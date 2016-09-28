@@ -38,3 +38,4 @@ class Isotropic(Surface):
             cosine of scattering angle
         """
         return 1./np.pi
+

@@ -26,10 +26,6 @@ class Volume(object):
 
 
 
-
-
-
-
 class Rayleigh(Volume):
     """
     class to define Rayleigh scattering
