@@ -2,6 +2,8 @@
 Definition of volume phase scattering functions
 """
 
+import numpy as np
+
 class Volume(object):
     def __init__(self, **kwargs):
         self.omega = kwargs.pop('omega', None)
