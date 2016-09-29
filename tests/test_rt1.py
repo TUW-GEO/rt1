@@ -9,33 +9,47 @@ import sys
 
 #sys.path.append(os.path.join('..', 'mintrend'))
 sys.path.append('..')
-from rt1.volume import Volume
+from rt1.rt1 import RT1
 from rt1.volume import Rayleigh
+from rt1.coefficients import RayleighIsotropic
+from rt1.surface import Isotropic
 
 
 
-class TestAR1(unittest.TestCase):
+class TestRT1(unittest.TestCase):
+
+    def setUp(self):
+        self.I0 = 1.
+        self.mu_0 = 0.5
+        self.mu_ex = 0.5
+        self.V = Rayleigh(tau=0.7, omega=0.3)
+        self.S = Isotropic()
+        self.C = RayleighIsotropic()
+
 
     def test_init(self):
-        V = Volume(omega=0.2, tau=1.7)
-        self.assertEqual(V.omega, 0.2)
-        self.assertEqual(V.tau, 1.7)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
 
-    def test_rayleigh(self):
-        V = Rayleigh(omega=0.2, tau=1.7)
-        p = V.p(0.)
-        self.assertEqual(p, (3./(16.*np.pi)))
-
-        p = V.p(1.)
-        self.assertEqual(p, (3./(8.*np.pi)))
+    def test_calc(self):
+        # just try to get it running simply without further testing
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT.calc()
 
 
 
 
-    #~ def setUp(self):
-        #~ self.phi = 0.8
-        #~ self.std = 0.1
-        #~ self.N = 1000
+
+
+
+
+
+#~ tests with I0=0 and extreme angles
+#~ zero order solution ???
+
+
+
+
+
 
     #~ def test_x(self):
         #~ A = AR1()

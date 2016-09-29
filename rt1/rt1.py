@@ -11,6 +11,8 @@ Quast & Wagner (2016): doi:10.1364/AO.55.005379
 
 import numpy as np
 from surface import Isotropic
+from scipy.special import expi
+from scipy.special import expn
 
 
 
@@ -39,6 +41,7 @@ class RT1(object):
 
         self._nmax = nmax
         self.Fn = Fn
+        assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
     def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
         """
@@ -83,13 +86,17 @@ class RT1(object):
         phi_s = 0.  # todo
         ctheta = self.cos_theta(-self.mu_0, self.mu_ex, phi_i, phi_s)
 
-        return I0 * np.exp(-(self.tau / self.mu_0) - (self.tau/self.mu_ex)) * self.mu_0 * self.SRF.brdf(ctheta)
+        return self.I0 * np.exp(-(self.RV.tau / self.mu_0) - (self.RV.tau/self.mu_ex)) * self.mu_0 * self.SRF.brdf(ctheta)
 
     def volume(self):
         """
         (18)
         """
-        return (self.I0*self.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.tau/self.mu_0)-(self.tau/self.mu_ex))) * self.phase(ctheta)
+
+        #todo
+        ctheta=0.
+
+        return (self.I0*self.RV.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.RV.tau/self.mu_0)-(self.RV.tau/self.mu_ex))) * self.RV.p(ctheta)
 
     def interaction(self):
         """
@@ -108,40 +115,22 @@ class RT1(object):
         # how to truncate infinite sum ????
 
         S = 0.
-        fn = self.Fn.fn(self._nmax)
+        fn = self.Fn.fn(mu1, self._nmax)
 
         for n in xrange(self._nmax):
             S2 = 0.
             for k in xrange(1,(n+1)+1):
-                E_k1 = todo
+                E_k1 = expn(k+1., self.RV.tau)
                 S2 += mu1**(-k) * (E_k1 - np.exp(-self.RV.tau/mu1)/k)
 
             # final sum
             # todo check once more the function
             S += fn[n] * mu1**(n+1) * (np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau) + S2)
 
+        return S
 
 
 
-from volume import Rayleigh
-from coefficients import RayleighIsotropic
 
-# Example1, Fig.7
-I0=1.
-inc = np.arange(0.,90.,5.)
-
-V = Rayleigh(tau=0.7, omega=0.3)
-SRF = Isotropic()
-
-Itot = np.ones_like(inc)*np.nan
-Isurf = np.ones_like(inc)*np.nan
-Iint = np.ones_like(inc)*np.nan
-Ivol = np.ones_like(inc)*np.nan
-for i in xrange(len(inc)):
-    mu_0 = inc[i]
-    mu_ex = mu_0*1.
-
-    R = RT1(I0, mu_0, mu_ex, RV=V, SRF=SRF)
-    Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
 
