@@ -31,7 +31,8 @@ class TestRT1(unittest.TestCase):
 
     def test_calc(self):
         # just try to get it running simply without further testing
-        Itot, Isurf, Ivol, Iint = RT.calc(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Itot, Isurf+Ivol+Iint)
 
     def test_surface(self):
