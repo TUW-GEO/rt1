@@ -55,7 +55,7 @@ class TestRT1(unittest.TestCase):
     def test_volume(self):
         mu_0 = 0.5
         mu_ex = 0.5
-        V = Rayleigh(tau=0., omega=0.2)
+        V = Rayleigh(tau=0., omega=0.0)
         RT = RT1(self.I0, mu_0, mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)

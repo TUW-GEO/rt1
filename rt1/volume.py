@@ -15,6 +15,11 @@ class Volume(object):
         assert self.omega >= 0.
         assert self.tau >= 0.
 
+        if self.tau == 0.:
+            assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+
+
+
     def p(self, mu_0, mu_s):
         """
         phase function wrapper

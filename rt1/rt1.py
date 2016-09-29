@@ -74,8 +74,12 @@ class RT1(object):
     def calc(self):
         # (16)
         Isurf = self.surface()
-        Ivol = self.volume()
-        Iint = self.interaction()
+        if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
+            Ivol = self.volume()
+            Iint = self.interaction()
+        else:
+            Ivol = 0.
+            Iint = 0.
         return Isurf + Ivol + Iint, Isurf, Ivol, Iint
 
     def surface(self):
@@ -118,7 +122,6 @@ class RT1(object):
                 E_k1 = expn(k+1., self.RV.tau)
                 S2 += mu1**(-k) * (E_k1 - np.exp(-self.RV.tau/mu1)/k)
 
-            print 'S2: ', S2
 
             # final sum
             # todo check once more the function
