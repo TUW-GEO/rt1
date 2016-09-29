@@ -60,7 +60,6 @@ class TestRT1(unittest.TestCase):
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 
-
     def test_interaction(self):
         pass
 

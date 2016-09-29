@@ -60,7 +60,14 @@ class RT1(object):
         phi_s : float
             scattering azimuth angle [rad]
         """
-        ctheta = mu_i*mu_s + np.sin(np.arccos(mu_i))*np.sin(np.arccos(mu_s))*np.cos(phi_i-phi_s)
+
+        theta_i = np.arccos(mu_i)
+        theta_s = np.arccos(mu_s)
+
+        #print 'theta_i, theta_s', theta_i, theta_s, mu_i, mu_s
+
+
+        ctheta = mu_i*mu_s + np.sin(theta_i)*np.sin(theta_s)*np.cos(phi_i-phi_s)
         return ctheta
 
     def cos_theta_prime(self, mu_i, mu_s, phi_i, phi_s):
@@ -95,6 +102,7 @@ class RT1(object):
         """
         # todo ctheta Winkel Definition ???
         ctheta = self.cos_theta(-self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
+
         return (self.I0*self.RV.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.RV.tau/self.mu_0)-(self.RV.tau/self.mu_ex))) * self.RV.p(ctheta)
 
     def interaction(self):
