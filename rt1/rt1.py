@@ -106,19 +106,19 @@ class RT1(object):
         (37)
         """
 
-        # todo
-        # how to truncate infinite sum ????
-
         S = 0.
-        fn = self.Fn.fn(mu1, self._nmax)
+        fn, nmax_trunc = self.Fn.fn(mu1, self._nmax)
 
-        #todo, nmax kann angepasst werden, wenn koeffizienten nur noch 0 sind ab einem bestimmten Wert
+        # set maximum number of itterations either to default value or to the value were all subsequent coefficeints are only zero
+        nmax = min(nmax_trunc, self._nmax)
 
-        for n in xrange(self._nmax):
+        for n in xrange(nmax):
             S2 = 0.
             for k in xrange(1,(n+1)+1):
                 E_k1 = expn(k+1., self.RV.tau)
                 S2 += mu1**(-k) * (E_k1 - np.exp(-self.RV.tau/mu1)/k)
+
+            print 'S2: ', S2
 
             # final sum
             # todo check once more the function

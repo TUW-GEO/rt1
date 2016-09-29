@@ -41,8 +41,8 @@ class TestRT1(unittest.TestCase):
         RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
-        #~ self.assertEqual(Iint, 0.)  # todo gives nan
-        #~ self.assertEqual(Itot, Isurf)
+        self.assertEqual(Iint, 0.)  # todo gives nan
+        self.assertEqual(Itot, Isurf)
         self.assertTrue(Isurf>0.)
 
     def test_surface(self):

@@ -14,6 +14,15 @@ class Fn(object):
     def __init__(self, **kwargs):
         pass
 
+    def _get_nmax(self, x):
+        """
+        return the last index where the coefficient X is still different from zero
+        """
+        idx = np.arange(len(x))
+        m = x != 0.
+        res = max(idx[m])
+        return res
+
 
 class RayleighIsotropic(Fn):
     """
@@ -43,7 +52,9 @@ class RayleighIsotropic(Fn):
 
         # remaining coefficients are zero
 
-        return c
+        return c, self._get_nmax(c)
+
+
 
 
 
