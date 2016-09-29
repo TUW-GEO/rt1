@@ -26,14 +26,25 @@ class TestRT1(unittest.TestCase):
         self.S = Isotropic()
         self.C = RayleighIsotropic()
 
-
     def test_init(self):
         RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
 
     def test_calc(self):
         # just try to get it running simply without further testing
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
-        RT.calc()
+        Itot, Isurf, Ivol, Iint = RT.calc(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        self.assertEqual(Itot, Isurf+Ivol+Iint)
+
+    def test_surface(self):
+        pass
+
+    def test_volume(self):
+        pass
+
+    def test_interaction(self):
+        pass
+
+    def test_fint(self):
+        pass
 
 
 
