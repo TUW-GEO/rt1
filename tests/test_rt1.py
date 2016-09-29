@@ -22,31 +22,58 @@ class TestRT1(unittest.TestCase):
         self.I0 = 1.
         self.mu_0 = 0.5
         self.mu_ex = 0.5
+        self.phi_0 = 0.
+        self.phi_ex = 0.
         self.V = Rayleigh(tau=0.7, omega=0.3)
         self.S = Isotropic()
         self.C = RayleighIsotropic()
 
     def test_init(self):
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S, Fn=self.C)
 
     def test_calc(self):
         # just try to get it running simply without further testing
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S, Fn=self.C)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Itot, Isurf+Ivol+Iint)
 
+        V = Rayleigh(tau=0., omega=0.)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        Itot, Isurf, Ivol, Iint = RT.calc()
+        self.assertEqual(Ivol, 0.)
+        #~ self.assertEqual(Iint, 0.)  # todo gives nan
+        #~ self.assertEqual(Itot, Isurf)
+        self.assertTrue(Isurf>0.)
+
     def test_surface(self):
-        pass
+        V = Rayleigh(tau=0., omega=0.)
+        mu_0 = 0.5
+        RT = RT1(4., mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        Itot, Isurf, Ivol, Iint = RT.calc()
+        self.assertEqual(Isurf, 2./np.pi)
 
     def test_volume(self):
-        pass
+        mu_0 = 0.5
+        mu_ex = 0.5
+        V = Rayleigh(tau=0., omega=0.2)
+        RT = RT1(self.I0, mu_0, mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        Itot, Isurf, Ivol, Iint = RT.calc()
+        self.assertEqual(Ivol, 0.)
+
 
     def test_interaction(self):
         pass
 
-    def test_fint(self):
-        pass
+    #~ def test_fint(self):
+        #~ RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        #~ mu1 = 0.5
+        #~ mu2 = 0.5
+        #~ F = RT._calc_Fint(mu1, mu2)
+        #~ self.assertEqual(F, 0.)
 
+
+
+# todo test for tau-omgea zero order
 
 
 

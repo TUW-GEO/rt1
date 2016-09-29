@@ -20,7 +20,7 @@ class RT1(object):
     """
     main class to perform RT simulations
     """
-    def __init__(self, I0, mu_0, mu_ex, RV=None, SRF=None, nmax=10, Fn=None):
+    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, nmax=10, Fn=None):
         """
         Parameters
         ----------
@@ -32,6 +32,8 @@ class RT1(object):
         self.I0 = I0
         self.mu_0 = mu_0
         self.mu_ex = mu_ex
+        self.phi_0 = phi_0
+        self.phi_ex = phi_ex
 
         self.RV = RV
         assert self.RV is not None, 'ERROR: needs to provide volume information'
@@ -80,22 +82,15 @@ class RT1(object):
         """
         (17)
         """
-
-        #  todo ctheta or ctheta_prime ???
-        phi_i = 0.
-        phi_s = 0.  # todo
-        ctheta = self.cos_theta(-self.mu_0, self.mu_ex, phi_i, phi_s)
-
+        ctheta = self.cos_theta(-self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
         return self.I0 * np.exp(-(self.RV.tau / self.mu_0) - (self.RV.tau/self.mu_ex)) * self.mu_0 * self.SRF.brdf(ctheta)
 
     def volume(self):
         """
         (18)
         """
-
-        #todo
-        ctheta=0.
-
+        # todo ctheta Winkel Definition ???
+        ctheta = self.cos_theta(-self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
         return (self.I0*self.RV.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.RV.tau/self.mu_0)-(self.RV.tau/self.mu_ex))) * self.RV.p(ctheta)
 
     def interaction(self):
@@ -116,6 +111,8 @@ class RT1(object):
 
         S = 0.
         fn = self.Fn.fn(mu1, self._nmax)
+
+        #todo, nmax kann angepasst werden, wenn koeffizienten nur noch 0 sind ab einem bestimmten Wert
 
         for n in xrange(self._nmax):
             S2 = 0.
