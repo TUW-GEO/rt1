@@ -79,6 +79,13 @@ class RT1(object):
 
 
     def calc(self):
+        """
+        Perform actual calculation of bistatic scattering at top of the random volume (z=0; tau(z) = 0)
+
+        Returns
+        -------
+        specific intensities Itot, Isurf, Ivol, Iint
+        """
         # (16)
         Isurf = self.surface()
         if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
@@ -117,7 +124,6 @@ class RT1(object):
         """
         (37)
         """
-
         S = 0.
         fn, nmax_trunc = self.Fn.fn(mu1, self._nmax)
 
@@ -129,7 +135,6 @@ class RT1(object):
             for k in xrange(1,(n+1)+1):
                 E_k1 = expn(k+1., self.RV.tau)
                 S2 += mu1**(-k) * (E_k1 - np.exp(-self.RV.tau/mu1)/k)
-
 
             # final sum
             # todo check once more the function

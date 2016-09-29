@@ -1,13 +1,11 @@
 """
-Reporduce examples like given in the paper
+Reproduce examples like given in the paper
 """
 
 import sys
 sys.path.append('..')
 
 import matplotlib.pyplot as plt
-
-
 
 from rt1.volume import Rayleigh
 from rt1.coefficients import RayleighIsotropic
@@ -41,18 +39,35 @@ for i in xrange(len(inc)):
     R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF, Fn=C)
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
+ctot='black'
+csurf='red'
+cvol='green'
+cint='blue'
+
 
 f = plt.figure()
-ax = f.add_subplot(111)
-ax.plot(inc, 10.*np.log10(Itot), label='$I_{tot}$')
-ax.plot(inc, 10.*np.log10(Isurf), label='$I_{surf}$')
-ax.plot(inc, 10.*np.log10(Ivol), label='$I_{vol}$')
-ax.plot(inc, 10.*np.log10(Iint), label='$I_{int}$')
+ax = f.add_subplot(121)
+ax2 = f.add_subplot(122)
+ax.plot(inc, 10.*np.log10(Itot), color=ctot, label='$I_{tot}$')
+ax.plot(inc, 10.*np.log10(Isurf), color=csurf, label='$I_{surf}$')
+ax.plot(inc, 10.*np.log10(Ivol), color=cvol, label='$I_{vol}$')
+ax.plot(inc, 10.*np.log10(Iint), color=cint, label='$I_{int}$')
 ax.grid()
 ax.legend()
 ax.set_xlabel('$\\theta_0$ [deg]')
 ax.set_ylabel('$I^+$ [dB]')
 ax.set_title('Figure 7')
 ax.set_ylim(-40.,0.)
+
+# plot fractions
+ax2.plot(inc, Isurf/Itot, label='surf', color=csurf)
+ax2.plot(inc, Ivol/Itot, label='volume', color=cvol)
+ax2.plot(inc, Iint/Itot, label='interaction', color=cint)
+ax2.set_title('fractional contributions on total signal')
+ax2.set_xlabel('$\\theta_0$ [deg]')
+ax2.set_ylabel('$I / I_{tot}$ [-]')
+ax2.set_title('Figure 7')
+ax2.grid()
+ax2.legend()
 
 plt.show()
