@@ -20,7 +20,7 @@ plt.close('all')
 I0=1.
 inc = np.arange(0.,90.,1.)
 
-V = Rayleigh(tau=0.7, omega=0.3)
+V = Rayleigh(tau=2., omega=0.5)
 SRF = Isotropic()
 
 Itot = np.ones_like(inc)*np.nan

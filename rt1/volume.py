@@ -13,6 +13,7 @@ class Volume(object):
         assert self.tau is not None, 'Optical depth needs to be provided'
 
         assert self.omega >= 0.
+        assert self.omega <= 1.
         assert self.tau >= 0.
 
         if self.tau == 0.:
