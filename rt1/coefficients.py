@@ -35,6 +35,10 @@ class RayleighIsotropic(Fn):
 
     def fn(self, mu_i, nmax):
         """
+
+        analytical result
+
+
         returns coefficients
 
         Parameters
@@ -53,6 +57,18 @@ class RayleighIsotropic(Fn):
         # remaining coefficients are zero
 
         return c, self._get_nmax(c)
+
+    def xxxxn(self, mu_i, nmax):
+        """
+        result based on sympy
+        """
+
+        c = np.zeros(int(nmax))
+        c[0] = 9./(16.*np.pi)
+        c[2] = (3./(16.*np.pi))*(2.*mu_i**2.-1.)
+
+        return c, self._get_nmax(c)
+
 
 
 
