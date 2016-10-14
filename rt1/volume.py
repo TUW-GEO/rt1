@@ -41,6 +41,7 @@ class Rayleigh(Volume):
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
         self._set_function()
+        self._set_legcoefficients()
 
 
     def _set_function(self):
@@ -52,7 +53,15 @@ class Rayleigh(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        return 3./(16.*sp.pi)*(1.+self.thetap(theta_i,theta_s,phi_i,phi_s)**2.)
+        self._func = 3./(16.*sp.pi)*(1.+self.thetap(theta_i,theta_s,phi_i,phi_s)**2.)
+
+    def _set_legcoefficients(self):
+        """
+        set Legrende coefficients
+        needs to be a function that can be later evaluated by subsituting 'n'
+        """
+        n = sp.Symbol('n')
+        self._legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
 
 
     def p(self, ctheta):
