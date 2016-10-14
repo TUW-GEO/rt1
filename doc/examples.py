@@ -20,7 +20,10 @@ plt.close('all')
 I0=1.
 inc = np.arange(0.,90.,1.)
 
-V = Rayleigh(tau=2., omega=0.5)
+# define properties of volume
+V = Rayleigh(tau=0.7, omega=0.3)
+
+# define properties of surface
 SRF = Isotropic()
 
 Itot = np.ones_like(inc)*np.nan

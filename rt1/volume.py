@@ -3,8 +3,9 @@ Definition of volume phase scattering functions
 """
 
 import numpy as np
+from scatter import Scatter
 
-class Volume(object):
+class Volume(Scatter):
     def __init__(self, **kwargs):
         self.omega = kwargs.pop('omega', None)
         assert self.omega is not None, 'Single scattering albedo needs to be provided'

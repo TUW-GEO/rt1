@@ -3,9 +3,10 @@ Definition of BRDF functions
 """
 
 import numpy as np
+from scatter import Scatter
 
 
-class Surface(object):
+class Surface(Scatter):
     """
     basic class
     """
