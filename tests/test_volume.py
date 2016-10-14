@@ -20,11 +20,16 @@ class TestAR1(unittest.TestCase):
 
     def test_rayleigh(self):
         V = Rayleigh(omega=0.2, tau=1.7)
-        p = V.p(0.)
+        theta_i = np.pi
+        theta_s = 0.234234
+        phi_i = 0.
+        phi_s = 0.
+
+        p = V.p(theta_i, theta_s, phi_i, phi_s)   # cos=0
         self.assertEqual(p, (3./(16.*np.pi)))
 
-        p = V.p(1.)
-        self.assertEqual(p, (3./(8.*np.pi)))
+        #~ p = V.p(theta_i, theta_s, phi_i, phi_s)  # cos = 1
+        #~ self.assertEqual(p, (3./(8.*np.pi)))
 
 if __name__ == "__main__":
     unittest.main()

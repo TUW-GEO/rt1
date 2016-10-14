@@ -32,6 +32,8 @@ class RT1(object):
         self.I0 = I0
         self.mu_0 = mu_0
         self.mu_ex = mu_ex
+        self.theta_0 = np.arccos(self.mu_0)  # todo set this as a property instead of fixed coding heres
+        self.theta_ex = np.arccos(self.mu_ex)
         self.phi_0 = phi_0
         self.phi_ex = phi_ex
 
@@ -44,6 +46,7 @@ class RT1(object):
         self._nmax = nmax
         self.Fn = Fn
         assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
+
 
     def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
         """
@@ -107,10 +110,7 @@ class RT1(object):
         """
         (18)
         """
-        # todo ctheta Winkel Definition ???
-        ctheta = self.cos_theta(-self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
-
-        return (self.I0*self.RV.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.RV.tau/self.mu_0)-(self.RV.tau/self.mu_ex))) * self.RV.p(ctheta)
+        return (self.I0*self.RV.omega*self.mu_0/(self.mu_0+self.mu_ex)) * (1.-np.exp(-(self.RV.tau/self.mu_0)-(self.RV.tau/self.mu_ex))) * self.RV.p(self.theta_0, self.theta_ex, self.phi_0, self.phi_ex)
 
     def interaction(self):
         """

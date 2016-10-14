@@ -64,15 +64,24 @@ class Rayleigh(Volume):
         self._legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
 
 
-    def p(self, ctheta):
+    def p(self, theta_i,theta_s,phi_i,phi_s):
         """
+        calculate phase function by subsituting current geometry in function
+        and then evaluate result
+
         Parameters
         ----------
-        ctheta : float
-            cosine of scattering angle
+        geometries of angles
+
         """
+        return self._func.xreplace({theta_i:theta_i, theta_s:theta_s, phi_i:phi_i, phi_s:phi_s})
+
+
+
         # calculate cosine of scattering angle
-        return (3./(16.*np.pi)) * (1. + ctheta**2.)
+
+
+        #return (3./(16.*np.pi)) * (1. + ctheta**2.)
 
 
 
