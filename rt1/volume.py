@@ -4,6 +4,7 @@ Definition of volume phase scattering functions
 
 import numpy as np
 from scatter import Scatter
+import sympy as sp
 
 class Volume(Scatter):
     def __init__(self, **kwargs):
@@ -39,6 +40,20 @@ class Rayleigh(Volume):
     """
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
+        self._set_function()
+
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        #def pfunkt(t0):
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+        return 3./(16.*sp.pi)*(1.+self.thetap(theta_i,theta_s,phi_i,phi_s)**2.)
+
 
     def p(self, ctheta):
         """
