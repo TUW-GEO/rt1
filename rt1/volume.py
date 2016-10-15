@@ -92,7 +92,7 @@ class Rayleigh(Volume):
         """
         self.ncoefs = 2
         n = sp.Symbol('n')
-        self._legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
+        self.legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
 
 
 

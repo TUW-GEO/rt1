@@ -59,7 +59,9 @@ class Isotropic(Surface):
         self._set_legcoefficients()
 
     def _set_legcoefficients(self):
-        pass
+        self.ncoefs = 1
+        n = sp.Symbol('n')
+        self.legcoefs = (1./sp.pi)*sp.KroneckerDelta(0,n)
 
     def _set_function(self):
         """
