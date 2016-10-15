@@ -29,8 +29,6 @@ class TestVolume(unittest.TestCase):
 
         self.assertEqual(p, (3./(16.*np.pi)))
 
-        #~ p = V.p(theta_i, theta_s, phi_i, phi_s)  # cos = 1
-        #~ self.assertEqual(p, (3./(8.*np.pi)))
 
 if __name__ == "__main__":
     unittest.main()
