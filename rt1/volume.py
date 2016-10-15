@@ -21,16 +21,30 @@ class Volume(Scatter):
         if self.tau == 0.:
             assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
 
-    def p(self, mu_0, mu_s):
+    def p(self, t0,ts,p0,ps):
         """
-        phase function wrapper
+        calculate phase function by subsituting current geometry in function
+        and then evaluate result
 
         Parameters
         ----------
-        ctheta : float
-            cosine of scattering angle
+        geometries of angles
+        to : theta incidence
+        ts : theta scattering
+        p0 : azimuth incident
+        ps : azimuth scattering
+
+        All in radians
+
         """
-        assert False, 'phase function to be defined in sub-classes'
+        # define sympy objects
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+
+        # replace arguments and evaluate expression
+        return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
 
 
@@ -62,27 +76,6 @@ class Rayleigh(Volume):
         """
         n = sp.Symbol('n')
         self._legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
-
-
-    def p(self, theta_i,theta_s,phi_i,phi_s):
-        """
-        calculate phase function by subsituting current geometry in function
-        and then evaluate result
-
-        Parameters
-        ----------
-        geometries of angles
-
-        """
-        return self._func.xreplace({theta_i:theta_i, theta_s:theta_s, phi_i:phi_i, phi_s:phi_s})
-
-
-
-        # calculate cosine of scattering angle
-
-
-        #return (3./(16.*np.pi)) * (1. + ctheta**2.)
-
 
 
 

@@ -11,7 +11,7 @@ from rt1.volume import Rayleigh
 
 
 
-class TestAR1(unittest.TestCase):
+class TestVolume(unittest.TestCase):
 
     def test_init(self):
         V = Volume(omega=0.2, tau=1.7)
@@ -20,12 +20,13 @@ class TestAR1(unittest.TestCase):
 
     def test_rayleigh(self):
         V = Rayleigh(omega=0.2, tau=1.7)
-        theta_i = np.pi
+        theta_i = np.pi/2.
         theta_s = 0.234234
-        phi_i = 0.
+        phi_i = np.pi/2.
         phi_s = 0.
 
         p = V.p(theta_i, theta_s, phi_i, phi_s)   # cos=0
+
         self.assertEqual(p, (3./(16.*np.pi)))
 
         #~ p = V.p(theta_i, theta_s, phi_i, phi_s)  # cos = 1
