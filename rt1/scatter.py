@@ -30,3 +30,19 @@ class Scatter(object):
         n = sp.Symbol('n')
         return self.legcoefs.xreplace({n:int(n0)}).evalf()
 
+    def _eval_legpoly(self, t0,ts,p0,ps):
+        """
+        function to evaluate legendre coefficients based on expansion
+        used mainly for testing purposes
+        the actual coefficient are used in the symbolic expansion
+        """
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+
+
+        print self.legexpansion().xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps})
+        return self.legexpansion().xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps}).evalf()
+
+

@@ -20,7 +20,7 @@ class RT1(object):
     """
     main class to perform RT simulations
     """
-    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, nmax=10, Fn=None):
+    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None):
         """
         Parameters
         ----------
@@ -43,7 +43,10 @@ class RT1(object):
         self.SRF = SRF
         assert self.SRF is not None, 'ERROR: needs to provide surface information'
 
-        self._nmax = nmax
+        # precalculate the expansiion coefficients for the interaction term
+        self._calc_interaction_expansion()
+
+
         #~ self.Fn = Fn
         #~ assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
@@ -79,6 +82,36 @@ class RT1(object):
         #~ """
         #~ ctheta_prime = -mu_i*mu_s + np.sin(np.arccos(mu_i))*np.sin(np.arccos(mu_s))*np.cos(phi_i-phi_s)
         #~ return ctheta_prime
+
+    def _calc_interaction_expansion(self):
+        """
+        calculate expensions to be able to analytically estimate Eq.23 needed for the interaction term
+        The approach is as follows
+        1) expand the legrende coefficents of the surface and volume phase functions
+        2) replace the cosine terms in the Legrende polynomials by sines which corresponds to the intergration between 0 and 2*pi
+        """
+        # preevaluate expansions for volume and surface phase functions
+        # this returns symbolic code to be then further used
+        volexp = self.RV.legexpansion()
+        brdfexp = self.SRF.legexpansion()
+
+
+        #todo for efficency reasons this should be only done once and not for each angle !!!
+
+
+        #   preparation of the product of p*BRDF for coefficient retrieval
+        fPoly =(volexp*brdfexp).expand()
+        print fPoly
+
+
+        #~ 2*pi
+#~
+#~
+        #~ def pexpansion(thetai,thetas,phii,phis):
+        #~ return Sum(plegcoefs.subs(dict(n=n))*legendre(n,thetap(thetai,thetas,phii,phis)),(n,0,Np)).doit()
+#~
+        #~ def BRDFexpansion(thetai,thetas,phii,phis):
+        #~ return Sum(BRDFlegcoefs.subs(dict(n=n))*legendre(n,thetaBRDF(thetai,thetas,phii,phis)),(n,0,NBRDF)).doit()
 
 
     def calc(self):

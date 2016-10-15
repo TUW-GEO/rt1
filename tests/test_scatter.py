@@ -31,6 +31,8 @@ class TestScatter(unittest.TestCase):
         p = S.thetap(theta_i, theta_s, phi_i, phi_s)   # cos(theta)=-1
         self.assertAlmostEqual(p, -1.,10)
 
+
+
 if __name__ == "__main__":
     unittest.main()
 
