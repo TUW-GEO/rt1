@@ -12,7 +12,7 @@ class Fn(object):
     Main class for coefficient calculation
     """
     def __init__(self, **kwargs):
-        pass
+        assert False 'should not needed any more1'
 
     def _get_nmax(self, x):
         """

@@ -11,7 +11,7 @@ import sys
 sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh
-from rt1.coefficients import RayleighIsotropic
+#~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import Isotropic
 
 
@@ -26,19 +26,19 @@ class TestRT1(unittest.TestCase):
         self.phi_ex = 0.
         self.V = Rayleigh(tau=0.7, omega=0.3)
         self.S = Isotropic()
-        self.C = RayleighIsotropic()
+        #~ self.C = RayleighIsotropic()
 
     def test_init(self):
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S)
 
     def test_calc(self):
         # just try to get it running simply without further testing
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Itot, Isurf+Ivol+Iint)
 
         V = Rayleigh(tau=0., omega=0.)
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
         self.assertEqual(Iint, 0.)  # todo gives nan
@@ -48,7 +48,7 @@ class TestRT1(unittest.TestCase):
     def test_surface(self):
         V = Rayleigh(tau=0., omega=0.)
         mu_0 = 0.5
-        RT = RT1(4., mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        RT = RT1(4., mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Isurf, 2./np.pi)
 
@@ -56,7 +56,7 @@ class TestRT1(unittest.TestCase):
         mu_0 = 0.5
         mu_ex = 0.5
         V = Rayleigh(tau=0., omega=0.0)
-        RT = RT1(self.I0, mu_0, mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S, Fn=self.C)
+        RT = RT1(self.I0, mu_0, mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 

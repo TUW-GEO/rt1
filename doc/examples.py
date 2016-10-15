@@ -8,7 +8,7 @@ sys.path.append('..')
 import matplotlib.pyplot as plt
 
 from rt1.volume import Rayleigh
-from rt1.coefficients import RayleighIsotropic
+#~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import Isotropic
 from rt1.rt1 import RT1
 
@@ -24,14 +24,14 @@ inc = np.arange(0.,90.,1.)
 V = Rayleigh(tau=0.7, omega=0.3)
 
 # define properties of surface
-SRF = Isotropic()
+SRF = CosineLobe()
 
 Itot = np.ones_like(inc)*np.nan
 Isurf = np.ones_like(inc)*np.nan
 Iint = np.ones_like(inc)*np.nan
 Ivol = np.ones_like(inc)*np.nan
 
-C = RayleighIsotropic()  # todo: this is not the combination in the paper!
+##C = RayleighIsotropic()  # todo: this is not the combination in the paper!
 
 for i in xrange(len(inc)):
     mu_0 = np.cos(np.deg2rad(inc[i]))
@@ -39,7 +39,7 @@ for i in xrange(len(inc)):
     phi_0 = 0.
     phi_ex = np.pi
 
-    R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF, Fn=C)
+    R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF)
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
 ctot='black'

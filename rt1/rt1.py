@@ -44,8 +44,8 @@ class RT1(object):
         assert self.SRF is not None, 'ERROR: needs to provide surface information'
 
         self._nmax = nmax
-        self.Fn = Fn
-        assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
+        #~ self.Fn = Fn
+        #~ assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
 
     #~ def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
@@ -120,6 +120,10 @@ class RT1(object):
         return self.I0 * self.mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self.mu_ex) * Fint1 + np.exp(-self.RV.tau/self.mu_0)*Fint2 )
 
     def _calc_Fint(self, mu1, mu2):
+        return 0.  # todo this is a dummy
+
+
+    def _calc_Fintxx(self, mu1, mu2):
         """
         (37)
         """
