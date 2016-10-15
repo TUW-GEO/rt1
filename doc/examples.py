@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from rt1.volume import Rayleigh
 #~ from rt1.coefficients import RayleighIsotropic
-from rt1.surface import Isotropic
+from rt1.surface import CosineLobe
 from rt1.rt1 import RT1
 
 import numpy as np
