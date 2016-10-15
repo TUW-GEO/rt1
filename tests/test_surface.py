@@ -60,7 +60,7 @@ class TestSurface(unittest.TestCase):
         #~ assert False
 
         # reference solution based on first 2 Legrende polynomials
-        S = CosineLobe(ncoefs=2)
+        S = CosineLobe(ncoefs=4)
         theta_i = np.pi/2.
         theta_s = 0.234234
         phi_i = np.pi/2.
@@ -76,7 +76,7 @@ class TestSurface(unittest.TestCase):
             #~ print S._get_legcoef(i), S._get_legcoef(i)
 
 
-        ref = S._get_legcoef(0)*1. + S._get_legcoef(1)*0. + S._get_legcoef(2)*(-0.5) # + S._get_legcoef(4)*(-1.5) + S._get_legcoef(6) * (-5./16.) + S._get_legcoef(8) * (35./128.) + S._get_legcoef(10)*(-63./256.)
+        ref = S._get_legcoef(0)*1. + S._get_legcoef(1)*0. + S._get_legcoef(2)*(-0.5)  + S._get_legcoef(4)*(-1.5) #+ S._get_legcoef(6) * (-5./16.) + S._get_legcoef(8) * (35./128.) + S._get_legcoef(10)*(-63./256.)
         self.assertAlmostEqual(r, ref, 15)
 
 
