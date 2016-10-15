@@ -22,6 +22,9 @@ class Surface(Scatter):
         ----------
         ctheta : float
             cosine of scattering angle
+
+        Returns
+        float
         """
         # define sympy objects
         theta_i = sp.Symbol('theta_i')

@@ -103,8 +103,7 @@ class RT1(object):
         """
         (17)
         """
-        ctheta = self.cos_theta(-self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
-        return self.I0 * np.exp(-(self.RV.tau / self.mu_0) - (self.RV.tau/self.mu_ex)) * self.mu_0 * self.SRF.brdf(ctheta)
+        return self.I0 * np.exp(-(self.RV.tau / self.mu_0) - (self.RV.tau/self.mu_ex)) * self.mu_0 * self.SRF.brdf(self.theta_0, self.theta_ex, self.phi_0, self.phi_ex)
 
     def volume(self):
         """
