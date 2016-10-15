@@ -37,6 +37,9 @@ class Surface(Scatter):
 
 
 class Isotropic(Surface):
+    """
+    define an isotropic surface
+    """
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
         self._set_function()
@@ -57,5 +60,30 @@ class Isotropic(Surface):
         self._func = 1./sp.pi   #<<<< todo gere a different cosine theta is required dthan for volume scattering phase function
 
 
+class CosineLobe(Surface):
+    """
+    define a surface like in the example 1 of the paper
+    which is a cosine lobe representation based on a 10-coefficient Legendre polynomial
+    approximation
+    """
+    def __init__(self, **kwargs):
+        super(CosineLobe, self).__init__(**kwargs)
+        self._set_function()
+        self._set_legcoefficients()
 
+    def _set_legcoefficients(self):
+        #self.legcoefs = ((2.*n+1.)*15.*sp.sqrt(sp.pi))/(16.*sp.gamma((7.-n)/2.)*sp.gamma((8.+n)/2.))    # A13
+        pass
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        #def pfunkt(t0):
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+
+        self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)**5., 0.)  # eq. A13
 

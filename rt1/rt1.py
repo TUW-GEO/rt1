@@ -48,37 +48,37 @@ class RT1(object):
         assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
 
-    def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
-        """
-        A14
+    #~ def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
+        #~ """
+        #~ A14
+#~
+        #~ Parameters
+        #~ ----------
+        #~ mu_i : float
+            #~ cosine of incidence angle
+        #~ mu_s : float
+            #~ cosine of scattering angle
+        #~ phi_i : float
+            #~ incident azimuth angle [rad]
+        #~ phi_s : float
+            #~ scattering azimuth angle [rad]
+        #~ """
+#~
+        #~ theta_i = np.arccos(mu_i)
+        #~ theta_s = np.arccos(mu_s)
+#~
+        #~ #print 'theta_i, theta_s', theta_i, theta_s, mu_i, mu_s
+#~
+#~
+        #~ ctheta = mu_i*mu_s + np.sin(theta_i)*np.sin(theta_s)*np.cos(phi_i-phi_s)
+        #~ return ctheta
 
-        Parameters
-        ----------
-        mu_i : float
-            cosine of incidence angle
-        mu_s : float
-            cosine of scattering angle
-        phi_i : float
-            incident azimuth angle [rad]
-        phi_s : float
-            scattering azimuth angle [rad]
-        """
-
-        theta_i = np.arccos(mu_i)
-        theta_s = np.arccos(mu_s)
-
-        #print 'theta_i, theta_s', theta_i, theta_s, mu_i, mu_s
-
-
-        ctheta = mu_i*mu_s + np.sin(theta_i)*np.sin(theta_s)*np.cos(phi_i-phi_s)
-        return ctheta
-
-    def cos_theta_prime(self, mu_i, mu_s, phi_i, phi_s):
-        """
-        A15
-        """
-        ctheta_prime = -mu_i*mu_s + np.sin(np.arccos(mu_i))*np.sin(np.arccos(mu_s))*np.cos(phi_i-phi_s)
-        return ctheta_prime
+    #~ def cos_theta_prime(self, mu_i, mu_s, phi_i, phi_s):
+        #~ """
+        #~ A15
+        #~ """
+        #~ ctheta_prime = -mu_i*mu_s + np.sin(np.arccos(mu_i))*np.sin(np.arccos(mu_s))*np.cos(phi_i-phi_s)
+        #~ return ctheta_prime
 
 
     def calc(self):

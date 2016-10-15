@@ -10,7 +10,7 @@ class Scatter(object):
     def __init__(self):
         pass
 
-    def thetaBRDF(self, thetai,thetas,phii,phis):
+    def thetaBRDF(self, thetai,thetas, phii, phis):
         """
         Parameters
         ----------
