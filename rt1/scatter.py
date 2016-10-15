@@ -3,7 +3,7 @@ Define general object for scattering calculations
 This is the basis object for any Surface and Vollume objects
 """
 
-import sympy as sc
+import sympy as sp
 
 
 class Scatter(object):
@@ -16,7 +16,17 @@ class Scatter(object):
         ----------
         incident and scattering angles as sympy symbols
         """
-        return sc.cos(thetai)*sc.cos(thetas)+sc.sin(thetai)*sc.sin(thetas)*sc.cos(phii)*sc.cos(phis)+sc.sin(thetai)*sc.sin(thetas)*sc.sin(phii)*sc.sin(phis)
+        return sp.cos(thetai)*sp.cos(thetas)+sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
 
     def thetap(self, thetai, thetas, phii, phis):
-        return -sc.cos(thetai)*sc.cos(thetas)+sc.sin(thetai)*sc.sin(thetas)*sc.cos(phii)*sc.cos(phis)+sc.sin(thetai)*sc.sin(thetas)*sc.sin(phii)*sc.sin(phis)
+        return -sp.cos(thetai)*sp.cos(thetas)+sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
+
+    def _get_legcoef(self, n0):
+        """
+        function to evaluate legendre coefficients
+        used mainly for testing purposes
+        the actual coefficient are used in the symbolic expansion
+        """
+        n = sp.Symbol('n')
+        return self.legcoefs.xreplace({n:int(n0)}).evalf()
+
