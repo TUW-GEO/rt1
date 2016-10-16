@@ -49,15 +49,10 @@ class RT1(object):
 
         # now we have the integral formula ready. The next step is now to
         # extract the expansion coefficients
-        fn = self._extract_coefficients(expr_int)
+        self.fn = self._extract_coefficients(expr_int)
         print 'coefficients:'
-        print fn
+        print self.fn
 
-        stop
-
-
-        #~ self.Fn = Fn
-        #~ assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
     def _extract_coefficients(self, expr):
         """
@@ -76,7 +71,6 @@ class RT1(object):
             replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]
             replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1)])
             fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
-
         return fn
 
 
@@ -197,10 +191,6 @@ class RT1(object):
         (37)
         """
         S = 0.
-        fn, nmax_trunc = self.Fn.fn(mu1, self._nmax)
-
-        # set maximum number of itterations either to default value or to the value were all subsequent coefficeints are only zero
-        nmax = min(nmax_trunc, self._nmax)
 
         for n in xrange(nmax):
             S2 = 0.
@@ -213,6 +203,22 @@ class RT1(object):
             S += fn[n] * mu1**(n+1) * (np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau) + S2)
 
         return S
+
+
+#   function that evaluates the coefficients
+#~ def fnfunktexp(n,t0):
+    #~ return fn[n].xreplace({thetaex:t0})
+#~
+#~
+#~ #   definition of surface- volume and first-order interaction-term
+#~ def CC(n,tau,tex):
+    #~ if n==0:
+        #~ return np.exp(-tau/np.cos(tex))*np.log(np.cos(tex)/(1-np.cos(tex)))-scipy.special.expi(-tau)+np.exp(-tau/np.cos(tex))*scipy.special.expi(tau/np.cos(tex)-tau)
+    #~ else:
+        #~ return CC(n-1,tau,tex)*np.cos(tex)-(np.exp(-tau/np.cos(tex))/n-scipy.special.expn(n+1,tau))
+#~
+#~ def intback(t0,tau,omega):
+    #~ return omega*np.cos(t0)*np.exp(-tau/np.cos(t0))*np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
 
 
 
