@@ -12,7 +12,7 @@ sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh
 #~ from rt1.coefficients import RayleighIsotropic
-from rt1.surface import Isotropic
+from rt1.surface import Isotropic, CosineLobe
 
 
 
@@ -60,7 +60,7 @@ class TestRT1(unittest.TestCase):
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 
-    def test_fn_coefficients(self):
+    def test_fn_coefficients_RayIso(self):
         # test if calculation of fn coefficients is correct
         # this is done by comparing the obtained coefficients
         # against the analytical solution using a Rayleigh volume
@@ -82,6 +82,22 @@ class TestRT1(unittest.TestCase):
         self.assertEqual(f1,RT._get_fn(1, RT.theta_0, RT.phi_0))
         self.assertAlmostEqual(f2,RT._get_fn(2, RT.theta_0, RT.phi_0),10)
         self.assertEqual(f3,RT._get_fn(3, RT.theta_0, RT.phi_0))
+
+    def test_fn_coefficients_RayCosine(self):
+        # test if calculation of fn coefficients is correct
+        # this is done by comparing the obtained coefficients
+        # against the analytical solution using a Rayleigh volume
+        # and isotropic surface scattering phase function
+        S = CosineLobe(ncoefs=10)
+        V = Rayleigh(tau=0.7, omega=0.3)
+        mu_0 = 1.
+        mu_ex = 1.
+        phi_0 = 0.
+        phi_ex = np.pi
+        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+
+        RT._get_fn(0, RT.theta_0, RT.phi_0)
+
 
 
     #~ def test_fint(self):

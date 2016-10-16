@@ -24,7 +24,7 @@ inc = np.arange(0.,90.,1.)
 V = Rayleigh(tau=0.7, omega=0.3)
 
 # define properties of surface
-SRF = CosineLobe()
+SRF = CosineLobe(ncoefs=10)
 
 Itot = np.ones_like(inc)*np.nan
 Isurf = np.ones_like(inc)*np.nan
@@ -37,7 +37,10 @@ for i in xrange(len(inc)):
     mu_0 = np.cos(np.deg2rad(inc[i]))
     mu_ex = mu_0*1.
     phi_0 = 0.
-    phi_ex = np.pi
+    phi_ex = np.pi   # todo ???
+
+
+    print inc[i], mu_0, mu_ex, phi_0, phi_ex
 
     R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF)
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()

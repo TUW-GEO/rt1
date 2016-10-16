@@ -59,11 +59,6 @@ class Volume(Scatter):
         return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(theta_i,theta_s,phi_i,phi_s)),(n,0,NP))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
-
-
-
-
-
 class Rayleigh(Volume):
     """
     class to define Rayleigh scattering
@@ -72,7 +67,6 @@ class Rayleigh(Volume):
         super(Rayleigh, self).__init__(**kwargs)
         self._set_function()
         self._set_legcoefficients()
-
 
     def _set_function(self):
         """
@@ -92,7 +86,7 @@ class Rayleigh(Volume):
         """
         self.ncoefs = 2
         n = sp.Symbol('n')
-        self.legcoefs = (3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))
+        self.legcoefs = ((3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))).expand()
 
 
 

@@ -99,6 +99,8 @@ class RT1(object):
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
         volexp = self.RV.legexpansion().doit()
+
+        print 'Surface expansion: ', self.SRF.legexpansion()
         brdfexp = self.SRF.legexpansion().doit()
 
 
