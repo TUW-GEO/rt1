@@ -203,27 +203,29 @@ class RT1(object):
         Fint2 = self._calc_Fint(self.mu_ex, self.mu_0)
         return self.I0 * self.mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self.mu_ex) * Fint1 + np.exp(-self.RV.tau/self.mu_0)*Fint2 )
 
-    def _calc_Fint(self, mu1, mu2):
+    def _calc_Fintxxx(self, mu1, mu2):
         return 0.  # todo this is a dummy
 
 
-    def _calc_Fintxx(self, mu1, mu2):
+    def _calc_Fint(self, mu1, mu2):
         """
         (37)
+        first order interaction term
         """
         S = 0.
+        nmax = self.SRF.ncoefs+self.RV.ncoefs+1
+
+        hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
 
         for n in xrange(nmax):
-            S2 = 0.
-            for k in xrange(1,(n+1)+1):
-                E_k1 = expn(k+1., self.RV.tau)
-                S2 += mu1**(-k) * (E_k1 - np.exp(-self.RV.tau/mu1)/k)
-
-            # final sum
-            # todo check once more the function
-            S += fn[n] * mu1**(n+1) * (np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau) + S2)
+            S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)
+            fn = self._get_fn(n, self.theta_i, self.phi_i)
+            S += fn * mu1**(n+1) * (hlp1 + S2)
 
         return S
+
+
+np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
 
 
 #   function that evaluates the coefficients
