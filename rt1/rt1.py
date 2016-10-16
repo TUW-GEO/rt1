@@ -21,7 +21,7 @@ class RT1(object):
     """
     main class to perform RT simulations
     """
-    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None):
+    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, fn=None):
         """
         Parameters
         ----------
@@ -29,6 +29,9 @@ class RT1(object):
             incidence radiation
         RV : Volume
             random volume object
+        fn : sympy expression
+            precalculated coefficient expression; otherwise it will be automatically calculated
+            usefull for speedup when caling with different geometries
         """
         self.I0 = I0
         self.mu_0 = mu_0
@@ -44,13 +47,16 @@ class RT1(object):
         self.SRF = SRF
         assert self.SRF is not None, 'ERROR: needs to provide surface information'
 
+
+        if fn is None:
         # precalculate the expansiion coefficients for the interaction term
-        expr_int = self._calc_interaction_expansion()
+            expr_int = self._calc_interaction_expansion()
 
-        # now we have the integral formula ready. The next step is now to
-        # extract the expansion coefficients
-        self.fn = self._extract_coefficients(expr_int)
-
+            # now we have the integral formula ready. The next step is now to
+            # extract the expansion coefficients
+            self.fn = self._extract_coefficients(expr_int)
+        else:
+            self.fn = fn
 
     def _extract_coefficients(self, expr):
         """
@@ -99,8 +105,6 @@ class RT1(object):
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
         volexp = self.RV.legexpansion().doit()
-
-        print 'Surface expansion: ', self.SRF.legexpansion()
         brdfexp = self.SRF.legexpansion().doit()
 
 
@@ -223,7 +227,6 @@ class RT1(object):
             S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
             fn = self._get_fn(n, np.arccos(mu1), phi1)
             S += fn * mu1**(n+1) * (hlp1 + S2)
-
         return S
 
 

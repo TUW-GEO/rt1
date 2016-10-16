@@ -33,6 +33,7 @@ Ivol = np.ones_like(inc)*np.nan
 
 ##C = RayleighIsotropic()  # todo: this is not the combination in the paper!
 
+fn = None
 for i in xrange(len(inc)):
     mu_0 = np.cos(np.deg2rad(inc[i]))
     mu_ex = mu_0*1.
@@ -40,9 +41,10 @@ for i in xrange(len(inc)):
     phi_ex = np.pi   # todo ???
 
 
-    print inc[i], mu_0, mu_ex, phi_0, phi_ex
+    #print inc[i], mu_0, mu_ex, phi_0, phi_ex
 
-    R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF)
+    R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn)
+    fn = R.fn  # store coefficients for faster itteration
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
 ctot='black'
