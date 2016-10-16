@@ -10,9 +10,10 @@ Quast & Wagner (2016): doi:10.1364/AO.55.005379
 ###todo implement unittests
 
 import numpy as np
-from surface import Isotropic
 from scipy.special import expi
 from scipy.special import expn
+
+import sympy as sp
 
 
 
@@ -44,44 +45,44 @@ class RT1(object):
         assert self.SRF is not None, 'ERROR: needs to provide surface information'
 
         # precalculate the expansiion coefficients for the interaction term
-        self._calc_interaction_expansion()
+        expr_int = self._calc_interaction_expansion()
+
+        # now we have the integral formula ready. The next step is now to
+        # extract the expansion coefficients
+        fn = self._extract_coefficients(expr_int)
+        print 'coefficients:'
+        print fn
+
+        stop
 
 
         #~ self.Fn = Fn
         #~ assert self.Fn is not None, 'ERROR: an object handling the coefficients needs to be provided'
 
+    def _extract_coefficients(self, expr):
+        """
+        extract Fn coefficients from given forumula
+        This is done by setting all the exponents to zero and look at the
+        remainer for each power of cosine
+        """
+        theta_s = sp.Symbol('theta_s')
+        replacementsnull= {sp.cos(theta_s):0.}
 
-    #~ def cos_theta(self, mu_i, mu_s, phi_i, phi_s):
-        #~ """
-        #~ A14
-#~
-        #~ Parameters
-        #~ ----------
-        #~ mu_i : float
-            #~ cosine of incidence angle
-        #~ mu_s : float
-            #~ cosine of scattering angle
-        #~ phi_i : float
-            #~ incident azimuth angle [rad]
-        #~ phi_s : float
-            #~ scattering azimuth angle [rad]
-        #~ """
-#~
-        #~ theta_i = np.arccos(mu_i)
-        #~ theta_s = np.arccos(mu_s)
-#~
-        #~ #print 'theta_i, theta_s', theta_i, theta_s, mu_i, mu_s
-#~
-#~
-        #~ ctheta = mu_i*mu_s + np.sin(theta_i)*np.sin(theta_s)*np.cos(phi_i-phi_s)
-        #~ return ctheta
+        # construct a list of coefficients
+        fn=[]
+        fn= fn + [expr.xreplace(replacementsnull)]
 
-    #~ def cos_theta_prime(self, mu_i, mu_s, phi_i, phi_s):
-        #~ """
-        #~ A15
-        #~ """
-        #~ ctheta_prime = -mu_i*mu_s + np.sin(np.arccos(mu_i))*np.sin(np.arccos(mu_s))*np.cos(phi_i-phi_s)
-        #~ return ctheta_prime
+        for nn in range(1,self.SRF.ncoefs+self.RV.ncoefs+1):
+            replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]
+            replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1)])
+            fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
+
+        return fn
+
+
+
+
+
 
     def _calc_interaction_expansion(self):
         """
@@ -92,26 +93,61 @@ class RT1(object):
         """
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
-        volexp = self.RV.legexpansion()
-        brdfexp = self.SRF.legexpansion()
+        volexp = self.RV.legexpansion().doit()
+        brdfexp = self.SRF.legexpansion().doit()
 
 
         #todo for efficency reasons this should be only done once and not for each angle !!!
 
 
         #   preparation of the product of p*BRDF for coefficient retrieval
-        fPoly =(volexp*brdfexp).expand()
-        print fPoly
+        fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi     todo, why multiplicative factor of 2*pi???
+
+        # do integration of eq. 23
+        expr = self._integrate_0_2pi_phis(fPoly)
+
+        # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
+        theta_s = sp.Symbol('theta_s')
+        replacements = [(sp.sin(theta_s)**i,((1.-sp.cos(theta_s)**2.)**sp.Rational(i,2)).expand())  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
+        res = expr.xreplace(dict(replacements)).expand()
+
+        # o.k., by now we have he integral formulation ready.
+        return res
+
+    def _gammafunkt(self, x):
+        return (sp.factorial(x/2.)*(-4.)**(x/2.))/sp.factorial(x)*sp.sqrt(sp.pi)
 
 
-        #~ 2*pi
-#~
-#~
-        #~ def pexpansion(thetai,thetas,phii,phis):
-        #~ return Sum(plegcoefs.subs(dict(n=n))*legendre(n,thetap(thetai,thetas,phii,phis)),(n,0,Np)).doit()
-#~
-        #~ def BRDFexpansion(thetai,thetas,phii,phis):
-        #~ return Sum(BRDFlegcoefs.subs(dict(n=n))*legendre(n,thetaBRDF(thetai,thetas,phii,phis)),(n,0,NBRDF)).doit()
+    def _cosintegral(self, i):
+        """
+        integral of cos(x)**i in the interval 0 ... 2*pi
+        """
+        if i % 2 == 0.:  # origin of this formula? todo
+            return 1./(2.*sp.pi)*(2.**(i+1)*sp.pi**2.)/(sp.factorial(i)*self._gammafunkt(i)**2.)
+        else:
+            # for odd exponents result is always zero
+            return 0.
+
+    def _integrate_0_2pi_phis(self, expr):
+        """
+        integrate from zero to 2pi for phi_s
+        and return similified expression
+        """
+        phi_s = sp.Symbol('phi_s')
+
+        # replace first all odd powers of sin(phi_s) as these are all zero for the integral
+        replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 1]
+        res = expr.xreplace(dict(replacements1)).expand()
+
+        # then subsitute the sine**2 by 1-cos**2
+        replacements2 = [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 0]
+        res = res.xreplace(dict(replacements2)).expand()
+
+        # integrate the cosine terms
+        replacements3 = [(sp.cos(phi_s)**i,self._cosintegral(i)) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+5)]
+        res = res.xreplace(dict(replacements3)).expand()
+        return res
+
 
 
     def calc(self):
