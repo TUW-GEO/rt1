@@ -60,8 +60,29 @@ class TestRT1(unittest.TestCase):
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 
-    def test_interaction(self):
-        pass
+    def test_fn_coefficients(self):
+        # test if calculation of fn coefficients is correct
+        # this is done by comparing the obtained coefficients
+        # against the analytical solution using a Rayleigh volume
+        # and isotropic surface scattering phase function
+        S = Isotropic()
+        V = Rayleigh(tau=0.7, omega=0.3)
+        mu_0 = 0.5
+        mu_ex = 0.5
+        phi_0 = 0.
+        RT = RT1(self.I0, mu_0, mu_ex, phi_0, self.phi_ex, RV=V, SRF=self.S)
+
+        # the reference solutions should be (for details see rayleighisocoefficients.pdf)
+        f0 = 3./(16.*np.pi) * (3.-mu_0**2.)
+        f1 = 0.
+        f2 = 3./(16.*np.pi) * (3.*mu_0**2.-1.)
+        f3 = 0.
+        # and all others are 0.
+        self.assertEqual(f0,RT._get_fn(0, RT.theta_0, RT.phi_0))
+        self.assertEqual(f1,RT._get_fn(1, RT.theta_0, RT.phi_0))
+        self.assertAlmostEqual(f2,RT._get_fn(2, RT.theta_0, RT.phi_0),10)
+        self.assertEqual(f3,RT._get_fn(3, RT.theta_0, RT.phi_0))
+
 
     #~ def test_fint(self):
         #~ RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)

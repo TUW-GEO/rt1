@@ -61,16 +61,29 @@ class RT1(object):
         remainer for each power of cosine
         """
         theta_s = sp.Symbol('theta_s')
-        replacementsnull= {sp.cos(theta_s):0.}
+        replacementsnull= {sp.cos(theta_s) : 0.}
 
         # construct a list of coefficients
         fn=[]
         fn= fn + [expr.xreplace(replacementsnull)]
 
+        print 'Before extraction: '
+        print expr
+
+        print ''
+        print 'extrected coefficients'
+
         for nn in range(1,self.SRF.ncoefs+self.RV.ncoefs+1):
-            replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]
-            replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1)])
+            replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]  # replace integer exponents
+            replacementsnn = replacementsnn + [(sp.cos(theta_s)**float(i),0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]  # replace float exponents
+            replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1.)] + [(sp.cos(theta_s)**float(nn),1.)]   )
+            #~ print ''
+            #~ print '***' , nn , '***'
+            #~ print 'Repl.: ', replacementsnn
+            #~ print expr
             fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
+            #~ print 'fn: ', fn
+        print fn
         return fn
 
 
@@ -142,6 +155,14 @@ class RT1(object):
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
+    def _get_fn(self, n, t0, p0):
+        """
+        function to evaluate expansion coefficients
+        as function of incident geometry
+        """
+        theta_i = sp.Symbol('theta_i')
+        phi_i = sp.Symbol('phi_i')
+        return self.fn[n].xreplace({theta_i:t0, phi_i:p0}).evalf()
 
 
     def calc(self):
