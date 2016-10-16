@@ -50,8 +50,6 @@ class RT1(object):
         # now we have the integral formula ready. The next step is now to
         # extract the expansion coefficients
         self.fn = self._extract_coefficients(expr_int)
-        print 'coefficients:'
-        print self.fn
 
 
     def _extract_coefficients(self, expr):
@@ -67,11 +65,11 @@ class RT1(object):
         fn=[]
         fn= fn + [expr.xreplace(replacementsnull)]
 
-        print 'Before extraction: '
-        print expr
-
-        print ''
-        print 'extrected coefficients'
+        #~ print 'Before extraction: '
+        #~ print expr
+#~
+        #~ print ''
+        #~ print 'extrected coefficients'
 
         for nn in range(1,self.SRF.ncoefs+self.RV.ncoefs+1):
             replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]  # replace integer exponents
@@ -83,7 +81,7 @@ class RT1(object):
             #~ print expr
             fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
             #~ print 'fn: ', fn
-        print fn
+        #~ print fn
         return fn
 
 
@@ -199,18 +197,20 @@ class RT1(object):
         """
         (19)
         """
-        Fint1 = self._calc_Fint(self.mu_0, self.mu_ex)
-        Fint2 = self._calc_Fint(self.mu_ex, self.mu_0)
+        Fint1 = self._calc_Fint(self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)  # todo clairfy usage of phi!!!
+        Fint2 = self._calc_Fint(self.mu_ex, self.mu_0, self.phi_ex, self.phi_0)
         return self.I0 * self.mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self.mu_ex) * Fint1 + np.exp(-self.RV.tau/self.mu_0)*Fint2 )
 
-    def _calc_Fintxxx(self, mu1, mu2):
+    def _calc_Fintxxx(self, mu1, mu2, phi1, phi2):
         return 0.  # todo this is a dummy
 
 
-    def _calc_Fint(self, mu1, mu2):
+    def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
         (37)
         first order interaction term
+        todo clarify why we need dependency on phi, as this is not the case in the paper
+        well, seems that in the paper phi_i is assumed to be always zero!
         """
         S = 0.
         nmax = self.SRF.ncoefs+self.RV.ncoefs+1
@@ -218,14 +218,14 @@ class RT1(object):
         hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
 
         for n in xrange(nmax):
-            S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)
-            fn = self._get_fn(n, self.theta_i, self.phi_i)
+            S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
+            fn = self._get_fn(n, np.arccos(mu1), phi1)
             S += fn * mu1**(n+1) * (hlp1 + S2)
 
         return S
 
 
-np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
+#~ np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
 
 
 #   function that evaluates the coefficients
