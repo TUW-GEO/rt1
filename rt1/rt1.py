@@ -1,13 +1,11 @@
 """
-Core module for 1st order scattering simulations using arbitrary BRDF and phase functions
+Core module for implementation of 1st order scattering model
+using arbitrary BRDF and phase functions
 
 References
 ----------
 Quast & Wagner (2016): doi:10.1364/AO.55.005379
-
 """
-
-###todo implement unittests
 
 import numpy as np
 from scipy.special import expi
@@ -36,8 +34,6 @@ class RT1(object):
         self.I0 = I0
         self.mu_0 = mu_0
         self.mu_ex = mu_ex
-        self.theta_0 = np.arccos(self.mu_0)  # todo set this as a property instead of fixed coding heres
-        self.theta_ex = np.arccos(self.mu_ex)
         self.phi_0 = phi_0
         self.phi_ex = phi_ex
 
@@ -57,6 +53,14 @@ class RT1(object):
             self.fn = self._extract_coefficients(expr_int)
         else:
             self.fn = fn
+
+    def _get_theta0(self):
+        return np.arccos(self.mu_0)
+    theta_0 = property(_get_theta0)
+
+    def _get_thetaex(self):
+        return np.arccos(self.mu_ex)
+    theta_ex = property(_get_thetaex)
 
     def _extract_coefficients(self, expr):
         """
