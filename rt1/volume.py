@@ -47,8 +47,6 @@ class Volume(Scatter):
         return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
     def legexpansion(self):
-        # todo ensure that we do expansion only once in the initialization
-        # otherwise it would be done for each angle!!!
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
@@ -61,7 +59,7 @@ class Volume(Scatter):
 
 class Rayleigh(Volume):
     """
-    class to define Rayleigh scattering
+    class to define Rayleigh scattering function
     """
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
@@ -72,7 +70,6 @@ class Rayleigh(Volume):
         """
         define phase function as sympy object for later evaluation
         """
-        #def pfunkt(t0):
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')

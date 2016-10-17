@@ -111,10 +111,6 @@ class RT1(object):
         volexp = self.RV.legexpansion().doit()
         brdfexp = self.SRF.legexpansion().doit()
 
-
-        #todo for efficency reasons this should be only done once and not for each angle !!!
-
-
         #   preparation of the product of p*BRDF for coefficient retrieval
         fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi     todo, why multiplicative factor of 2*pi???
 
@@ -210,10 +206,6 @@ class RT1(object):
         Fint1 = self._calc_Fint(self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)  # todo clairfy usage of phi!!!
         Fint2 = self._calc_Fint(self.mu_ex, self.mu_0, self.phi_ex, self.phi_0)
         return self.I0 * self.mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self.mu_ex) * Fint1 + np.exp(-self.RV.tau/self.mu_0)*Fint2 )
-
-    def _calc_Fintxxx(self, mu1, mu2, phi1, phi2):
-        return 0.  # todo this is a dummy
-
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """

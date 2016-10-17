@@ -36,8 +36,6 @@ class Surface(Scatter):
         return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
     def legexpansion(self):
-        # todo ensure that we do expansion only once in the initialization
-        # otherwise it would be done for each angle!!!
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
@@ -72,7 +70,7 @@ class Isotropic(Surface):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = 1./sp.pi   #<<<< todo gere a different cosine theta is required dthan for volume scattering phase function
+        self._func = 1./sp.pi
 
 
 class CosineLobe(Surface):
