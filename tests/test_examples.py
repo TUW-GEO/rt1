@@ -45,6 +45,7 @@ class TestExamples(unittest.TestCase):
             Itot, Isurf, Ivol, Iint = RT.calc()
 
             self.assertAlmostEqual(Isurf,x['surf'][i],10)
+            self.assertAlmostEqual(Ivol,x['vol'][i],10)
 
 
 
