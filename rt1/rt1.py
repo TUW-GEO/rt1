@@ -91,7 +91,7 @@ class RT1(object):
             #~ print expr
             fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
             #~ print 'fn: ', fn
-        #~ print fn
+        #~ print 'Number of coefficients: ', len(fn)
         return fn
 
 
@@ -112,7 +112,7 @@ class RT1(object):
         brdfexp = self.SRF.legexpansion().doit()
 
         #   preparation of the product of p*BRDF for coefficient retrieval
-        fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi     todo, why multiplicative factor of 2*pi???
+        fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
@@ -122,7 +122,7 @@ class RT1(object):
         replacements = [(sp.sin(theta_s)**i,((1.-sp.cos(theta_s)**2.)**sp.Rational(i,2)).expand())  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
         res = expr.xreplace(dict(replacements)).expand()
 
-        # o.k., by now we have he integral formulation ready.
+        # o.k., by now we have the integral formulation ready.
         return res
 
     def _gammafunkt(self, x):

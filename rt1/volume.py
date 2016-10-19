@@ -81,7 +81,7 @@ class Rayleigh(Volume):
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
-        self.ncoefs = 2
+        self.ncoefs = 10
         n = sp.Symbol('n')
         self.legcoefs = ((3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))).expand()
 

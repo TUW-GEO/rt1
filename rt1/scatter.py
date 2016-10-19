@@ -42,7 +42,9 @@ class Scatter(object):
         phi_s = sp.Symbol('phi_s')
 
 
-        #print self.legexpansion().xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps})
+        #~ print 'Before replace: ', self.legexpansion()e
+        print 'and after replace Expansion: ', self.legexpansion().xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps})
+        print ''
         return self.legexpansion().xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps}).evalf()
 
 

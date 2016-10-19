@@ -36,15 +36,18 @@ class Surface(Scatter):
         return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
     def legexpansion(self):
+        assert self.ncoefs > 0
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
 
         NBRDF = self.ncoefs
+        print 'NBRDF: ', NBRDF
         n = sp.Symbol('n')
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)),(n,0,NBRDF))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
-
+        #~ for i in xrange(11):
+            #~ print 'n: ', i, (self._get_legcoef(i)*sp.legendre(i,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s))).xreplace({n:i, theta_i:sp.pi/2.,theta_s:0.1234,phi_i:sp.pi/2.,phi_s:0.})
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class Isotropic(Surface):
@@ -89,7 +92,7 @@ class CosineLobe(Surface):
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = (((2.*n+1.)*15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((8.+n)/2.))).expand()    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        self.legcoefs = (((2.*n+1.)*15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((sp.Rational(8.)+n)/sp.Rational(2.)))).expand()    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """

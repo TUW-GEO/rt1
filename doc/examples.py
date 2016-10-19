@@ -47,6 +47,7 @@ for i in xrange(len(inc)):
     fn = R.fn  # store coefficients for faster itteration
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
+
 ctot='black'
 csurf='red'
 cvol='green'
