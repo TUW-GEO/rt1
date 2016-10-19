@@ -4,6 +4,8 @@
 test examples given in paper by comparison against reference solution
 """
 
+from nose.tools import nottest
+
 import unittest
 import numpy as np
 
@@ -29,8 +31,9 @@ class TestExamples(unittest.TestCase):
         self.tau = x[:,2]
         self.fn = x[:,3]
         self.cc = x[:,4]
-        self.step = 1
+        self.step = 82
 
+    #@nottest
     def test_example1_fn(self):
         S = CosineLobe(ncoefs=10)
         V = Rayleigh(tau=0.7, omega=0.3)
@@ -47,34 +50,30 @@ class TestExamples(unittest.TestCase):
             RT = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S, fn=fn)
             fn=RT.fn
 
-            for f in fn:
-                print f
-
-
             self.assertEqual(self.tau[i],V.tau)   # check that tau for reference is the same as used for Volume object
-            self.assertAlmostEqual(RT._get_fn(int(self.n[i]), np.arccos(mu_0), phi_0),self.fn[i])
+            self.assertAlmostEqual(RT._get_fn(int(self.n[i]), np.arccos(mu_0), phi_0),self.fn[i],15)  # compare against reference solutions
 
 
-    #~ def test_example1_Fint(self):
-        #~ # backscatter case
-        #~ S = CosineLobe(ncoefs=10)
-        #~ V = Rayleigh(tau=0.7, omega=0.3)
-#~
-        #~ I0=1.
-        #~ phi_0 = 0.
-        #~ phi_ex = 0.  # backscatter case
-        #~ for i in xrange(0,len(self.inc),self.step):
-            #~ print 'i,n:', i, self.n[i]
-            #~ mu_0 = np.cos(self.inc[i])
-            #~ mu_ex = mu_0*1.
-#~
-            #~ RT = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
-            #~ self.assertEqual(self.tau[i],V.tau)   # check that tau for reference is the same as used for Volume object
-#~
-            #~ Fint1 = RT._calc_Fint(mu_0, mu_ex, phi_0, phi_ex)  # todo clairfy usage of phi!!!
-            #~ Fint2 = RT._calc_Fint(mu_ex, mu_0, phi_ex, phi_0)
-#~
-            #~ self.assertEqual(Fint1,Fint2)
+    def test_example1_Fint(self):
+        # backscatter case
+        S = CosineLobe(ncoefs=10)
+        V = Rayleigh(tau=0.7, omega=0.3)
+
+        I0=1.
+        phi_0 = 0.
+        phi_ex = 0.  # backscatter case
+        for i in xrange(0,len(self.inc),self.step):
+            print 'i,n:', i, self.n[i]
+            mu_0 = np.cos(self.inc[i])
+            mu_ex = mu_0*1.
+
+            RT = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+            self.assertEqual(self.tau[i],V.tau)   # check that tau for reference is the same as used for Volume object
+
+            Fint1 = RT._calc_Fint(mu_0, mu_ex, phi_0, phi_ex)  # todo clairfy usage of phi!!!
+            Fint2 = RT._calc_Fint(mu_ex, mu_0, phi_ex, phi_0)
+
+            self.assertEqual(Fint1,Fint2)
             #~ self.assertAlmostEqual(Fint1,self.cc[i])
 
 
