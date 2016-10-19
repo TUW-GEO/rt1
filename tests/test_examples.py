@@ -33,7 +33,7 @@ class TestExamples(unittest.TestCase):
         self.cc = x[:,4]
         self.step = 82
 
-    #@nottest
+    @nottest
     def test_example1_fn(self):
         S = CosineLobe(ncoefs=10)
         V = Rayleigh(tau=0.7, omega=0.3)
@@ -53,7 +53,7 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(self.tau[i],V.tau)   # check that tau for reference is the same as used for Volume object
             self.assertAlmostEqual(RT._get_fn(int(self.n[i]), np.arccos(mu_0), phi_0),self.fn[i],15)  # compare against reference solutions
 
-
+    @nottest
     def test_example1_Fint(self):
         # backscatter case
         S = CosineLobe(ncoefs=10)

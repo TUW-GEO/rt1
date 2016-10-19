@@ -34,6 +34,8 @@ f2 = np.asarray(f2).astype('float')
 res = f1*f2
 
 
+print sp.__version__
+
 """
 results in:
 n, sympy.sum(), cum:  0 0.0833333333333333 0.0833333333333333
@@ -44,7 +46,7 @@ n, sympy.sum(), cum:  4 0.00585937500000000 0.00585937500000000
 n, sympy.sum(), cum:  5 0.00585937500000001 0.00585937500000001
 n, sympy.sum(), cum:  6 0.000569661458333343 0.000569661458333343
 n, sympy.sum(), cum:  7 0.000569661458333343 0.000569661458333343
-n, sympy.sum(), cum:  8 0.000569661458333343 0.000137329101562509    <<---- look at differences here!
+n, sympy.sum(), cum:  8 0.000569661458333343 0.000137329101562509    <<---- look at differences here!  solved! was due to old sympy version
 n, sympy.sum(), cum:  9 0.000569661458333343 0.000137329101562509
 n, sympy.sum(), cum:  10 0.000569661458333343 4.72068786621187e-5
 n, sympy.sum(), cum:  11 0.000569661458333343 4.72068786621187e-5

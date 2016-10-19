@@ -48,11 +48,11 @@ class Surface(Scatter):
         #~ for i in xrange(11):
             #~ print 'n: ', i, (self._get_legcoef(i)*sp.legendre(i,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s))).xreplace({n:i, theta_i:sp.pi/2.,theta_s:0.1234,phi_i:sp.pi/2.,phi_s:0.})
 
-        fak1 = self.legcoefs.expand().doit()
-        fak2=sp.legendre(n, self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)).expand().doit()
+        #~ fak1 = self.legcoefs.expand().doit()
+        #~ fak2=sp.legendre(n, self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)).expand().doit()
 
         # note that sp.Sum is NOT used, as this results in somewhat strange results!
-        return np.sum([fak1.xreplace({n:i}).evalf()*fak2.xreplace({n:i}).evalf() for i in range(NBRDF)])
+        #return np.sum([fak1.xreplace({n:i}).evalf()*fak2.xreplace({n:i}).evalf() for i in range(NBRDF)])
 
 
 
@@ -61,7 +61,7 @@ class Surface(Scatter):
 
         #~ return sp.Sum((fak1*fak2).expand(), (n,0,NBRDF-1))    # note that the sp.Sum function results in somewhat strange results in the end!
 
-        #return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)),(n,0,NBRDF+1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class Isotropic(Surface):
