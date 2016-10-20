@@ -109,7 +109,7 @@ class HenyeyGreenstein(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = (1.-self.t**2.) / (4.*sp.pi)*(1.+self.t**2.-2.*t*self.thetap(theta_i,theta_s,phi_i,phi_s))**1.5
+        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s))**1.5)
 
     def _set_legcoefficients(self):
         """
