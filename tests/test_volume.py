@@ -41,6 +41,11 @@ class TestVolume(unittest.TestCase):
         p = V.p(theta_i, theta_s, phi_i, phi_s)
         self.assertAlmostEqual(p, (1.-0.7*0.7)/(4.*np.pi*(1.+0.7*0.7)**1.5),10)
 
+    def test_test_HenyeyGreenstein_coefficients(self):
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        self.assertEqual(V._get_legcoef(0),1./(4.*np.pi))
+
+
 
 
 
