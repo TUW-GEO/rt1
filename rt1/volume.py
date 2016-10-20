@@ -87,5 +87,34 @@ class Rayleigh(Volume):
 
 
 
+class HenyeyGreenstein(Volume):
+    """
+    class to define HenyeyGreenstein scattering function
+    """
+    def __init__(self, t=None, ncoefs=None, **kwargs):
+        assert t is not None, 't parameter needs to be provided!'
+        assert ncoefs is not None, 'Number of coefficients needs to be specified'
+        super(HenyeyGreenstein, self).__init__(**kwargs)
+        self.t = t
+        self.ncoefs = ncoefs
+        assert self.ncoefs > 1
+        self._set_function()
+        self._set_legcoefficients()
 
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+        self._func = (1.-self.t**2.) / (4.*sp.pi)*(1.+self.t**2.-2.*t*self.thetap(theta_i,theta_s,phi_i,phi_s))**1.5
 
+    def _set_legcoefficients(self):
+        """
+        set Legrende coefficients
+        needs to be a function that can be later evaluated by subsituting 'n'
+        """
+        n = sp.Symbol('n')
+        self.legcoefs = (1./(4.*sp.pi)) * (2.*n+1)*self.t**n
