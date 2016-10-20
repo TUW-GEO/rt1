@@ -94,11 +94,6 @@ class RT1(object):
         #~ print 'Number of coefficients: ', len(fn)
         return fn
 
-
-
-
-
-
     def _calc_interaction_expansion(self):
         """
         calculate expensions to be able to analytically estimate Eq.23 needed for the interaction term
@@ -123,6 +118,7 @@ class RT1(object):
         res = expr.xreplace(dict(replacements)).expand()
 
         # o.k., by now we have the integral formulation ready.
+        print res
         return res
 
     def _gammafunkt(self, x):
@@ -150,7 +146,7 @@ class RT1(object):
         replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 1]
         res = expr.xreplace(dict(replacements1)).expand()
 
-        # then subsitute the sine**2 by 1-cos**2
+        # then substitute the sine**2 by 1-cos**2
         replacements2 = [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 0]
         res = res.xreplace(dict(replacements2)).expand()
 

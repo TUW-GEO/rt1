@@ -10,7 +10,7 @@ import sys
 #sys.path.append(os.path.join('..', 'mintrend'))
 sys.path.append('..')
 from rt1.rt1 import RT1
-from rt1.volume import Rayleigh
+from rt1.volume import Rayleigh, HenyeyGreenstein
 #~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import Isotropic, CosineLobe
 
@@ -98,14 +98,27 @@ class TestRT1(unittest.TestCase):
 
         RT._get_fn(0, RT.theta_0, RT.phi_0)
 
+    def test_fn_coefficients_HGIso(self):
+        # test if calculation of fn coefficients is correct
+        # this is done by comparing the obtained coefficients
+        # against the analytical solution using a Rayleigh volume
+        # and isotropic surface scattering phase function
+        S = Isotropic()
 
+        mu_0 = 1.
+        mu_ex = 1.
+        phi_0 = 0.
+        phi_ex = np.pi
 
-    #~ def test_fint(self):
-        #~ RT = RT1(self.I0, self.mu_0, self.mu_ex, RV=self.V, SRF=self.S, Fn=self.C)
-        #~ mu1 = 0.5
-        #~ mu2 = 0.5
-        #~ F = RT._calc_Fint(mu1, mu2)
-        #~ self.assertEqual(F, 0.)
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
+        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+        r = RT._get_fn(0, RT.theta_0, RT.phi_0)
+        self.assertEqual(r,1./(2.*np.pi))
+
+        #~ V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=2)
+        #~ RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+        #~ r = RT._get_fn(0, RT.theta_0, RT.phi_0)
+        #~ self.assertEqual(r,1./(2.*np.pi))
 
 
 

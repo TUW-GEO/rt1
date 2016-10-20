@@ -97,7 +97,7 @@ class HenyeyGreenstein(Volume):
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
         self.ncoefs = ncoefs
-        assert self.ncoefs > 1
+        assert self.ncoefs > 0
         self._set_function()
         self._set_legcoefficients()
 
