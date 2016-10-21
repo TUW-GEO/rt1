@@ -50,6 +50,7 @@ class RT1(object):
 
             # now we have the integral formula ready. The next step is now to
             # extract the expansion coefficients
+            #~ print 'Integral expansion before extraction:'
             self.fn = self._extract_coefficients(expr_int)
         else:
             self.fn = fn
@@ -109,6 +110,12 @@ class RT1(object):
         #   preparation of the product of p*BRDF for coefficient retrieval
         fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
+        #~ print fPoly
+        #~ print volexp
+        #~ print brdfexp
+
+
+
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
 
@@ -118,7 +125,7 @@ class RT1(object):
         res = expr.xreplace(dict(replacements)).expand()
 
         # o.k., by now we have the integral formulation ready.
-        print res
+        #~ print res
         return res
 
     def _gammafunkt(self, x):
@@ -129,7 +136,7 @@ class RT1(object):
         """
         integral of cos(x)**i in the interval 0 ... 2*pi
         """
-        if i % 2 == 0.:  # origin of this formula? todo
+        if i % 2 == 0.:  # origin of this formula not clear, Raphael documents this
             return 1./(2.*sp.pi)*(2.**(i+1)*sp.pi**2.)/(sp.factorial(i)*self._gammafunkt(i)**2.)
         else:
             # for odd exponents result is always zero
@@ -162,6 +169,7 @@ class RT1(object):
         """
         theta_i = sp.Symbol('theta_i')
         phi_i = sp.Symbol('phi_i')
+        print 'fn, ', n, self.fn[n]
         return self.fn[n].xreplace({theta_i:t0, phi_i:p0}).evalf()
 
 
@@ -199,7 +207,7 @@ class RT1(object):
         """
         (19)
         """
-        Fint1 = self._calc_Fint(self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)  # todo clairfy usage of phi!!!
+        Fint1 = self._calc_Fint(self.mu_0, self.mu_ex, self.phi_0, self.phi_ex)
         Fint2 = self._calc_Fint(self.mu_ex, self.mu_0, self.phi_ex, self.phi_0)
         return self.I0 * self.mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self.mu_ex) * Fint1 + np.exp(-self.RV.tau/self.mu_0)*Fint2 )
 
@@ -207,8 +215,10 @@ class RT1(object):
         """
         (37)
         first order interaction term
-        todo clarify why we need dependency on phi, as this is not the case in the paper
-        well, seems that in the paper phi_i is assumed to be always zero!
+
+        in the original paper there is no dependency on PHI, but here it is
+        as the we don not assume per se that PHI1=0 like it is done in the
+        mansucript.
         """
         S = 0.
         nmax = self.SRF.ncoefs+self.RV.ncoefs+1

@@ -107,6 +107,10 @@ class CosineLobe(Surface):
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
         self.legcoefs = (((2.*n+1.)*15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((sp.Rational(8.)+n)/sp.Rational(2.)))).expand()    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        #self.legcoefs = (15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((sp.Rational(8.)+n)/sp.Rational(2.)))
+        #~ print 'legcoefs: ', self.legcoefs
+        #~ print 'coef(0)', self._get_legcoef(0)
+
 
     def _set_function(self):
         """

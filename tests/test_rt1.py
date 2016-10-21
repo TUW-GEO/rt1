@@ -14,6 +14,8 @@ from rt1.volume import Rayleigh, HenyeyGreenstein
 #~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import Isotropic, CosineLobe
 
+from scipy.special import gamma
+
 
 
 class TestRT1(unittest.TestCase):
@@ -85,18 +87,43 @@ class TestRT1(unittest.TestCase):
 
     def test_fn_coefficients_RayCosine(self):
         # test if calculation of fn coefficients is correct
+        # for a cosine lobe with reduced number of coefficients
         # this is done by comparing the obtained coefficients
         # against the analytical solution using a Rayleigh volume
         # and isotropic surface scattering phase function
-        S = CosineLobe(ncoefs=10)
+        S = CosineLobe(ncoefs=1)
         V = Rayleigh(tau=0.7, omega=0.3)
-        mu_0 = 1.
-        mu_ex = 1.
-        phi_0 = 0.
-        phi_ex = np.pi
-        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+        #--> cosTHETA = 0.
 
-        RT._get_fn(0, RT.theta_0, RT.phi_0)
+        theta_i = np.pi/2.
+        theta_s = 0.234234
+        phi_i = np.pi/2.
+        phi_s = 0.
+
+        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_s), phi_i, phi_s, RV=V, SRF=S)
+        res = RT._get_fn(0, RT.theta_0, RT.phi_0)
+
+        # analtytical solution for ncoefs = 1 --> n=0
+        #\int_0^2pi  Raycoef*Coscoef dphi = \int_0^2pi (a0P0+a2P2)*(b0P0) = 2*pia0b0-a2b0pi
+
+        a0=(3./(16.*np.pi))*(4./3.)
+        a2=(3./(16.*np.pi))*(2./3.)
+        b0=(15.*np.sqrt(np.pi))/(16.*gamma(3.5)*gamma(4.))
+
+        #~ print 'a0:', a0, V._get_legcoef(0)
+        #~ print 'a2:', a2, V._get_legcoef(2)
+        #~ print 'b0: ', b0, S._get_legcoef(0)
+
+        ref = 2.*np.pi*a0*b0- a2*b0*np.pi
+
+        self.assertAlmostEqual(ref, res)
+
+
+
+
+
+
+
 
     def test_fn_coefficients_HGIso(self):
         # test if calculation of fn coefficients is correct
