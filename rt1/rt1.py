@@ -13,8 +13,6 @@ from scipy.special import expn
 
 import sympy as sp
 
-
-
 class RT1(object):
     """
     main class to perform RT simulations
@@ -150,15 +148,15 @@ class RT1(object):
         phi_s = sp.Symbol('phi_s')
 
         # replace first all odd powers of sin(phi_s) as these are all zero for the integral
-        replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 1]
+        replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 1]
         res = expr.xreplace(dict(replacements1)).expand()
 
         # then substitute the sine**2 by 1-cos**2
-        replacements2 = [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+5) if i % 2 == 0]
+        replacements2 = [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
         res = res.xreplace(dict(replacements2)).expand()
 
         # integrate the cosine terms
-        replacements3 = [(sp.cos(phi_s)**i,self._cosintegral(i)) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+5)]
+        replacements3 = [(sp.cos(phi_s)**i,self._cosintegral(i)) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1)]
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
@@ -169,7 +167,7 @@ class RT1(object):
         """
         theta_i = sp.Symbol('theta_i')
         phi_i = sp.Symbol('phi_i')
-        print 'fn, ', n, self.fn[n]
+        #print 'fn, ', n, self.fn[n]
         return self.fn[n].xreplace({theta_i:t0, phi_i:p0}).evalf()
 
 
