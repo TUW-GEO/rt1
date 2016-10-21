@@ -35,7 +35,7 @@ class TestExamples(unittest.TestCase):
 
     #@nottest
     def test_example1_fn(self):
-        S = CosineLobe(ncoefs=1)
+        S = CosineLobe(ncoefs=2)
         V = Rayleigh(tau=0.7, omega=0.3)
 
         I0=1.
