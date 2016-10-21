@@ -95,6 +95,10 @@ class TestRT1(unittest.TestCase):
         V = Rayleigh(tau=0.7, omega=0.3)
         #--> cosTHETA = 0.
 
+
+        # tests are using full Volume phase function, but only
+        # ncoef times the coefficients from the surface
+
         theta_i = np.pi/2.
         theta_s = 0.234234
         phi_i = np.pi/2.
