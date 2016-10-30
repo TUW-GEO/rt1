@@ -128,6 +128,12 @@ plt.show()
 
 # ---------------------- generation 3d plots
 
+thetaplot = 55.
+phiplot = 0.
+
+
+
+
 # define plot-grid
 theta,phi = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,25)
 THETA,PHI = np.meshgrid(theta,phi)
@@ -135,7 +141,7 @@ THETA,PHI = np.meshgrid(theta,phi)
 
 # calculate bistatic coefficients
 print('start of bistatic coefficient generation')
-testfn = RT1(1., np.cos(np.deg2rad(45)), np.cos(np.deg2rad(45)), 0., np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
+testfn = RT1(1., np.cos(np.deg2rad(thetaplot)), np.cos(np.deg2rad(45)), phiplot, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
 
 # initialize arrays
 tot3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
@@ -147,12 +153,14 @@ int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
 # definition of function to evaluate bistatic contributions
 # since this step might take a while an estimation of the calculation-time was included
 
+# define incidence angle for plotting
+
 def Rad(tt,pp):
     for i in range(0,len(tt)):
         if i == 0: tic = timeit.default_timer()
         if i == 0: print('... estimating evaluation-time...')
         for j in range(0,len(pp)):
-            test = RT1(1., np.cos(np.deg2rad(45)), np.cos(theta[i]), 0.,phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
+            test = RT1(1., np.cos(np.deg2rad(thetaplot)), np.cos(theta[i]), phiplot,phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
             tot3d[j][i],surf3d[j][i],vol3d[j][i],int3d[j][i] = test.calc()
         if i == 0: toc = timeit.default_timer()
         if i == 0: print('evaluation of 3dplot will take approximately ' + str(round((toc-tic)*len(tt)/60.,2)) + ' minutes')
@@ -182,9 +190,9 @@ import mpl_toolkits.mplot3d as plt3d
 fig = plt.figure(figsize=plt.figaspect(1.))
 ax3d = fig.add_subplot(1,1,1,projection='3d')
 
-ax3d.set_xlim3d(np.min(sphericaltransform(tot3dplot)[0])*1.5,np.max(sphericaltransform(tot3dplot)[0]))
-ax3d.set_ylim3d(np.min(sphericaltransform(tot3dplot)[0])*1.5,np.max(sphericaltransform(tot3dplot)[0]))
-ax3d.set_zlim3d(np.min(sphericaltransform(tot3dplot)[2]),np.max(sphericaltransform(tot3dplot)[2]))
+
+
+
 
 #cmap=plt.get_cmap('Reds_r')
 
@@ -215,21 +223,19 @@ ax3d.set_yticks([])
 ax3d.set_zticks([])
 
 
-    
+
+#Xb = np.array([0.,0.,0.,0.,1.,1.,1.,1.])*np.max(sphericaltransform(tot3dplot)) + np.array([1.,1.,1.,1.,0.,0.,0.,0.])*np.min(sphericaltransform(tot3dplot))
+#Yb = np.array([0.,0.,1.,1.,0.,0.,1.,1.])*(np.max(sphericaltransform(tot3dplot)) + np.abs(np.min(sphericaltransform(tot3dplot))))
+##Zb = np.array([0.,0.,0.,0.,1.,1.,1.,1.])*np.max(sphericaltransform(tot3dplot)) + np.array([1.,1.,1.,1.,0.,0.,0.,0.])*np.min(sphericaltransform(tot3dplot))
+#
+#Zb = np.array([0.,1.,0.,1.,0.,1.,0.,1.])*(np.max(sphericaltransform(tot3dplot)) + np.abs(np.min(sphericaltransform(tot3dplot))))
+#for xb, yb, zb in zip(Xb, Yb, Zb):
+#   ax3d.plot([xb], [yb], [zb], 'wo')
+
 plt.show()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# ensure display of correct aspect ratio (bug in mplot3d)
+# due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
+ax3d.auto_scale_xyz([np.min(sphericaltransform(tot3dplot)),np.max(sphericaltransform(tot3dplot))],
+                    [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))],
+                      [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))])
