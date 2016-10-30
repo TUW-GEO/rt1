@@ -17,7 +17,8 @@ class RT1(object):
     """
     main class to perform RT simulations
     """
-    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, fn=None):
+    
+    def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         """
         Parameters
         ----------
@@ -34,6 +35,9 @@ class RT1(object):
         self.mu_ex = mu_ex
         self.phi_0 = phi_0
         self.phi_ex = phi_ex
+        
+        self.geometry = geometry
+        assert isinstance(geometry,str), 'ERROR: geometry must be a 4-character string'
 
         self.RV = RV
         assert self.RV is not None, 'ERROR: needs to provide volume information'
@@ -53,6 +57,9 @@ class RT1(object):
         else:
             self.fn = fn
 
+
+       
+            
     def _get_theta0(self):
         return np.arccos(self.mu_0)
     theta_0 = property(_get_theta0)
@@ -102,16 +109,18 @@ class RT1(object):
         """
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
-        volexp = self.RV.legexpansion().doit()
-        brdfexp = self.SRF.legexpansion().doit()
 
+        volexp = self.RV.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit() 
+        brdfexp = self.SRF.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit()   
         #   preparation of the product of p*BRDF for coefficient retrieval
         fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
-        #~ print fPoly
-        #~ print volexp
-        #~ print brdfexp
 
+
+
+        #~print fPoly
+        #~print volexp
+        #~print brdfexp
 
 
         # do integration of eq. 23
@@ -126,19 +135,17 @@ class RT1(object):
         #~ print res
         return res
 
-    def _gammafunkt(self, x):
-        return (sp.factorial(x/2.)*(-4.)**(x/2.))/sp.factorial(x)*sp.sqrt(sp.pi)
-
 
     def _cosintegral(self, i):
         """
         integral of cos(x)**i in the interval 0 ... 2*pi
         """
-        if i % 2 == 0.:  # origin of this formula not clear, Raphael documents this
-            return 1./(2.*sp.pi)*(2.**(i+1)*sp.pi**2.)/(sp.factorial(i)*self._gammafunkt(i)**2.)
+        if i % 2==0:
+            return (2**(-i))*sp.binomial(i,i*sp.Rational(1,2))
         else:
             # for odd exponents result is always zero
-            return 0.
+            return 0.            
+    
 
     def _integrate_0_2pi_phis(self, expr):
         """
@@ -149,26 +156,30 @@ class RT1(object):
 
         # replace first all odd powers of sin(phi_s) as these are all zero for the integral
         replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 1]
-        res = expr.xreplace(dict(replacements1)).expand()
 
         # then substitute the sine**2 by 1-cos**2
-        replacements2 = [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
-        res = res.xreplace(dict(replacements2)).expand()
+        replacements1 = replacements1 + [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
+        res = expr.xreplace(dict(replacements1)).expand()
+
+        # replacements need to be done simultaneously, otherwise all remaining sin(phi_i)**even will be replaced by 0
 
         # integrate the cosine terms
         replacements3 = [(sp.cos(phi_s)**i,self._cosintegral(i)) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1)]
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
-    def _get_fn(self, n, t0, p0):
+    def _get_fn(self, n, t0, p0, tex, pex):
         """
         function to evaluate expansion coefficients
         as function of incident geometry
         """
         theta_i = sp.Symbol('theta_i')
         phi_i = sp.Symbol('phi_i')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_ex = sp.Symbol('phi_ex')
+
         #~ print 'fn, ', n, self.fn[n]
-        return self.fn[n].xreplace({theta_i:t0, phi_i:p0}).evalf()
+        return self.fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex}).evalf()
 
 
     def calc(self):
@@ -225,7 +236,7 @@ class RT1(object):
 
         for n in xrange(nmax):
             S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
-            fn = self._get_fn(n, np.arccos(mu1), phi1)
+            fn = self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2)
             S += fn * mu1**(n+1) * (hlp1 + S2)
         return S
 
