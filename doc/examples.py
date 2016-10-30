@@ -128,9 +128,9 @@ plt.show()
 
 # ---------------------- generation 3d plots
 
+# definition of incidence-angles
 thetaplot = 55.
 phiplot = 0.
-
 
 
 
@@ -139,7 +139,7 @@ theta,phi = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,
 THETA,PHI = np.meshgrid(theta,phi)
 
 
-# calculate bistatic coefficients
+# calculate bistatic fn coefficients
 print('start of bistatic coefficient generation')
 testfn = RT1(1., np.cos(np.deg2rad(thetaplot)), np.cos(np.deg2rad(45)), phiplot, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
 
@@ -152,8 +152,6 @@ int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
 
 # definition of function to evaluate bistatic contributions
 # since this step might take a while an estimation of the calculation-time was included
-
-# define incidence angle for plotting
 
 def Rad(tt,pp):
     for i in range(0,len(tt)):
@@ -182,19 +180,13 @@ def sphericaltransform(r):
     return X,Y,Z
 
 
+
+# plot of 3d scattering distribution
 import mpl_toolkits.mplot3d as plt3d
-
-
-
 
 fig = plt.figure(figsize=plt.figaspect(1.))
 ax3d = fig.add_subplot(1,1,1,projection='3d')
 
-
-
-
-
-#cmap=plt.get_cmap('Reds_r')
 
 plot = ax3d.plot_surface(
     sphericaltransform(tot3dplot)[0],sphericaltransform(tot3dplot)[1],sphericaltransform(tot3dplot)[2] ,rstride=1, cstride=1, color='Gray',
@@ -224,18 +216,10 @@ ax3d.set_zticks([])
 
 
 
-#Xb = np.array([0.,0.,0.,0.,1.,1.,1.,1.])*np.max(sphericaltransform(tot3dplot)) + np.array([1.,1.,1.,1.,0.,0.,0.,0.])*np.min(sphericaltransform(tot3dplot))
-#Yb = np.array([0.,0.,1.,1.,0.,0.,1.,1.])*(np.max(sphericaltransform(tot3dplot)) + np.abs(np.min(sphericaltransform(tot3dplot))))
-##Zb = np.array([0.,0.,0.,0.,1.,1.,1.,1.])*np.max(sphericaltransform(tot3dplot)) + np.array([1.,1.,1.,1.,0.,0.,0.,0.])*np.min(sphericaltransform(tot3dplot))
-#
-#Zb = np.array([0.,1.,0.,1.,0.,1.,0.,1.])*(np.max(sphericaltransform(tot3dplot)) + np.abs(np.min(sphericaltransform(tot3dplot))))
-#for xb, yb, zb in zip(Xb, Yb, Zb):
-#   ax3d.plot([xb], [yb], [zb], 'wo')
-
-plt.show()
-
 # ensure display of correct aspect ratio (bug in mplot3d)
 # due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
 ax3d.auto_scale_xyz([np.min(sphericaltransform(tot3dplot)),np.max(sphericaltransform(tot3dplot))],
                     [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))],
                       [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))])
+
+plt.show()
