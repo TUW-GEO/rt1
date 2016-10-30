@@ -4,32 +4,56 @@ Reproduce examples like given in the paper
 
 import sys
 sys.path.append('..')
+#sys.path.append('/home/rquast/shares/home/rt_model_python/rt1')
+
+
+import os
+os.chdir('/home/rquast/shares/home/rt_model_python/rt1')
+
 
 import matplotlib.pyplot as plt
 
+from rt1.volume import HenyeyGreenstein
 from rt1.volume import Rayleigh
+
 #~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import CosineLobe
 from rt1.rt1 import RT1
 
 import numpy as np
 
-plt.close('all')
+#plt.close('all')
+
+import timeit
+    
+tic = timeit.default_timer()
+
 
 # Example1, Fig.7
 I0=1.
-inc = np.arange(0.,90.,1.)
+inc = np.arange(0.,90.,2.)
 
 # define properties of volume
+#V = HenyeyGreenstein(tau=0.7, omega=0.3, t=.2, ncoefs=5)
 V = Rayleigh(tau=0.7, omega=0.3)
+
+
 
 # define properties of surface
 SRF = CosineLobe(ncoefs=10)
+
 
 Itot = np.ones_like(inc)*np.nan
 Isurf = np.ones_like(inc)*np.nan
 Iint = np.ones_like(inc)*np.nan
 Ivol = np.ones_like(inc)*np.nan
+
+
+
+#tic = timeit.default_timer()
+#print(RT1(I0, np.cos(np.deg2rad(45)), np.cos(np.deg2rad(45)), 0., np.pi, RV=V, SRF=SRF, fn=None, geometry='ffff').calc())
+#toc = timeit.default_timer()
+#print('evaluating print-values took ' + str(toc-tic))
 
 ##C = RayleighIsotropic()  # todo: this is not the combination in the paper!
 
@@ -37,15 +61,33 @@ fn = None
 for i in xrange(len(inc)):
     mu_0 = np.cos(np.deg2rad(inc[i]))
     mu_ex = mu_0*1.
-    phi_0 = 0.
-    phi_ex = np.pi   # todo ???
-
+    phi_0 = np.deg2rad(0.)
+    phi_ex = phi_0 + np.pi    # todo ???
 
     #print inc[i], mu_0, mu_ex, phi_0, phi_ex
 
-    R = RT1(I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn)
+    R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     fn = R.fn  # store coefficients for faster itteration
+    #Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
+
+toc = timeit.default_timer()
+print('coefficient evaluation took ' + str(toc-tic))
+
+tic = timeit.default_timer()
+for i in xrange(len(inc)):
+    mu_0 = np.cos(np.deg2rad(inc[i]))
+    mu_ex = mu_0*1.
+    #phi_0 = 10.
+    #phi_ex = np.pi   # todo ???
+
+    #print inc[i], mu_0, mu_ex, phi_0, phi_ex
+
+    R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
+
+toc = timeit.default_timer()
+print('evaluating print-values took ' + str(toc-tic))
+
 
 
 ctot='black'
@@ -80,3 +122,114 @@ ax2.grid()
 ax2.legend()
 
 plt.show()
+
+
+
+
+# ---------------------- generation 3d plots
+
+# define plot-grid
+theta,phi = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,25)
+THETA,PHI = np.meshgrid(theta,phi)
+
+
+# calculate bistatic coefficients
+print('start of bistatic coefficient generation')
+testfn = RT1(1., np.cos(np.deg2rad(45)), np.cos(np.deg2rad(45)), 0., np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
+
+# initialize arrays
+tot3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+surf3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+vol3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+
+
+# definition of function to evaluate bistatic contributions
+# since this step might take a while an estimation of the calculation-time was included
+
+def Rad(tt,pp):
+    for i in range(0,len(tt)):
+        if i == 0: tic = timeit.default_timer()
+        if i == 0: print('... estimating evaluation-time...')
+        for j in range(0,len(pp)):
+            test = RT1(1., np.cos(np.deg2rad(45)), np.cos(theta[i]), 0.,phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
+            tot3d[j][i],surf3d[j][i],vol3d[j][i],int3d[j][i] = test.calc()
+        if i == 0: toc = timeit.default_timer()
+        if i == 0: print('evaluation of 3dplot will take approximately ' + str(round((toc-tic)*len(tt)/60.,2)) + ' minutes')
+    return np.array(tot3d,dtype=float) ,  np.array(surf3d,dtype=float),  np.array(vol3d,dtype=float),  np.array(int3d,dtype=float)
+
+
+# evaluation of bistatic contributions
+tic = timeit.default_timer()
+tot3dplot, surf3dplot, vol3dplot, int3dplot = Rad(theta,phi)
+toc = timeit.default_timer()
+print('evaluation finished, it took ' + str(round((toc-tic)/60.,2)) + ' minutes')
+
+
+# transform values to spherical coordinate system
+def sphericaltransform(r):
+    X = r * np.sin(THETA) * np.cos(PHI)
+    Y = r * np.sin(THETA) * np.sin(PHI)
+    Z = r * np.cos(THETA)
+    return X,Y,Z
+
+
+import mpl_toolkits.mplot3d as plt3d
+
+
+
+
+fig = plt.figure(figsize=plt.figaspect(1.))
+ax3d = fig.add_subplot(1,1,1,projection='3d')
+
+ax3d.set_xlim3d(np.min(sphericaltransform(tot3dplot)[0])*1.5,np.max(sphericaltransform(tot3dplot)[0]))
+ax3d.set_ylim3d(np.min(sphericaltransform(tot3dplot)[0])*1.5,np.max(sphericaltransform(tot3dplot)[0]))
+ax3d.set_zlim3d(np.min(sphericaltransform(tot3dplot)[2]),np.max(sphericaltransform(tot3dplot)[2]))
+
+#cmap=plt.get_cmap('Reds_r')
+
+plot = ax3d.plot_surface(
+    sphericaltransform(tot3dplot)[0],sphericaltransform(tot3dplot)[1],sphericaltransform(tot3dplot)[2] ,rstride=1, cstride=1, color='Gray',
+    linewidth=0, antialiased=True, alpha=.3)
+    
+plot = ax3d.plot_surface(
+    sphericaltransform(surf3dplot)[0],sphericaltransform(surf3dplot)[1],sphericaltransform(surf3dplot)[2], rstride=1, cstride=1, color='Red',
+    linewidth=0, antialiased=True, alpha=.5)
+    
+plot = ax3d.plot_surface(
+    sphericaltransform(vol3dplot)[0],sphericaltransform(vol3dplot)[1],sphericaltransform(vol3dplot)[2], rstride=1, cstride=1, color='Green',
+    linewidth=0, antialiased=True, alpha=.5)
+    
+plot = ax3d.plot_surface(
+    sphericaltransform(int3dplot)[0],sphericaltransform(int3dplot)[1],sphericaltransform(int3dplot)[2], rstride=1, cstride=1, color='Blue',
+    linewidth=0, antialiased=True, alpha=.5)
+
+ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
+ax3d.w_xaxis.line.set_color((1.,1.,1.,0.))
+ax3d.w_yaxis.set_pane_color((1.,1.,1.,0.))
+ax3d.w_yaxis.line.set_color((1.,1.,1.,0.))
+ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
+ax3d.w_zaxis.line.set_color((1.,1.,1.,0.))
+ax3d.set_xticks([])
+ax3d.set_yticks([])
+ax3d.set_zticks([])
+
+
+    
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
