@@ -33,7 +33,7 @@ class TestExamples(unittest.TestCase):
         self.cc = x[:,4]
         self.step = 1
 
-    @nottest
+    #@nottest
     def test_example1_fn(self):
         S = CosineLobe(ncoefs=10)  # somehow this is only working for ncoefs=1 at the moment!
         V = Rayleigh(tau=0.7, omega=0.3)
@@ -45,8 +45,8 @@ class TestExamples(unittest.TestCase):
         fn = None
         for i in xrange(0,len(self.inc),self.step):
 
-            if self.n[i] % 2 == 1:
-                continue   # todo skipping odds at the moment
+            #~ if self.n[i] % 2 == 1:
+                #~ continue   # todo skipping odds at the moment
 
 
             mu_0 = np.cos(self.inc[i])

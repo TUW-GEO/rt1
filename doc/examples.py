@@ -7,7 +7,7 @@ sys.path.append('..')
 
 import matplotlib.pyplot as plt
 
-from rt1.volume import Rayleigh
+from rt1.volume import Rayleigh, HenyeyGreenstein
 #~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import CosineLobe
 from rt1.rt1 import RT1
@@ -16,15 +16,22 @@ import numpy as np
 
 plt.close('all')
 
-# Example1, Fig.7
+#
 I0=1.
 inc = np.arange(0.,90.,1.)
 
-# define properties of volume
-V = Rayleigh(tau=0.7, omega=0.3)
 
-# define properties of surface
-SRF = CosineLobe(ncoefs=10)
+if False:
+    # Example 1
+    V = Rayleigh(tau=0.7, omega=0.3)
+    SRF = CosineLobe(ncoefs=10)
+    label = 'Example 1'
+else:
+    V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
+    SRF = CosineLobe(ncoefs=10)
+    label = 'Example 2'
+
+
 
 Itot = np.ones_like(inc)*np.nan
 Isurf = np.ones_like(inc)*np.nan
@@ -39,6 +46,7 @@ for i in xrange(len(inc)):
     mu_ex = mu_0*1.
     phi_0 = 0.
     phi_ex = np.pi   # todo ???
+    print i
 
 
     #print inc[i], mu_0, mu_ex, phi_0, phi_ex
@@ -65,7 +73,7 @@ ax.grid()
 ax.legend()
 ax.set_xlabel('$\\theta_0$ [deg]')
 ax.set_ylabel('$I^+$ [dB]')
-ax.set_title('Figure 7')
+ax.set_title(label)
 ax.set_ylim(-40.,0.)
 
 # plot fractions
@@ -75,7 +83,7 @@ ax2.plot(inc, Iint/Itot, label='interaction', color=cint)
 ax2.set_title('fractional contributions on total signal')
 ax2.set_xlabel('$\\theta_0$ [deg]')
 ax2.set_ylabel('$I / I_{tot}$ [-]')
-ax2.set_title('Figure 7')
+ax2.set_title(label)
 ax2.grid()
 ax2.legend()
 
