@@ -46,15 +46,75 @@ class Volume(Scatter):
         # replace arguments and evaluate expression
         return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
-    def legexpansion(self):
-        theta_i = sp.Symbol('theta_i')
+    def legexpansion(self,t_i,t_ex,p_0,p_ex,geometry):
+        assert self.ncoefs > 0
+
+        """
+        Definition of the legendre-expansion of the volume-phase-function.        
+        
+        The geometry-parameter consists of 4 characters that define the 
+        geometry of the experiment-setup:
+        
+        The 4 characters represent in order: theta_i, theta_ex, phi_i, phi_ex
+        
+        'f' indicates that the angle is treated 'fixed' 
+        'v' indicates that the angle is treated 'variable'
+        
+        Passing  geometry = 'mono'  indicates a monstatic geometry
+        (i.e.:  theta_i = theta_ex, phi_ex = phi_i + pi)
+        """
+
+                        
         theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
+
 
         NP = self.ncoefs
         n = sp.Symbol('n')
+                
+
+        # define sympy variables based on chosen geometry
+        if geometry == 'mono':
+            theta_i = sp.Symbol('theta_i')
+            theta_ex = theta_i
+            phi_i = p_0
+        else:
+            if geometry[0] == 'v':
+                theta_i = sp.Symbol('theta_i')
+            elif geometry[0] == 'f':
+                theta_i = t_i
+            else:
+                raise AssertionError('wrong choice of theta_i geometry')
+                
+            if geometry[1] == 'v':
+                theta_ex = sp.Symbol('theta_ex')
+            elif geometry[1] == 'f':
+                theta_ex = t_ex
+            else:
+                raise AssertionError('wrong choice of theta_ex geometry')
+                
+            if geometry[2] == 'v':
+                phi_i = sp.Symbol('phi_i')
+            elif geometry[2] == 'f':
+                phi_i = p_0
+            else:
+                raise AssertionError('wrong choice of phi_i geometry')
+    
+            if geometry[3] == 'v':
+                phi_ex = sp.Symbol('phi_ex')
+            elif geometry[3] == 'f':
+                phi_ex = p_ex
+            else:
+                raise AssertionError('wrong choice of phi_ex geometry')
+
+ 
+
+        #correct for backscattering
         return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(theta_i,theta_s,phi_i,phi_s)),(n,0,NP))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+
+
+
+
 
 
 class Rayleigh(Volume):
@@ -81,7 +141,7 @@ class Rayleigh(Volume):
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
-        self.ncoefs = 10
+        self.ncoefs = 2    #only 2 coefficients are needed to correctly represent the Rayleigh scattering function
         n = sp.Symbol('n')
         self.legcoefs = ((3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))).expand()
 
