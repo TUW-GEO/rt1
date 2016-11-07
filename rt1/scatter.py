@@ -51,7 +51,6 @@ class Scatter(object):
         phi_s = sp.Symbol('phi_s')
         phi_ex = sp.Symbol('phi_ex')
 
-
         mu_0 = np.cos(t0)
         mu_ex = np.cos(ts)
 

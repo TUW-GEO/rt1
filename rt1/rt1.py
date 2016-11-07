@@ -187,7 +187,6 @@ class RT1(object):
         theta_ex = sp.Symbol('theta_ex')
         phi_ex = sp.Symbol('phi_ex')
 
-        #~ print 'fn, ', n, self.fn[n]
         return self.fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex}).evalf()
 
 

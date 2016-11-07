@@ -80,10 +80,11 @@ class TestRT1(unittest.TestCase):
         f2 = 3./(16.*np.pi) * (3.*mu_0**2.-1.)
         f3 = 0.
         # and all others are 0.
-        self.assertEqual(f0,RT._get_fn(0, RT.theta_0, RT.phi_0))
-        self.assertEqual(f1,RT._get_fn(1, RT.theta_0, RT.phi_0))
-        self.assertAlmostEqual(f2,RT._get_fn(2, RT.theta_0, RT.phi_0),10)
-        self.assertEqual(f3,RT._get_fn(3, RT.theta_0, RT.phi_0))
+
+        self.assertEqual(f0,RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
+        self.assertEqual(f1,RT._get_fn(1, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
+        self.assertAlmostEqual(f2,RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex),10)
+        self.assertEqual(f3,RT._get_fn(3, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
 
     def test_fn_coefficients_RayCosine(self):
         # test if calculation of fn coefficients is correct
@@ -105,8 +106,8 @@ class TestRT1(unittest.TestCase):
         phi_s = 0.
 
         RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_s), phi_i, phi_s, RV=V, SRF=S)
-        res = RT._get_fn(0, RT.theta_0, RT.phi_0)
-
+        #res = RT._get_fn(0, RT.theta_0, RT.phi_0)
+        res = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
 
         # ncoefs = 1
         # analtytical solution for ncoefs = 1 --> n=0
@@ -150,7 +151,8 @@ class TestRT1(unittest.TestCase):
 
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
         RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
-        r = RT._get_fn(0, RT.theta_0, RT.phi_0)
+        r = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+
         self.assertEqual(r,1./(2.*np.pi))
 
         #~ V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=2)
