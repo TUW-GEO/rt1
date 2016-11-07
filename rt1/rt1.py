@@ -17,7 +17,7 @@ class RT1(object):
     """
     main class to perform RT simulations
     """
-    
+
     def __init__(self, I0, mu_0, mu_ex, phi_0, phi_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         """
         Parameters
@@ -29,15 +29,24 @@ class RT1(object):
         fn : sympy expression
             precalculated coefficient expression; otherwise it will be automatically calculated
             usefull for speedup when caling with different geometries
+        geometry : str
+            4 character string specifying which components of the angles should be fixed or variable
+            This is done to significantly speed up the calculations in the coefficient calculations
+
+            mono = monostatic configuration
+            v
+            f
+            TODO --> describe setups here
         """
         self.I0 = I0
         self.mu_0 = mu_0
         self.mu_ex = mu_ex
         self.phi_0 = phi_0
         self.phi_ex = phi_ex
-        
+
         self.geometry = geometry
         assert isinstance(geometry,str), 'ERROR: geometry must be a 4-character string'
+        assert len(self.geometry) == 4
 
         self.RV = RV
         assert self.RV is not None, 'ERROR: needs to provide volume information'
@@ -58,8 +67,8 @@ class RT1(object):
             self.fn = fn
 
 
-       
-            
+
+
     def _get_theta0(self):
         return np.arccos(self.mu_0)
     theta_0 = property(_get_theta0)
@@ -110,8 +119,8 @@ class RT1(object):
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
 
-        volexp = self.RV.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit() 
-        brdfexp = self.SRF.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit()   
+        volexp = self.RV.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit()
+        brdfexp = self.SRF.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).doit()
         #   preparation of the product of p*BRDF for coefficient retrieval
         fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
@@ -144,8 +153,8 @@ class RT1(object):
             return (2**(-i))*sp.binomial(i,i*sp.Rational(1,2))
         else:
             # for odd exponents result is always zero
-            return 0.            
-    
+            return 0.
+
 
     def _integrate_0_2pi_phis(self, expr):
         """

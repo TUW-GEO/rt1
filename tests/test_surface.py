@@ -26,7 +26,6 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
         self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
 
-
     def test_cosine(self):
         S = CosineLobe(ncoefs=10)
         theta_i = np.pi/2.
@@ -44,43 +43,28 @@ class TestSurface(unittest.TestCase):
         self.assertAlmostEqual(S.thetaBRDF(theta_i,theta_s, phi_i, phi_s),0.5,15) #--> 0.5
         self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0.5**5., 10)
 
-
     def test_cosine_coeff(self):
         S = CosineLobe(ncoefs=10)
         self.assertAlmostEqual(S._get_legcoef(0), 15.*np.sqrt(np.pi)/(16.*sc.gamma(3.5)*sc.gamma(4.)))
         self.assertAlmostEqual(S._get_legcoef(2), 75.*np.sqrt(np.pi)/(16.*sc.gamma(2.5)*sc.gamma(5.)))
 
-    #@nottest
     def test_expansion_cosine_lobe(self):
         theta_i = np.pi/2.
         theta_s = 0.234234
         phi_i = np.pi/2.
         phi_s = 0.
 
-        # reference solution based on first 6 Legrende polynomials
+        # reference solution based on first N Legrende polynomials
         S = CosineLobe(ncoefs=10)   # means coefficients 0...9
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
 
-        #~ S05 = CosineLobe(ncoefs=5)
-        #~ S08 = CosineLobe(ncoefs=8)
-        #~ S07 = CosineLobe(ncoefs=7)
-        #~ S10 = CosineLobe(ncoefs=10)
-        #~ S20 = CosineLobe(ncoefs=20)
-#~
-        #~ print 'S05: ', S05._eval_legpoly(theta_i,theta_s,phi_i,phi_s)  #o.k
-        #~ print 'S07: ', S07._eval_legpoly(theta_i,theta_s,phi_i,phi_s)
-        #~ print 'S08: ', S08._eval_legpoly(theta_i,theta_s,phi_i,phi_s)
-        #~ print 'S10: ', S10._eval_legpoly(theta_i,theta_s,phi_i,phi_s)
-        #~ print 'S20: ', S20._eval_legpoly(theta_i,theta_s,phi_i,phi_s)
-#~
-        #~ stop
+        # input parameters are set in a way that COS_THETA = 0
+        # and therefore only the legendre coefficients should be returned
+        theta_i = 0.1234
+        theta_s = np.pi/2.
+        phi_i = 0.3456
+        phi_s = np.pi/2.
 
-
-        r = S._eval_legpoly(theta_i,theta_s,phi_i,phi_s)
-
+        r = S._eval_legpoly(theta_i,theta_s,phi_i,phi_s, geometry='ffff')
         #~ ref = S._get_legcoef(0)*1. + S._get_legcoef(1)*0. + S._get_legcoef(2)*(-0.5)  + S._get_legcoef(4)*(3./8.) + S._get_legcoef(6)*(-5./16.) + S._get_legcoef(8) * (35./128.) #+ S._get_legcoef(10)*(-63./256.)
 
         refs = []
@@ -95,14 +79,15 @@ class TestSurface(unittest.TestCase):
         self.assertAlmostEqual(r, ref, 15)
 
 
-    #@nottest
     def test_eval_legpoly(self):
-        S = CosineLobe(ncoefs=10)
+        S = CosineLobe(ncoefs=2)
 
         t0 = np.pi/2.
-        ts = 0.1234
+        ts = 0.234234
         p0 = np.pi/2.
         ps = 0.
+
+
 
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
@@ -124,8 +109,10 @@ class TestSurface(unittest.TestCase):
             r = ST._eval_legpoly(t0,ts,p0,ps)
             refs.append(ref)
 
-            print refs
-            print r
+            print ''
+            print 'i: ', i
+            print 'Refs: ', refs
+            print 'r: ', r
             self.assertAlmostEqual(r, np.array(refs).sum())
 
         # check overall results
