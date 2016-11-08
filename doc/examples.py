@@ -3,7 +3,7 @@ Reproduce examples like given in the paper
 """
 
 import sys
-sys.path.append('..')
+#sys.path.append('..')
 #sys.path.append('/home/rquast/shares/home/rt_model_python/rt1')
 
 
@@ -37,7 +37,7 @@ inc = np.arange(0.,90.,2.)
 if True:
     # Example 1
     V = Rayleigh(tau=0.7, omega=0.3)
-    SRF = CosineLobe(ncoefs=10)
+    SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 1'
 else:
     V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)

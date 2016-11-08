@@ -129,40 +129,36 @@ class Isotropic(Surface):
 
 class CosineLobe(Surface):
     """
-    define a surface like in the example 1 of the paper
-    which is a cosine lobe representation based on a 10-coefficient Legendre polynomial
-    approximation
+    define a cosine-lobe of power i as BRDF
+    example 2 in the paper uses the parameters: i=5, ncoefs=10
     """
-    def __init__(self, ncoefs=None, **kwargs):
-        super(CosineLobe, self).__init__(**kwargs)
+    
+    def __init__(self, ncoefs=None, i=None,  **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
+        assert i is not None, 'Error: Cosine lobe power needs to be specified!'
+        super(CosineLobe, self).__init__(**kwargs)
         assert ncoefs > 0
-        self.ncoefs = int(ncoefs)  # is the maximum degree used for polynomlial (e.g. if ncoefs=2, then evaluations until P(n=2) are done --> 3 coefficients are used
+        self.i = i      
+        assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
+        assert i > 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 1'        
+        self.ncoefs = int(ncoefs)
         self._set_function()
         self._set_legcoefficients()
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = (((2.*n+1.)*15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((sp.Rational(8.)+n)/sp.Rational(2.)))).expand()    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
-        #self.legcoefs = (15.*sp.sqrt(sp.pi))/(16.*sp.gamma(((sp.Rational(7.)-n)/sp.Rational(2.)))*sp.gamma((sp.Rational(8.)+n)/sp.Rational(2.)))
-        #~ print 'legcoefs: ', self.legcoefs
-        #~ print 'coef(0)', self._get_legcoef(0)
-
+        self.legcoefs = ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """
         define phase function as sympy object for later evaluation
         """
-        #def pfunkt(t0):
         theta_i = sp.Symbol('theta_i')
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
 
-        self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)**5., 0.)  # eq. A13
-
-
-
+        self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
 
 
 
