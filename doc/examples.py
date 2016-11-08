@@ -3,12 +3,12 @@ Reproduce examples like given in the paper
 """
 
 import sys
-#sys.path.append('..')
+sys.path.append('..')
 #sys.path.append('/home/rquast/shares/home/rt_model_python/rt1')
 
 
 import os
-#os.chdir('/home/rquast/shares/home/rt_model_python/rt1')  # should not be done that way; use PYTHONPATH variable instead
+os.chdir('/home/rquast/shares/home/rt_model_python/rt1')  # should not be done that way; use PYTHONPATH variable instead
 
 
 import matplotlib.pyplot as plt
@@ -41,7 +41,7 @@ if True:
     label = 'Example 1'
 else:
     V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
-    SRF = CosineLobe(ncoefs=10)
+    SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 2'
 
 # initialize output fields for faster processing
@@ -129,6 +129,9 @@ ax2.legend()
 plt.show()
 
 
+
+
+assert 1.>2., 'STOP before evaluating bistatic coefficients'
 
 
 # ---------------------- generation 3d plots
