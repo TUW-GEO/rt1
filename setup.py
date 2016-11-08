@@ -38,9 +38,7 @@ from Cython.Build import cythonize
 
 # requires scipy:
 # http://stackoverflow.com/questions/11128070/cannot-import-minimize-in-scipy
-#~ install_requires = ["numpy>0.1", "cdo>1.2", "netCDF4", "pytz",
-                    #~ "matplotlib", 'shapely', 'cartopy', 'cython', 'scipy']
-install_requires = []
+install_requires = ["numpy>0.1", "sympy>=1.0"]  # todo adapt according to actual dependencies
 
 
 
