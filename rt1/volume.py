@@ -105,7 +105,7 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(theta_i,theta_s,phi_i,phi_s)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(theta_i,theta_s,phi_i,phi_s)),(n,0,NP))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
         # todo muss das nicht NP-1 heissen ???
 
 
