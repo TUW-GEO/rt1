@@ -105,8 +105,7 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(theta_i,theta_s,phi_i,phi_s)),(n,0,NP))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
-        # todo muss das nicht NP-1 heissen ???
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class Rayleigh(Volume):
@@ -133,7 +132,7 @@ class Rayleigh(Volume):
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
-        self.ncoefs = 2    #only 2 coefficients are needed to correctly represent the Rayleigh scattering function
+        self.ncoefs = 3    #only 3 coefficients are needed to correctly represent the Rayleigh scattering function
         n = sp.Symbol('n')
         self.legcoefs = ((3./(16.*sp.pi))*((4./3.)*sp.KroneckerDelta(0,n)+(2./3.)*sp.KroneckerDelta(2,n))).expand()
 
@@ -170,3 +169,4 @@ class HenyeyGreenstein(Volume):
         """
         n = sp.Symbol('n')
         self.legcoefs = (1./(4.*sp.pi)) * (2.*n+1)*self.t**n
+
