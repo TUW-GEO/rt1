@@ -105,13 +105,13 @@ class TestRT1(unittest.TestCase):
         phi_i = np.pi/2.
         phi_ex = 0.
 
-        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
+        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='vvvv')
         #res = RT._get_fn(0, RT.theta_0, RT.phi_0)
-        res = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        res0 = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        res2 = RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
 
         # ncoefs = 1
         # analtytical solution for ncoefs = 1 --> n=0
-        #\int_0^2pi  Raycoef*Coscoef dphi = \int_0^2pi (a0P0+a2P2)*(b0P0) = 2*pia0b0-a2b0pi
 
         a0=(3./(16.*np.pi))*(4./3.)
         a2=(3./(16.*np.pi))*(2./3.)
@@ -120,16 +120,22 @@ class TestRT1(unittest.TestCase):
         #~ print 'a0:', a0, V._get_legcoef(0)
         #~ print 'a2:', a2, V._get_legcoef(2)
         #~ print 'b0: ', b0, S._get_legcoef(0)
-        ref = 2.*np.pi*a0*b0- a2*b0*np.pi
-        self.assertAlmostEqual(ref, res)
+         
+        ref0 = np.pi/4. * b0 * (8. * a0 - a2 - 3. * a2 * np.cos(2. * theta_i))  
+        ref2 = 3./4. * a2 * b0 * np.pi * (1. + 3. * np.cos(2. * theta_i))        
+        
+        self.assertAlmostEqual(ref0, res0)
+        self.assertAlmostEqual(ref2, res2)
 
         # ncoefs = 2
         # result should be the same as for ncoefs=1
         S = CosineLobe(ncoefs=2, i=5)
         RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
-        res = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
-        self.assertAlmostEqual(ref, res)
+        res00 = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        res22 = RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
 
+        self.assertAlmostEqual(ref0, res00)
+        self.assertAlmostEqual(ref2, res22)
 
 
 
