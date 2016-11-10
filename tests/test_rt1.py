@@ -92,7 +92,7 @@ class TestRT1(unittest.TestCase):
         # this is done by comparing the obtained coefficients
         # against the analytical solution using a Rayleigh volume
         # and isotropic surface scattering phase function
-        S = CosineLobe(ncoefs=1)
+        S = CosineLobe(ncoefs=1, i=5)
         V = Rayleigh(tau=0.7, omega=0.3)
         #--> cosTHETA = 0.
 
@@ -101,11 +101,11 @@ class TestRT1(unittest.TestCase):
         # ncoef times the coefficients from the surface
 
         theta_i = np.pi/2.
-        theta_s = 0.234234
+        theta_ex = 0.234234
         phi_i = np.pi/2.
-        phi_s = 0.
+        phi_ex = 0.
 
-        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_s), phi_i, phi_s, RV=V, SRF=S)
+        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
         #res = RT._get_fn(0, RT.theta_0, RT.phi_0)
         res = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
 
@@ -125,11 +125,10 @@ class TestRT1(unittest.TestCase):
 
         # ncoefs = 2
         # result should be the same as for ncoefs=1
-        S = CosineLobe(ncoefs=2)
-        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_s), phi_i, phi_s, RV=V, SRF=S)
-        res = RT._get_fn(0, RT.theta_0, RT.phi_0)
+        S = CosineLobe(ncoefs=2, i=5)
+        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
+        res = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
         self.assertAlmostEqual(ref, res)
-
 
 
 
@@ -150,7 +149,7 @@ class TestRT1(unittest.TestCase):
         phi_ex = np.pi
 
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
-        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S, geometry='ffff')
         r = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
 
         self.assertEqual(r,1./(2.*np.pi))

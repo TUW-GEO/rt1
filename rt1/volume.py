@@ -46,7 +46,7 @@ class Volume(Scatter):
         # replace arguments and evaluate expression
         return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
 
-    def legexpansion(self,t_i,t_ex,p_0,p_ex,geometry):
+    def legexpansion(self,mu_0,mu_ex,p_0,p_ex,geometry):
         assert self.ncoefs > 0
 
         """
@@ -79,14 +79,14 @@ class Volume(Scatter):
             if geometry[0] == 'v':
                 theta_i = sp.Symbol('theta_i')
             elif geometry[0] == 'f':
-                theta_i = t_i
+                theta_i = np.arccos(mu_0)
             else:
                 raise AssertionError('wrong choice of theta_i geometry')
 
             if geometry[1] == 'v':
                 theta_ex = sp.Symbol('theta_ex')
             elif geometry[1] == 'f':
-                theta_ex = t_ex
+                theta_ex = np.arccos(mu_ex)
             else:
                 raise AssertionError('wrong choice of theta_ex geometry')
 
