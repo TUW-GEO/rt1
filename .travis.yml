@@ -24,16 +24,15 @@ before_install:
 # todo clarify alternative installation for SCIPY to allow for most recent version ??
 #- pip install pyparsing
 - pip install matplotlib
-- sudo apt-get install python-mpltoolkits.basemap python-mpltoolkits.basemap-data
+#- sudo apt-get install python-mpltoolkits.basemap python-mpltoolkits.basemap-data
 # projection libraries
 # - sudo apt-get install libgeos-dev libproj-dev
 # testing environment
 - pip install coveralls pytest-cov
+
+
 # I/O related things
-- sudo apt-get install cdo
-- sudo apt-get install libhdf5-openmpi-dev libnetcdf-dev libopenmpi-dev
-- sudo apt-get install libgdal1h
-- sudo apt-get install libgdal-dev
+
 # netCDF4 installation
 #- sudo C_INCLUDE_PATH=/usr/include/mpi pip install netCDF4==1.1.1
 # todo: remove particular dependency on entCDF4 version here again!!!
@@ -41,17 +40,12 @@ before_install:
 #pushd netcdf4-python
 #cp setup.cfg.template setup.cfg
 #popd
-- sudo pip install netCDF4
-# cartopy dependencices
-- sudo pip install shapely
-- sudo pip install pyshp
-- sudo pip install six
-- sudo pip install cython
-- sudo pip install cartopy
+
 # do actual installation
-- sudo /usr/bin/python setup.py build_ext --inplace install
+####- sudo /usr/bin/python setup.py build_ext --inplace install
 #####- sudo /usr/bin/python setup.py build_ext does not work yet!
 # - sudo sh compile_extensions.sh
+
 script:
 - nosetests --with-coverage --cover-package=geoval
 after_success:
