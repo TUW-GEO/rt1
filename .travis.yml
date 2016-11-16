@@ -1,16 +1,19 @@
 language: python
-python: 2.7
+python:
+  - "2.7"
+
 virtualenv:
 system_site_packages: true
-branches:
-
-only:
-- master
-
+ 
 before_install:
-# todo
-# do we really need the sudo commands ???
-- sudo apt-get update
+  - sudo apt-get update
+  
+  
+# command to install dependencies
+install:
+  - pip install .
+  - pip install matplotlib
+
 
 # general setup
 # - sudo apt-get install python-pip python-dev
@@ -19,16 +22,16 @@ before_install:
 # latex environment
 #- sudo apt-get install texlive-latex-base texlive-latex-extra texlive-latex-recommended
 # basic python modules
-- sudo apt-get install python-numpy
+###- sudo apt-get install python-numpy
 # - sudo apt-get install python-scipy
 # todo clarify alternative installation for SCIPY to allow for most recent version ??
 #- pip install pyparsing
-- pip install matplotlib
+
 #- sudo apt-get install python-mpltoolkits.basemap python-mpltoolkits.basemap-data
 # projection libraries
 # - sudo apt-get install libgeos-dev libproj-dev
 # testing environment
-- pip install coveralls pytest-cov
+###- pip install coveralls pytest-cov
 
 
 # I/O related things
@@ -47,6 +50,6 @@ before_install:
 # - sudo sh compile_extensions.sh
 
 script:
-- nosetests --with-coverage --cover-package=geoval
-after_success:
-- coveralls
+  - nosetests --with-coverage --cover-package=geoval
+#after_success:
+#  - coveralls
