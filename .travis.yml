@@ -13,6 +13,7 @@ before_install:
 install:
   #- pip install .
   - pip install matplotlib
+  - pip install scipy
 
 
 # general setup
