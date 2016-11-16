@@ -25,7 +25,7 @@ class TestExamples(unittest.TestCase):
     def setUp(self):
         # read reference solutions for backscattering case
         fname = 'example1_fn_cc.tab'
-        x = np.loadtxt(fname, delimiter='\t',skiprows=1)
+        #x = np.loadtxt(fname, delimiter='\t',skiprows=1)
         self.inc = x[:,0]
         self.n = x[:,1]
         self.tau = x[:,2]
