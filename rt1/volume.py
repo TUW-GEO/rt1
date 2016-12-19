@@ -49,6 +49,10 @@ class Volume(Scatter):
     def legexpansion(self,mu_0,mu_ex,p_0,p_ex,geometry):
         assert self.ncoefs > 0
 
+        # set scattering angle generalization-matrix to standard value if it is not explicitly provided by the chosen class
+        self.a = getattr(self, 'a', [-1.,1.,1.])
+
+
         """
         Definition of the legendre-expansion of the volume-phase-function.
 
@@ -105,7 +109,7 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class Rayleigh(Volume):
