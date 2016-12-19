@@ -15,15 +15,26 @@ import matplotlib.pyplot as plt
 
 from rt1.volume import Rayleigh
 from rt1.volume import HenyeyGreenstein
-from rt1.volume import Rayleigh
+from rt1.volume import HGRayleigh
+from rt1.volume import DoubleHG
+
 
 #~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import CosineLobe
+from rt1.surface import LafortuneLobe
+from rt1.surface import HenyeyGreenstein as HenyeyGreensteinsurface
+
 from rt1.rt1 import RT1
 
 import numpy as np
 
 import timeit
+
+# EVALUATION OF BISTATIC PLOTS
+# if set to true, 3dplots will be generated,
+# otherwise the code is stopped after monostatic evaluation
+bistaticplot = True
+
 
 #plt.close('all')
 
@@ -43,6 +54,10 @@ else:
     V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
     SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 2'
+
+
+V = Rayleigh(tau=0.7, omega=0.3)
+SRF = LafortuneLobe(ncoefs=10, i=5, a=[1.,1.,1.])
 
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
@@ -129,10 +144,7 @@ ax2.legend()
 plt.show()
 
 
-
-
-assert 1.>2., 'STOP before evaluating bistatic coefficients'
-
+assert bistaticplot, 'Manual stop before bistatic evaluation'
 
 # ---------------------- generation 3d plots
 
