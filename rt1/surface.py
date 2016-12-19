@@ -39,6 +39,9 @@ class Surface(Scatter):
     def legexpansion(self, mu_0, mu_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
 
+        # set scattering angle generalization-matrix to 1 if it is not explicitly provided by the chosen class
+        self.a = getattr(self, 'a', [1.,1.,1.])
+
         """
         Definition of the legendre-expansion of the BRDF
 
@@ -97,7 +100,7 @@ class Surface(Scatter):
 
 
         #print 'BRDF: ', self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex)
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex, self.a)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 
@@ -159,6 +162,61 @@ class CosineLobe(Surface):
         phi_s = sp.Symbol('phi_s')
 
         self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
+
+
+
+class LafortuneLobe(Surface):
+    """
+    define a generalized cosine-lobe of power i.
+
+    the parameter a=[-,-,-] provides the diagonal-elements of the generalized scattering
+    angle as defined in:
+    'E.P.F. Lafortune et.al : Non-Linear Approximation of Reflectance Functions,
+    Proceedings of SIGGRAPH'97, pages 117-126, 1997'
+
+
+    if the a-parameter is not provided explicitly or if it is set 
+    to a=[1.,1.,1.], LafortuneLobe is equal to the CosineLobe.
+    """
+
+    def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
+        assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
+        assert i is not None, 'Error: Cosine lobe power needs to be specified!'
+        super(LafortuneLobe, self).__init__(**kwargs)
+        assert ncoefs > 0
+        self.i = i
+        assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
+        assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
+        self.a = a
+        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
+        assert all(type(x)==float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
+        self.ncoefs = int(ncoefs)
+        self._set_function()
+        self._set_legcoefficients()
+
+    def _set_legcoefficients(self):
+        n = sp.Symbol('n')
+        self.legcoefs = ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+
+        #self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
+
+        # alternative formulation avoiding the use of sp.Max()
+        #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
+        #      that can not interpret array inputs.)
+        x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s, a=self.a)
+        self._func = (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
+
+
 
 
 
