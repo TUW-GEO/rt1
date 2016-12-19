@@ -4,14 +4,16 @@ Reproduce examples like given in the paper
 
 import sys
 sys.path.append('..')
-#sys.path.append('/home/rquast/shares/home/rt_model_python/rt1')
-
-
-import os
-os.chdir('/home/rquast/shares/home/rt_model_python/rt1')  # should not be done that way; use PYTHONPATH variable instead
 
 
 import matplotlib.pyplot as plt
+import numpy as np
+import timeit
+
+from rt1.rt1 import RT1
+
+from rt1.rtplots import Plots
+
 
 from rt1.volume import Rayleigh
 from rt1.volume import HenyeyGreenstein
@@ -19,21 +21,18 @@ from rt1.volume import HGRayleigh
 from rt1.volume import DoubleHG
 
 
-#~ from rt1.coefficients import RayleighIsotropic
 from rt1.surface import CosineLobe
 from rt1.surface import LafortuneLobe
 from rt1.surface import HenyeyGreenstein as HenyeyGreensteinsurface
 
 from rt1.rt1 import RT1
 
-import numpy as np
 
-import timeit
 
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
 # otherwise the code is stopped after monostatic evaluation
-bistaticplot = True
+bistaticplot = False
 
 
 #plt.close('all')
@@ -59,6 +58,7 @@ else:
 V = Rayleigh(tau=0.7, omega=0.3)
 SRF = LafortuneLobe(ncoefs=10, i=5, a=[1.,1.,1.])
 
+
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
 Isurf = np.ones_like(inc)*np.nan
@@ -66,13 +66,6 @@ Iint = np.ones_like(inc)*np.nan
 Ivol = np.ones_like(inc)*np.nan
 
 
-
-#tic = timeit.default_timer()
-#print(RT1(I0, np.cos(np.deg2rad(45)), np.cos(np.deg2rad(45)), 0., np.pi, RV=V, SRF=SRF, fn=None, geometry='ffff').calc())
-#toc = timeit.default_timer()
-#print('evaluating print-values took ' + str(toc-tic))
-
-##C = RayleighIsotropic()  # todo: this is not the combination in the paper!
 
 fn = None
 for i in xrange(len(inc)):
@@ -82,8 +75,7 @@ for i in xrange(len(inc)):
     phi_0 = np.deg2rad(0.)
     phi_ex = phi_0 + np.pi
 
-    #print inc[i], mu_0, mu_ex, phi_0, phi_ex
-
+    
     R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     fn = R.fn  # store coefficients for faster itteration
     #Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
@@ -109,12 +101,15 @@ toc = timeit.default_timer()
 print('evaluating print-values took ' + str(toc-tic))
 
 
+Plots(R).polarplot()
 
 ctot='black'
 csurf='red'
 cvol='green'
 cint='blue'
 
+# multiply  I..  with  signorm  to get sigma0 values instead of normalized intensity
+#signorm = 4.*np.pi*np.cos(np.deg2rad(inc))
 
 f = plt.figure()
 ax = f.add_subplot(121)
@@ -204,8 +199,22 @@ def sphericaltransform(r):
 # plot of 3d scattering distribution
 import mpl_toolkits.mplot3d as plt3d
 
+
 fig = plt.figure(figsize=plt.figaspect(1.))
 ax3d = fig.add_subplot(1,1,1,projection='3d')
+
+#ax3d.view_init(elev=20.,azim=45)
+
+maximumx = np.max(sphericaltransform(tot3dplot)[0])
+
+xx=np.array([-maximumx,maximumx])
+yy=np.array([0.,maximumx])
+xxx,yyy = np.meshgrid(xx,yy)
+zzz = np.ones_like(xxx)*(0.)
+
+ax3d.plot_surface(xxx,yyy,zzz, alpha=0.2, color='k')
+
+
 
 
 plot = ax3d.plot_surface(
@@ -228,18 +237,30 @@ ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
 ax3d.w_xaxis.line.set_color((1.,1.,1.,0.))
 ax3d.w_yaxis.set_pane_color((1.,1.,1.,0.))
 ax3d.w_yaxis.line.set_color((1.,1.,1.,0.))
-ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
+#ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
+ax3d.w_zaxis.set_pane_color((1.,1.,1.,.0))
 ax3d.w_zaxis.line.set_color((1.,1.,1.,0.))
 ax3d.set_xticks([])
 ax3d.set_yticks([])
 ax3d.set_zticks([])
 
+zoom=2.
+ax3d.set_xlim(-np.max(sphericaltransform(tot3dplot))/zoom,np.max(sphericaltransform(tot3dplot))/zoom)
+ax3d.set_ylim(-np.max(sphericaltransform(tot3dplot))/zoom,np.max(sphericaltransform(tot3dplot))/zoom)
+ax3d.set_zlim(0,2*np.max(sphericaltransform(tot3dplot))/zoom)
 
 
 # ensure display of correct aspect ratio (bug in mplot3d)
 # due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
+
 ax3d.auto_scale_xyz([np.min(sphericaltransform(tot3dplot)),np.max(sphericaltransform(tot3dplot))],
                     [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))],
-                      [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))])
+                      [-np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot))),np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))])
+
+
+
+
 
 plt.show()
+
+

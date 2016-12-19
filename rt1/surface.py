@@ -161,7 +161,16 @@ class CosineLobe(Surface):
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
 
-        self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
+        #self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
+
+        # alternative formulation avoiding the use of sp.Max()
+        #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
+        #      that can not interpret array inputs.)
+        x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)
+        self._func = (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
+
+
+
 
 
 
