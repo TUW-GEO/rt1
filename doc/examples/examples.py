@@ -56,7 +56,7 @@ else:
 
 
 V = Rayleigh(tau=0.7, omega=0.3)
-SRF = LafortuneLobe(ncoefs=10, i=5, a=[1.,1.,1.])
+SRF = LafortuneLobe(ncoefs=10, i=5, a=[.8,1.,1.])
 
 
 # initialize output fields for faster processing

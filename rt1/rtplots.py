@@ -53,11 +53,8 @@ class Plots(Scatter):
         # define functions for plotting that evaluate the used approximations in terms of legendre-polynomials
         n = sp.Symbol('n')     
         
-        # TODO: replace the following lines if generalized scattering angle branch is merged
-        phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.RV.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s')),(n,0,self.R.RV.ncoefs-1)).doit(),"numpy") 
-        #phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.RV.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', self.R.RV.a)),(n,0,self.R.RV.ncoefs-1)).doit(),"numpy") 
-        brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s')),(n,0,self.R.SRF.ncoefs-1)).doit(),"numpy") 
-        #brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', self.R.SRF.a)),(n,0,self.R.SRF.ncoefs-1)).doit(),"numpy") 
+        phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.RV.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', self.R.RV.a)),(n,0,self.R.RV.ncoefs-1)).doit(),"numpy") 
+        brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(self.R.SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', self.R.SRF.a)),(n,0,self.R.SRF.ncoefs-1)).doit(),"numpy") 
 
 
 
