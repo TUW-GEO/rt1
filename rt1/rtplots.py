@@ -8,6 +8,8 @@ polarplot() ... plot p and the BRDF as polar-plot
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+#plot of 3d scattering distribution
+import mpl_toolkits.mplot3d as plt3d
 from scatter import Scatter
 
 class Plots(Scatter):
@@ -278,3 +280,130 @@ class Plots(Scatter):
             ax2.legend()
         
         plt.show()
+        
+        
+        
+        
+        
+        
+    def linplot3d(self, theta, phi, Itot3d=None, Isurf3d=None, Ivol3d=None, Iint3d=None, surfmultip = 1., zoom = 2.):
+        """
+        Input arrays must be numpy arrays with dtype = float and must have the following shape:
+            
+        Parameters:
+            theta = [...]
+            phi   = [...]            
+            I...  = [ [theta[0], phi[:] ] , [theta[1], phi[:] ] , ... , [theta[N], phi[:] ]]
+            
+            
+        Optional Parameters:
+            surfmultip ... scaling factor for the plotted surface
+            zoom       ... scaling factor for the whole plot
+        """
+
+        assert isinstance(theta,np.ndarray), 'Error: theta must be a numpy-array'
+        assert isinstance(phi,np.ndarray), 'Error: phi must be a numpy-array'
+        if Itot3d is not None: assert isinstance(Itot3d,np.ndarray), 'Error: Itot3d must be a numpy-array'
+        if Isurf3d is not None: assert isinstance(Isurf3d,np.ndarray), 'Error: Isurf3d must be a numpy-array'
+        if Ivol3d is not None: assert isinstance(Ivol3d,np.ndarray), 'Error: Ivol3d must be a numpy-array'
+        if Iint3d is not None: assert isinstance(Iint3d,np.ndarray), 'Error: Iint3d must be a numpy-array'
+        assert isinstance(surfmultip, float), 'Error: surfmultip must be a floating-point number'
+        assert surfmultip>0., 'Error: surfmultip must be larger than 0.'
+
+        assert isinstance(zoom, float), 'Error: zoom must be a floating-point number'
+        assert zoom>0., 'Error: zoom must be larger than 0.'
+
+
+
+
+        
+        # make plot-grid of theta/phi
+        THETA,PHI = np.meshgrid(theta,phi)
+        
+        # transform values to spherical coordinate system
+        def sphericaltransform(r):
+            if r is None:
+                return None
+                
+            X = r * np.sin(THETA) * np.cos(PHI)
+            Y = r * np.sin(THETA) * np.sin(PHI)
+            Z = r * np.cos(THETA)
+            return X,Y,Z
+        
+                        
+        fig = plt.figure(figsize=(7,7))
+        ax3d = fig.add_subplot(1,1,1,projection='3d')
+        
+        #ax3d.view_init(elev=20.,azim=45)
+        
+        # calculate maximum value of all given imput-arrays        
+        m = []
+        if Itot3d is not None: m = m + [np.max(sphericaltransform(Itot3d)), np.abs(np.min(sphericaltransform(Itot3d)))]
+        if Isurf3d is not None: m = m + [np.max(sphericaltransform(Isurf3d)), np.abs(np.min(sphericaltransform(Isurf3d)))]
+        if Ivol3d is not None: m = m + [np.max(sphericaltransform(Ivol3d)), np.abs(np.min(sphericaltransform(Ivol3d)))]
+        if Iint3d is not None: m = m + [np.max(sphericaltransform(Iint3d)), np.abs(np.min(sphericaltransform(Iint3d)))]
+        maximum = np.max(m)
+        
+        
+        
+        xx=np.array([- surfmultip*maximum, surfmultip*maximum ])
+        yy=np.array([0., surfmultip*maximum])
+        xxx,yyy = np.meshgrid(xx,yy)
+        zzz = np.ones_like(xxx)*(0.)
+        
+        ax3d.plot_surface(xxx,yyy,zzz, alpha=0.2, color='k')
+
+        
+        if Itot3d is not None: 
+            ax3d.plot_surface(
+            sphericaltransform(Itot3d)[0],sphericaltransform(Itot3d)[1],sphericaltransform(Itot3d)[2] ,rstride=1, cstride=1, color='Gray',
+            linewidth=0, antialiased=True, alpha=.3)
+        
+        if Isurf3d is not None:
+            ax3d.plot_surface(
+            sphericaltransform(Isurf3d)[0],sphericaltransform(Isurf3d)[1],sphericaltransform(Isurf3d)[2], rstride=1, cstride=1, color='Red',
+            linewidth=0, antialiased=True, alpha=.5)
+        
+        if Ivol3d is not None:
+            ax3d.plot_surface(
+            sphericaltransform(Ivol3d)[0],sphericaltransform(Ivol3d)[1],sphericaltransform(Ivol3d)[2], rstride=1, cstride=1, color='Green',
+            linewidth=0, antialiased=True, alpha=.5)
+        
+        if Iint3d is not None:
+            ax3d.plot_surface(
+            sphericaltransform(Iint3d)[0],sphericaltransform(Iint3d)[1],sphericaltransform(Iint3d)[2], rstride=1, cstride=1, color='Blue',
+            linewidth=0, antialiased=True, alpha=.5)
+        
+        ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
+        ax3d.w_xaxis.line.set_color((1.,1.,1.,0.))
+        ax3d.w_yaxis.set_pane_color((1.,1.,1.,0.))
+        ax3d.w_yaxis.line.set_color((1.,1.,1.,0.))
+        #ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
+        ax3d.w_zaxis.set_pane_color((1.,1.,1.,.0))
+        ax3d.w_zaxis.line.set_color((1.,1.,1.,0.))
+        ax3d.set_xticks([])
+        ax3d.set_yticks([])
+        ax3d.set_zticks([])
+        
+        
+        ax3d.set_xlim(-maximum/zoom, maximum/zoom)
+        ax3d.set_ylim(-maximum/zoom,maximum/zoom)
+        ax3d.set_zlim(0,2*maximum/zoom)
+        
+        
+        # ensure display of correct aspect ratio (bug in mplot3d)
+        # due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
+        
+        #ax3d.auto_scale_xyz([np.min(sphericaltransform(Itot3d)),np.max(sphericaltransform(Itot3d))],
+        #                   [0.,np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d)))],
+        #                     [-np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d))),np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d)))])
+         
+        plt.show()
+        
+            
+            
+        
+        
+        
+        
+        

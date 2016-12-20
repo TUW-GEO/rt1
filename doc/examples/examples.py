@@ -24,8 +24,7 @@ from rt1.surface import CosineLobe
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
 # otherwise the code is stopped after monostatic evaluation
-bistaticplot = False
-
+bistaticplot = True
 
 #plt.close('all')
 
@@ -92,177 +91,103 @@ print('evaluating print-values took ' + str(toc-tic))
 
 
 
-# test of Plots class
+# ---------------- GENERATION OF POLAR-PLOTS ----------------
+#       plot both p and the BRDF in a single plot
 Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np.linspace(0,90,5)) , pmultip = 1.5)
-Plots().polarplot(SRF = SRF)
-Plots().polarplot(V = V)
 
-Plots().logmono(inc,Itot = Itot,Isurf = Isurf,Ivol = Ivol,Iint = Iint)
-Plots().logmono(inc,Itot = Itot,Isurf = Isurf,Ivol = Ivol,Iint = Iint, sig0=True, fractions = False)
+#       plot only the BRDF
+#Plots().polarplot(SRF = R.SRF)
 
-Plots().logmono(inc,Itot = Itot, Ivol = Ivol, fractions = False)
+#       plot only p
+#Plots().polarplot(V = R.RV)
 
-#ctot='black'
-#csurf='red'
-#cvol='green'
-#cint='blue'
-#
-## multiply  I..  with  signorm  to get sigma0 values instead of normalized intensity
-##signorm = 4.*np.pi*np.cos(np.deg2rad(inc))
-#
-#f = plt.figure()
-#ax = f.add_subplot(121)
-#ax2 = f.add_subplot(122)
-#ax.plot(inc, 10.*np.log10(Itot), color=ctot, label='$I_{tot}$')
-#ax.plot(inc, 10.*np.log10(Isurf), color=csurf, label='$I_{surf}$')
-#ax.plot(inc, 10.*np.log10(Ivol), color=cvol, label='$I_{vol}$')
-#ax.plot(inc, 10.*np.log10(Iint), color=cint, label='$I_{int}$')
-#ax.grid()
-#ax.legend()
-#ax.set_xlabel('$\\theta_0$ [deg]')
-#ax.set_ylabel('$I^+$ [dB]')
-#ax.set_title(label)
-#ax.set_ylim(-40.,0.)
-#
-## plot fractions
-#ax2.plot(inc, Isurf/Itot, label='surf', color=csurf)
-#ax2.plot(inc, Ivol/Itot, label='volume', color=cvol)
-#ax2.plot(inc, Iint/Itot, label='interaction', color=cint)
-#ax2.set_title('fractional contributions on total signal')
-#ax2.set_xlabel('$\\theta_0$ [deg]')
-#ax2.set_ylabel('$I / I_{tot}$ [-]')
-#ax2.set_title(label)
-#ax2.grid()
-#ax2.legend()
-#
-#plt.show()
+#       plot a cosine-lobe
+#Plots().polarplot(SRF = CosineLobe(ncoefs=10, i=10))
+
+
+
+# ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
+#       plot backscattered intensity and fractional contributions
+Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint)
+
+#       plot only backscattering coefficient without fractions
+#Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, fractions = False)
+
+#       plot only Itot and Ivol
+#Plots().logmono(inc,Itot = Itot, Ivol = Ivol, fractions = False)
 
 
 
 
-assert 1.>2., 'STOP before evaluating bistatic coefficients'
+# ---------------- GENERATION OF 3D PLOTS ----------------
 
+assert bistaticplot, 'Manual stop before bistatic evaluation'
 
-# ---------------------- generation 3d plots
 
 # definition of incidence-angles
-thetaplot = 55.
-phiplot = 0.
+thetainc= 55.
+phiinc = 0.
 
-
-
-# define plot-grid
+# define plot-range
 theta,phi = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,25)
-THETA,PHI = np.meshgrid(theta,phi)
-
-
-# calculate bistatic fn coefficients
-print('start of bistatic coefficient generation')
-testfn = RT1(1., np.cos(np.deg2rad(thetaplot)), np.cos(np.deg2rad(45)), phiplot, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
-
-# initialize arrays
-tot3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
-surf3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
-vol3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
-int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
 
 
 # definition of function to evaluate bistatic contributions
 # since this step might take a while an estimation of the calculation-time was included
 
-def Rad(tt,pp):
-    for i in range(0,len(tt)):
+def Rad(theta, phi, thetainc, phiinc):
+    '''
+    theta,phi         = [...]      plotrange-arrays
+    thetainc, phiinc, = float      incidence-angles for which the model is evaluated
+    '''
+    # initialize output arrays
+    tot3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+    surf3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+    vol3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+    int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
+    
+    # pre-evaluation of fn-coefficients
+    testfn = RT1(1., np.cos(np.deg2rad(thetainc)), np.cos(np.deg2rad(45)), phiinc, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
+
+    # evaluation of model        
+    for i in range(0,len(theta)):
         if i == 0: tic = timeit.default_timer()
         if i == 0: print('... estimating evaluation-time...')
-        for j in range(0,len(pp)):
-            test = RT1(1., np.cos(np.deg2rad(thetaplot)), np.cos(theta[i]), phiplot,phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
-            tot3d[j][i],surf3d[j][i],vol3d[j][i],int3d[j][i] = test.calc()
+        for j in range(0,len(phi)):
+            R3d = RT1(1., np.cos(np.deg2rad(thetainc)), np.cos(theta[i]), phiinc, phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
+            tot3d[j][i],surf3d[j][i],vol3d[j][i],int3d[j][i] = R3d.calc()
         if i == 0: toc = timeit.default_timer()
-        if i == 0: print('evaluation of 3dplot will take approximately ' + str(round((toc-tic)*len(tt)/60.,2)) + ' minutes')
+        if i == 0: print('evaluation of 3dplot will take approximately ' + str(round((toc-tic)*len(theta)/60.,2)) + ' minutes')
     return np.array(tot3d,dtype=float) ,  np.array(surf3d,dtype=float),  np.array(vol3d,dtype=float),  np.array(int3d,dtype=float)
-
 
 # evaluation of bistatic contributions
 tic = timeit.default_timer()
-tot3dplot, surf3dplot, vol3dplot, int3dplot = Rad(theta,phi)
+tot3dplot, surf3dplot, vol3dplot, int3dplot = Rad(theta,phi, thetainc, phiinc)
 toc = timeit.default_timer()
 print('evaluation finished, it took ' + str(round((toc-tic)/60.,2)) + ' minutes')
 
 
-# transform values to spherical coordinate system
-def sphericaltransform(r):
-    X = r * np.sin(THETA) * np.cos(PHI)
-    Y = r * np.sin(THETA) * np.sin(PHI)
-    Z = r * np.cos(THETA)
-    return X,Y,Z
+#       dplot of total, volume, surface and interaction - contribution 
+Plots().linplot3d(theta, phi,  Itot3d = tot3dplot, Isurf3d = surf3dplot, Ivol3d = vol3dplot, Iint3d = int3dplot,  zoom = 1.2, surfmultip = .8)
 
-
-
-# plot of 3d scattering distribution
-import mpl_toolkits.mplot3d as plt3d
-
-
-fig = plt.figure(figsize=plt.figaspect(1.))
-ax3d = fig.add_subplot(1,1,1,projection='3d')
-
-#ax3d.view_init(elev=20.,azim=45)
-
-maximumx = np.max(sphericaltransform(tot3dplot)[0])
-
-xx=np.array([-maximumx,maximumx])
-yy=np.array([0.,maximumx])
-xxx,yyy = np.meshgrid(xx,yy)
-zzz = np.ones_like(xxx)*(0.)
-
-ax3d.plot_surface(xxx,yyy,zzz, alpha=0.2, color='k')
-
-
-
-
-plot = ax3d.plot_surface(
-    sphericaltransform(tot3dplot)[0],sphericaltransform(tot3dplot)[1],sphericaltransform(tot3dplot)[2] ,rstride=1, cstride=1, color='Gray',
-    linewidth=0, antialiased=True, alpha=.3)
-
-plot = ax3d.plot_surface(
-    sphericaltransform(surf3dplot)[0],sphericaltransform(surf3dplot)[1],sphericaltransform(surf3dplot)[2], rstride=1, cstride=1, color='Red',
-    linewidth=0, antialiased=True, alpha=.5)
-
-plot = ax3d.plot_surface(
-    sphericaltransform(vol3dplot)[0],sphericaltransform(vol3dplot)[1],sphericaltransform(vol3dplot)[2], rstride=1, cstride=1, color='Green',
-    linewidth=0, antialiased=True, alpha=.5)
-
-plot = ax3d.plot_surface(
-    sphericaltransform(int3dplot)[0],sphericaltransform(int3dplot)[1],sphericaltransform(int3dplot)[2], rstride=1, cstride=1, color='Blue',
-    linewidth=0, antialiased=True, alpha=.5)
-
-ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
-ax3d.w_xaxis.line.set_color((1.,1.,1.,0.))
-ax3d.w_yaxis.set_pane_color((1.,1.,1.,0.))
-ax3d.w_yaxis.line.set_color((1.,1.,1.,0.))
-#ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
-ax3d.w_zaxis.set_pane_color((1.,1.,1.,.0))
-ax3d.w_zaxis.line.set_color((1.,1.,1.,0.))
-ax3d.set_xticks([])
-ax3d.set_yticks([])
-ax3d.set_zticks([])
-
-zoom=2.
-ax3d.set_xlim(-np.max(sphericaltransform(tot3dplot))/zoom,np.max(sphericaltransform(tot3dplot))/zoom)
-ax3d.set_ylim(-np.max(sphericaltransform(tot3dplot))/zoom,np.max(sphericaltransform(tot3dplot))/zoom)
-ax3d.set_zlim(0,2*np.max(sphericaltransform(tot3dplot))/zoom)
-
-
-# ensure display of correct aspect ratio (bug in mplot3d)
-# due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
-
-ax3d.auto_scale_xyz([np.min(sphericaltransform(tot3dplot)),np.max(sphericaltransform(tot3dplot))],
-                    [0.,np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))],
-                      [-np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot))),np.max(sphericaltransform(tot3dplot))+np.abs(np.min(sphericaltransform(tot3dplot)))])
+#       plot only volume contribution
+#Plots().linplot3d(theta, phi,  Ivol3d = vol3dplot,  zoom = 1.2, surfmultip = 1.)
+#       plot only surface contribution
+#Plots().linplot3d(theta, phi,  Isurf3d = surf3dplot,  zoom = 1.2, surfmultip = 1.)
+#       plot only interaction contribution
+#Plots().linplot3d(theta, phi,  Iint3d = int3dplot,  zoom = 1.2, surfmultip = 1.)
 
 
 
 
 
-plt.show()
+
+
+
+
+
+
+
+
 
 
