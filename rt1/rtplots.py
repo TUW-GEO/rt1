@@ -109,13 +109,13 @@ class Plots(Scatter):
                 # reset color-counter
                 i=0
                 
-                pmax = pmultip*max(phasefunkt(plottis, np.pi-plottis, 0., 0.))
+                pmax = pmultip*np.max(phasefunkt(plottis, np.pi-plottis, 0., 0.))
                 
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
                     thetass = np.arange(0.,2.*np.pi,.01)
-                    rad=phasefunkt(ti, thetass, 0., 0.)
+                    rad=[phasefunkt(ti, ts, 0., 0.) for ts in thetass]
                     if paprox == True: radapprox = phasefunktapprox(ti, thetass, 0., 0.)
                     
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
@@ -161,13 +161,13 @@ class Plots(Scatter):
                 colors = ['k', 'r','g','b', 'c','m','y']*(len(plottis)/7+1)
                 i=0
                 
-                brdfmax = BRDFmultip*max(brdffunkt(plottis, plottis, 0., 0.))
+                brdfmax = BRDFmultip*np.max(brdffunkt(plottis, plottis, 0., 0.))
                 
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
                     thetass = np.arange(-np.pi/2.,np.pi/2.,.01)
-                    rad=brdffunkt(ti, thetass, 0., 0.)
+                    rad=[brdffunkt(ti, ts, 0., 0.) for ts in thetass]
                     if BRDFaprox == True: radapprox = brdffunktapprox(ti, thetass, 0., 0.)
                     
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
