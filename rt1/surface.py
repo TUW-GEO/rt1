@@ -12,7 +12,8 @@ class Surface(Scatter):
     basic class
     """
     def __init__(self, **kwargs):
-        pass
+        # set scattering angle generalization-matrix to 1 if it is not explicitly provided by the chosen class
+        self.a = getattr(self, 'a', [1.,1.,1.])
 
     def brdf(self, t0,ts,p0,ps):
         """
@@ -39,8 +40,7 @@ class Surface(Scatter):
     def legexpansion(self, mu_0, mu_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
 
-        # set scattering angle generalization-matrix to 1 if it is not explicitly provided by the chosen class
-        self.a = getattr(self, 'a', [1.,1.,1.])
+
 
         """
         Definition of the legendre-expansion of the BRDF

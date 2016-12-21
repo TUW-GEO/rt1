@@ -20,6 +20,9 @@ class Volume(Scatter):
 
         if self.tau == 0.:
             assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+        
+        # set scattering angle generalization-matrix to standard value if it is not explicitly provided by the chosen class
+        self.a = getattr(self, 'a', [-1.,1.,1.])
 
     def p(self, t0,ts,p0,ps):
         """
@@ -49,8 +52,7 @@ class Volume(Scatter):
     def legexpansion(self,mu_0,mu_ex,p_0,p_ex,geometry):
         assert self.ncoefs > 0
 
-        # set scattering angle generalization-matrix to standard value if it is not explicitly provided by the chosen class
-        self.a = getattr(self, 'a', [-1.,1.,1.])
+
 
 
         """
