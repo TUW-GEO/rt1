@@ -115,7 +115,7 @@ class Plots(Scatter):
                     color = colors[i]
                     i=i+1
                     thetass = np.arange(0.,2.*np.pi,.01)
-                    rad=[phasefunkt(ti, ts, 0., 0.) for ts in thetass]
+                    rad= [phasefunkt(ti, ts, 0., 0.) for ts in thetass]
                     if paprox == True: radapprox = phasefunktapprox(ti, thetass, 0., 0.)
                     
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
