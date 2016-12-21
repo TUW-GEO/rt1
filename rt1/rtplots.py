@@ -21,7 +21,7 @@ class Plots(Scatter):
         pass
     
 
-    def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1.):
+    def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1. , plabel = 'Volume-Scattering Phase Function', BRDFlabel = 'Surface-BRDF', paprox = True, BRDFaprox = True):
         """
         generate a polar-plot of the volume- and the surface scattering phase function
         together or in separate plots. 
@@ -38,6 +38,11 @@ class Plots(Scatter):
             incp        ... incidence-angles [deg] at which the volume-scattering phase-function will be plotted 
             incBRDF     ... incidence-angles [deg] at which the BRDF will be plotted
         
+            plabel      ... label for the plot of p
+            BRDFlabel   ... label for the plot of the BRDF
+                     
+            paprox      ... True/False whether to print the approximation of p or not
+            BRDFaprox   ... True/False whether to print the approximation of the BRDF or not
             
             pmultip     ... multiplicator of max-plotrange for p     (in case the chosen plotranges are not satisfying)
             BRDFmultip  ... multiplicator of max-plotrange for BRDF
@@ -54,6 +59,11 @@ class Plots(Scatter):
         assert isinstance(pmultip,float), 'Error: plotrange-multiplier for polarplot of p must be a floating-point number'
         assert isinstance(BRDFmultip,float), 'Error: plotrange-multiplier for polarplot of the BRDF must be a floating-point number'
 
+        assert isinstance(plabel,str), 'Error: plabel of polarplot must be a string'
+        assert isinstance(BRDFlabel,str), 'Error: plabel of polarplot must be a string'
+
+
+
         if R==None and SRF==None and V==None:
             assert False, 'Error: You must either provide R or SRF and/or V'
             
@@ -67,13 +77,16 @@ class Plots(Scatter):
         n = sp.Symbol('n')        
         
 
-        if V != None:
-            # define a plotfunction of the analytic form of p
-            phasefunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V._func,"numpy") 
-            # define a plotfunction of the legendre-approximation of p
-            phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s')),(n,0,V.ncoefs-1)).doit(),"numpy") 
 
-            # plot of volume-scattering phase-function
+        
+        
+        
+        if V != None:
+            # if V is a scalar, make it a list
+            if np.ndim(V)==0:
+                V = [V]
+
+            # make new figure
             if SRF == None:
                 # if SRF is None, plot only a single plot of p
                 polarfig = plt.figure(figsize=(7,7))
@@ -82,44 +95,49 @@ class Plots(Scatter):
                 # plot p and the BRDF together
                 polarfig = plt.figure(figsize=(14,7))
                 polarax = polarfig.add_subplot(121,projection='polar')
-            
-            # set incidence-angles for which p is calculated
-            plottis=np.deg2rad(incp)
-            colors = ['r','g','b', 'k','c','m','y']*(len(plottis)/7+1)
-            # reset color-counter
-            i=0
-            
-            pmax = pmultip*max(phasefunkt(plottis, np.pi-plottis, 0., 0.))
-            
-            for ti in plottis:
-                color = colors[i]
-                i=i+1
-                thetass = np.arange(0.,2.*np.pi,.01)
-                rad=phasefunkt(ti, thetass, 0., 0.)
-                radapprox=phasefunktapprox(ti, thetass, 0., 0.)
+
+            # plot of volume-scattering phase-function's
+            for V in V:
+                # define a plotfunction of the analytic form of p
+                phasefunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V._func,"numpy") 
+                # define a plotfunction of the legendre-approximation of p
+                if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s')),(n,0,V.ncoefs-1)).doit(),"numpy") 
+                   
+                # set incidence-angles for which p is calculated
+                plottis=np.deg2rad(incp)
+                colors = ['k','r','g','b','c','m','y']*(len(plottis)/7+1)
+                # reset color-counter
+                i=0
                 
-                polarax.set_theta_direction(-1)   # set theta direction to clockwise
-                polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
+                pmax = pmultip*max(phasefunkt(plottis, np.pi-plottis, 0., 0.))
                 
-                polarax.plot(thetass,rad, color)
-                polarax.plot(thetass,radapprox, color+'--')
-                polarax.arrow(-ti,pmax*1.2  ,0.,-pmax*0.8, head_width = .0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
-                polarax.fill_between(thetass,rad,alpha=0.2, color=color)
-                polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$','$135^\circ$','$180^\circ$'])
-                polarax.set_yticklabels([])
-                polarax.set_rmax(pmax*1.2)
-                polarax.set_title('Volume-Scattering Phase Function \n')
+                for ti in plottis:
+                    color = colors[i]
+                    i=i+1
+                    thetass = np.arange(0.,2.*np.pi,.01)
+                    rad=phasefunkt(ti, thetass, 0., 0.)
+                    if paprox == True: radapprox = phasefunktapprox(ti, thetass, 0., 0.)
+                    
+                    polarax.set_theta_direction(-1)   # set theta direction to clockwise
+                    polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
+                    
+                    polarax.plot(thetass,rad, color)
+                    if paprox == True: polarax.plot(thetass,radapprox, color+'--')
+                    polarax.arrow(-ti,pmax*1.2  ,0.,-pmax*0.8, head_width = .0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
+                    polarax.fill_between(thetass,rad,alpha=0.2, color=color)
+                    polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$','$135^\circ$','$180^\circ$'])
+                    polarax.set_yticklabels([])
+                    polarax.set_rmax(pmax*1.2)
+                    polarax.set_title(plabel + '\n')
             
    
                 
         if SRF !=None:
-            # define a plotfunction of the analytic form of the BRDF
-            brdffunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), SRF._func,"numpy") 
-            # define a plotfunction of the analytic form of the BRDF
-            brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s')),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
-     
-      
-            # plot of BRDF
+            # if SRF is a scalar, make it a list
+            if np.ndim(SRF)==0:
+                SRF = [SRF]
+
+            # append to figure or make new figure
             if V == None:
                 # if V is None, plot only a single plot of the BRDF
                 polarfig = plt.figure(figsize=(7,7))
@@ -127,37 +145,48 @@ class Plots(Scatter):
             else: 
                 # plot p and the BRDF together
                 polarax = polarfig.add_subplot(122,projection='polar')
-            
-            # set incidence-angles for which the BRDF is calculated
-            plottis=np.deg2rad(incBRDF)
-            colors = ['r','g','b', 'k','c','m','y']*(len(plottis)/7+1)
-            i=0
-            
-            brdfmax = BRDFmultip*max(brdffunkt(plottis, plottis, 0., 0.))
-            
-            for ti in plottis:
-                color = colors[i]
-                i=i+1
-                thetass = np.arange(-np.pi/2.,np.pi/2.,.01)
-                rad=brdffunkt(ti, thetass, 0., 0.)
-                radapprox = brdffunktapprox(ti, thetass, 0., 0.)
-                
-                polarax.set_theta_direction(-1)   # set theta direction to clockwise
-                polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
-                
-                polarax.plot(thetass,rad, color)
-                polarax.plot(thetass,radapprox, color + '--')
-                polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2,'k')
-            
-            
-                polarax.arrow(-ti,brdfmax*1.2  ,0.,-brdfmax*0.8, head_width =.0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
-                polarax.fill_between(thetass,rad,alpha=0.2, color=color)
-                polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$'])
-                polarax.set_yticklabels([])
-                polarax.set_rmax(brdfmax*1.2)
-                polarax.set_title('Surface-BRDF\n')
 
-        
+
+
+            # plot of BRDF
+            for SRF in SRF:
+                # define a plotfunction of the analytic form of the BRDF
+                brdffunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), SRF._func,"numpy") 
+                # define a plotfunction of the analytic form of the BRDF
+                if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s')),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
+          
+                
+                # set incidence-angles for which the BRDF is calculated
+                plottis=np.deg2rad(incBRDF)
+                colors = ['k', 'r','g','b', 'c','m','y']*(len(plottis)/7+1)
+                i=0
+                
+                brdfmax = BRDFmultip*max(brdffunkt(plottis, plottis, 0., 0.))
+                
+                for ti in plottis:
+                    color = colors[i]
+                    i=i+1
+                    thetass = np.arange(-np.pi/2.,np.pi/2.,.01)
+                    rad=brdffunkt(ti, thetass, 0., 0.)
+                    if BRDFaprox == True: radapprox = brdffunktapprox(ti, thetass, 0., 0.)
+                    
+                    polarax.set_theta_direction(-1)   # set theta direction to clockwise
+                    polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
+                    
+                    polarax.plot(thetass,rad, color)
+                    if BRDFaprox == True: polarax.plot(thetass,radapprox, color + '--')
+                    polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2,'k')
+                
+                
+                    polarax.arrow(-ti,brdfmax*1.2  ,0.,-brdfmax*0.8, head_width =.0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
+                    polarax.fill_between(thetass,rad,alpha=0.2, color=color)
+                    polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$'])
+                    polarax.set_yticklabels([])
+                    polarax.set_rmax(brdfmax*1.2)
+                    polarax.set_title(BRDFlabel + '\n')
+        return polarfig
+
+
         
         
 
@@ -280,6 +309,8 @@ class Plots(Scatter):
             ax2.legend()
         
         plt.show()
+        return f
+
         
         
         
@@ -399,9 +430,13 @@ class Plots(Scatter):
         #                     [-np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d))),np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d)))])
          
         plt.show()
+        return fig
         
-            
-            
+        
+        
+        
+        
+        
         
         
         

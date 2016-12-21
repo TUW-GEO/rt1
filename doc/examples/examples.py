@@ -101,9 +101,14 @@ Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np.linspac
 #       plot only p
 #Plots().polarplot(V = R.RV)
 
-#       plot a cosine-lobe
-#Plots().polarplot(SRF = CosineLobe(ncoefs=10, i=10))
 
+#       plot more than one phase-function simultaneously
+#       example: henyey-greenstein phase function for various choices of asymmetry parameter
+hg = Plots().polarplot(V = [HenyeyGreenstein(tau=0.7, omega=0.3, t=tt, ncoefs=10) for tt in [.1,.2,.3,.4,.5,.6]], pmultip = 1., incp = [45], plabel = 'Henyey Greenstein Phase Function', paprox = False)
+
+
+#       example: cosine-lobes for various choices of i and it's approximation with 10 legendre-coefficients
+cl = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=ii) for ii in [1,5,10,15]], BRDFlabel = 'Cosine-Lobe BRDF', incBRDF = [45], BRDFaprox = True)
 
 
 # ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
