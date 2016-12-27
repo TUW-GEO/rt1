@@ -7,5 +7,5 @@ The package implements a first order scattering radiative transfer model for ran
 
 
 ## References
-* Quast & Wagner (2016): doi:10.1364/AO.55.005379
+* Quast & Wagner (2016): [doi:10.1364/AO.55.005379](http://dx.doi.org/10.1364/AO.55.005379)
 
