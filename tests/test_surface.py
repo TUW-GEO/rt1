@@ -55,7 +55,7 @@ class TestSurface(unittest.TestCase):
         phi_s = 0.
 
         # reference solution based on first N Legrende polynomials
-        S = CosineLobe(ncoefs=10, i=5)   # means coefficients 0...9
+        S = CosineLobe(ncoefs=10, i=5)   # means coefficients 0...9; i=5 is for the example in the paper
 
         # input parameters are set in a way that COS_THETA = 0
         # and therefore only the legendre coefficients should be returned
@@ -66,6 +66,8 @@ class TestSurface(unittest.TestCase):
 
         r = S._eval_legpoly(theta_i,theta_s,phi_i,phi_s, geometry='ffff')
         #~ ref = S._get_legcoef(0)*1. + S._get_legcoef(1)*0. + S._get_legcoef(2)*(-0.5)  + S._get_legcoef(4)*(3./8.) + S._get_legcoef(6)*(-5./16.) + S._get_legcoef(8) * (35./128.) #+ S._get_legcoef(10)*(-63./256.)
+
+        print S._get_legcoef(0)
 
         refs = []
         refs.append(S._get_legcoef(0)*1.)
