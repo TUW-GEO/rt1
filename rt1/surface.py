@@ -97,6 +97,7 @@ class Surface(Scatter):
 
 
         #print 'BRDF: ', self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex)
+        print self.legcoefs
         return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
