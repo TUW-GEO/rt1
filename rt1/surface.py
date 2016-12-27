@@ -132,15 +132,15 @@ class CosineLobe(Surface):
     define a cosine-lobe of power i as BRDF
     example 2 in the paper uses the parameters: i=5, ncoefs=10
     """
-    
+
     def __init__(self, ncoefs=None, i=None,  **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
         assert i is not None, 'Error: Cosine lobe power needs to be specified!'
         super(CosineLobe, self).__init__(**kwargs)
         assert ncoefs > 0
-        self.i = i      
-        assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
-        assert i > 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 1'        
+        self.i = i
+        assert isinstance(self.i, int), 'Error: Cosine lobe power needs to be an integer!'
+        assert i > 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 1'
         self.ncoefs = int(ncoefs)
         self._set_function()
         self._set_legcoefficients()
@@ -148,6 +148,7 @@ class CosineLobe(Surface):
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
         self.legcoefs = ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        #slightly different formuation used than in the paper.
 
     def _set_function(self):
         """

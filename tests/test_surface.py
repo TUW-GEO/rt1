@@ -27,7 +27,7 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
 
     def test_cosine(self):
-        S = CosineLobe(ncoefs=10)
+        S = CosineLobe(ncoefs=10, i=5)
         theta_i = np.pi/2.
         theta_s = 0.234234
         phi_i = np.pi/2.
@@ -44,7 +44,7 @@ class TestSurface(unittest.TestCase):
         self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0.5**5., 10)
 
     def test_cosine_coeff(self):
-        S = CosineLobe(ncoefs=10)
+        S = CosineLobe(ncoefs=10, i=5)
         self.assertAlmostEqual(S._get_legcoef(0), 15.*np.sqrt(np.pi)/(16.*sc.gamma(3.5)*sc.gamma(4.)))
         self.assertAlmostEqual(S._get_legcoef(2), 75.*np.sqrt(np.pi)/(16.*sc.gamma(2.5)*sc.gamma(5.)))
 
@@ -55,7 +55,7 @@ class TestSurface(unittest.TestCase):
         phi_s = 0.
 
         # reference solution based on first N Legrende polynomials
-        S = CosineLobe(ncoefs=10)   # means coefficients 0...9
+        S = CosineLobe(ncoefs=10, i=5)   # means coefficients 0...9
 
         # input parameters are set in a way that COS_THETA = 0
         # and therefore only the legendre coefficients should be returned
