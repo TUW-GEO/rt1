@@ -3,8 +3,6 @@
 import unittest
 import numpy as np
 
-from nose.tools import nottest
-
 import sys
 
 sys.path.append('..')
@@ -82,48 +80,6 @@ class TestSurface(unittest.TestCase):
             refs.append(S._get_legcoef(k)*1.)
         ref = np.array(refs).sum()
         self.assertAlmostEqual(r, ref, 15)
-
-    @nottest  # does not work properly yet!
-    def test_eval_legpoly(self):
-        S = CosineLobe(ncoefs=2)
-
-        t0 = np.pi/2.
-        ts = 0.234234
-        p0 = np.pi/2.
-        ps = 0.
-
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        n = sp.Symbol('n')
-
-        r1 = S._eval_legpoly(t0,ts,p0,ps, geometry='ffff')  ## sum goes until NCOEFS+1; here 11
-        #~ print 'Legcoefs: ', S.legcoefs
-        refs = []
-        for i in xrange(S.ncoefs):
-            #~ print ''
-            #~ print ''
-            #~ print 'i: ', i
-            # compare individual references against those of a scatterer with reduced coefficients
-            ref = S._get_legcoef(i)*sp.legendre(i,S.thetaBRDF(theta_i,theta_s,phi_i,phi_s)).xreplace({n:i, theta_i:t0,theta_s:ts,phi_i:p0,phi_s:ps})
-
-            ST = CosineLobe(ncoefs=i+1)
-            r = ST._eval_legpoly(t0,ts,p0,ps, geometry='ffff')
-            refs.append(ref)
-
-            print ''
-            print 'i: ', i
-            print 'Refs: ', refs
-            print 'r: ', r
-            self.assertAlmostEqual(r, np.array(refs).sum())
-
-        # check overall results
-        refs = np.array(refs)
-        self.assertAlmostEqual(r1, refs.sum())
-
-
-
 
 
 
