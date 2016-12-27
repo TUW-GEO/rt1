@@ -1,6 +1,4 @@
-[![Build Status](https://travis-ci.org/pygeo/rt1.svg?branch=master)](https://travis-ci.org/pygeo/rt1)
-
-[![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/en/latest/?badge=latest)
+[![Build Status](https://travis-ci.org/pygeo/rt1.svg?branch=master)](https://travis-ci.org/pygeo/rt1) [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/en/latest/?badge=latest)
 
 # RT1 - bistatic scattering model for first order scattering of random media
 
