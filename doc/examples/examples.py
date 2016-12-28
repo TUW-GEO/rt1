@@ -3,7 +3,7 @@ Reproduce examples like given in the paper
 """
 
 import sys
-sys.path.append('..')
+sys.path.append('../..')
 
 
 import matplotlib.pyplot as plt
@@ -72,7 +72,7 @@ for i in xrange(len(inc)):
     phi_0 = np.deg2rad(0.)
     phi_ex = phi_0 + np.pi
 
-    
+
     R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     fn = R.fn  # store coefficients for faster itteration
     #Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
@@ -166,11 +166,11 @@ def Rad(theta, phi, thetainc, phiinc):
     surf3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
     vol3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
     int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
-    
+
     # pre-evaluation of fn-coefficients
     testfn = RT1(1., np.cos(np.deg2rad(thetainc)), np.cos(np.deg2rad(45)), phiinc, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
 
-    # evaluation of model        
+    # evaluation of model
     for i in range(0,len(theta)):
         if i == 0: tic = timeit.default_timer()
         if i == 0: print('... estimating evaluation-time...')
@@ -188,7 +188,7 @@ toc = timeit.default_timer()
 print('evaluation finished, it took ' + str(round((toc-tic)/60.,2)) + ' minutes')
 
 
-#       dplot of total, volume, surface and interaction - contribution 
+#       dplot of total, volume, surface and interaction - contribution
 Plots().linplot3d(theta, phi,  Itot3d = tot3dplot, Isurf3d = surf3dplot, Ivol3d = vol3dplot, Iint3d = int3dplot,  zoom = 1.2, surfmultip = .8)
 
 #       plot only volume contribution

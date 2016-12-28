@@ -56,6 +56,7 @@ class Scatter(object):
 
         ###self.RV.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).do
         res = self.legexpansion(mu_0, mu_ex, p0, ps, geometry).xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps, theta_ex:ts, phi_ex:ps})
+        print 'THETA: ', self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex).xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps, theta_ex:ts, phi_ex:ps}).evalf()
         return res.evalf()  #.xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps}).evalf()
 
 
