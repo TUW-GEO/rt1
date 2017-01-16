@@ -25,7 +25,7 @@ class TestExamples(unittest.TestCase):
     def setUp(self):
         # read reference solutions for backscattering case
         fname1 = 'example1_int.csv'
-        x1 = np.loadtxt(fname1, delimiter=',',skiprows=0)
+        x1 = np.loadtxt('tests/' + fname1, delimiter=',',skiprows=0)
         self.inc1 = x1[:,0]
         self.int_num_1 = x1[:,1]
 
