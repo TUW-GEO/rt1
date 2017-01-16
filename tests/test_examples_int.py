@@ -8,7 +8,6 @@ with a numerical solution (generated with numerical_evaluation.py)
 
 """
 
-
 import unittest
 import numpy as np
 
@@ -18,7 +17,7 @@ import sys
 sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh, HenyeyGreenstein
-from rt1.surface import CosineLobe
+from rt1.surface import Isotropic, CosineLobe
 
 
 class TestExamples(unittest.TestCase):
@@ -34,7 +33,6 @@ class TestExamples(unittest.TestCase):
         x2 = np.loadtxt(fname2, delimiter=',',skiprows=0)
         self.inc2 = x2[:,0]
         self.int_num_2 = x2[:,1]
-
 
     def test_example_1_int(self):
         print('Testing Example 1 ...')
@@ -71,7 +69,6 @@ class TestExamples(unittest.TestCase):
             self.assertAlmostEqual(self.int_num_1[i],Iint[i])
         
 
-        
     def test_example_2_int(self):
         print('Testing Example 2 ...')
 

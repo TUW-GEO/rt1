@@ -6,6 +6,9 @@ import numpy as np
 import sys
 
 sys.path.append('..')
+from rt1.volume import Rayleigh, HenyeyGreenstein
+from rt1.rt1 import RT1
+
 from rt1.surface import Isotropic, CosineLobe
 from scipy import special as sc
 import sympy as sp
