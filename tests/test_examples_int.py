@@ -30,7 +30,7 @@ class TestExamples(unittest.TestCase):
         self.int_num_1 = x1[:,1]
 
         fname2 = 'example2_int.csv'
-        x2 = np.loadtxt(fname2, delimiter=',',skiprows=0)
+        x2 = np.loadtxt('tests/' + fname2, delimiter=',',skiprows=0)
         self.inc2 = x2[:,0]
         self.int_num_2 = x2[:,1]
 
