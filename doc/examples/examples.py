@@ -18,7 +18,7 @@ from rt1.rtplots import Plots
 from rt1.volume import Rayleigh
 from rt1.volume import HenyeyGreenstein
 
-from rt1.surface import LafortuneLobe
+from rt1.surface import CosineLobe
 
 from rt1.rt1 import RT1
 
@@ -40,16 +40,16 @@ inc = np.arange(0.,90.,2.)
 if True:
     # Example 1
     V = Rayleigh(tau=0.7, omega=0.3)
-    SRF = LafortuneLobe(ncoefs=10, i=5)
+    SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 1'
 else:
     V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
-    SRF = LafortuneLobe(ncoefs=10, i=5)
+    SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 2'
 
 
 V = Rayleigh(tau=0.7, omega=0.3)
-SRF = LafortuneLobe(ncoefs=10, i=5, a=[.8,1.,1.])
+SRF = CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])
 
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
@@ -112,10 +112,10 @@ hg = Plots().polarplot(V = [HenyeyGreenstein(tau=0.7, omega=0.3, t=tt, ncoefs=10
 
 
 #       example: cosine-lobes for various choices of i and it's approximation with 10 legendre-coefficients
-cl = Plots().polarplot(SRF = [LafortuneLobe(ncoefs=10, i=ii) for ii in [1,5,10,15]], BRDFlabel = 'Cosine-Lobe BRDF', incBRDF = [45], BRDFaprox = True)
+cl = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=ii) for ii in [1,5,10,15]], BRDFlabel = 'Cosine-Lobe BRDF', incBRDF = [45], BRDFaprox = True)
 
 #       example: lafortune-lobes
-ll = Plots().polarplot(SRF = [LafortuneLobe(ncoefs=10, i=5, a=[.8,1.,1.])], BRDFlabel = 'Lafortune-Lobe BRDF', BRDFaprox = False)
+ll = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])], BRDFlabel = 'Lafortune-Lobe BRDF', BRDFaprox = False)
 
 #       example: isotropic phase function
 #iso = Plots().polarplot(SRF = SRFisotropic(), BRDFlabel = 'Isotropic BRDF', BRDFaprox = False, incBRDF = [45], BRDFmultip = 2.)

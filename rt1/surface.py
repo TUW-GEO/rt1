@@ -132,7 +132,7 @@ class Isotropic(Surface):
 
 
 
-class LafortuneLobe(Surface):
+class CosineLobe(Surface):
     """
     define a generalized cosine-lobe of power i.
 
@@ -149,7 +149,7 @@ class LafortuneLobe(Surface):
     def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
         assert i is not None, 'Error: Cosine lobe power needs to be specified!'
-        super(LafortuneLobe, self).__init__(**kwargs)
+        super(CosineLobe, self).__init__(**kwargs)
         assert ncoefs > 0
         self.i = i
         assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
