@@ -40,8 +40,6 @@ class Surface(Scatter):
     def legexpansion(self, mu_0, mu_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
 
-
-
         """
         Definition of the legendre-expansion of the BRDF
 
@@ -131,48 +129,6 @@ class Isotropic(Surface):
         self._func = 1./sp.pi
 
 
-class CosineLobe(Surface):
-    """
-    define a cosine-lobe of power i as BRDF
-    example 2 in the paper uses the parameters: i=5, ncoefs=10
-    """
-
-    def __init__(self, ncoefs=None, i=None,  **kwargs):
-        assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
-        assert i is not None, 'Error: Cosine lobe power needs to be specified!'
-        super(CosineLobe, self).__init__(**kwargs)
-        assert ncoefs > 0
-        self.i = i
-        assert isinstance(self.i, int), 'Error: Cosine lobe power needs to be an integer!'
-        assert i > 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 1'
-        self.ncoefs = int(ncoefs)
-        self._set_function()
-        self._set_legcoefficients()
-
-    def _set_legcoefficients(self):
-        n = sp.Symbol('n')
-        self.legcoefs = ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
-        #slightly different formuation used than in the paper.
-
-    def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-
-        #self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s), 0.)**self.i  # eq. A13
-
-        # alternative formulation avoiding the use of sp.Max()
-        #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
-        #      that can not interpret array inputs.)
-        x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s)
-        self._func = (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
-
-
-
 
 
 
@@ -187,7 +143,7 @@ class LafortuneLobe(Surface):
 
 
     if the a-parameter is not provided explicitly or if it is set 
-    to a=[1.,1.,1.], LafortuneLobe is equal to the CosineLobe.
+    to a=[1.,1.,1.], LafortuneLobe is the equal to the ordinary CosineLobe.
     """
 
     def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
@@ -229,9 +185,12 @@ class LafortuneLobe(Surface):
 
 
 
+
+
 class HenyeyGreenstein(Surface):
     """
     class to define HenyeyGreenstein scattering function
+    for use as BRDF approximation function.
     """
     def __init__(self, t=None, ncoefs=None, a=[1.,1.,1.], **kwargs):
         assert t is not None, 't parameter needs to be provided!'
