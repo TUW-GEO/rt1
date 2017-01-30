@@ -107,15 +107,19 @@ class Isotropic(Surface):
     """
     define an isotropic surface
     """
-    def __init__(self, **kwargs):
+    def __init__(self, NormBRDF = 1. , **kwargs):
         super(Isotropic, self).__init__(**kwargs)
         self._set_function()
         self._set_legcoefficients()
+        self.NormBRDF = NormBRDF
+        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
+
 
     def _set_legcoefficients(self):
         self.ncoefs = 1
         n = sp.Symbol('n')
-        self.legcoefs = (1./sp.pi)*sp.KroneckerDelta(0,n)
+        self.legcoefs = (self.NormBRDF/sp.pi)*sp.KroneckerDelta(0,n)
 
     def _set_function(self):
         """
@@ -126,7 +130,7 @@ class Isotropic(Surface):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = 1./sp.pi
+        self._func = self.NormBRDF/sp.pi
 
 
 
@@ -146,7 +150,7 @@ class CosineLobe(Surface):
     to a=[1.,1.,1.], LafortuneLobe is the equal to the ordinary CosineLobe.
     """
 
-    def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
+    def __init__(self, ncoefs=None, i=None, NormBRDF = 1. , a=[1.,1.,1.],  **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
         assert i is not None, 'Error: Cosine lobe power needs to be specified!'
         super(CosineLobe, self).__init__(**kwargs)
@@ -154,6 +158,9 @@ class CosineLobe(Surface):
         self.i = i
         assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
         assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
+        self.NormBRDF = NormBRDF
+        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'        
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
         assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
@@ -164,7 +171,7 @@ class CosineLobe(Surface):
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        self.legcoefs = self.NormBRDF * ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """
@@ -181,7 +188,7 @@ class CosineLobe(Surface):
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
         x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s, a=self.a)
-        self._func = (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
+        self._func = self.NormBRDF * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
 
 
 
@@ -192,13 +199,16 @@ class HenyeyGreenstein(Surface):
     class to define HenyeyGreenstein scattering function
     for use as BRDF approximation function.
     """
-    def __init__(self, t=None, ncoefs=None, a=[1.,1.,1.], **kwargs):
+    def __init__(self, t=None, ncoefs=None, NormBRDF = 1. , a=[1.,1.,1.], **kwargs):
         assert t is not None, 't parameter needs to be provided!'
         assert ncoefs is not None, 'Number of coefficients needs to be specified'
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
+        self.NormBRDF = NormBRDF
+        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'                
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
         assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
@@ -213,11 +223,11 @@ class HenyeyGreenstein(Surface):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetaBRDF(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        self._func = self.NormBRDF * (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetaBRDF(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = (1./(4.*sp.pi)) * (2.*n+1)*self.t**n
+        self.legcoefs = self.NormBRDF * (1./(4.*sp.pi)) * (2.*n+1)*self.t**n
 
 
 
