@@ -12,6 +12,23 @@ from scipy.special import expi
 from scipy.special import expn
 
 import sympy as sp
+import time
+
+def _get_fn_wrapper(fn, n, t0, p0, tex, pex):
+    """
+    function to evaluate expansion coefficients
+    as function of incident geometry
+
+    independent of class
+    """
+    theta_i = sp.Symbol('theta_i')
+    phi_i = sp.Symbol('phi_i')
+    theta_ex = sp.Symbol('theta_ex')
+    phi_ex = sp.Symbol('phi_ex')
+    # potential speed up here through evaluation of sin cosine functions
+    # only once
+    return fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex}).evalf()
+
 
 class RT1(object):
     """
@@ -177,17 +194,14 @@ class RT1(object):
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
-    def _get_fn(self, n, t0, p0, tex, pex):
-        """
-        function to evaluate expansion coefficients
-        as function of incident geometry
-        """
-        theta_i = sp.Symbol('theta_i')
-        phi_i = sp.Symbol('phi_i')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_ex = sp.Symbol('phi_ex')
 
-        return self.fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex}).evalf()
+
+
+
+    def _get_fn(self, n, t0, p0, tex, pex):
+        """ wrapper function is used to have no effect on tests, external function needed for parallelization """
+        return _get_fn_wrapper(self.fn, n, t0, p0, tex, pex)
+
 
 
     def calc(self):
@@ -242,10 +256,22 @@ class RT1(object):
 
         hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
 
-        for n in xrange(nmax):
-            S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
-            fn = self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2)
-            S += fn * mu1**(n+1) * (hlp1 + S2)
+        #~ if False:
+            #~ # standard way
+            #~ for n in xrange(nmax):
+#~
+                #~ S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
+                #~ fn = self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2)
+                #~ S += fn * mu1**(n+1) * (hlp1 + S2)
+        #~ else:
+        # hopefully faster
+        # try to seaparate loops
+        S2 = np.array([np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)) for n in xrange(nmax)])
+        fn = np.array([self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)])
+        #fn = np.random.random(nmax)
+        mu = np.array([mu1**(n+1) for n in xrange(nmax)])
+        S = np.sum(fn * mu * (S2 + hlp1))
+
         return S
 
 
