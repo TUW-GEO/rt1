@@ -109,11 +109,11 @@ class Isotropic(Surface):
     """
     def __init__(self, NormBRDF = 1. , **kwargs):
         super(Isotropic, self).__init__(**kwargs)
-        self._set_function()
-        self._set_legcoefficients()
         self.NormBRDF = NormBRDF
         assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
         assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
+        self._set_function()
+        self._set_legcoefficients()
 
 
     def _set_legcoefficients(self):
