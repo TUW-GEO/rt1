@@ -110,7 +110,7 @@ class Isotropic(Surface):
     def __init__(self, NormBRDF = 1. , **kwargs):
         super(Isotropic, self).__init__(**kwargs)
         self.NormBRDF = NormBRDF
-        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
         assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
         self._set_function()
         self._set_legcoefficients()
@@ -159,7 +159,7 @@ class CosineLobe(Surface):
         assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
         assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
         self.NormBRDF = NormBRDF
-        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
         assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'        
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
@@ -207,7 +207,7 @@ class HenyeyGreenstein(Surface):
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self.NormBRDF = NormBRDF
-        assert type(NormBRDF) == float, 'Error: NormBRDF must be a floating-point number'
+        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
         assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'                
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
