@@ -101,7 +101,8 @@ class Plots(Scatter):
                 # define a plotfunction of the analytic form of p
                 phasefunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V._func,"numpy") 
                 # define a plotfunction of the legendre-approximation of p
-                if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', V.a)),(n,0,V.ncoefs-1)).doit(),"numpy") 
+                #if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', V.a)),(n,0,V.ncoefs-1)).doit(),"numpy") 
+                if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V.legexpansion('theta_i', 'theta_s', 'phi_i', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
                    
                 # set incidence-angles for which p is calculated
                 plottis=np.deg2rad(incp)
@@ -116,7 +117,7 @@ class Plots(Scatter):
                     i=i+1
                     thetass = np.arange(0.,2.*np.pi,.01)
                     rad= [phasefunkt(ti, ts, 0., 0.) for ts in thetass]
-                    if paprox == True: radapprox = phasefunktapprox(ti, thetass, 0., 0.)
+                    if paprox == True: radapprox = phasefunktapprox(np.pi-ti, thetass, 0., 0.) # the use of np.pi-ti stems from the definition of legexpansion() in volume.py
                     
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
                     polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
@@ -153,7 +154,8 @@ class Plots(Scatter):
                 # define a plotfunction of the analytic form of the BRDF
                 brdffunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), SRF._func,"numpy") 
                 # define a plotfunction of the analytic form of the BRDF
-                if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', SRF.a)),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
+                #if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', SRF.a)),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
+                if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
           
                 
                 # set incidence-angles for which the BRDF is calculated
@@ -230,7 +232,7 @@ class Plots(Scatter):
         if label is not None:assert isinstance(label,str), 'Error, Label must be a string'
      
         
-        if ylim is not None: assert len(ylim)!=2, 'Error: ylim must be an array of length 2!   ylim = [ymin, ymax]'
+        if ylim is not None: assert len(ylim)==2, 'Error: ylim must be an array of length 2!   ylim = [ymin, ymax]'
         if ylim is not None: assert isinstance(ylim[0],(int,float)), 'Error: ymin must be a number'
         if ylim is not None: assert isinstance(ylim[1],(int,float)), 'Error: ymax must be a number'
         
