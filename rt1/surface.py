@@ -171,7 +171,7 @@ class CosineLobe(Surface):
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF * ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        self.legcoefs = self.NormBRDF/sp.pi * ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """
@@ -188,7 +188,7 @@ class CosineLobe(Surface):
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
         x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s, a=self.a)
-        self._func = self.NormBRDF * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
+        self._func = self.NormBRDF/sp.pi * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
 
 
 
@@ -223,11 +223,11 @@ class HenyeyGreenstein(Surface):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = self.NormBRDF * (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetaBRDF(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*self.thetaBRDF(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF * (1./(4.*sp.pi)) * (2.*n+1)*self.t**n
+        self.legcoefs = self.NormBRDF * (1./(sp.pi)) * (2.*n+1)*self.t**n
 
 
 

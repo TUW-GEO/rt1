@@ -28,7 +28,7 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
 
     def test_cosine(self):
-        S = CosineLobe(ncoefs=10, i=5)
+        S = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
         theta_i = np.pi/2.
         theta_s = 0.234234
         phi_i = np.pi/2.
@@ -47,7 +47,7 @@ class TestSurface(unittest.TestCase):
     def test_cosine_coeff(self):
         # test legcoefs for example in paper
         n=10
-        S = CosineLobe(ncoefs=n, i=5)
+        S = CosineLobe(ncoefs=n, i=5, NormBRDF = np.pi)
         for i in xrange(n):
             z1 = 120.*np.sqrt(np.pi)*(1./128.+i/64.)
             z2 = sc.gamma((7.-i)*0.5)*sc.gamma((8.+i)*0.5)
@@ -64,7 +64,7 @@ class TestSurface(unittest.TestCase):
 
         # reference solution based on first N Legrende polynomials
         ncoefs = 10
-        S = CosineLobe(ncoefs=ncoefs, i=5)   # means coefficients 0...9; i=5 is for the example in the paper
+        S = CosineLobe(ncoefs=ncoefs, i=5, NormBRDF = np.pi)   # means coefficients 0...9; i=5 is for the example in the paper
 
         # input parameters are set in a way that COS_THETA = 1
         # and therefore only the legendre coefficients should be returned
