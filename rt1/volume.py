@@ -111,6 +111,37 @@ class Volume(Scatter):
         return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
+class Phasefunction(Volume):
+        """
+        dummy-Volume-class object used to generate linear-combinations of volume-phase-functions
+        """
+        def __init__(self, **kwargs):
+            super(Phasefunction, self).__init__(**kwargs)
+            self._set_function()
+            self._set_legcoefficients()
+
+
+        def _set_function(self):
+            """
+            define phase function as sympy object for later evaluation
+            """
+            theta_i = sp.Symbol('theta_i')
+            theta_s = sp.Symbol('theta_s')
+            phi_i = sp.Symbol('phi_i')
+            phi_s = sp.Symbol('phi_s')
+            self._func = 0.
+
+        def _set_legcoefficients(self):
+            """
+            set Legrende coefficients
+            needs to be a function that can be later evaluated by subsituting 'n'
+            """
+
+            n = sp.Symbol('n')
+            self.legcoefs = 0.
+
+
+
 class Rayleigh(Volume):
     """
     class to define Rayleigh scattering function
@@ -226,54 +257,6 @@ class HGRayleigh(Volume):
         (3./(8.*sp.pi) * 1./(2.+self.t**2) * (n*(n-1.)/(2.*n-1.) * self.t**(n-2.) + (n+2.)*(n+1.)/(2.*n+3)*self.t**(n+2.) + (n+1.)**2./(2.*n+3.)*self.t**n + (5.*n**2.-1.)/(2.*n-1.)*self.t**n)
         ,True)
         )
-
-
-
-
-
-
-
-class DoubleHG(Volume):
-    """
-    class to define a generalized double-HenyeyGreenstein scattering function
-    """
-    def __init__(self, t1=None, t2=None, fraction=None,  ncoefs=None, a=[-1.,1.,1.], **kwargs):
-        assert t1 is not None, 't1 parameter needs to be provided!'
-        assert t2 is not None, 't2 parameter needs to be provided!'
-        assert fraction is not None, 'fraction parameter needs to be provided!'
-        assert ncoefs is not None, 'Number of coefficients needs to be specified'
-        super(DoubleHG, self).__init__(**kwargs)
-        self.t1 = t1
-        self.t2 = t2
-        self.fraction = fraction
-        self.a = a
-        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
-        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
-        assert all(type(x)==float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
-        self.ncoefs = ncoefs
-        assert self.ncoefs > 0
-        self._set_function()
-        self._set_legcoefficients()
-
-    def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        self._func = self.fraction*(1.-self.t1**2.) / ((4.*sp.pi)*(1.+self.t1**2.-2.*self.t1*self.thetap(theta_i,theta_s,phi_i,phi_s, self.a))**1.5) + (1.-self.fraction)*(1.-self.t2**2.) / ((4.*sp.pi)*(1.+self.t2**2.-2.*self.t2*self.thetap(theta_i,theta_s,phi_i,phi_s, self.a))**1.5)
-
-    def _set_legcoefficients(self):
-        """
-        set Legrende coefficients
-        needs to be a function that can be later evaluated by subsituting 'n'
-        """
-        n = sp.Symbol('n')
-        self.legcoefs = (1./(4.*sp.pi)) * (2.*n+1)*(self.fraction*self.t1**n + (1.-self.fraction)*self.t2**n)
-
-
 
 
 

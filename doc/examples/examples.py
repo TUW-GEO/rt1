@@ -19,6 +19,9 @@ from rt1.volume import Rayleigh
 from rt1.volume import HenyeyGreenstein
 
 from rt1.surface import CosineLobe
+from rt1.surface import HenyeyGreenstein as HGsurface
+from rt1.surface import Isotropic
+
 
 from rt1.rt1 import RT1
 
@@ -26,9 +29,10 @@ from rt1.rt1 import RT1
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
 # otherwise the code is stopped after monostatic evaluation
-bistaticplot = True
+bistaticplot = False
 
 #plt.close('all')
+
 
 
 # start timer
@@ -48,8 +52,40 @@ else:
     label = 'Example 2'
 
 
-V = Rayleigh(tau=0.7, omega=0.3)
-SRF = CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])
+
+
+# list of volume-scattering phase-functions to be combined
+phasechoices = [HenyeyGreenstein(tau = 0.5, omega = 0.4, t=  0.5, ncoefs = 10, a=[-1.,1.,1.]),  # forward-scattering-peak
+                HenyeyGreenstein(tau = 0.5, omega = 0.4, t= -0.2, ncoefs = 10, a=[-1.,1.,1.]),  # backscattering-peak
+                HenyeyGreenstein(tau = 0.5, omega = 0.4, t= -0.5, ncoefs = 10, a=[ 1.,1.,1.]),  # downward-specular peak
+                HenyeyGreenstein(tau = 0.5, omega = 0.4, t=  0.2, ncoefs = 10, a=[ 1.,1.,1.]),  # upward-specular peak
+               ]
+# weighting-factors for the individual phase-functions
+Vweights = [.3,.3,.2,.2]
+
+
+# list of surface-BRDF-functions to be combined
+BRDFchoices = [HGsurface(ncoefs=10, t=-.4, a=[-.8,1.,1.], NormBRDF=.1),         # backscattering peak
+               HGsurface(ncoefs=10, t= .5, a=[ .8,1.,1.], NormBRDF=.1),         # specular peak
+               Isotropic(NormBRDF=.1),        # isotropic scattering contribution
+              ]
+# weighting-factors for the individual BRDF's
+BRDFweights = [.3,.4,.3]
+
+
+# generate correctly shaped arrays of the phase-functions and their corresponding weighting-factors:
+V = map(list,zip(Vweights, phasechoices))
+SRF = map(list,zip(BRDFweights, BRDFchoices))
+
+
+#   extract the combined surface- and volume- class elements and plot them
+#combinedV = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=None, geometry='mono').RV
+#combinedSRF = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=None, geometry='mono').SRF
+
+#hg = Plots().polarplot(V=combinedV, SRF = combinedSRF, pmultip = 1., incp = [15,45,85], plabel = 'Henyey Greenstein Phase Function', paprox = True, BRDFaprox=True)
+
+
+
 
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
@@ -108,14 +144,14 @@ plot1 = Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np
 
 #       plot more than one phase-function simultaneously
 #       example: henyey-greenstein phase function for various choices of asymmetry parameter
-hg = Plots().polarplot(V = [HenyeyGreenstein(tau=0.7, omega=0.3, t=tt, ncoefs=10) for tt in [.1,.2,.3,.4,.5,.6]], pmultip = 1., incp = [45], plabel = 'Henyey Greenstein Phase Function', paprox = False)
+#hg = Plots().polarplot(V = [HenyeyGreenstein(tau=0.7, omega=0.3, t=tt, ncoefs=10) for tt in [.1,.2,.3,.4,.5,.6]], pmultip = 1., incp = [45], plabel = 'Henyey Greenstein Phase Function', paprox = False)
 
 
 #       example: cosine-lobes for various choices of i and it's approximation with 10 legendre-coefficients
-cl = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=ii) for ii in [1,5,10,15]], BRDFlabel = 'Cosine-Lobe BRDF', incBRDF = [45], BRDFaprox = True)
+#cl = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=ii) for ii in [1,5,10,15]], BRDFlabel = 'Cosine-Lobe BRDF', incBRDF = [45], BRDFaprox = True)
 
 #       example: lafortune-lobes
-ll = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])], BRDFlabel = 'Lafortune-Lobe BRDF', BRDFaprox = False)
+#ll = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])], BRDFlabel = 'Lafortune-Lobe BRDF', BRDFaprox = False)
 
 #       example: isotropic phase function
 #iso = Plots().polarplot(SRF = SRFisotropic(), BRDFlabel = 'Isotropic BRDF', BRDFaprox = False, incBRDF = [45], BRDFmultip = 2.)
@@ -124,7 +160,7 @@ ll = Plots().polarplot(SRF = [CosineLobe(ncoefs=10, i=5, a=[.8,1.,1.])], BRDFlab
 
 # ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
 #       plot backscattered intensity and fractional contributions
-plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint)
+plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, ylim=[-20,0])
 
 #       plot only backscattering coefficient without fractions
 #Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, fractions = False)
@@ -192,15 +228,6 @@ Plots().linplot3d(theta, phi,  Itot3d = tot3dplot, Isurf3d = surf3dplot, Ivol3d 
 #Plots().linplot3d(theta, phi,  Isurf3d = surf3dplot,  zoom = 1.2, surfmultip = 1.)
 #       plot only interaction contribution
 #Plots().linplot3d(theta, phi,  Iint3d = int3dplot,  zoom = 1.2, surfmultip = 1.)
-
-
-
-
-
-
-
-
-
 
 
 

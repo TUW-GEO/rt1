@@ -103,6 +103,32 @@ class Surface(Scatter):
 
 
 
+class BRDFfunction(Surface):
+    """
+    dummy-Surface-class object used to generate linear-combinations of BRDF-functions
+    """
+    def __init__(self, **kwargs):
+        super(BRDFfunction, self).__init__(**kwargs)
+        self._set_function()
+        self._set_legcoefficients()
+
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        theta_i = sp.Symbol('theta_i')
+        theta_s = sp.Symbol('theta_s')
+        phi_i = sp.Symbol('phi_i')
+        phi_s = sp.Symbol('phi_s')
+        self._func = 0.
+
+    def _set_legcoefficients(self):
+        n = sp.Symbol('n')
+        self.legcoefs = 0.
+
+
+
 class Isotropic(Surface):
     """
     define an isotropic surface
