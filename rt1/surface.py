@@ -14,6 +14,9 @@ class Surface(Scatter):
     def __init__(self, **kwargs):
         # set scattering angle generalization-matrix to 1 if it is not explicitly provided by the chosen class
         self.a = getattr(self, 'a', [1.,1.,1.])
+        self.NormBRDF = kwargs.get('NormBRDF', 1.)
+        assert isinstance(self.NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
+        assert self.NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
 
     def brdf(self, t0,ts,p0,ps):
         """
@@ -133,11 +136,8 @@ class Isotropic(Surface):
     """
     define an isotropic surface
     """
-    def __init__(self, NormBRDF = 1. , **kwargs):
+    def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
-        self.NormBRDF = NormBRDF
-        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
-        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
         self._set_function()
         self._set_legcoefficients()
 
@@ -172,11 +172,11 @@ class CosineLobe(Surface):
     Proceedings of SIGGRAPH'97, pages 117-126, 1997'
 
 
-    if the a-parameter is not provided explicitly or if it is set 
+    if the a-parameter is not provided explicitly or if it is set
     to a=[1.,1.,1.], LafortuneLobe is the equal to the ordinary CosineLobe.
     """
 
-    def __init__(self, ncoefs=None, i=None, NormBRDF = 1. , a=[1.,1.,1.],  **kwargs):
+    def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
         assert i is not None, 'Error: Cosine lobe power needs to be specified!'
         super(CosineLobe, self).__init__(**kwargs)
@@ -184,9 +184,6 @@ class CosineLobe(Surface):
         self.i = i
         assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
         assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
-        self.NormBRDF = NormBRDF
-        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
-        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'        
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
         assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
@@ -225,16 +222,14 @@ class HenyeyGreenstein(Surface):
     class to define HenyeyGreenstein scattering function
     for use as BRDF approximation function.
     """
-    def __init__(self, t=None, ncoefs=None, NormBRDF = 1. , a=[1.,1.,1.], **kwargs):
+    def __init__(self, t=None, ncoefs=None, a=[1.,1.,1.], **kwargs):
         assert t is not None, 't parameter needs to be provided!'
         assert ncoefs is not None, 'Number of coefficients needs to be specified'
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
-        self.NormBRDF = NormBRDF
-        assert isinstance(NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
-        assert NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'                
+
         self.a = a
         assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
         assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
