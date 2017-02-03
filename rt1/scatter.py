@@ -10,16 +10,16 @@ class Scatter(object):
     def __init__(self):
         pass
 
-    def thetaBRDF(self, thetai,thetas, phii, phis):
+    def thetaBRDF(self, thetai,thetas, phii, phis, a=[1.,1.,1.]):
         """
         Parameters
         ----------
         incident and scattering angles as sympy symbols
         """
-        return sp.cos(thetai)*sp.cos(thetas)+sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
+        return a[0]*sp.cos(thetai)*sp.cos(thetas)+a[1]*sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+a[2]*sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
 
-    def thetap(self, thetai, thetas, phii, phis):
-        return -sp.cos(thetai)*sp.cos(thetas)+sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
+    def thetap(self, thetai, thetas, phii, phis, a=[-1.,1.,1.]):
+        return a[0]*sp.cos(thetai)*sp.cos(thetas)+a[1]*sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+a[2]*sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
 
     def _get_legcoef(self, n0):
         """

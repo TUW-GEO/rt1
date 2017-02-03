@@ -92,7 +92,7 @@ class TestRT1(unittest.TestCase):
         # this is done by comparing the obtained coefficients
         # against the analytical solution using a Rayleigh volume
         # and isotropic surface scattering phase function
-        S = CosineLobe(ncoefs=1, i=5)
+        S = CosineLobe(ncoefs=1, i=5, NormBRDF = np.pi)
         V = Rayleigh(tau=0.7, omega=0.3)
         #--> cosTHETA = 0.
 
@@ -129,7 +129,7 @@ class TestRT1(unittest.TestCase):
 
         # ncoefs = 2
         # result should be the same as for ncoefs=1
-        S = CosineLobe(ncoefs=2, i=5)
+        S = CosineLobe(ncoefs=2, i=5, NormBRDF = np.pi)
         RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
         res00 = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
         res22 = RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)

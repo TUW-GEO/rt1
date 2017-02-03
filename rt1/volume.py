@@ -20,6 +20,9 @@ class Volume(Scatter):
 
         if self.tau == 0.:
             assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+        
+        # set scattering angle generalization-matrix to standard value if it is not explicitly provided by the chosen class
+        self.a = getattr(self, 'a', [-1.,1.,1.])
 
     def p(self, t0,ts,p0,ps):
         """
@@ -105,7 +108,38 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+
+
+class Phasefunction(Volume):
+        """
+        dummy-Volume-class object used to generate linear-combinations of volume-phase-functions
+        """
+        def __init__(self, **kwargs):
+            super(Phasefunction, self).__init__(**kwargs)
+            self._set_function()
+            self._set_legcoefficients()
+
+
+        def _set_function(self):
+            """
+            define phase function as sympy object for later evaluation
+            """
+            theta_i = sp.Symbol('theta_i')
+            theta_s = sp.Symbol('theta_s')
+            phi_i = sp.Symbol('phi_i')
+            phi_s = sp.Symbol('phi_s')
+            self._func = 0.
+
+        def _set_legcoefficients(self):
+            """
+            set Legrende coefficients
+            needs to be a function that can be later evaluated by subsituting 'n'
+            """
+
+            n = sp.Symbol('n')
+            self.legcoefs = 0.
+
 
 
 class Rayleigh(Volume):
@@ -142,11 +176,15 @@ class HenyeyGreenstein(Volume):
     """
     class to define HenyeyGreenstein scattering function
     """
-    def __init__(self, t=None, ncoefs=None, **kwargs):
+    def __init__(self, t=None, ncoefs=None, a=[-1.,1.,1.] , **kwargs):
         assert t is not None, 't parameter needs to be provided!'
         assert ncoefs is not None, 'Number of coefficients needs to be specified'
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
+        self.a = a
+        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
+        assert all(type(x)==float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self._set_function()
@@ -160,7 +198,7 @@ class HenyeyGreenstein(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s))**1.5)
+        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
 
     def _set_legcoefficients(self):
         """
@@ -182,11 +220,15 @@ class HGRayleigh(Volume):
     Appl. Opt., 45(28):7475-7479, Oct 2006. doi: 10.1364/AO.45.'
     """
 
-    def __init__(self, t=None, ncoefs=None, **kwargs):
+    def __init__(self, t=None, ncoefs=None, a=[-1.,1.,1.] , **kwargs):
         assert t is not None, 't parameter needs to be provided!'
         assert ncoefs is not None, 'Number of coefficients needs to be specified'
         super(HGRayleigh, self).__init__(**kwargs)
         self.t = t
+        self.a = a
+        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
+        assert all(type(x)==float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self._set_function()
@@ -200,7 +242,7 @@ class HGRayleigh(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+self.thetap(theta_i,theta_s,phi_i,phi_s)**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s))**1.5)
+        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+self.thetap(theta_i,theta_s,phi_i,phi_s, self.a)**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s, self.a))**1.5)
 
 
     def _set_legcoefficients(self):
@@ -215,12 +257,6 @@ class HGRayleigh(Volume):
         (3./(8.*sp.pi) * 1./(2.+self.t**2) * (n*(n-1.)/(2.*n-1.) * self.t**(n-2.) + (n+2.)*(n+1.)/(2.*n+3)*self.t**(n+2.) + (n+1.)**2./(2.*n+3.)*self.t**n + (5.*n**2.-1.)/(2.*n-1.)*self.t**n)
         ,True)
         )
-
-
-
-
-
-
 
 
 

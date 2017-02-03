@@ -51,7 +51,7 @@ class TestExamples(unittest.TestCase):
 
         # ---- evaluation of first example
         V = Rayleigh(tau=0.7, omega=0.3)
-        SRF = CosineLobe(ncoefs=11, i=5) # 11 instead of 10 coefficients used to assure 7 digit precision
+        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF = np.pi) # 11 instead of 10 coefficients used to assure 7 digit precision
 
         fn = None
         for i in xrange(len(inc)):
@@ -85,8 +85,7 @@ class TestExamples(unittest.TestCase):
 
         # ---- evaluation of second example
         V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
-        SRF = CosineLobe(ncoefs=11, i=5) # 11 instead of 10 coefficients used to assure 7 digit precision
-
+        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF = np.pi) # 11 instead of 10 coefficients used to assure 7 digit precision
 
         fn = None
         for i in xrange(len(inc)):

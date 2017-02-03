@@ -35,7 +35,7 @@ class TestExamples(unittest.TestCase):
 
     @nottest
     def test_example1_fn(self):
-        S = CosineLobe(ncoefs=10)  # somehow this is only working for ncoefs=1 at the moment!
+        S = CosineLobe(ncoefs=10, NormBRDF = np.pi)  # somehow this is only working for ncoefs=1 at the moment!
         V = Rayleigh(tau=0.7, omega=0.3)
 
         I0=1.
@@ -75,7 +75,7 @@ class TestExamples(unittest.TestCase):
     @nottest
     def test_example1_Fint(self):
         # backscatter case
-        S = CosineLobe(ncoefs=10)
+        S = CosineLobe(ncoefs=10, NormBRDF = np.pi)
         V = Rayleigh(tau=0.7, omega=0.3)
 
         I0=1.
