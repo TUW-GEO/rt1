@@ -6,10 +6,10 @@ import numpy as np
 import sys
 
 sys.path.append('..')
-from rt1.volume import Rayleigh, HenyeyGreenstein
+from rt1.volume import Rayleigh
 from rt1.rt1 import RT1
 
-from rt1.surface import Isotropic, CosineLobe
+from rt1.surface import Isotropic, CosineLobe, HenyeyGreenstein
 from scipy import special as sc
 import sympy as sp
 
@@ -83,6 +83,35 @@ class TestSurface(unittest.TestCase):
             refs.append(S._get_legcoef(k)*1.)
         ref = np.array(refs).sum()
         self.assertAlmostEqual(r, ref, 15)
+
+
+    def test_normalization(self):
+        # test normalization results for the extreme case of isotropic scattering.
+        # this is done by testing for different geometries the following cases:
+        # Isotropic := 1/pi = CosineLobe(i=0) = HenyeyGreenstein(t=0)
+
+        N = 20
+        theta_i = np.random.random(N)*np.pi
+        theta_s = np.random.random(N)*np.pi
+        phi_i = np.pi/4.
+        phi_s = np.pi/4.
+
+        for i in xrange(N):
+            I = Isotropic()
+            self.assertEqual(I.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+
+            ncoefs = 10
+            C = CosineLobe(ncoefs=ncoefs, i=0)
+            self.assertEqual(C.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+
+            H = HenyeyGreenstein(t=0, ncoefs=5)
+            #~ HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
+
+            self.assertEqual(H.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+
+
+
+
 
 
 
