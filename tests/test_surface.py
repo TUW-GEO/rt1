@@ -105,8 +105,6 @@ class TestSurface(unittest.TestCase):
             self.assertEqual(C.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
 
             H = HenyeyGreenstein(t=0, ncoefs=5)
-            #~ HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
-
             self.assertEqual(H.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
 
 
