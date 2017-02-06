@@ -195,7 +195,7 @@ class Plots(Scatter):
 
         
         
-    def logmono(self, inc, Itot=None, Isurf= None, Ivol = None, Iint=None, ylim = None, sig0=False, fractions = True, label = None):
+    def logmono(self, inc, Itot=None, Isurf= None, Ivol = None, Iint=None, ylim = None, sig0=False, noint=False, fractions = True, label = None):
         """
         plot either backscattered intensity or sigma_0 in dB
         
@@ -236,6 +236,12 @@ class Plots(Scatter):
         if ylim is not None: assert isinstance(ylim[0],(int,float)), 'Error: ymin must be a number'
         if ylim is not None: assert isinstance(ylim[1],(int,float)), 'Error: ymax must be a number'
         
+        if noint is True:
+            assert Isurf is not None, 'Isurf must be provided if noint = True'
+            assert Ivol is not None, 'Ivol must be provided if noint = True'
+
+
+
         assert isinstance(sig0,bool), 'Error: sig0 must be either True or False'
         assert isinstance(fractions,bool), 'Error: fractions must be either True or False'
 
@@ -268,6 +274,8 @@ class Plots(Scatter):
             if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$\\sigma_0^{surf}$')
             if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$\\sigma_0^{vol}$')
             if Iint is not None: ax.plot(inc, 10.*np.log10(signorm*Iint), color=cint, label='$\\sigma_0^{int}$')
+            if noint is True: ax.plot(inc, 10.*np.log10(signorm*(Ivol + Isurf)), color=ctot, linestyle = '--', label='$\\sigma_0^{surf}+\\sigma_0^{vol}$')
+
             
             if label == None:
                 ax.set_title('Bacscattering Coefficient')
@@ -282,6 +290,8 @@ class Plots(Scatter):
             if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$I_{surf}$')
             if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$I_{vol}$')
             if Iint is not None: ax.plot(inc, 10.*np.log10(signorm*Iint), color=cint, label='$I_{int}$')
+            if noint is True: ax.plot(inc, 10.*np.log10(signorm*(Ivol + Isurf)), color=ctot, linestyle = '--', label='$I_0^{surf}+I_0^{vol}$')
+
             
             if label == None:
                 ax.set_title('Normalized Intensity')
