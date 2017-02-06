@@ -11,6 +11,8 @@ import numpy as np
 from scipy.special import expi
 from scipy.special import expn
 
+from sympy.simplify.fu import TR5
+
 import sympy as sp
 import time
 
@@ -35,6 +37,8 @@ def _get_fn_wrapper(fn, n, t0, p0, tex, pex):
     # print t0
     # print fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex})
     return fn[n].xreplace({theta_i:t0, phi_i:p0, theta_ex:tex, phi_ex:pex}).evalf()
+
+    
 
 
 class RT1(object):
@@ -141,6 +145,12 @@ class RT1(object):
             replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1.)] + [(sp.cos(theta_s)**float(nn),1.)]   )
 
             fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
+
+                                              
+        # simplify gained coefficients for faster evaluation
+        # the TR5 function performs the replacement sin^2(x) = 1-cos(x)^2 to get rid of remaining sin(x)-terms
+        # this results in a significant speedup for monostatic evaluations (and a moderate effect on bistatic calculations)
+        fn = [TR5(i, max=self.SRF.ncoefs+self.RV.ncoefs+1).expand() for i in fn]               
         return fn
 
 
