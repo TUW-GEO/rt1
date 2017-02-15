@@ -34,14 +34,14 @@ class TestSurface(unittest.TestCase):
         phi_i = np.pi/2.
         phi_s = 0.
 
-        self.assertAlmostEqual(S.thetaBRDF(theta_i,theta_s, phi_i, phi_s),0.,15) #--> 0
+        self.assertAlmostEqual(S.scat_angle(theta_i,theta_s, phi_i, phi_s, S.a),0.,15) #--> 0
         self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0., 20)   #cos(THeTa)=0 --> 0.
 
         theta_i = 0.
         theta_s = np.deg2rad(60.)
         phi_i = 0.
         phi_s = 0.
-        self.assertAlmostEqual(S.thetaBRDF(theta_i,theta_s, phi_i, phi_s),0.5,15) #--> 0.5
+        self.assertAlmostEqual(S.scat_angle(theta_i,theta_s, phi_i, phi_s, S.a),0.5,15) #--> 0.5
         self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0.5**5., 10)
 
     def test_cosine_coeff(self):
