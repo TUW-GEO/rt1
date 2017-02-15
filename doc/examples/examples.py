@@ -84,7 +84,12 @@ SRF = map(list,zip(BRDFweights, BRDFchoices))
 
 
 from rt1.volume import LinCombV
+from rt1.surface import LinCombSRF
+
+
 V = LinCombV(tau=0.5, omega=0.4, Vchoices=V)
+
+SRF = LinCombSRF(SRFchoices=SRF)
 
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
