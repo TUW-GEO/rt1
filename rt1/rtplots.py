@@ -316,7 +316,7 @@ class Plots(Scatter):
             ymin = np.nanmin([Itotmax, Isurfmax, Ivolmax, Iintmax])-5.
 
             # set maximum y to the maximum value of the maximas of the individual contributions + 5.
-            ymax = np.nanmax([Itotmax, Isurfmax, Ivolmax, Iintmax])+5
+            ymax = np.nanmax([Itotmax, Isurfmax, Ivolmax, Iintmax])+5.
 
             ax.set_ylim(ymin,ymax)
         else:
