@@ -53,11 +53,9 @@ class RT1(object):
         I0 : float
             incidence radiation
         RV : Volume
-            random volume object or array of weighting-factors (w_i) and volume-objects (RV_i)
-            shaped in the form  RV = [ [w_1, RV_1], [w_2, RV_2], ...]    with   sum(w_i) = 1
+            random volume object
         SRF: Surface
-            random surface object or array of weighting-factors (w_i) and surface-objects (SRF_i)
-            shaped in the form  SRF = [ [w_1, SRF_1], [w_2, SRF_2], ...]
+            random surface object
         fn : sympy expression
             precalculated coefficient expression; otherwise it will be automatically calculated
             usefull for speedup when caling with different geometries
@@ -82,21 +80,26 @@ class RT1(object):
 
 
         assert RV is not None, 'ERROR: needs to provide volume information'
+        self.RV = RV
 
-        # if an array is provided for RV, call Vcombiner function to generate a combined phase-function element
-        if isinstance(RV,(list,np.ndarray)):
-            self.RV = self._Vcombiner(RV)
-        else:
-            self.RV = RV
+        # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
+        # to allow calling Volume-elements without providing omega & tau which is needed to generate
+        # linear-combinations of Volume-elements with unambiguous tau- & omega-specifications
+
+        assert self.RV.omega is not None, 'Single scattering albedo needs to be provided'
+        assert self.RV.tau is not None, 'Optical depth needs to be provided'
+
+        assert self.RV.omega >= 0.
+        assert self.RV.omega <= 1.
+        assert self.RV.tau >= 0.
+
+        if self.RV.tau == 0.:
+            assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+
 
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
-
-        # if an array is provided for SRF, call SRFcombiner function to generate a combined BRDF-function element
-        if isinstance(SRF,(list,np.ndarray)):
-            self.SRF = self._SRFcombiner(SRF)
-        else:
-            self.SRF = SRF
+        self.SRF = SRF
 
 
         if ncpu is None:
@@ -332,129 +335,3 @@ class RT1(object):
 
 
 
-
-    def _Vcombiner(self, Vchoices):
-        '''
-        Returns a Volume-class element based on an input-array of Volume-class elements.
-        The array must be shaped in the form:
-            Vchoices = [  [ weighting-factor   ,   Volume-class element ]  ,  [ weighting-factor   ,   Volume-class element ]  , .....]
-
-        In order to keep the normalization of the phase-functions correct,
-        the sum of the weighting factors must equate to 1!
-
-
-        ATTENTION: the .legexpansion()-function of the combined volume-class element is no longer related to its legcoefs (which are set to 0.)
-                   since the individual legexpansions of the combined volume-class elements are possibly evaluated with a different a-parameter
-                   of the generalized scattering angle! This does not affect any calculations, since the evaluation is exclusively based on the
-                   use of the .legexpansion()-function.
-
-
-
-        '''
-        from volume import Phasefunction
-
-        # test if the weighting-factors equate to 1.
-        np.testing.assert_almost_equal(desired = 1.,actual = np.sum([V[0] for V in Vchoices]), verbose = False, err_msg='The sum of the phase-function weighting-factors must equate to 1 !'),
-
-        # find phase functions with equal a parameters
-        equals = [np.where((np.array([VV[1].a for VV in Vchoices])==tuple(V[1].a)).all(axis=1))[0] for V in Vchoices]
-        # evaluate index of phase-functions that have equal a parameter
-        equal_a = list({tuple(row) for row in equals})
-
-        # initialize a combined phase-function class element
-        Vcomb = Phasefunction(tau=0.7, omega=0.3)
-        Vcomb.ncoefs = max([V[1].ncoefs for V in Vchoices])     # set ncoefs of the combined volume-class element to the maximum
-                                                                #   number of coefficients within the chosen functions.
-                                                                #   (this is necessary for correct evaluation of fn-coefficients)
-
-        # evaluation of combined expansion in legendre-polynomials
-        dummylegexpansion = []
-        for i in range(0,len(equal_a)):
-
-            Vdummy = Phasefunction(tau=0.7, omega=0.3)
-            Vequal = np.take(Vchoices,equal_a[i],axis=0)        # select V choices where a parameter is equal
-
-            Vdummy.ncoefs = max([V[1].ncoefs for V in Vequal])  # set ncoefs to the maximum number within the choices with equal a-parameter
-
-            for V in Vequal:                                    # loop over phase-functions with equal a-parameter
-
-                # set parameters based on chosen phase-functions and evaluate combined legendre-expansion
-                Vdummy.a = V[1].a
-                Vdummy.tau = V[1].tau
-                Vdummy.omega = V[1].omega
-                Vdummy._func = Vdummy._func + V[1]._func * V[0]
-                Vdummy.legcoefs = Vdummy.legcoefs + V[1].legcoefs * V[0]
-
-            dummylegexpansion = dummylegexpansion + [Vdummy.legexpansion]
-
-        # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-        Vcomb.legexpansion = lambda mu_0,mu_ex,p_0,p_ex,geometry : np.sum([lexp(mu_0,mu_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
-
-
-        for V in Vchoices:
-            # set parameters based on chosen classes to define analytic function representation
-            Vcomb.tau = V[1].tau
-            Vcomb.omega = V[1].omega
-            Vcomb._func = Vcomb._func + V[1]._func * V[0]
-
-        return Vcomb
-
-
-
-
-    def _SRFcombiner(self, SRFchoices):
-        '''
-        Returns a Surface-class element based on an input-array of Surface-class elements.
-        The array must be shaped in the form:
-            SRFchoices = [  [ weighting-factor   ,   Surface-class element ]  ,  [ weighting-factor   ,   Surface-class element ]  , .....]
-
-
-        ATTENTION: the .legexpansion()-function of the combined surface-class element is no longer related to its legcoefs (which are set to 0.)
-                   since the individual legexpansions of the combined surface-class elements are possibly evaluated with a different a-parameter
-                   of the generalized scattering angle! This does not affect any calculations, since the evaluation is exclusively based on the
-                   use of the .legexpansion()-function.
-
-        '''
-
-        from surface import BRDFfunction
-
-
-        # initialize a combined phase-function class element
-        SRFcomb = BRDFfunction()
-        SRFcomb.ncoefs = max([SRF[1].ncoefs for SRF in SRFchoices])     # set ncoefs of the combined volume-class element to the maximum
-                                                                #   number of coefficients within the chosen functions.
-                                                                #   (this is necessary for correct evaluation of fn-coefficients)
-
-        # find BRDF functions with equal a parameters
-        equals = [np.where((np.array([VV[1].a for VV in SRFchoices])==tuple(V[1].a)).all(axis=1))[0] for V in SRFchoices]
-        # evaluate index of BRDF-functions that have equal a parameter
-        equal_a = list({tuple(row) for row in equals})
-                           # find phase functions where a-parameter is equal
-
-        # evaluation of combined expansion in legendre-polynomials
-        dummylegexpansion = []
-        for i in range(0,len(equal_a)):
-
-            SRFdummy = BRDFfunction()
-            SRFequal = np.take(SRFchoices,equal_a[i],axis=0)        # select SRF choices where a parameter is equal
-
-            SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])  # set ncoefs to the maximum number within the choices with equal a-parameter
-
-            for SRF in SRFequal:                                    # loop over phase-functions with equal a-parameter
-
-                # set parameters based on chosen phase-functions and evaluate combined legendre-expansion
-                SRFdummy.a = SRF[1].a
-                SRFdummy.NormBRDF = SRF[1].NormBRDF
-                SRFdummy._func = SRFdummy._func + SRF[1]._func * SRF[0]
-                SRFdummy.legcoefs = SRFdummy.legcoefs + SRF[1].legcoefs * SRF[0]
-
-            dummylegexpansion = dummylegexpansion + [SRFdummy.legexpansion]
-
-        # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-        SRFcomb.legexpansion = lambda mu_0,mu_ex,p_0,p_ex,geometry : np.sum([lexp(mu_0,mu_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
-
-
-        for SRF in SRFchoices:
-            # set parameters based on chosen classes to define analytic function representation
-            SRFcomb._func = SRFcomb._func + SRF[1]._func * SRF[0]
-        return SRFcomb
