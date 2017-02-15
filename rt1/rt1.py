@@ -83,14 +83,25 @@ class RT1(object):
 
         assert RV is not None, 'ERROR: needs to provide volume information'
 
+        # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
+        # to allow calling Volume-elements without providing omega & tau which is needed to generate
+        # linear-combinations of Volume-elements with unambiguous tau- & omega-specifications
         # if an array is provided for RV, call Vcombiner function to generate a combined phase-function element
         if isinstance(RV,(list,np.ndarray)):
             self.RV = self._Vcombiner(RV)
         else:
             self.RV = RV
 
+        assert self.RV.omega is not None, 'Single scattering albedo needs to be provided'
+        assert self.RV.tau is not None, 'Optical depth needs to be provided'
 
+        assert self.RV.omega >= 0.
+        assert self.RV.omega <= 1.
+        assert self.RV.tau >= 0.
         assert SRF is not None, 'ERROR: needs to provide surface information'
+
+        if self.RV.tau == 0.:
+            assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
 
         # if an array is provided for SRF, call SRFcombiner function to generate a combined BRDF-function element
         if isinstance(SRF,(list,np.ndarray)):

@@ -9,18 +9,7 @@ import sympy as sp
 class Volume(Scatter):
     def __init__(self, **kwargs):
         self.omega = kwargs.pop('omega', None)
-        assert self.omega is not None, 'Single scattering albedo needs to be provided'
-
         self.tau = kwargs.pop('tau', None)
-        assert self.tau is not None, 'Optical depth needs to be provided'
-
-        assert self.omega >= 0.
-        assert self.omega <= 1.
-        assert self.tau >= 0.
-
-        if self.tau == 0.:
-            assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
-        
      
         # set scattering angle generalization-matrix to [-1,1,1] if it is not explicitly provided by the chosen class
         # this results in a peak in forward-direction which is suitable for describing volume-scattering phase-functions
