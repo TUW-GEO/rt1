@@ -292,17 +292,33 @@ class Plots(Scatter):
             if Iint is not None: ax.plot(inc, 10.*np.log10(signorm*Iint), color=cint, label='$I_{int}$')
             if noint is True: ax.plot(inc, 10.*np.log10(signorm*(Ivol + Isurf)), color=ctot, linestyle = '--', label='$I_0^{surf}+I_0^{vol}$')
 
-            
+
             if label == None:
                 ax.set_title('Normalized Intensity')
             else:
                 ax.set_title(label)
-            
+
             ax.set_ylabel('$I^+$ [dB]')
         ax.legend()
-        
+
         if ylim == None:
-            if Itot is not None and Iint is not None: ax.set_ylim(np.nanmax(10.*np.log10(signorm*Iint))-5.,np.nanmax(10.*np.log10(signorm*Itot))+5)
+            Itotmax = np.nan
+            Isurfmax= np.nan
+            Ivolmax = np.nan
+            Iintmax = np.nan
+
+            # set minimum y to the smallest value of the maximas of the individual contributions -5.
+            if Itot  is not None: Itotmax  = np.nanmax(10.*np.log10(signorm*Itot))
+            if Isurf is not None: Isurfmax = np.nanmax(10.*np.log10(signorm*Isurf))
+            if Ivol  is not None: Ivolmax  = np.nanmax(10.*np.log10(signorm*Ivol))
+            if Iint  is not None: Iintmax  = np.nanmax(10.*np.log10(signorm*Iint))
+
+            ymin = np.nanmin([Itotmax, Isurfmax, Ivolmax, Iintmax])-5.
+
+            # set maximum y to the maximum value of the maximas of the individual contributions + 5.
+            ymax = np.nanmax([Itotmax, Isurfmax, Ivolmax, Iintmax])+5
+
+            ax.set_ylim(ymin,ymax)
         else:
             ax.set_ylim(ylim[0],ylim[1])
         
