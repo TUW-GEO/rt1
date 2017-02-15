@@ -21,7 +21,9 @@ class Volume(Scatter):
         if self.tau == 0.:
             assert self.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
         
-        # set scattering angle generalization-matrix to standard value if it is not explicitly provided by the chosen class
+     
+        # set scattering angle generalization-matrix to [-1,1,1] if it is not explicitly provided by the chosen class
+        # this results in a peak in forward-direction which is suitable for describing volume-scattering phase-functions
         self.a = getattr(self, 'a', [-1.,1.,1.])
 
     def p(self, t0,ts,p0,ps):
@@ -108,7 +110,7 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetap(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class Phasefunction(Volume):
@@ -159,7 +161,7 @@ class Rayleigh(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = 3./(16.*sp.pi)*(1.+self.thetap(theta_i,theta_s,phi_i,phi_s)**2.)
+        self._func = 3./(16.*sp.pi)*(1.+self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a)**2.)
 
     def _set_legcoefficients(self):
         """
@@ -198,7 +200,7 @@ class HenyeyGreenstein(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
 
     def _set_legcoefficients(self):
         """
@@ -242,7 +244,7 @@ class HGRayleigh(Volume):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+self.thetap(theta_i,theta_s,phi_i,phi_s, self.a)**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*self.thetap(theta_i,theta_s,phi_i,phi_s, self.a))**1.5)
+        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a)**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a))**1.5)
 
 
     def _set_legcoefficients(self):

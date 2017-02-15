@@ -10,16 +10,24 @@ class Scatter(object):
     def __init__(self):
         pass
 
-    def thetaBRDF(self, thetai,thetas, phii, phis, a=[1.,1.,1.]):
+
+    def scat_angle(self, thetai,thetas, phii, phis, a):
         """
-        Parameters
+        the function returns the generalized cattering angle with respect to the given zenith-angles
+
+        Parameters:
+
+        thetai, phii  ... incident direction
+        thetas, phis  ... scattering direction
+        a =[ _ , _ , _ ] ... generalized scattering angle parameters
         ----------
-        incident and scattering angles as sympy symbols
+
+        standard-choices assigned in the volume- and surface class:
+        Surface: a=[ 1,1,1] ... ordinary scattering angle      cos[i]*cos[s] + sin[i]*sin[s]*cos[phii - phis]
+        Volume:  a=[-1,1,1] ... pi-shifted scattering angle   -cos[i]*cos[s] + sin[i]*sin[s]*cos[phii - phis]
         """
         return a[0]*sp.cos(thetai)*sp.cos(thetas)+a[1]*sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+a[2]*sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
 
-    def thetap(self, thetai, thetas, phii, phis, a=[-1.,1.,1.]):
-        return a[0]*sp.cos(thetai)*sp.cos(thetas)+a[1]*sp.sin(thetai)*sp.sin(thetas)*sp.cos(phii)*sp.cos(phis)+a[2]*sp.sin(thetai)*sp.sin(thetas)*sp.sin(phii)*sp.sin(phis)
 
     def _get_legcoef(self, n0):
         """

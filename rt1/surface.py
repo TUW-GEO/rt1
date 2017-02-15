@@ -12,7 +12,8 @@ class Surface(Scatter):
     basic class
     """
     def __init__(self, **kwargs):
-        # set scattering angle generalization-matrix to 1 if it is not explicitly provided by the chosen class
+        # set scattering angle generalization-matrix to [1,1,1] if it is not explicitly provided by the chosen class.
+        # this results in a peak in specular-direction which is suitable for describing surface BRDF's
         self.a = getattr(self, 'a', [1.,1.,1.])
         self.NormBRDF = kwargs.get('NormBRDF', 1.)
         assert isinstance(self.NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
@@ -100,8 +101,9 @@ class Surface(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
 
-        #print 'BRDF: ', self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex)
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.thetaBRDF(theta_s,theta_ex,phi_s,phi_ex, self.a)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        #print 'BRDF: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex)
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(theta_s,theta_ex,phi_s,phi_ex, self.a)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+
 
 
 
@@ -205,12 +207,12 @@ class CosineLobe(Surface):
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
 
-        #self._func = sp.Max(self.thetaBRDF(theta_i,theta_s,phi_i,phi_s, a=self.a), 0.)**self.i  # eq. A13
+        #self._func = sp.Max(self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a), 0.)**self.i  # eq. A13
 
         # alternative formulation avoiding the use of sp.Max()
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
-        x = self.thetaBRDF(theta_i,theta_s,phi_i,phi_s, a=self.a)
+        x = self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a)
         self._func = self.NormBRDF/sp.pi * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
 
 
@@ -244,7 +246,7 @@ class HenyeyGreenstein(Surface):
         theta_s = sp.Symbol('theta_s')
         phi_i = sp.Symbol('phi_i')
         phi_s = sp.Symbol('phi_s')
-        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*self.thetaBRDF(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
