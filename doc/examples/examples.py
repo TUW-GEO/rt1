@@ -55,10 +55,10 @@ else:
 
 
 # list of volume-scattering phase-functions to be combined
-phasechoices = [HenyeyGreenstein(tau = 0.5, omega = 0.4, t=  0.5, ncoefs = 10, a=[-1.,1.,1.]),  # forward-scattering-peak
-                HenyeyGreenstein(tau = 0.5, omega = 0.4, t= -0.2, ncoefs = 10, a=[-1.,1.,1.]),  # backscattering-peak
-                HenyeyGreenstein(tau = 0.5, omega = 0.4, t= -0.5, ncoefs = 10, a=[ 1.,1.,1.]),  # downward-specular peak
-                HenyeyGreenstein(tau = 0.5, omega = 0.4, t=  0.2, ncoefs = 10, a=[ 1.,1.,1.]),  # upward-specular peak
+phasechoices = [HenyeyGreenstein(t=  0.5, ncoefs = 10, a=[-1.,1.,1.]),  # forward-scattering-peak
+                HenyeyGreenstein(t= -0.2, ncoefs = 10, a=[-1.,1.,1.]),  # backscattering-peak
+                HenyeyGreenstein(t= -0.5, ncoefs = 10, a=[ 1.,1.,1.]),  # downward-specular peak
+                HenyeyGreenstein(t=  0.2, ncoefs = 10, a=[ 1.,1.,1.]),  # upward-specular peak
                ]
 # weighting-factors for the individual phase-functions
 Vweights = [.3,.3,.2,.2]
@@ -78,14 +78,13 @@ V = map(list,zip(Vweights, phasechoices))
 SRF = map(list,zip(BRDFweights, BRDFchoices))
 
 
-#   extract the combined surface- and volume- class elements and plot them
-#combinedV = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=None, geometry='mono').RV
-#combinedSRF = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=None, geometry='mono').SRF
 
 #hg = Plots().polarplot(V=combinedV, SRF = combinedSRF, pmultip = 1., incp = [15,45,85], plabel = 'Henyey Greenstein Phase Function', paprox = True, BRDFaprox=True)
 
 
 
+from rt1.volume import LinCombV
+V = LinCombV(tau=0.5, omega=0.4, Vchoices=V)
 
 # initialize output fields for faster processing
 Itot = np.ones_like(inc)*np.nan
@@ -160,7 +159,7 @@ plot1 = Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np
 
 # ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
 #       plot backscattered intensity and fractional contributions
-plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, ylim=[-20,0])
+plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, ylim=[-20,0], noint=True)
 
 #       plot only backscattering coefficient without fractions
 #Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, fractions = False)
