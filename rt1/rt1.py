@@ -68,15 +68,25 @@ class RT1(object):
             f
             TODO --> describe setups here
         """
-        self.I0 = I0
-        self.mu_0 = mu_0
-        self.mu_ex = mu_ex
-        self.phi_0 = phi_0
-        self.phi_ex = phi_ex
 
         self.geometry = geometry
         assert isinstance(geometry,str), 'ERROR: geometry must be a 4-character string'
         assert len(self.geometry) == 4
+
+
+        self.I0 = I0
+
+
+        if self.geometry == 'mono':
+            self.mu_0 = mu_0
+            self.mu_ex = mu_0
+            self.phi_0 = phi_0
+            self.phi_ex = phi_0 + np.pi
+        else:
+            self.mu_0 = mu_0
+            self.mu_ex = mu_ex
+            self.phi_0 = phi_0
+            self.phi_ex = phi_ex
 
 
         assert RV is not None, 'ERROR: needs to provide volume information'

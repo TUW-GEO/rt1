@@ -69,6 +69,7 @@ class Volume(Scatter):
             theta_i = sp.Symbol('theta_i')
             theta_ex = theta_i
             phi_i = p_0
+            phi_ex = p_0 + sp.pi
         else:
             if geometry[0] == 'v':
                 theta_i = sp.Symbol('theta_i')

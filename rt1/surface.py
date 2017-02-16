@@ -71,6 +71,7 @@ class Surface(Scatter):
         if geometry == 'mono':
             theta_i = sp.Symbol('theta_i')
             theta_ex = theta_i
+            phi_i = p_0
             phi_ex = p_0 + sp.pi
         else:
             if geometry[0] == 'v':
@@ -100,7 +101,6 @@ class Surface(Scatter):
                 phi_ex = p_ex
             else:
                 raise AssertionError('wrong choice of phi_ex geometry')
-
 
         #print 'BRDF: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex)
         return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(theta_s,theta_ex,phi_s,phi_ex, self.a)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
