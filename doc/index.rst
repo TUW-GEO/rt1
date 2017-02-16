@@ -14,6 +14,7 @@ Contents:
 
    introduction
    installation
+   model_specification
 
 
 Indices and tables
