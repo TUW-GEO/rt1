@@ -15,7 +15,13 @@
 import sys
 import os
 
+# Add directories to document to sys.path so that autodoc finds the sources
+sys.path.insert(0, os.path.abspath('..'))
+
+# Enable figure-numbering in "latex-style" (i.e. autonumbering with Fig.1, Fig.2 etc.)
 numfig = True
+
+
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
