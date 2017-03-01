@@ -58,7 +58,7 @@ class TestExamples(unittest.TestCase):
             # set geometries
             t_0 = np.deg2rad(inc[i])
             p_0 = np.deg2rad(0.)
-            p_ex = phi_0 + np.pi
+            p_ex = p_0 + np.pi
 
 
             R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
@@ -92,7 +92,7 @@ class TestExamples(unittest.TestCase):
             # set geometries
             t_0 = np.deg2rad(inc[i])
             p_0 = np.deg2rad(0.)
-            p_ex = phi_0 + np.pi
+            p_ex = p_0 + np.pi
 
 
             R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
