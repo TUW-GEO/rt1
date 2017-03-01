@@ -148,7 +148,7 @@ class RT1(object):
     
     def _get_mu_ex(self):
         return np.cos(self.t_ex)
-    _mu_ex = property(_get_mu_0)
+    _mu_ex = property(_get_mu_ex)
     
 
 
