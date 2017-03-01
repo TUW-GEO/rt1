@@ -20,25 +20,25 @@ class TestVolume(unittest.TestCase):
 
     def test_rayleigh(self):
         V = Rayleigh(omega=0.2, tau=1.7)
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
+        t_0 = np.pi/2.
+        t_ex = 0.234234
+        p_0 = np.pi/2.
+        p_ex = 0.
 
-        p = V.p(theta_i, theta_s, phi_i, phi_s)   # cos=0
+        p = V.p(t_0, t_ex, p_0, p_ex)   # cos=0
 
         self.assertEqual(p, (3./(16.*np.pi)))
 
     def test_HenyeyGreenstein(self):
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
         self.assertEqual(V.t,0.7)
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
+        t_0 = np.pi/2.
+        t_ex = 0.234234
+        p_0 = np.pi/2.
+        p_ex = 0.
 
         #--> cos(THETA) = 0
-        p = V.p(theta_i, theta_s, phi_i, phi_s)
+        p = V.p(t_0, t_ex, p_0, p_ex)
         self.assertAlmostEqual(p, (1.-0.7*0.7)/(4.*np.pi*(1.+0.7*0.7)**1.5),10)
 
     def test_HenyeyGreenstein_coefficients(self):

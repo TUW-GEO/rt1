@@ -18,31 +18,31 @@ class TestSurface(unittest.TestCase):
 
     def test_isotropic(self):
         S = Isotropic()
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
+        t_0 = np.pi/2.
+        t_ex = 0.234234
+        p_0 = np.pi/2.
+        p_ex = 0.
 
-        self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
-        self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
-        self.assertEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 1./np.pi)
+        self.assertEqual(S.brdf(t_0, t_ex, p_0, p_ex), 1./np.pi)
+        self.assertEqual(S.brdf(t_0, t_ex, p_0, p_ex), 1./np.pi)
+        self.assertEqual(S.brdf(t_0, t_ex, p_0, p_ex), 1./np.pi)
 
     def test_cosine(self):
         S = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
+        t_0 = np.pi/2.
+        t_ex = 0.234234
+        p_0 = np.pi/2.
+        p_ex = 0.
 
-        self.assertAlmostEqual(S.scat_angle(theta_i,theta_s, phi_i, phi_s, S.a),0.,15) #--> 0
-        self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0., 20)   #cos(THeTa)=0 --> 0.
+        self.assertAlmostEqual(S.scat_angle(t_0,t_ex, p_0, p_ex, S.a),0.,15) #--> 0
+        self.assertAlmostEqual(S.brdf(t_0, t_ex, p_0, p_ex), 0., 20)   #cos(THeTa)=0 --> 0.
 
-        theta_i = 0.
-        theta_s = np.deg2rad(60.)
-        phi_i = 0.
-        phi_s = 0.
-        self.assertAlmostEqual(S.scat_angle(theta_i,theta_s, phi_i, phi_s, S.a),0.5,15) #--> 0.5
-        self.assertAlmostEqual(S.brdf(theta_i, theta_s, phi_i, phi_s), 0.5**5., 10)
+        t_0 = 0.
+        t_ex = np.deg2rad(60.)
+        p_0 = 0.
+        p_ex = 0.
+        self.assertAlmostEqual(S.scat_angle(t_0,t_ex, p_0, p_ex, S.a),0.5,15) #--> 0.5
+        self.assertAlmostEqual(S.brdf(t_0, t_ex, p_0, p_ex), 0.5**5., 10)
 
     def test_cosine_coeff(self):
         # test legcoefs for example in paper
@@ -69,12 +69,12 @@ class TestSurface(unittest.TestCase):
         # input parameters are set in a way that COS_THETA = 1
         # and therefore only the legendre coefficients should be returned
         # which is always 1 in case that cos_THETA=1
-        theta_i = 0.1234
-        theta_s = np.pi/2.
-        phi_i = 0.3456
-        phi_s = 0.
+        t_0 = 0.1234
+        t_ex = np.pi/2.
+        p_0 = 0.3456
+        p_ex = 0.
 
-        r = S._eval_legpoly(theta_i,theta_s,phi_i,phi_s, geometry='ffff')
+        r = S._eval_legpoly(t_0,t_ex,p_0,p_ex, geometry='ffff')
         #ref = S._get_legcoef(0)*1. + S._get_legcoef(1)*1. #+ S._get_legcoef(2)*(-0.5)  #+ S._get_legcoef(4)*(3./8.) + S._get_legcoef(6)*(-5./16.) + S._get_legcoef(8) * (35./128.) #+ S._get_legcoef(10)*(-63./256.)
 
         # calculate reference solution
@@ -91,21 +91,21 @@ class TestSurface(unittest.TestCase):
         # Isotropic := 1/pi = CosineLobe(i=0) = HenyeyGreenstein(t=0)
 
         N = 20
-        theta_i = np.random.random(N)*np.pi
-        theta_s = np.random.random(N)*np.pi
-        phi_i = np.pi/4.
-        phi_s = np.pi/4.
+        t_0 = np.random.random(N)*np.pi
+        t_ex = np.random.random(N)*np.pi
+        p_0 = np.pi/4.
+        p_ex = np.pi/4.
 
         for i in xrange(N):
             I = Isotropic()
-            self.assertEqual(I.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+            self.assertEqual(I.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
 
             ncoefs = 10
             C = CosineLobe(ncoefs=ncoefs, i=0)
-            self.assertEqual(C.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+            self.assertEqual(C.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
 
             H = HenyeyGreenstein(t=0, ncoefs=5)
-            self.assertEqual(H.brdf(theta_i[i], theta_s[i], phi_i, phi_s), 1./np.pi)
+            self.assertEqual(H.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
 
 
 

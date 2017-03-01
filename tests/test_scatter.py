@@ -16,19 +16,19 @@ class TestScatter(unittest.TestCase):
 
     def test_p(self):
         S = Scatter()
-        theta_i = np.pi/2.
+        theta_0 = np.pi/2.
         theta_s = 0.234234
-        phi_i = np.pi/2.
+        phi_0 = np.pi/2.
         phi_s = 0.
 
-        p = S.scat_angle(theta_i, theta_s, phi_i, phi_s, a=[-1.,1.,1.])   # cos(theta)=0
+        p = S.scat_angle(theta_0, theta_s, phi_0, phi_s, a=[-1.,1.,1.])   # cos(theta)=0
         self.assertAlmostEqual(p, 0.,10)
 
-        theta_i = 0.
+        theta_0 = 0.
         theta_s = 0.
-        phi_i = np.pi/2.
+        phi_0 = np.pi/2.
         phi_s = 0.12345
-        p = S.scat_angle(theta_i, theta_s, phi_i, phi_s, a=[-.7,1.,1.])   # cos(theta)=-1
+        p = S.scat_angle(theta_0, theta_s, phi_0, phi_s, a=[-.7,1.,1.])   # cos(theta)=-1
         self.assertAlmostEqual(p, -.7,10)
 
 

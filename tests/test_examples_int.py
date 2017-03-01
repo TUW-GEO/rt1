@@ -56,12 +56,12 @@ class TestExamples(unittest.TestCase):
         fn = None
         for i in xrange(len(inc)):
             # set geometries
-            mu_0 = np.cos(np.deg2rad(inc[i]))
-            phi_0 = np.deg2rad(0.)
-            phi_ex = phi_0 + np.pi
+            t_0 = np.deg2rad(inc[i])
+            p_0 = np.deg2rad(0.)
+            p_ex = phi_0 + np.pi
 
 
-            R = RT1(1., mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
             fn = R.fn  # store coefficients for faster itteration
             Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
@@ -90,12 +90,12 @@ class TestExamples(unittest.TestCase):
         fn = None
         for i in xrange(len(inc)):
             # set geometries
-            mu_0 = np.cos(np.deg2rad(inc[i]))
-            phi_0 = np.deg2rad(0.)
-            phi_ex = phi_0 + np.pi
+            t_0 = np.deg2rad(inc[i])
+            p_0 = np.deg2rad(0.)
+            p_ex = phi_0 + np.pi
 
 
-            R = RT1(1., mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
             fn = R.fn  # store coefficients for faster itteration
             Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 

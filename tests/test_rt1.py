@@ -22,25 +22,25 @@ class TestRT1(unittest.TestCase):
 
     def setUp(self):
         self.I0 = 1.
-        self.mu_0 = 0.5
-        self.mu_ex = 0.5
-        self.phi_0 = 0.
-        self.phi_ex = 0.
+        self.t_0 = np.deg2rad(60.)
+        self.t_ex = np.deg2rad(60.)
+        self.p_0 = 0.
+        self.p_ex = 0.
         self.V = Rayleigh(tau=0.7, omega=0.3)
         self.S = Isotropic()
         #~ self.C = RayleighIsotropic()
 
     def test_init(self):
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S)
+        RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex, RV=self.V, SRF=self.S)
 
     def test_calc(self):
         # just try to get it running simply without further testing
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=self.V, SRF=self.S)
+        RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex, RV=self.V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Itot, Isurf+Ivol+Iint)
 
         V = Rayleigh(tau=0., omega=0.)
-        RT = RT1(self.I0, self.mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
+        RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
         self.assertEqual(Iint, 0.)  # todo gives nan
@@ -49,16 +49,16 @@ class TestRT1(unittest.TestCase):
 
     def test_surface(self):
         V = Rayleigh(tau=0., omega=0.)
-        mu_0 = 0.5
-        RT = RT1(4., mu_0, self.mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
+        t_0 = np.deg2rad(60.)
+        RT = RT1(4., t_0, self.t_ex, self.p_0, self.p_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
-        self.assertEqual(Isurf, 2./np.pi)
+        self.assertAlmostEqual(Isurf, 2./np.pi,15)
 
     def test_volume(self):
-        mu_0 = 0.5
-        mu_ex = 0.5
+        t_0 = np.deg2rad(60.)
+        t_ex = np.deg2rad(60.)
         V = Rayleigh(tau=0., omega=0.0)
-        RT = RT1(self.I0, mu_0, mu_ex, self.phi_0, self.phi_ex, RV=V, SRF=self.S)
+        RT = RT1(self.I0, t_0, t_ex, self.p_0, self.p_ex, RV=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 
@@ -69,22 +69,22 @@ class TestRT1(unittest.TestCase):
         # and isotropic surface scattering phase function
         S = Isotropic()
         V = Rayleigh(tau=0.7, omega=0.3)
-        mu_0 = 0.5
-        mu_ex = 0.5
-        phi_0 = 0.
-        RT = RT1(self.I0, mu_0, mu_ex, phi_0, self.phi_ex, RV=V, SRF=self.S)
+        t_0 = np.deg2rad(60.)
+        t_ex = np.deg2rad(60.)
+        p_0 = 0.
+        RT = RT1(self.I0, t_0, t_ex, p_0, self.p_ex, RV=V, SRF=S)
 
         # the reference solutions should be (for details see rayleighisocoefficients.pdf)
-        f0 = 3./(16.*np.pi) * (3.-mu_0**2.)
+        f0 = 3./(16.*np.pi) * (3.-np.cos(t_0)**2.)
         f1 = 0.
-        f2 = 3./(16.*np.pi) * (3.*mu_0**2.-1.)
+        f2 = 3./(16.*np.pi) * (3.*np.cos(t_0)**2.-1.)
         f3 = 0.
         # and all others are 0.
 
-        self.assertEqual(f0,RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
-        self.assertEqual(f1,RT._get_fn(1, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
-        self.assertAlmostEqual(f2,RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex),10)
-        self.assertEqual(f3,RT._get_fn(3, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex))
+        self.assertEqual(f0,RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
+        self.assertEqual(f1,RT._get_fn(1, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
+        self.assertAlmostEqual(f2,RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex),10)
+        self.assertEqual(f3,RT._get_fn(3, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
 
     def test_fn_coefficients_RayCosine(self):
         # test if calculation of fn coefficients is correct
@@ -100,15 +100,15 @@ class TestRT1(unittest.TestCase):
         # tests are using full Volume phase function, but only
         # ncoef times the coefficients from the surface
 
-        theta_i = np.pi/2.
-        theta_ex = 0.234234
-        phi_i = np.pi/2.
-        phi_ex = 0.
+        t_0 = np.pi/2.
+        t_ex = 0.234234
+        p_0 = np.pi/2.
+        p_ex = 0.
 
-        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='vvvv')
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='vvvv')
         #res = RT._get_fn(0, RT.theta_0, RT.phi_0)
-        res0 = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
-        res2 = RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        res0 = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
+        res2 = RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
 
         # ncoefs = 1
         # analtytical solution for ncoefs = 1 --> n=0
@@ -121,8 +121,8 @@ class TestRT1(unittest.TestCase):
         #~ print 'a2:', a2, V._get_legcoef(2)
         #~ print 'b0: ', b0, S._get_legcoef(0)
          
-        ref0 = np.pi/4. * b0 * (8. * a0 - a2 - 3. * a2 * np.cos(2. * theta_i))  
-        ref2 = 3./4. * a2 * b0 * np.pi * (1. + 3. * np.cos(2. * theta_i))        
+        ref0 = np.pi/4. * b0 * (8. * a0 - a2 - 3. * a2 * np.cos(2. * t_0))  
+        ref2 = 3./4. * a2 * b0 * np.pi * (1. + 3. * np.cos(2. * t_0))        
         
         self.assertAlmostEqual(ref0, res0)
         self.assertAlmostEqual(ref2, res2)
@@ -130,9 +130,9 @@ class TestRT1(unittest.TestCase):
         # ncoefs = 2
         # result should be the same as for ncoefs=1
         S = CosineLobe(ncoefs=2, i=5, NormBRDF = np.pi)
-        RT = RT1(self.I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='ffff')
-        res00 = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
-        res22 = RT._get_fn(2, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff')
+        res00 = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
+        res22 = RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
 
         self.assertAlmostEqual(ref0, res00)
         self.assertAlmostEqual(ref2, res22)
@@ -149,14 +149,14 @@ class TestRT1(unittest.TestCase):
         # and isotropic surface scattering phase function
         S = Isotropic()
 
-        mu_0 = 1.
-        mu_ex = 1.
-        phi_0 = 0.
-        phi_ex = np.pi
+        t_0 = 0.
+        t_ex = 0.
+        p_0 = 0.
+        p_ex = np.pi
 
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=1)
-        RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S, geometry='ffff')
-        r = RT._get_fn(0, RT.theta_0, RT.phi_0, RT.theta_ex, RT.phi_ex)
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff')
+        r = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
 
         self.assertEqual(r,1./(2.*np.pi))
 
