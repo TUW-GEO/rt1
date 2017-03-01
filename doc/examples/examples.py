@@ -35,7 +35,7 @@ tic = timeit.default_timer()
 # set incident intensity to 1.
 I0=1.
 # define incidence-angle range for generation of backscatter-plots
-inc = np.arange(0.,90.,2.)
+inc = np.arange(1.,89.,2.)
 
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
@@ -108,13 +108,13 @@ Ivol = np.ones_like(inc)*np.nan
 fn = None
 for i in xrange(len(inc)):
     # set geometries
-    mu_0 = np.cos(np.deg2rad(inc[i]))
-    mu_ex = mu_0*1.
-    phi_0 = np.deg2rad(0.)
-    phi_ex = phi_0 + np.pi
+    t_0 = np.deg2rad(inc[i])
+    t_ex = t_0*1.
+    p_0 = np.deg2rad(0.)
+    p_ex = p_0 + np.pi
 
 
-    R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+    R = RT1(I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     fn = R.fn  # store coefficients for faster itteration
     #Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
@@ -125,14 +125,14 @@ print('time for coefficient evaluation: ' + str(toc-tic))
 # todo this separation in two loops is actually not needed and only for debugging
 tic = timeit.default_timer()
 for i in xrange(len(inc)):
-    mu_0 = np.cos(np.deg2rad(inc[i]))
-    mu_ex = mu_0*1.
+    t_0 = np.deg2rad(inc[i])
+    t_ex = t_0*1.
     #phi_0 = 10.
     #phi_ex = np.pi   # todo ???
 
     #print inc[i], mu_0, mu_ex, phi_0, phi_ex
 
-    R = RT1(I0, mu_0, mu_0, phi_0, phi_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+    R = RT1(I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
     Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
 toc = timeit.default_timer()
@@ -209,14 +209,14 @@ def Rad(theta, phi, thetainc, phiinc):
     int3d=[[0 for i in range(0,len(theta))] for j in range(0,len(phi))]
 
     # pre-evaluation of fn-coefficients
-    testfn = RT1(1., np.cos(np.deg2rad(thetainc)), np.cos(np.deg2rad(45)), phiinc, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
+    testfn = RT1(1., np.deg2rad(thetainc), np.deg2rad(45), phiinc, np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv').fn
 
     # evaluation of model
     for i in range(0,len(theta)):
         if i == 0: tic = timeit.default_timer()
         if i == 0: print('... estimating evaluation-time...')
         for j in range(0,len(phi)):
-            R3d = RT1(1., np.cos(np.deg2rad(thetainc)), np.cos(theta[i]), phiinc, phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
+            R3d = RT1(1., np.deg2rad(thetainc), theta[i], phiinc, phi[j], RV=V, SRF=SRF, fn=testfn, geometry='ffff')
             tot3d[j][i],surf3d[j][i],vol3d[j][i],int3d[j][i] = R3d.calc()
         if i == 0: toc = timeit.default_timer()
         if i == 0: print('evaluation of 3dplot will take approximately ' + str(round((toc-tic)*len(theta)/60.,2)) + ' minutes')

@@ -99,10 +99,10 @@ class Plots(Scatter):
             # plot of volume-scattering phase-function's
             for V in V:
                 # define a plotfunction of the analytic form of p
-                phasefunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V._func,"numpy") 
+                phasefunkt = sp.lambdify(('theta_0', 'theta_ex', 'phi_0', 'phi_ex'), V._func,"numpy") 
                 # define a plotfunction of the legendre-approximation of p
                 #if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', V.a)),(n,0,V.ncoefs-1)).doit(),"numpy") 
-                if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), V.legexpansion('theta_i', 'theta_s', 'phi_i', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
+                if paprox == True: phasefunktapprox = sp.lambdify(('theta_0', 'theta_s', 'phi_0', 'phi_s'), V.legexpansion('theta_0', 'theta_s', 'phi_0', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
                    
                 # set incidence-angles for which p is calculated
                 plottis=np.deg2rad(incp)
@@ -152,7 +152,7 @@ class Plots(Scatter):
             # plot of BRDF
             for SRF in SRF:
                 # define a plotfunction of the analytic form of the BRDF
-                brdffunkt = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), SRF._func,"numpy") 
+                brdffunkt = sp.lambdify(('theta_0', 'theta_ex', 'phi_0', 'phi_ex'), SRF._func,"numpy") 
                 # define a plotfunction of the analytic form of the BRDF
                 #if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', SRF.a)),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
                 if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
@@ -186,6 +186,7 @@ class Plots(Scatter):
                     polarax.set_yticklabels([])
                     polarax.set_rmax(brdfmax*1.2)
                     polarax.set_title(BRDFlabel + '\n')
+        plt.show()
         return polarfig
 
 
@@ -215,19 +216,37 @@ class Plots(Scatter):
         label ...   manual label of plot        
         """
         
+        # define a mask to avoid log(0) errors 
+        def mask(x):
+            return (x <= 0.) 
+       
+        
+        
         assert isinstance(inc,np.ndarray), 'Error, inc must be a numpy array'
     
-        if Itot is not None: assert isinstance(Itot,np.ndarray), 'Error, Itot must be a numpy array'
-        if Itot is not None: assert len(inc) == len(Itot), 'Error: Length of inc and Itot is not equal'
+        if Itot is not None: 
+            assert isinstance(Itot,np.ndarray), 'Error, Itot must be a numpy array'
+            assert len(inc) == len(Itot), 'Error: Length of inc and Itot is not equal'
+            Itot = np.ma.array(Itot,mask=mask(Itot))
 
-        if Isurf is not None: assert isinstance(Isurf,np.ndarray), 'Error, Isurf must be a numpy array'
-        if Isurf is not None: assert len(inc) == len(Isurf), 'Error: Length of inc and Isurf is not equal'
 
-        if Ivol is not None: assert isinstance(Ivol,np.ndarray), 'Error, Ivol must be a numpy array'
-        if Ivol is not None: assert len(inc) == len(Ivol), 'Error: Length of inc and Ivol is not equal'
+        if Isurf is not None: 
+            assert isinstance(Isurf,np.ndarray), 'Error, Isurf must be a numpy array'
+            assert len(inc) == len(Isurf), 'Error: Length of inc and Isurf is not equal'
+            Isurf = np.ma.array(Isurf,mask=mask(Isurf))
+
+
+        if Ivol is not None: 
+            assert isinstance(Ivol,np.ndarray), 'Error, Ivol must be a numpy array'
+            assert len(inc) == len(Ivol), 'Error: Length of inc and Ivol is not equal'
+            Ivol = np.ma.array(Ivol,mask=mask(Ivol))
+
         
-        if Iint is not None: assert isinstance(Iint,np.ndarray), 'Error, Iint must be a numpy array'
-        if Iint is not None: assert len(inc) == len(Iint), 'Error: Length of inc and Iint is not equal'
+        if Iint is not None: 
+            assert isinstance(Iint,np.ndarray), 'Error, Iint must be a numpy array'
+            assert len(inc) == len(Iint), 'Error: Length of inc and Iint is not equal'
+            Iint = np.ma.array(Iint,mask=mask(Iint))
+
         
         if label is not None:assert isinstance(label,str), 'Error, Label must be a string'
      
@@ -270,6 +289,7 @@ class Plots(Scatter):
         ax.set_xlabel('$\\theta_0$ [deg]')
         
         if sig0 == True:
+
             if Itot is not None: ax.plot(inc, 10.*np.log10(signorm*Itot), color=ctot, label='$\\sigma_0^{tot}$')
             if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$\\sigma_0^{surf}$')
             if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$\\sigma_0^{vol}$')
@@ -286,6 +306,7 @@ class Plots(Scatter):
 
                 
         else:
+            
             if Itot is not None: ax.plot(inc, 10.*np.log10(signorm*Itot), color=ctot, label='$I_{tot}$')
             if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$I_{surf}$')
             if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$I_{vol}$')

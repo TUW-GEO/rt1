@@ -20,7 +20,7 @@ class Surface(Scatter):
         assert self.NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
 
         
-    def brdf(self, t0,ts,p0,ps):
+    def brdf(self, t_0, t_ex, p_0, p_ex):
         """
         Calculate BRDF as function of geometry
 
@@ -33,16 +33,16 @@ class Surface(Scatter):
         float
         """
         # define sympy objects
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
 
         # replace arguments and evaluate expression
-        return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
+        return self._func.xreplace({theta_0:t_0, theta_ex:t_ex, phi_0:p_0, phi_ex:p_ex}).evalf()
 
 
-    def legexpansion(self, mu_0, mu_ex, p_0, p_ex, geometry):
+    def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
 
         """
@@ -69,31 +69,31 @@ class Surface(Scatter):
 
         # define sympy variables based on chosen geometry
         if geometry == 'mono':
-            theta_i = sp.Symbol('theta_i')
-            theta_ex = theta_i
-            phi_i = p_0
+            theta_0 = sp.Symbol('theta_0')
+            theta_ex = theta_0
+            phi_0 = p_0
             phi_ex = p_0 + sp.pi
         else:
             if geometry[0] == 'v':
-                theta_i = sp.Symbol('theta_i')
+                theta_0 = sp.Symbol('theta_0')
             elif geometry[0] == 'f':
-                theta_i = np.arccos(mu_0)
+                theta_0 = t_0
             else:
-                raise AssertionError('wrong choice of theta_i geometry')
+                raise AssertionError('wrong choice of theta_0 geometry')
 
             if geometry[1] == 'v':
                 theta_ex = sp.Symbol('theta_ex')
             elif geometry[1] == 'f':
-                theta_ex = np.arccos(mu_ex)
+                theta_ex = t_ex
             else:
                 raise AssertionError('wrong choice of theta_ex geometry')
 
             if geometry[2] == 'v':
-                phi_i = sp.Symbol('phi_i')
+                phi_0 = sp.Symbol('phi_0')
             elif geometry[2] == 'f':
-                phi_i = p_0
+                phi_0 = p_0
             else:
-                raise AssertionError('wrong choice of phi_i geometry')
+                raise AssertionError('wrong choice of phi_0 geometry')
 
             if geometry[3] == 'v':
                 phi_ex = sp.Symbol('phi_ex')
@@ -133,10 +133,10 @@ class LinCombSRF(Surface):
             """
             define phase function as sympy object for later evaluation
             """
-            theta_i = sp.Symbol('theta_i')
-            theta_s = sp.Symbol('theta_s')
-            phi_i = sp.Symbol('phi_i')
-            phi_s = sp.Symbol('phi_s')
+            theta_0 = sp.Symbol('theta_0')
+            theta_ex = sp.Symbol('theta_ex')
+            phi_0 = sp.Symbol('phi_0')
+            phi_ex = sp.Symbol('phi_ex')
             self._func = self._SRFcombiner()._func
 
         def _set_legexpansion(self):
@@ -174,10 +174,10 @@ class LinCombSRF(Surface):
                     """
                     define phase function as sympy object for later evaluation
                     """
-                    theta_i = sp.Symbol('theta_i')
-                    theta_s = sp.Symbol('theta_s')
-                    phi_i = sp.Symbol('phi_i')
-                    phi_s = sp.Symbol('phi_s')
+                    theta_0 = sp.Symbol('theta_0')
+                    theta_ex = sp.Symbol('theta_ex')
+                    phi_0 = sp.Symbol('phi_0')
+                    phi_ex = sp.Symbol('phi_ex')
                     self._func = 0.
 
                 def _set_legcoefficients(self):
@@ -217,7 +217,7 @@ class LinCombSRF(Surface):
                 dummylegexpansion = dummylegexpansion + [SRFdummy.legexpansion]
 
             # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-            SRFcomb.legexpansion = lambda mu_0,mu_ex,p_0,p_ex,geometry : np.sum([lexp(mu_0,mu_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
+            SRFcomb.legexpansion = lambda t_0,t_ex,p_0,p_ex,geometry : np.sum([lexp(t_0,t_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
 
 
             for SRF in self.SRFchoices:
@@ -251,10 +251,10 @@ class Isotropic(Surface):
         define phase function as sympy object for later evaluation
         """
         #def pfunkt(t0):
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
         self._func = self.NormBRDF/sp.pi
 
 
@@ -299,17 +299,17 @@ class CosineLobe(Surface):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
 
         #self._func = sp.Max(self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a), 0.)**self.i  # eq. A13
 
         # alternative formulation avoiding the use of sp.Max()
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
-        x = self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a)
+        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, a=self.a)
         self._func = self.NormBRDF/sp.pi * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
 
 
@@ -339,11 +339,14 @@ class HenyeyGreenstein(Surface):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+        
+        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, a=self.a)
+
+        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*x)**1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
