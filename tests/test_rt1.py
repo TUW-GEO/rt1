@@ -81,7 +81,7 @@ class TestRT1(unittest.TestCase):
         f3 = 0.
         # and all others are 0.
 
-        self.assertEqual(f0,RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
+        self.assertAlmostEqual(f0,RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex),15)
         self.assertEqual(f1,RT._get_fn(1, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
         self.assertAlmostEqual(f2,RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex),10)
         self.assertEqual(f3,RT._get_fn(3, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex))
