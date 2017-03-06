@@ -38,7 +38,9 @@ class Volume(Scatter):
         phi_ex = sp.Symbol('phi_ex')
 
         # replace arguments and evaluate expression
-        return self._func.xreplace({theta_0:t_0, theta_ex:t_ex, phi_0:p_0, phi_ex:p_ex}).evalf()
+        # sp.lambdify is used to allow array-inputs
+        pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex),self._func, modules = ["numpy","sympy"])
+        return pfunc(t_0, t_ex, p_0, p_ex)
 
     def legexpansion(self,t_0,t_ex,p_0,p_ex,geometry):
         assert self.ncoefs > 0
