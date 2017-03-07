@@ -41,6 +41,13 @@ class Surface(Scatter):
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
         brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex),self._func, modules = ["numpy","sympy"])
+
+        # in case _func is a constant, lambdify will produce a function with scalar output which
+        # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
+        # Therefore the following query is implemented to ensure correct array-output:
+        if not isinstance(brdffunc(np.array([.1,.2,.3]),.1,.1,.1),np.ndarray):
+            brdffunc = np.vectorize(brdffunc)
+
         return brdffunc(t_0, t_ex, p_0, p_ex)
 
 
