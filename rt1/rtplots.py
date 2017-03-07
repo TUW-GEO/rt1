@@ -499,14 +499,91 @@ class Plots(Scatter):
          
         plt.show()
         return fig
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
+    def hemreflect(self, R=None, SRF=None, phi_0 = 0., t_0_step = 5., t_0_min = 0., t_0_max = 90., simps_N = 1000, showpoints = True):
+        '''
+        Numerical evaluation of the hemispherical reflectance of the given BRDF-function
+        using scipy's implementation of the Simpson-rule integration scheme.
+
+        Parameters:
+        ------------
+        R : RT1-class object
+            definition of the brdf-function to be evaluated (either R or SRF must be provided)
+        SRF : Surface-class object
+              definition of the brdf-function to be evaluated (either R or SRF must be provided)
+
+        Optional Parameters:
+        --------------------
+        phi_0 : float
+                incident azimuth-angle
+                (for spherically symmetric phase-functions the result is independent of the choice of phi_0)
+        t_0_step : float
+                   separation of the incidence-angle grid-spacing in DEGREE for which the hemispherical
+                   reflectance will be calculated
+        t_0_min : float
+                  minimum incidence-angle
+        t_0_max : float
+                  maximum incidence-angle
+        simps_N : integer
+                  number of points used in the discretization of the brdf within the Simpson-rule
+        showpoints : boolean
+                     show or hide integration-points in the plot
+
+        Returns:
+        ---------
+        figure
+            a matplotlib figure showing the incidence-angle dependent hemispherical reflectance
+        '''
+
+        from scipy.integrate import simps
+
+        # choose BRDF function to be evaluated
+        if R != None:
+            BRDF = R.SRF.brdf
+        elif SRF !=None:
+            BRDF = SRF.brdf
+        else:
+            assert False, 'Error: You must provide either R or SRF'
+
+        # set incident (zenith-angle) directions for which the integral should be evaluated!
+        incnum = np.arange(t_0_min,t_0_max,t_0_step)
+
+        # define grid for integration
+        x=np.linspace(0.,np.pi/2., simps_N)
+        y=np.linspace(0.,2*np.pi, simps_N)
+
+        # initialize array for solutions
+        sol = []
+
+        # ---- evaluation of Integral
+        for theta_0 in np.deg2rad(incnum):
+            # define the function that has to be integrated (i.e. Eq.20 in the paper)
+            # notice the additional  np.sin(thetas)  which oritinates from integrating over theta_s instead of mu_s
+            def integfunkt(theta_s,phi_s):
+                return np.sin(theta_s)*np.cos(theta_s)*BRDF(theta_0,theta_s,phi_0,phi_s)
+            # evaluate the integral using Simpson's Rule twice
+            z=integfunkt(x[:,None],y)
+            sol = sol + [simps(simps(z,y),x)]
+
+        sol = np.array(sol)
+
+        # print warning if the hemispherical reflectance exceeds 1
+        if np.any(sol > 1.):
+            print('ATTENTION, Hemispherical Reflectance > 1 !')
+
+        # generation of plot
+        fig = plt.figure()
+        axnum = fig.add_subplot(1,1,1)
+
+        axnum.plot(incnum,sol, 'k')
+        if showpoints == True: axnum.plot(incnum,sol, 'r.')
+
+        axnum.set_xlabel('$\\theta_0$ [deg]')
+        axnum.set_ylabel('$R(\\theta_0)$')
+        axnum.set_title('Hemispherical reflectance ') # for $\\phi_i = $' + str(phii) +'$)$')
+        axnum.set_ylim(0.,np.max(sol)*1.1)
+
+        axnum.grid()
+        plt.show()
+        return fig

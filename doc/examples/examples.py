@@ -120,6 +120,10 @@ print('evaluating print-values took ' + str(toc-tic))
 
 
 
+# ---------------- EVALUATION OF HEMISPHERICAL REFLECTANCE ----------------
+
+# plot the hemispherical reflectance associated with the chosen BRDF
+#hemr = Plots().hemreflect(R=R, t_0_step = 5., simps_N = 500)
 # ---------------- GENERATION OF POLAR-PLOTS ----------------
 #       plot both p and the BRDF in a single plot
 plot1 = Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np.linspace(0,90,5)) , pmultip = 1.5)
