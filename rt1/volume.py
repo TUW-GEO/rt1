@@ -40,6 +40,13 @@ class Volume(Scatter):
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
         pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex),self._func, modules = ["numpy","sympy"])
+
+        # in case _func is a constant, lambdify will produce a function with scalar output which
+        # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
+        # Therefore the following query is implemented to ensure correct array-output:
+        if not isinstance(pfunc(np.array([.1,.2,.3]),.1,.1,.1),np.ndarray):
+            pfunc = np.vectorize(pfunc)
+
         return pfunc(t_0, t_ex, p_0, p_ex)
 
     def legexpansion(self,t_0,t_ex,p_0,p_ex,geometry):
