@@ -146,10 +146,9 @@ plot1 = Plots().polarplot(R,incp = list(np.linspace(0,120,5)), incBRDF = list(np
 #iso = Plots().polarplot(SRF = SRFisotropic(), BRDFlabel = 'Isotropic BRDF', BRDFaprox = False, incBRDF = [45], BRDFmultip = 2.)
 
 
-
 # ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
 #       plot backscattered intensity and fractional contributions
-plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, noint=True)#, ylim=[-25,0])
+plot2 = Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, noint=True, label='Backscattering Coefficient'+'\n $\\omega$ = ' + str(R.RV.omega) + '$ \quad \\tau$ = ' + str(R.RV.tau))#, ylim=[-25,0])
 
 #       plot only backscattering coefficient without fractions
 #Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, fractions = False)
@@ -170,18 +169,26 @@ thetainc= 55.
 phiinc = 0.
 
 # define plot-range
-theta,phi = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,25)
+t_ex,p_ex = np.linspace(np.deg2rad(1.),np.deg2rad(89.),25),np.linspace(0.,np.pi,25)
+theta,phi = np.meshgrid(t_ex,p_ex)
+tinc = np.ones_like(theta)*np.deg2rad(thetainc)
+pinc = np.ones_like(phi)*np.deg2rad(phiinc)
 
 
 # definition of function to evaluate bistatic contributions
 # since this step might take a while an estimation of the calculation-time was included
 
 
-
 def Rad(theta, phi, thetainc, phiinc):
     '''
-    theta,phi         = [...]      plotrange-arrays
-    thetainc, phiinc, = float      incidence-angles for which the model is evaluated
+    thetainc : float
+               azimuth incidence angle
+    phiinc : float
+             polar incidence angle
+    theta : numpy array
+            azimuth exit angles    
+    phi : numpy array
+          polar exit angles    
     '''
     # pre-evaluation of fn-coefficients
 
@@ -192,9 +199,6 @@ def Rad(theta, phi, thetainc, phiinc):
     print('evaluation of 3d coefficients took ' + str(round((toc-tic)/60.,2)) + ' minutes')
 
 
-    tt,pp = np.meshgrid(theta,phi)
-    tinc = np.ones_like(tt)*np.deg2rad(thetainc)
-    pinc = np.ones_like(tt)*np.deg2rad(phiinc)
     R3d = RT1(1., tinc, tt, pinc, pp, RV=V, SRF=SRF, fn=testfn, geometry='ffff')
 
     tic = timeit.default_timer()
@@ -207,13 +211,11 @@ def Rad(theta, phi, thetainc, phiinc):
 
 
 
-
-
 # evaluation of bistatic contributions
-tot3dplot, surf3dplot, vol3dplot, int3dplot = Rad(theta,phi, 1, phiinc)
+tot3dplot, surf3dplot, vol3dplot, int3dplot = Rad(theta,phi, thetainc, phiinc)
 
 #       dplot of total, volume, surface and interaction - contribution
-plot3d = Plots().linplot3d(theta, phi,  Itot3d = tot3dplot, Isurf3d = surf3dplot, Ivol3d = vol3dplot, Iint3d = int3dplot,  zoom = 1., surfmultip = 1.)
+plot3d = Plots().linplot3d(theta, phi,  Itot = tot3dplot, Isurf = surf3dplot, Ivol = vol3dplot, Iint = int3dplot,  zoom = 1., surfmultip = 1.)
 
 #       plot only volume contribution
 #Plots().linplot3d(theta, phi,  Ivol3d = vol3dplot,  zoom = 1.2, surfmultip = 1.)

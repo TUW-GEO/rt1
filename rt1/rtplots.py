@@ -14,41 +14,52 @@ from scatter import Scatter
 
 class Plots(Scatter):
     """
-    Parameters:
-        R ... RT1 class object
+    The class provides pre-defined plotting-modules to easily visualize the used definitions and results.
     """
     def __init__(self, **kwargs):
         pass
-    
+
 
     def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1. , plabel = 'Volume-Scattering Phase Function', BRDFlabel = 'Surface-BRDF', paprox = True, BRDFaprox = True):
         """
-        generate a polar-plot of the volume- and the surface scattering phase function
-        together or in separate plots. 
-        The used approximation in terms of legendre-polynomials is also plotted as dashed line.
+        Generation of polar-plots of the volume- and the surface scattering phase function as well as
+        the used approximations in terms of legendre-polynomials.
         
         
         Parameters:
-        
-            R	   ... a RT1 object 
-            SRF     ... a rt1.surface module
-            V       ... a rt1.volume module
-        
+        -------------
+        R : RT1-class object 
+            If R is provided, SRF and V are taken from it as V = R.RV and SRF = R.SRF
+        SRF : RT1.surface class object
+            Alternative direct specification of the surface BRDF, e.g. SRF = Rayleigh()
+        V : RT1.volume class object
+            Alternative direct specification of the volume-scattering phase-function
+
         Optional Parameters:
-            incp        ... incidence-angles [deg] at which the volume-scattering phase-function will be plotted 
-            incBRDF     ... incidence-angles [deg] at which the BRDF will be plotted
-        
-            plabel      ... label for the plot of p
-            BRDFlabel   ... label for the plot of the BRDF
-                     
-            paprox      ... True/False whether to print the approximation of p or not
-            BRDFaprox   ... True/False whether to print the approximation of the BRDF or not
-            
-            pmultip     ... multiplicator of max-plotrange for p     (in case the chosen plotranges are not satisfying)
-            BRDFmultip  ... multiplicator of max-plotrange for BRDF
-        
-            max-plotrange for p is given by the max. value of p in forward-direction (for the chosen incp)
-            and for the BRDF by the max. value of the BRDF in specular direction (for the chosen incBRDF)
+        ----------------------
+        incp : list of floats (default = [15.,35.,55.,75.])
+               Incidence-angles in degree at which the volume-scattering phase-function will be plotted
+        incBRDF : list of floats (default = [15.,35.,55.,75.])
+                  Incidence-angles in degree at which the BRDF will be plotted
+        pmultip : float (default = 2.)
+                  Multiplicator to scale the plotrange for the plot of the volume-scattering phase-function
+                  (the max-plotrange is given by the max. value of V in forward-direction (for the chosen incp) )
+        BRDFmultip : float (default = 1.)
+                     Multiplicator to scale the plotrange for the plot of the BRDF
+                     (the max-plotrange is given by the max. value of SRF in specular-direction (for the chosen incBRDF) )
+        plabel : string
+                 Manual label for the volume-scattering phase-function plot
+        BRDFlabel : string
+                    Manual label for the BRDF plot
+        paprox : boolean (default = True)
+                 Indicator if the approximation of the phase-function in terms of Legendre-polynomials will be plotted.
+        BRDFaprox : boolean (default = True)
+                 Indicator if the approximation of the BRDF in terms of Legendre-polynomials will be plotted.
+                 
+        Returns:
+        ---------
+        figure
+            a matplotlib figure showing a polar-plot of the functions specified by V or SRF              
         """
         
        
@@ -75,12 +86,8 @@ class Plots(Scatter):
             
         # define functions for plotting that evaluate the used approximations in terms of legendre-polynomials
         n = sp.Symbol('n')        
-        
 
 
-        
-        
-        
         if V != None:
             # if V is a scalar, make it a list
             if np.ndim(V)==0:
@@ -190,38 +197,42 @@ class Plots(Scatter):
         return polarfig
 
 
-        
-        
 
-
-        
-        
-    def logmono(self, inc, Itot=None, Isurf= None, Ivol = None, Iint=None, ylim = None, sig0=False, noint=False, fractions = True, label = None):
+    def logmono(self, inc, Itot=None, Isurf= None, Ivol = None, Iint=None, ylim = None, sig0=False, noint=False, fractions = True, label = None, label_frac=None):
         """
-        plot either backscattered intensity or sigma_0 in dB
-        
+        Generate a plot of the monostatic backscattered Intensity or sigma_0 in dB as well as a
+        plot showing the fractional contributions to the total signal.
+
         Parameters:
-             
-        inc ...     incidence-angle range used for calculating the intensities
-                    (array)
-           
-        Itot, Ivol, Isurf, Iint ... individual signal contributions, i.e. outputs from RT1.calc()
-                    (array's of same length as inc)        
-        
-        sig0 ... If True, sigma0 will be plotted which is related to I via:  sigma_0 = 4 Pi cos(inc) * I             
-                    (True, False)
-                    
-        ylim ... manual entry of plot-boundaries as [ymin, ymax]
-                
-        label ...   manual label of plot        
+        ------------
+        inc : float-array 
+              Incidence-angle range used for calculating the intensities
+        Itot, Ivol, Isurf, Iint : float-arrays
+                                  individual monostatic signal contributions
+                                  i.e. outputs from RT1.calc()  with   RT1.geometry = 'mono'  and    RT1.t_0 = inc
+                                  At least one of the arrays must be provided and it must be of the same length as inc!  
+        Optional Parameters:
+        ---------------------       
+        ylim : [float , float]
+               Manual entry of plot-boundaries as [ymin, ymax]
+        sig0 : boolean (default = False)
+               Indicator to choose whether sigma_0 (True) or intensity (False) is plotted.
+               If True, the relation     sigma_0 = 4 * Pi * cos(inc) * intensity    is applied.
+        noint : boolean (default = False)
+                If True, the zero-order contribution (i.e. I_tot0 = I_vol + I_surf) is plotted as a dashed line
+        fractions : boolean (default = True)
+                    If True, a plot of the fractional contributions to the total signal is generated.
+                    (i.e. volume_fraction = I_vol / I_tot    etc.)
+        label : string
+                Manual label of backscatter-plot
+        label_frac : string
+                Manual label of the fractional contribution-plot
         """
         
-        # define a mask to avoid log(0) errors 
+        # define a mask to avoid log(0) errors (used to crop numpy arrays)
         def mask(x):
             return (x <= 0.) 
-       
-        
-        
+
         assert isinstance(inc,np.ndarray), 'Error, inc must be a numpy array'
     
         if Itot is not None: 
@@ -348,7 +359,14 @@ class Plots(Scatter):
             if Itot is not None and Isurf is not None: ax2.plot(inc, Isurf/Itot, label='surface', color=csurf)
             if Itot is not None and Ivol is not None: ax2.plot(inc, Ivol/Itot, label='volume', color=cvol)
             if Itot is not None and Iint is not None: ax2.plot(inc, Iint/Itot, label='interaction', color=cint)
-            ax2.set_title('Fractional contributions to total signal')
+            
+            if label_frac == None:
+                ax2.set_title('Fractional contributions to total signal')
+            else:
+                ax2.set_title(label_frac)
+            
+            
+            
             ax2.set_xlabel('$\\theta_0$ [deg]')
             if sig0 == True:
                 ax2.set_ylabel('$\\sigma_0 / \\sigma_0^{tot}$')
@@ -360,33 +378,40 @@ class Plots(Scatter):
         plt.show()
         return f
 
-        
-        
-        
-        
-        
-        
-    def linplot3d(self, theta, phi, Itot3d=None, Isurf3d=None, Ivol3d=None, Iint3d=None, surfmultip = 1., zoom = 2.):
+
+   
+    def linplot3d(self, theta, phi, Itot=None, Isurf=None, Ivol=None, Iint=None, surfmultip = 1., zoom = 2.):
         """
-        Input arrays must be numpy arrays with dtype = float and must have the following shape:
-            
+        Generation of a spherical 3D-plot to visualize bistatic scattering behaviour
+        
         Parameters:
-            theta = [...]
-            phi   = [...]            
-            I...  = [ [theta[0], phi[:] ] , [theta[1], phi[:] ] , ... , [theta[N], phi[:] ]]
-            
-            
+        ------------
+        
+        theta, phi : 2d arrays of floats
+                     The angular grid at which the scattered radiation has been evaluated.
+                     If t_ex and p_ex are arrays of the azimuth- and polar angles to be used, 
+                     theta and phi can be calculated via:     theta,phi = np.meshgrid(t_ex, p_ex)
+        Itot, Ivol, Isurf, Iint : 2d arrays of floats
+                                  individual bistatic signal contributions
+                                  i.e. outputs from RT1.calc()  with   
+                                  RT1.geometry = 'fvfv'   ,    RT1.t_ex = theta    ,     RT1.p_ex = phi.
+                                  At least one of the arrays must be provided and they must have the same shape as theta and phi!  
         Optional Parameters:
-            surfmultip ... scaling factor for the plotted surface
-            zoom       ... scaling factor for the whole plot
+        ---------------------
+        surfmultip : float (default = 1.)
+                     Scaling factor for the plotted surface that indicates the ground.
+        zoom : float (default = 2.)
+               Factor to scale the plot. 
+               The factor is included in order to be able to change the plotrange while keeping a constant aspect-ratio of 1. in the 3d-plot.
+               (This workaround is necessary due to an open issue concerning aspect-ratio in matplotlib's 3d-plots)
         """
 
         assert isinstance(theta,np.ndarray), 'Error: theta must be a numpy-array'
         assert isinstance(phi,np.ndarray), 'Error: phi must be a numpy-array'
-        if Itot3d is not None: assert isinstance(Itot3d,np.ndarray), 'Error: Itot3d must be a numpy-array'
-        if Isurf3d is not None: assert isinstance(Isurf3d,np.ndarray), 'Error: Isurf3d must be a numpy-array'
-        if Ivol3d is not None: assert isinstance(Ivol3d,np.ndarray), 'Error: Ivol3d must be a numpy-array'
-        if Iint3d is not None: assert isinstance(Iint3d,np.ndarray), 'Error: Iint3d must be a numpy-array'
+        if Itot is not None: assert isinstance(Itot,np.ndarray), 'Error: Itot3d must be a numpy-array'
+        if Isurf is not None: assert isinstance(Isurf,np.ndarray), 'Error: Isurf3d must be a numpy-array'
+        if Ivol is not None: assert isinstance(Ivol,np.ndarray), 'Error: Ivol3d must be a numpy-array'
+        if Iint is not None: assert isinstance(Iint,np.ndarray), 'Error: Iint3d must be a numpy-array'
         assert isinstance(surfmultip, float), 'Error: surfmultip must be a floating-point number'
         assert surfmultip>0., 'Error: surfmultip must be larger than 0.'
 
@@ -394,20 +419,14 @@ class Plots(Scatter):
         assert zoom>0., 'Error: zoom must be larger than 0.'
 
 
-
-
-        
-        # make plot-grid of theta/phi
-        THETA,PHI = np.meshgrid(theta,phi)
-        
         # transform values to spherical coordinate system
         def sphericaltransform(r):
             if r is None:
                 return None
                 
-            X = r * np.sin(THETA) * np.cos(PHI)
-            Y = r * np.sin(THETA) * np.sin(PHI)
-            Z = r * np.cos(THETA)
+            X = r * np.sin(theta) * np.cos(phi)
+            Y = r * np.sin(theta) * np.sin(phi)
+            Z = r * np.cos(theta)
             return X,Y,Z
         
                         
@@ -418,10 +437,10 @@ class Plots(Scatter):
         
         # calculate maximum value of all given imput-arrays        
         m = []
-        if Itot3d is not None: m = m + [np.max(sphericaltransform(Itot3d)), np.abs(np.min(sphericaltransform(Itot3d)))]
-        if Isurf3d is not None: m = m + [np.max(sphericaltransform(Isurf3d)), np.abs(np.min(sphericaltransform(Isurf3d)))]
-        if Ivol3d is not None: m = m + [np.max(sphericaltransform(Ivol3d)), np.abs(np.min(sphericaltransform(Ivol3d)))]
-        if Iint3d is not None: m = m + [np.max(sphericaltransform(Iint3d)), np.abs(np.min(sphericaltransform(Iint3d)))]
+        if Itot is not None: m = m + [np.max(sphericaltransform(Itot)), np.abs(np.min(sphericaltransform(Itot)))]
+        if Isurf is not None: m = m + [np.max(sphericaltransform(Isurf)), np.abs(np.min(sphericaltransform(Isurf)))]
+        if Ivol is not None: m = m + [np.max(sphericaltransform(Ivol)), np.abs(np.min(sphericaltransform(Ivol)))]
+        if Iint is not None: m = m + [np.max(sphericaltransform(Iint)), np.abs(np.min(sphericaltransform(Iint)))]
         maximum = np.max(m)
         
         
@@ -434,24 +453,24 @@ class Plots(Scatter):
         ax3d.plot_surface(xxx,yyy,zzz, alpha=0.2, color='k')
 
         
-        if Itot3d is not None: 
+        if Itot is not None: 
             ax3d.plot_surface(
-            sphericaltransform(Itot3d)[0],sphericaltransform(Itot3d)[1],sphericaltransform(Itot3d)[2] ,rstride=1, cstride=1, color='Gray',
+            sphericaltransform(Itot)[0],sphericaltransform(Itot)[1],sphericaltransform(Itot)[2] ,rstride=1, cstride=1, color='Gray',
             linewidth=0, antialiased=True, alpha=.3)
         
-        if Isurf3d is not None:
+        if Isurf is not None:
             ax3d.plot_surface(
-            sphericaltransform(Isurf3d)[0],sphericaltransform(Isurf3d)[1],sphericaltransform(Isurf3d)[2], rstride=1, cstride=1, color='Red',
+            sphericaltransform(Isurf)[0],sphericaltransform(Isurf)[1],sphericaltransform(Isurf)[2], rstride=1, cstride=1, color='Red',
             linewidth=0, antialiased=True, alpha=.5)
         
-        if Ivol3d is not None:
+        if Ivol is not None:
             ax3d.plot_surface(
-            sphericaltransform(Ivol3d)[0],sphericaltransform(Ivol3d)[1],sphericaltransform(Ivol3d)[2], rstride=1, cstride=1, color='Green',
+            sphericaltransform(Ivol)[0],sphericaltransform(Ivol)[1],sphericaltransform(Ivol)[2], rstride=1, cstride=1, color='Green',
             linewidth=0, antialiased=True, alpha=.5)
         
-        if Iint3d is not None:
+        if Iint is not None:
             ax3d.plot_surface(
-            sphericaltransform(Iint3d)[0],sphericaltransform(Iint3d)[1],sphericaltransform(Iint3d)[2], rstride=1, cstride=1, color='Blue',
+            sphericaltransform(Iint)[0],sphericaltransform(Iint)[1],sphericaltransform(Iint)[2], rstride=1, cstride=1, color='Blue',
             linewidth=0, antialiased=True, alpha=.5)
         
         ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
