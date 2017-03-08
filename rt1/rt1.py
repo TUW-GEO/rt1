@@ -36,13 +36,17 @@ def _get_fn_wrapper(fn, n, t_0, p_0, t_ex, p_ex):
     # the destinction between zero and nonzero fn-coefficients is necessary because sympy treats
     # any symbol multiplied by 0 as 0, which results in a function that returns 0 instead of an array of zeroes!
     # -> see  https://github.com/sympy/sympy/issues/3935
-    if fn[n] == 0:
-        def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
-            return np.ones_like(theta_0)*np.ones_like(phi_0)*np.ones_like(theta_ex)*np.ones_like(phi_ex)*0.
-    else:
-        fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex),fn[n], modules = ["numpy","sympy"])
 
-    return fnfunc(t_0, p_0, t_ex, p_ex)
+    if n >= len(fn):
+        return 0.
+    else:
+        if fn[n] == 0:
+            def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
+                return np.ones_like(theta_0)*np.ones_like(phi_0)*np.ones_like(theta_ex)*np.ones_like(phi_ex)*0.
+        else:
+            fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex),fn[n], modules = ["numpy","sympy"])
+
+        return fnfunc(t_0, p_0, t_ex, p_ex)
 
 
     
