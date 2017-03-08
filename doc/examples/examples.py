@@ -203,7 +203,7 @@ def Rad(theta, phi, thetainc, phiinc):
     print('evaluation of 3d coefficients took ' + str(round((toc-tic)/60.,2)) + ' minutes')
 
 
-    R3d = RT1(1., tinc, tt, pinc, pp, RV=V, SRF=SRF, fn=testfn, geometry='ffff')
+    R3d = RT1(1., tinc, theta, pinc, phi, RV=V, SRF=SRF, fn=testfn, geometry='ffff')
 
     tic = timeit.default_timer()
     Itot, Isurf, Ivol, Iint = R3d.calc()

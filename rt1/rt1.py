@@ -162,29 +162,25 @@ class RT1(object):
 
     def _extract_coefficients(self, expr):
         """
-        extract Fn coefficients from given forumula
-        This is done by setting all the exponents to zero and look at the
-        remainer for each power of cosine
+        extract Fn coefficients from given forumula.
+
+        This is done by collecting the terms of expr with respect to powers of cos(theta_s) and
+        simplifying the gained coefficients by applying a simple trigonometric identity.
         """
+
         theta_s = sp.Symbol('theta_s')
-        replacementsnull= {sp.cos(theta_s) : 0.}
+        # collect terms with equal powers of cos(theta_s)
+        expr_sort = sp.collect(expr,sp.cos(theta_s),evaluate=False)
 
-        # construct a list of coefficients
-        fn=[]
-        fn= fn + [expr.xreplace(replacementsnull)]
+        # convert generated dictionary to list of coefficients
+        # the use of  .get() is necessary for getting the dict-values since otherwise coefficients that are actually 0.
+        # would not appear in the list of fn-coefficients
 
-        for nn in range(1,self.SRF.ncoefs+self.RV.ncoefs+1):
-            replacementsnn = [(sp.cos(theta_s)**i,0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]  # replace integer exponents
-            replacementsnn = replacementsnn + [(sp.cos(theta_s)**float(i),0.)  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i !=nn]  # replace float exponents
-            replacementsnn = dict(replacementsnn + [(sp.cos(theta_s)**nn,1.)] + [(sp.cos(theta_s)**float(nn),1.)]   )
-
-            fn = fn + [(expr.xreplace(replacementsnn)-fn[0])]
-
-                                              
-        # simplify gained coefficients for faster evaluation
+        # the gained coefficients are further simplified using trigonometric identities to speed up numerical evaluation
         # the TR5 function performs the replacement sin^2(x) = 1-cos(x)^2 to get rid of remaining sin(x)-terms
         # this results in a significant speedup for monostatic evaluations (and a moderate effect on bistatic calculations)
-        fn = [TR5(i, max=self.SRF.ncoefs+self.RV.ncoefs+1).expand() for i in fn]               
+        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s)**n,0.), max=self.SRF.ncoefs+self.RV.ncoefs+1)) for n in range(len(expr_sort))]
+
         return fn
 
 
@@ -204,23 +200,14 @@ class RT1(object):
         fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
 
-
-
-        #~print fPoly
-        #~print volexp
-        #~print brdfexp
-
-
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
 
         # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
         theta_s = sp.Symbol('theta_s')
-        replacements = [(sp.sin(theta_s)**i,((1.-sp.cos(theta_s)**2.)**sp.Rational(i,2)).expand())  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
+        replacements = [(sp.sin(theta_s)**i,((1.-sp.cos(theta_s)**2)**sp.Rational(i,2)).expand())  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
         res = expr.xreplace(dict(replacements)).expand()
 
-        # o.k., by now we have the integral formulation ready.
-        #~ print res
         return res
 
 
@@ -315,8 +302,7 @@ class RT1(object):
         as the we don not assume per se that PHI1=0 like it is done in the
         mansucript.
         """
-        #~ S = 0.
-        nmax = self.SRF.ncoefs+self.RV.ncoefs+1
+        nmax = len(self.fn) #self.SRF.ncoefs+self.RV.ncoefs+1
 
 
         hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
@@ -347,25 +333,4 @@ class RT1(object):
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
 
         return S
-
-
-#~ np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
-
-
-#   function that evaluates the coefficients
-#~ def fnfunktexp(n,t0):
-    #~ return fn[n].xreplace({thetaex:t0})
-#~
-#~
-#~ #   definition of surface- volume and first-order interaction-term
-#~ def CC(n,tau,tex):
-    #~ if n==0:
-        #~ return np.exp(-tau/np.cos(tex))*np.log(np.cos(tex)/(1-np.cos(tex)))-scipy.special.expi(-tau)+np.exp(-tau/np.cos(tex))*scipy.special.expi(tau/np.cos(tex)-tau)
-    #~ else:
-        #~ return CC(n-1,tau,tex)*np.cos(tex)-(np.exp(-tau/np.cos(tex))/n-scipy.special.expn(n+1,tau))
-#~
-#~ def intback(t0,tau,omega):
-    #~ return omega*np.cos(t0)*np.exp(-tau/np.cos(t0))*np.sum(fnfunktexp(n,t0)*CC(n+1,tau,t0) for n in range(0,Np+NBRDF+1))
-
-
 
