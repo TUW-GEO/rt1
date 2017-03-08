@@ -183,7 +183,7 @@ class RT1(object):
         # the gained coefficients are further simplified using trigonometric identities to speed up numerical evaluation
         # the TR5 function performs the replacement sin^2(x) = 1-cos(x)^2 to get rid of remaining sin(x)-terms
         # this results in a significant speedup for monostatic evaluations (and a moderate effect on bistatic calculations)
-        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s)**n,0.), max=self.SRF.ncoefs+self.RV.ncoefs+1)) for n in range(len(expr_sort))]
+        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s)**n,0.), max=self.SRF.ncoefs+self.RV.ncoefs+1)) for n in range(self.SRF.ncoefs+self.RV.ncoefs+1)]
 
         return fn
 
@@ -306,7 +306,7 @@ class RT1(object):
         as the we don not assume per se that PHI1=0 like it is done in the
         mansucript.
         """
-        nmax = len(self.fn) #self.SRF.ncoefs+self.RV.ncoefs+1
+        nmax = len(self.fn)
 
 
         hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
