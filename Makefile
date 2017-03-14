@@ -22,33 +22,18 @@ clean :
 	rm -rf geoval.egg-info
 
 
-coverage: dependencies
-	#nosetests --with-coverage --cover-package=benchmarking --cover-package=pycmbs $(TESTDIRS) --cover-html
-	nosetests --with-coverage --cover-package=geoval $(TESTDIRS) --cover-html
-
-tests: dependencies
-	nosetests $(TESTDIRS)
-
 dist : clean
 	python setup.py sdist
 
-build_docs:
-	python setup.py build_sphinx
+#upload_docs:
+#	python setup.py upload_sphinx
 
-update_version:
-	python autoincrement_version.py
-
-upload_docs:
-	python setup.py upload_sphinx
-
-dependencies : clean
-	sh compile_extensions.sh
-
-upload_pip: update_version
+upload_pip: dist
 	# ensure that pip version has always counterpart on github
 	git push origin master
 	# note that this requres .pypirc file beeing in home directory
-	python setup.py sdist upload
+	python setup.py sdist 
+	twine upload dist/*
 
 
 
