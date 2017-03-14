@@ -30,7 +30,7 @@ from setuptools import setup
 # import json
 
 # from setuptools import setup, Extension
-# from setuptools import find_packages  # Always prefer setuptools over distutils
+from setuptools import find_packages  # Always prefer setuptools over distutils
 # from Cython.Distutils import build_ext
 # from Cython.Build import cythonize
 
@@ -42,14 +42,14 @@ install_requires = ["numpy", "sympy"]  # todo adapt according to actual dependen
 
 
 
-#~ def get_packages():
-    #find_packages(exclude=['contrib', 'docs', 'tests*']),
-    #~ return find_packages()
+def get_packages():
+    find_packages(exclude=['contrib', 'docs', 'tests*']),
+    return find_packages()
 
 
 setup(name='rt1',
 
-      version='0.1.1-dev',
+      version='0.1.1',
 
       description='rt1 - bistatic single scattering radiative transfer model',
 
@@ -57,8 +57,8 @@ setup(name='rt1',
       # simple. Or you can use find_packages().
       # packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
 
-      #~ packages=get_packages(),
-      #~ package_dir={'pycmbs': 'pycmbs'},
+      packages=get_packages(),
+      package_dir={'rt1': 'rt1'},
       #~ package_data={'pycmbs': ['benchmarking/configuration/*',
                                #~ 'benchmarking/logo/*', 'version.json']},
 
