@@ -49,7 +49,7 @@ install_requires = ["numpy", "sympy"]  # todo adapt according to actual dependen
 
 setup(name='rt1',
 
-      version='0.1-dev',
+      version='0.1.1-dev',
 
       description='rt1 - bistatic single scattering radiative transfer model',
 
