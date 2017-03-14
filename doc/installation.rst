@@ -3,9 +3,19 @@ Installation
 
 There are currently different methods to install `rt1`. The first two are for users who just want to use the package, while the last one is for developers. All follow standard principles.
 
+Using conda
+-----------
+
+TBD conda installation is currently under development ... be patient!
+
+The installation using `conda <https://conda.io/docs/intro.html>`_ is as easy as::
+
+    conda install [-n YOURENV] -c conda-forge rt1
 
 Using pip
 ---------
+
+**Note that this has not been tested yet, but is supposed to work**
 
 The `rt1` package is provided on `pip <https://pypi.python.org/pypi/rt1>`_. Install is as easy as::
 
