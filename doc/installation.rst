@@ -15,8 +15,6 @@ The installation using `conda <https://conda.io/docs/intro.html>`_ is as easy as
 Using pip
 ---------
 
-**Note that this has not been tested yet, but is supposed to work**
-
 The `rt1` package is provided on `pip <https://pypi.python.org/pypi/rt1>`_. Install is as easy as::
 
     pip install rt1
