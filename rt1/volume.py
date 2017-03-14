@@ -15,7 +15,7 @@ class Volume(Scatter):
         # this results in a peak in forward-direction which is suitable for describing volume-scattering phase-functions
         self.a = getattr(self, 'a', [-1.,1.,1.])
 
-    def p(self, t0,ts,p0,ps):
+    def p(self, t_0,t_ex,p_0,p_ex):
         """
         calculate phase function by subsituting current geometry in function
         and then evaluate result
@@ -23,24 +23,33 @@ class Volume(Scatter):
         Parameters
         ----------
         geometries of angles
-        to : theta incidence
-        ts : theta scattering
-        p0 : azimuth incident
-        ps : azimuth scattering
+        t_0 : theta incidence
+        t_ex : theta scattering
+        p_0 : azimuth incident
+        p_ex : azimuth scattering
 
         All in radians
 
         """
         # define sympy objects
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
 
         # replace arguments and evaluate expression
-        return self._func.xreplace({theta_i:t0, theta_s:ts, phi_i:p0, phi_s:ps}).evalf()
+        # sp.lambdify is used to allow array-inputs
+        pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex),self._func, modules = ["numpy","sympy"])
 
-    def legexpansion(self,mu_0,mu_ex,p_0,p_ex,geometry):
+        # in case _func is a constant, lambdify will produce a function with scalar output which
+        # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
+        # Therefore the following query is implemented to ensure correct array-output:
+        if not isinstance(pfunc(np.array([.1,.2,.3]),.1,.1,.1),np.ndarray):
+            pfunc = np.vectorize(pfunc)
+
+        return pfunc(t_0, t_ex, p_0, p_ex)
+
+    def legexpansion(self,t_0,t_ex,p_0,p_ex,geometry):
         assert self.ncoefs > 0
 
         """
@@ -66,29 +75,29 @@ class Volume(Scatter):
 
         # define sympy variables based on chosen geometry
         if geometry == 'mono':
-            theta_i = sp.Symbol('theta_i')
-            theta_ex = theta_i
-            phi_i = p_0
+            theta_0 = sp.Symbol('theta_0')
+            theta_ex = theta_0
+            phi_0 = p_0
             phi_ex = p_0 + sp.pi
         else:
             if geometry[0] == 'v':
-                theta_i = sp.Symbol('theta_i')
+                theta_0 = sp.Symbol('theta_0')
             elif geometry[0] == 'f':
-                theta_i = np.arccos(mu_0)
+                theta_0 = t_0
             else:
                 raise AssertionError('wrong choice of theta_i geometry')
 
             if geometry[1] == 'v':
                 theta_ex = sp.Symbol('theta_ex')
             elif geometry[1] == 'f':
-                theta_ex = np.arccos(mu_ex)
+                theta_ex = t_ex
             else:
                 raise AssertionError('wrong choice of theta_ex geometry')
 
             if geometry[2] == 'v':
-                phi_i = sp.Symbol('phi_i')
+                phi_0 = sp.Symbol('phi_0')
             elif geometry[2] == 'f':
-                phi_i = p_0
+                phi_0 = p_0
             else:
                 raise AssertionError('wrong choice of phi_i geometry')
 
@@ -100,7 +109,7 @@ class Volume(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #correct for backscattering
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(sp.pi-theta_i,theta_s,phi_i,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
+        return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(sp.pi-theta_0,theta_s,phi_0,phi_s, self.a)),(n,0,NP-1))  #.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 
@@ -137,10 +146,10 @@ class LinCombV(Volume):
             """
             define phase function as sympy object for later evaluation
             """
-            theta_i = sp.Symbol('theta_i')
-            theta_s = sp.Symbol('theta_s')
-            phi_i = sp.Symbol('phi_i')
-            phi_s = sp.Symbol('phi_s')
+            theta_0 = sp.Symbol('theta_0')
+            theta_ex = sp.Symbol('theta_ex')
+            phi_0 = sp.Symbol('phi_0')
+            phi_ex = sp.Symbol('phi_ex')
             self._func = self._Vcombiner()._func
 
         def _set_legexpansion(self):
@@ -182,10 +191,10 @@ class LinCombV(Volume):
                     """
                     define phase function as sympy object for later evaluation
                     """
-                    theta_i = sp.Symbol('theta_i')
-                    theta_s = sp.Symbol('theta_s')
-                    phi_i = sp.Symbol('phi_i')
-                    phi_s = sp.Symbol('phi_s')
+                    theta_0 = sp.Symbol('theta_0')
+                    theta_ex = sp.Symbol('theta_ex')
+                    phi_0 = sp.Symbol('phi_0')
+                    phi_ex = sp.Symbol('phi_ex')
                     self._func = 0.
 
                 def _set_legcoefficients(self):
@@ -231,7 +240,7 @@ class LinCombV(Volume):
                 dummylegexpansion = dummylegexpansion + [Vdummy.legexpansion]
 
             # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-            Vcomb.legexpansion = lambda mu_0,mu_ex,p_0,p_ex,geometry : np.sum([lexp(mu_0,mu_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
+            Vcomb.legexpansion = lambda t_0,t_ex,p_0,p_ex,geometry : np.sum([lexp(t_0,t_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
 
 
             for V in self.Vchoices:
@@ -260,11 +269,12 @@ class Rayleigh(Volume):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        self._func = 3./(16.*sp.pi)*(1.+self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a)**2.)
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, self.a)
+        self._func = 3./(16.*sp.pi)*(1.+x**2.)
 
     def _set_legcoefficients(self):
         """
@@ -299,11 +309,12 @@ class HenyeyGreenstein(Volume):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s,self.a))**1.5)
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, self.a)
+        self._func = (1.-self.t**2.) / ((4.*sp.pi)*(1.+self.t**2.-2.*self.t*x)**1.5)
 
     def _set_legcoefficients(self):
         """
@@ -343,11 +354,12 @@ class HGRayleigh(Volume):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_i = sp.Symbol('theta_i')
-        theta_s = sp.Symbol('theta_s')
-        phi_i = sp.Symbol('phi_i')
-        phi_s = sp.Symbol('phi_s')
-        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a)**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*self.scat_angle(theta_i,theta_s,phi_i,phi_s, self.a))**1.5)
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, self.a)
+        self._func = 3./(8.*sp.pi)*1./(2.+self.t**2)*(1+x**2)*(1.-self.t**2.) / ((1.+self.t**2.-2.*self.t*x)**1.5)
 
 
     def _set_legcoefficients(self):

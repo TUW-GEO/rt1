@@ -25,7 +25,7 @@ theta_ex = 0.234234
 phi_i = np.pi/2.
 phi_ex = 0.
 
-RT = RT1(I0, np.cos(theta_i), np.cos(theta_ex), phi_i, phi_ex, RV=V, SRF=S, geometry='vvvv')
+RT = RT1(I0, theta_i, theta_ex, phi_i, phi_ex, RV=V, SRF=S, geometry='vvvv')
 #~ print RT.fn
 #~ print len(RT.fn)
 
