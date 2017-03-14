@@ -10,10 +10,10 @@ For COPYING and LICENSE details, please refer to the LICENSE file
 # https://python-packaging-user-guide.readthedocs.org/en/latest/index.html
 
 from setuptools import setup
-from distutils.core import setup as setup_dist  # todo use only one setup
+# from distutils.core import setup as setup_dist  # todo use only one setup
 
-import os
-import glob
+# import os
+# import glob
 
 # the setuptools are supposed to be used as a standard. Thats why we ommit
 # usage of distutils here
@@ -25,20 +25,20 @@ import glob
 # a small example how to build dependencies is given here:
 # http://stackoverflow.com/questions/11010151/distributing-a-shared-library-and-some-c-code-with-a-cython-extension-module
 
-import os
-import numpy as np
-import json
+# import oss
+# import numpy as np
+# import json
 
-from setuptools import setup, Extension
-from setuptools import find_packages  # Always prefer setuptools over distutils
-from Cython.Distutils import build_ext
-from Cython.Build import cythonize
+# from setuptools import setup, Extension
+# from setuptools import find_packages  # Always prefer setuptools over distutils
+# from Cython.Distutils import build_ext
+# from Cython.Build import cythonize
 
 
 
 # requires scipy:
 # http://stackoverflow.com/questions/11128070/cannot-import-minimize-in-scipy
-install_requires = ["numpy>0.1", "sympy>=1.0"]  # todo adapt according to actual dependencies
+install_requires = ["numpy", "sympy"]  # todo adapt according to actual dependencies
 
 
 
@@ -121,13 +121,3 @@ setup(name='rt1',
       )
 
 
-
-
-########################################################################
-# Some useful information on shipping packages
-########################################################################
-
-# PIP
-#~ python setup.py register
-#~ python setup.py sdist
-#~ python setup.py upload
