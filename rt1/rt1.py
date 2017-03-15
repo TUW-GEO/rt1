@@ -321,7 +321,7 @@ class RT1(object):
         #~ else:
         # hopefully faster
         # try to seaparate loops
-        S2 = np.array([np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)) for n in xrange(nmax)])
+        S2 = np.array([np.sum(mu1**(-k) * (eapn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)) for n in range(nmax)])
 
 
         if True:  # regular processing
