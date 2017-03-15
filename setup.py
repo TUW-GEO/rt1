@@ -6,41 +6,10 @@ This file is part of RT1.
 For COPYING and LICENSE details, please refer to the LICENSE file
 """
 
-# good introduction into packing can be found in
-# https://python-packaging-user-guide.readthedocs.org/en/latest/index.html
-
 from setuptools import setup
-# from distutils.core import setup as setup_dist  # todo use only one setup
+from setuptools import find_packages  
 
-# import os
-# import glob
-
-# the setuptools are supposed to be used as a standard. Thats why we ommit
-# usage of distutils here
-
-# example of setup.py can be found here:
-# https://github.com/pypa/sampleproject/blob/master/setup.py
-
-
-# a small example how to build dependencies is given here:
-# http://stackoverflow.com/questions/11010151/distributing-a-shared-library-and-some-c-code-with-a-cython-extension-module
-
-# import oss
-# import numpy as np
-# import json
-
-# from setuptools import setup, Extension
-from setuptools import find_packages  # Always prefer setuptools over distutils
-# from Cython.Distutils import build_ext
-# from Cython.Build import cythonize
-
-
-
-# requires scipy:
-# http://stackoverflow.com/questions/11128070/cannot-import-minimize-in-scipy
-install_requires = ["numpy", "sympy"]  # todo adapt according to actual dependencies
-
-
+install_requires = ["numpy", "sympy"]  
 
 def get_packages():
     find_packages(exclude=['contrib', 'docs', 'tests*']),
@@ -72,20 +41,12 @@ setup(name='rt1',
 
       # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
       classifiers=[
-          # How mature is this project? Common values are
-          # 3 - Alpha
-          # 4 - Beta
-          # 5 - Production/Stable
-          # 'Development Status :: 4 - beta',
-          # Indicate who your project is intended for
           'Intended Audience :: Science/Research',
           'Topic :: Scientific/Engineering :: Atmospheric Science',
 
           # Pick your license as you wish (should match "license" above)
           #~ 'License :: OSI Approved :: MIT License',
 
-          # Specify the Python versions you support here. In particular, ensure
-          # that you indicate whether you support Python 2, Python 3 or both.
           'Programming Language :: Python :: 2.7'
       ],
 
