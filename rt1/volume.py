@@ -6,6 +6,7 @@ import numpy as np
 from scatter import Scatter
 import sympy as sp
 
+
 class Volume(Scatter):
     def __init__(self, **kwargs):
         self.omega = kwargs.pop('omega', None)
@@ -113,7 +114,6 @@ class Volume(Scatter):
 
 
 
-
 class LinCombV(Volume):
         '''
         Class to generate linear-combinations of volume-class elements
@@ -146,10 +146,10 @@ class LinCombV(Volume):
             """
             define phase function as sympy object for later evaluation
             """
-            theta_0 = sp.Symbol('theta_0')
-            theta_ex = sp.Symbol('theta_ex')
-            phi_0 = sp.Symbol('phi_0')
-            phi_ex = sp.Symbol('phi_ex')
+            #theta_0 = sp.Symbol('theta_0')
+            #theta_ex = sp.Symbol('theta_ex')
+            #phi_0 = sp.Symbol('phi_0')
+            #phi_ex = sp.Symbol('phi_ex')
             self._func = self._Vcombiner()._func
 
         def _set_legexpansion(self):
@@ -191,10 +191,10 @@ class LinCombV(Volume):
                     """
                     define phase function as sympy object for later evaluation
                     """
-                    theta_0 = sp.Symbol('theta_0')
-                    theta_ex = sp.Symbol('theta_ex')
-                    phi_0 = sp.Symbol('phi_0')
-                    phi_ex = sp.Symbol('phi_ex')
+                    #theta_0 = sp.Symbol('theta_0')
+                    #theta_ex = sp.Symbol('theta_ex')
+                    #phi_0 = sp.Symbol('phi_0')
+                    #phi_ex = sp.Symbol('phi_ex')
                     self._func = 0.
 
                 def _set_legcoefficients(self):
@@ -203,7 +203,7 @@ class LinCombV(Volume):
                     needs to be a function that can be later evaluated by subsituting 'n'
                     """
 
-                    n = sp.Symbol('n')
+                    #n = sp.Symbol('n')
                     self.legcoefs = 0.
 
 
