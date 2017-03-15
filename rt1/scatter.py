@@ -75,7 +75,7 @@ class Scatter(object):
 
         ###self.RV.legexpansion(self.mu_0,self.mu_ex,self.phi_0,self.phi_ex,self.geometry).do
         res = self.legexpansion(t_0, t_s, p_0, p_s, geometry).xreplace({theta_0:t_0, theta_s:t_s, phi_0:p_0,phi_s:p_s, theta_ex:t_s, phi_ex:p_s})
-        print('THETA: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex, a=[1.,1.,1.]).xreplace({theta_0:t_0, theta_s:t_s, phi_0:p_0,phi_s:p_s, theta_ex:t_s, phi_ex:p_s}).evalf())
+        # print('THETA: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex, a=[1.,1.,1.]).xreplace({theta_0:t_0, theta_s:t_s, phi_0:p_0,phi_s:p_s, theta_ex:t_s, phi_ex:p_s}).evalf())
         return res.evalf()  #.xreplace({theta_i:t0, theta_s:ts, phi_i:p0,phi_s:ps}).evalf()
 
 
