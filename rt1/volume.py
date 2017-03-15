@@ -3,7 +3,7 @@ Definition of volume phase scattering functions
 """
 
 import numpy as np
-from scatter import Scatter
+from rt1.scatter import Scatter
 import sympy as sp
 
 

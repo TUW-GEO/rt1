@@ -3,8 +3,8 @@ Definition of BRDF functions
 """
 
 import numpy as np
-from scatter import Scatter
 import sympy as sp
+from rt1.scatter import Scatter
 
 
 class Surface(Scatter):

@@ -6,12 +6,12 @@ import numpy as np
 import sys
 
 sys.path.append('..')
-from rt1.volume import Rayleigh
-from rt1.rt1 import RT1
+# from rt1.volume import Rayleigh
+# from rt1.rt1 import RT1
 
 from rt1.surface import Isotropic, CosineLobe, HenyeyGreenstein
 from scipy import special as sc
-import sympy as sp
+# import sympy as sp
 
 
 class TestSurface(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestSurface(unittest.TestCase):
         # test legcoefs for example in paper
         n=10
         S = CosineLobe(ncoefs=n, i=5, NormBRDF = np.pi)
-        for i in xrange(n):
+        for i in range(n):
             z1 = 120.*np.sqrt(np.pi)*(1./128.+i/64.)
             z2 = sc.gamma((7.-i)*0.5)*sc.gamma((8.+i)*0.5)
             self.assertAlmostEqual(S._get_legcoef(i), z1/z2)
@@ -57,10 +57,10 @@ class TestSurface(unittest.TestCase):
         self.assertAlmostEqual(S._get_legcoef(2), 75.*np.sqrt(np.pi)/(16.*sc.gamma(2.5)*sc.gamma(5.)))
 
     def test_expansion_cosine_lobe(self):
-        theta_i = np.pi/2.
-        theta_s = 0.234234
-        phi_i = np.pi/2.
-        phi_s = 0.
+        # theta_i = np.pi/2.
+        # theta_s = 0.234234
+        # phi_i = np.pi/2.
+        # phi_s = 0.
 
         # reference solution based on first N Legrende polynomials
         ncoefs = 10
@@ -79,7 +79,7 @@ class TestSurface(unittest.TestCase):
 
         # calculate reference solution
         refs = []
-        for k in xrange(ncoefs):
+        for k in range(ncoefs):
             refs.append(S._get_legcoef(k)*1.)
         ref = np.array(refs).sum()
         self.assertAlmostEqual(r, ref, 15)
@@ -96,7 +96,7 @@ class TestSurface(unittest.TestCase):
         p_0 = np.pi/4.
         p_ex = np.pi/4.
 
-        for i in xrange(N):
+        for i in range(N):
             I = Isotropic()
             self.assertEqual(I.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
 
