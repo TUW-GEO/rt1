@@ -7,9 +7,6 @@ import sys
 
 sys.path.append('..')
 from rt1.scatter import Scatter
-from rt1.volume import Rayleigh
-
-
 
 class TestScatter(unittest.TestCase):
 
@@ -30,9 +27,6 @@ class TestScatter(unittest.TestCase):
         phi_s = 0.12345
         p = S.scat_angle(theta_0, theta_s, phi_0, phi_s, a=[-.7,1.,1.])   # cos(theta)=-1
         self.assertAlmostEqual(p, -.7,10)
-
-
-
 
 
 if __name__ == "__main__":
