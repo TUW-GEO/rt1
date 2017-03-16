@@ -11,10 +11,17 @@ import numpy as np
 from scipy.special import expi
 from scipy.special import expn
 
-from sympy.simplify.fu import TR5
-
 import sympy as sp
 #import time
+
+try:
+    # if symengine is available, use it to perform series-expansions
+    # this try-exept is necessary since symengine does currently not
+    # build correctly with conda using a python 2.7 environment
+    from symengine import expand
+except ImportError:
+    from sympy import expand
+
 
 
 class RT1(object):
@@ -129,10 +136,7 @@ class RT1(object):
         # the use of  .get() is necessary for getting the dict-values since otherwise coefficients that are actually 0.
         # would not appear in the list of fn-coefficients
 
-        # the gained coefficients are further simplified using trigonometric identities to speed up numerical evaluation
-        # the TR5 function performs the replacement sin^2(x) = 1-cos(x)^2 to get rid of remaining sin(x)-terms
-        # this results in a significant speedup for monostatic evaluations (and a moderate effect on bistatic calculations)
-        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s) ** n, 0.), max=self.SRF.ncoefs + self.RV.ncoefs + 1)) for n in range(self.SRF.ncoefs + self.RV.ncoefs + 1)]
+        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.) for n in range(self.SRF.ncoefs + self.RV.ncoefs + 1)]
 
         return fn
 
@@ -149,15 +153,15 @@ class RT1(object):
         volexp = self.RV.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
         brdfexp = self.SRF.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
         #   preparation of the product of p*BRDF for coefficient retrieval
-        fPoly = (2 * sp.pi * volexp * brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
+        fPoly = expand(2 * sp.pi * volexp * brdfexp)  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
 
         # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
         theta_s = sp.Symbol('theta_s')
-        replacements = [(sp.sin(theta_s) ** i, ((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2)).expand())  for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
-        res = expr.xreplace(dict(replacements)).expand()
+        replacements = [(sp.sin(theta_s) ** i, expand((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2)))  for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
+        res = expand(expr.xreplace(dict(replacements)))
 
         return res
 
@@ -182,14 +186,14 @@ class RT1(object):
         replacements1 = [(sp.sin(phi_s) ** i, 0.) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 1]
 
         # then substitute the sine**2 by 1-cos**2
-        replacements1 = replacements1 + [(sp.sin(phi_s) ** i, ((1. - sp.cos(phi_s) ** 2) ** sp.Rational(i, 2)).expand()) for i in range(2, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
-        res = expr.xreplace(dict(replacements1)).expand()
+        replacements1 = replacements1 + [(sp.sin(phi_s) ** i, expand((1. - sp.cos(phi_s) ** 2) ** sp.Rational(i, 2))) for i in range(2, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
+        res = expand(expr.xreplace(dict(replacements1)))
 
         # replacements need to be done simultaneously, otherwise all remaining sin(phi_s)**even will be replaced by 0
 
         # integrate the cosine terms
         replacements3 = [(sp.cos(phi_s) ** i, self._cosintegral(i)) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1)]
-        res = res.xreplace(dict(replacements3)).expand()
+        res = expand(res.xreplace(dict(replacements3)))
         return res
 
     def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
