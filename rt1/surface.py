@@ -4,7 +4,7 @@ Definition of BRDF functions
 
 import numpy as np
 import sympy as sp
-from rt1.scatter import Scatter
+from .scatter import Scatter
 
 
 class Surface(Scatter):
