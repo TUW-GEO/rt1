@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 #plot of 3d scattering distribution
 import mpl_toolkits.mplot3d as plt3d
-from scatter import Scatter
+from .scatter import Scatter
 
 class Plots(Scatter):
     """
@@ -113,7 +113,7 @@ class Plots(Scatter):
                    
                 # set incidence-angles for which p is calculated
                 plottis=np.deg2rad(incp)
-                colors = ['k','r','g','b','c','m','y']*(len(plottis)/7+1)
+                colors = ['k','r','g','b','c','m','y']*round((len(plottis)/7.+1))
                 # reset color-counter
                 i=0
                 
@@ -167,7 +167,7 @@ class Plots(Scatter):
                 
                 # set incidence-angles for which the BRDF is calculated
                 plottis=np.deg2rad(incBRDF)
-                colors = ['k', 'r','g','b', 'c','m','y']*(len(plottis)/7+1)
+                colors = ['k', 'r','g','b', 'c','m','y']*round((len(plottis)/7.+1))
                 i=0
                 
                 brdfmax = BRDFmultip*np.max(brdffunkt(plottis, plottis, 0., 0.))

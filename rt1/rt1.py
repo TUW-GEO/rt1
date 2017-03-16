@@ -269,8 +269,8 @@ class RT1(object):
         nmax = len(self.fn)
         hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)
         S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
-        fn = np.array([self._get_fn(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)])
+        fn = np.array([self._get_fn(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])
 
-        mu = np.array([mu1 ** (n + 1) for n in xrange(nmax)])
+        mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
         return S
