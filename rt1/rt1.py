@@ -9,7 +9,7 @@ Quast & Wagner (2016): doi:10.1364/AO.55.005379
 
 import numpy as np
 from scipy.special import expi
-# from scipy.special import expn
+from scipy.special import expn
 
 from sympy.simplify.fu import TR5
 
@@ -298,7 +298,7 @@ class RT1(object):
         #~ else:
         # hopefully faster
         # try to seaparate loops
-        S2 = np.array([np.sum(mu1 ** (-k) * (eapn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
+        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
 
 
         if True:  # regular processing
