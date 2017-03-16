@@ -18,8 +18,10 @@ import sympy as sp
 
 import multiprocessing
 
+
 def _get_fn_wrapper1(x):
     return _get_fn_wrapper(x[0], x[1], x[2], x[3], x[4], x[5])
+
 
 def _get_fn_wrapper(fn, n, t_0, p_0, t_ex, p_ex):
     """
@@ -42,14 +44,11 @@ def _get_fn_wrapper(fn, n, t_0, p_0, t_ex, p_ex):
     else:
         if fn[n] == 0:
             def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
-                return np.ones_like(theta_0)*np.ones_like(phi_0)*np.ones_like(theta_ex)*np.ones_like(phi_ex)*0.
+                return np.ones_like(theta_0) * np.ones_like(phi_0) * np.ones_like(theta_ex) * np.ones_like(phi_ex) * 0.
         else:
-            fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex),fn[n], modules = ["numpy","sympy"])
+            fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), fn[n], modules=["numpy", "sympy"])
 
         return fnfunc(t_0, p_0, t_ex, p_ex)
-
-
-    
 
 
 class RT1(object):
@@ -91,28 +90,25 @@ class RT1(object):
         """
 
         self.geometry = geometry
-        assert isinstance(geometry,str), 'ERROR: geometry must be a 4-character string'
+        assert isinstance(geometry, str), 'ERROR: geometry must be a 4-character string'
         assert len(self.geometry) == 4
-
 
         self.I0 = I0
 
-        # use only theta_0 and phi_0 if geometry is set to mono 
+        # use only theta_0 and phi_0 if geometry is set to mono
         if self.geometry == 'mono':
-            self.t_0  = t_0
+            self.t_0 = t_0
             self.t_ex = t_0
-            self.p_0  = p_0
+            self.p_0 = p_0
             self.p_ex = p_0 + np.pi
         else:
-            self.t_0  = t_0
+            self.t_0 = t_0
             self.t_ex = t_ex
-            self.p_0  = p_0
+            self.p_0 = p_0
             self.p_ex = p_ex
-
 
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
-
         # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
         # to allow calling Volume-elements without providing omega & tau which is needed to generate
         # linear-combinations of Volume-elements with unambiguous tau- & omega-specifications
@@ -126,8 +122,6 @@ class RT1(object):
 
         if self.RV.tau == 0.:
             assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
-
-
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
@@ -151,18 +145,14 @@ class RT1(object):
         else:
             self.fn = fn
 
-
     # calculate cosines of incident- and exit angle
     def _get_mu_0(self):
         return np.cos(self.t_0)
     _mu_0 = property(_get_mu_0)
-    
+
     def _get_mu_ex(self):
         return np.cos(self.t_ex)
     _mu_ex = property(_get_mu_ex)
-    
-
-
 
     def _extract_coefficients(self, expr):
         """
@@ -174,7 +164,7 @@ class RT1(object):
 
         theta_s = sp.Symbol('theta_s')
         # collect terms with equal powers of cos(theta_s)
-        expr_sort = sp.collect(expr,sp.cos(theta_s),evaluate=False)
+        expr_sort = sp.collect(expr, sp.cos(theta_s), evaluate=False)
 
         # convert generated dictionary to list of coefficients
         # the use of  .get() is necessary for getting the dict-values since otherwise coefficients that are actually 0.
@@ -183,10 +173,9 @@ class RT1(object):
         # the gained coefficients are further simplified using trigonometric identities to speed up numerical evaluation
         # the TR5 function performs the replacement sin^2(x) = 1-cos(x)^2 to get rid of remaining sin(x)-terms
         # this results in a significant speedup for monostatic evaluations (and a moderate effect on bistatic calculations)
-        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s)**n,0.), max=self.SRF.ncoefs+self.RV.ncoefs+1)) for n in range(self.SRF.ncoefs+self.RV.ncoefs+1)]
+        fn = [sp.expand(TR5(expr_sort.get(sp.cos(theta_s) ** n, 0.), max=self.SRF.ncoefs + self.RV.ncoefs + 1)) for n in range(self.SRF.ncoefs + self.RV.ncoefs + 1)]
 
         return fn
-
 
     def _calc_interaction_expansion(self):
         """
@@ -198,33 +187,30 @@ class RT1(object):
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
 
-        volexp  = self.RV.legexpansion(self.t_0,self.t_ex,self.p_0,self.p_ex,self.geometry).doit()
-        brdfexp = self.SRF.legexpansion(self.t_0,self.t_ex,self.p_0,self.p_ex,self.geometry).doit()
+        volexp = self.RV.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
+        brdfexp = self.SRF.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
         #   preparation of the product of p*BRDF for coefficient retrieval
-        fPoly =(2*sp.pi*volexp*brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
-
+        fPoly = (2 * sp.pi * volexp * brdfexp).expand().doit()  # this is the eq.23. and would need to be integrated from 0 to 2pi
 
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
 
         # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
         theta_s = sp.Symbol('theta_s')
-        replacements = [(sp.sin(theta_s)**i,((1.-sp.cos(theta_s)**2)**sp.Rational(i,2)).expand())  for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
+        replacements = [(sp.sin(theta_s) ** i, ((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2)).expand())  for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
         res = expr.xreplace(dict(replacements)).expand()
 
         return res
-
 
     def _cosintegral(self, i):
         """
         integral of cos(x)**i in the interval 0 ... 2*pi
         """
-        if i % 2==0:
-            return (2**(-i))*sp.binomial(i,i*sp.Rational(1,2))
+        if i % 2 == 0:
+            return (2 ** (-i)) * sp.binomial(i, i * sp.Rational(1, 2))
         else:
             # for odd exponents result is always zero
             return 0.
-
 
     def _integrate_0_2pi_phis(self, expr):
         """
@@ -234,30 +220,22 @@ class RT1(object):
         phi_s = sp.Symbol('phi_s')
 
         # replace first all odd powers of sin(phi_s) as these are all zero for the integral
-        replacements1 = [(sp.sin(phi_s)**i, 0.) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 1]
+        replacements1 = [(sp.sin(phi_s) ** i, 0.) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 1]
 
         # then substitute the sine**2 by 1-cos**2
-        replacements1 = replacements1 + [(sp.sin(phi_s)**i, ((1.-sp.cos(phi_s)**2)**sp.Rational(i,2)).expand()) for i in range(2,self.SRF.ncoefs+self.RV.ncoefs+1) if i % 2 == 0]
+        replacements1 = replacements1 + [(sp.sin(phi_s) ** i, ((1. - sp.cos(phi_s) ** 2) ** sp.Rational(i, 2)).expand()) for i in range(2, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
         res = expr.xreplace(dict(replacements1)).expand()
 
         # replacements need to be done simultaneously, otherwise all remaining sin(phi_s)**even will be replaced by 0
 
         # integrate the cosine terms
-        replacements3 = [(sp.cos(phi_s)**i,self._cosintegral(i)) for i in range(1,self.SRF.ncoefs+self.RV.ncoefs+1)]
+        replacements3 = [(sp.cos(phi_s) ** i, self._cosintegral(i)) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1)]
         res = res.xreplace(dict(replacements3)).expand()
         return res
-
-
-
-
 
     def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
         """ wrapper function is used to have no effect on tests, external function needed for parallelization """
         return _get_fn_wrapper(self.fn, n, t_0, p_0, t_ex, p_ex)
-
-
-
-
 
     def calc(self):
         """
@@ -281,13 +259,13 @@ class RT1(object):
         """
         (17)
         """
-        return self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau/self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+        return self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
 
     def volume(self):
         """
         (18)
         """
-        return (self.I0*self.RV.omega*self._mu_0/(self._mu_0+self._mu_ex)) * (1.-np.exp(-(self.RV.tau/self._mu_0)-(self.RV.tau/self._mu_ex))) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
+        return (self.I0 * self.RV.omega * self._mu_0 / (self._mu_0 + self._mu_ex)) * (1. - np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex))) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
 
     def interaction(self):
         """
@@ -295,7 +273,7 @@ class RT1(object):
         """
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
-        return self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau/self._mu_ex) * Fint1 + np.exp(-self.RV.tau/self._mu_0)*Fint2 )
+        return self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
@@ -308,8 +286,7 @@ class RT1(object):
         """
         nmax = len(self.fn)
 
-
-        hlp1 = np.exp(-self.RV.tau/mu1)*np.log(mu1/(1.-mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau/mu1)*expi(self.RV.tau/mu1-self.RV.tau)
+        hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)
 
         #~ if False:
             #~ # standard way
@@ -321,7 +298,7 @@ class RT1(object):
         #~ else:
         # hopefully faster
         # try to seaparate loops
-        S2 = np.array([np.sum(mu1**(-k) * (eapn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1)) for n in range(nmax)])
+        S2 = np.array([np.sum(mu1 ** (-k) * (eapn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
 
 
         if True:  # regular processing
@@ -332,9 +309,8 @@ class RT1(object):
             fn = pool.map(_get_fn_wrapper1, args)
 
         #fn = np.random.random(nmax)
-        mu = np.array([mu1**(n+1) for n in xrange(nmax)])
+        mu = np.array([mu1 ** (n + 1) for n in xrange(nmax)])
 
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
 
         return S
-
