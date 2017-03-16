@@ -16,47 +16,13 @@ from sympy.simplify.fu import TR5
 import sympy as sp
 #import time
 
-import multiprocessing
-
-
-def _get_fn_wrapper1(x):
-    return _get_fn_wrapper(x[0], x[1], x[2], x[3], x[4], x[5])
-
-
-def _get_fn_wrapper(fn, n, t_0, p_0, t_ex, p_ex):
-    """
-    function to evaluate expansion coefficients
-    as function of incident geometry
-
-    independent of class
-    """
-    theta_0 = sp.Symbol('theta_0')
-    phi_0 = sp.Symbol('phi_0')
-    theta_ex = sp.Symbol('theta_ex')
-    phi_ex = sp.Symbol('phi_ex')
-
-    # the destinction between zero and nonzero fn-coefficients is necessary because sympy treats
-    # any symbol multiplied by 0 as 0, which results in a function that returns 0 instead of an array of zeroes!
-    # -> see  https://github.com/sympy/sympy/issues/3935
-
-    if n >= len(fn):
-        return 0.
-    else:
-        if fn[n] == 0:
-            def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
-                return np.ones_like(theta_0) * np.ones_like(phi_0) * np.ones_like(theta_ex) * np.ones_like(phi_ex) * 0.
-        else:
-            fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), fn[n], modules=["numpy", "sympy"])
-
-        return fnfunc(t_0, p_0, t_ex, p_ex)
-
 
 class RT1(object):
     """
     main class to perform RT simulations
     """
 
-    def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv', ncpu=None):
+    def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         """
         Parameters
         ----------
@@ -125,13 +91,6 @@ class RT1(object):
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
-
-
-        if ncpu is None:
-            self.ncpu = multiprocessing.cpu_count()
-        else:
-            self.ncpu = ncpu
-        #~ print 'NCPU: ', self.ncpu
 
 
         if fn is None:
@@ -233,9 +192,32 @@ class RT1(object):
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
-    def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
-        """ wrapper function is used to have no effect on tests, external function needed for parallelization """
-        return _get_fn_wrapper(self.fn, n, t_0, p_0, t_ex, p_ex)
+    def _get_fn(self, fn, n, t_0, p_0, t_ex, p_ex):
+        """
+        function to evaluate expansion coefficients
+        as function of incident geometry
+        """
+        theta_0 = sp.Symbol('theta_0')
+        phi_0 = sp.Symbol('phi_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_ex = sp.Symbol('phi_ex')
+
+        # the destinction between zero and nonzero fn-coefficients is necessary because sympy treats
+        # any symbol multiplied by 0 as 0, which results in a function that returns 0 instead of an array of zeroes!
+        # -> see  https://github.com/sympy/sympy/issues/3935
+
+        if n >= len(fn):
+            return 0.
+        else:
+            if fn[n] == 0:
+                def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
+                    return np.ones_like(theta_0) * np.ones_like(phi_0) * np.ones_like(theta_ex) * np.ones_like(phi_ex) * 0.
+            else:
+                fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), fn[n], modules=["numpy", "sympy"])
+
+            return fnfunc(t_0, p_0, t_ex, p_ex)
+
+
 
     def calc(self):
         """
@@ -285,32 +267,10 @@ class RT1(object):
         mansucript.
         """
         nmax = len(self.fn)
-
         hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)
-
-        #~ if False:
-            #~ # standard way
-            #~ for n in range(nmax):
-                #~
-                #~ S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
-                #~ fn = self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2)
-                #~ S += fn * mu1**(n+1) * (hlp1 + S2)
-        #~ else:
-        # hopefully faster
-        # try to seaparate loops
         S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
+        fn = np.array([self._get_fn(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)])
 
-
-        if True:  # regular processing
-            fn = np.array([_get_fn_wrapper(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])   # this is the by far slowes part!!
-        else:  # parallel processing (IS MUCH SLOWER AT THE MOMENT!! REAL OVERHEAD DUE TO PARALLELIZATION)
-            pool = multiprocessing.Pool(processes=self.ncpu)
-            args = [(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)]
-            fn = pool.map(_get_fn_wrapper1, args)
-
-        #fn = np.random.random(nmax)
-        mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
-
+        mu = np.array([mu1 ** (n + 1) for n in xrange(nmax)])
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
-
         return S
