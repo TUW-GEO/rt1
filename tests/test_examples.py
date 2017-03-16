@@ -4,6 +4,9 @@
 test examples given in paper by comparison against reference solution
 """
 
+from __future__ import print_function
+
+
 from nose.tools import nottest
 
 import unittest
@@ -15,16 +18,14 @@ import sys
 sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh
-from rt1.surface import Isotropic, CosineLobe
-
-import json
+from rt1.surface import CosineLobe
 
 
 class TestExamples(unittest.TestCase):
 
     def setUp(self):
         # read reference solutions for backscattering case
-        fname = 'example1_fn_cc.tab'
+        # fname = 'example1_fn_cc.tab'
         #x = np.loadtxt(fname, delimiter='\t',skiprows=1)
         #~ self.inc = x[:,0]
         #~ self.n = x[:,1]
@@ -43,7 +44,7 @@ class TestExamples(unittest.TestCase):
         #~ phi_0 = np.pi/2.
         phi_ex = np.pi  # backscatter case
         fn = None
-        for i in xrange(0,len(self.inc),self.step):
+        for i in range(0,len(self.inc),self.step):
 
             #~ if self.n[i] % 2 == 1:
                 #~ continue   # todo skipping odds at the moment
@@ -56,7 +57,7 @@ class TestExamples(unittest.TestCase):
 
             mysol = RT._get_fn(int(self.n[i]), RT.theta_0, phi_0)
 
-            print 'inc,n,fnref,mysol:', RT.t_0, self.n[i], self.fn[i], mysol
+            print('inc,n,fnref,mysol:', RT.t_0, self.n[i], self.fn[i], mysol)
             fn=RT.fn
 
             self.assertEqual(self.tau[i],V.tau)   # check that tau for reference is the same as used for Volume object
@@ -81,8 +82,8 @@ class TestExamples(unittest.TestCase):
         I0=1.
         phi_0 = 0.
         phi_ex = np.pi  # backscatter case
-        for i in xrange(0,len(self.inc),self.step):
-            print 'i,n:', i, self.n[i]
+        for i in range(0,len(self.inc),self.step):
+            print('i,n:', i, self.n[i])
             t_0 = self.inc[i]
             t_ex = t_0*1.
 
@@ -137,7 +138,7 @@ class TestExamples(unittest.TestCase):
         #~ phi_0 = x['phii']
         #~ phi_ex = x['phiex']
         #~ step = 10
-        #~ for i in xrange(0,len(inc),step):
+        #~ for i in range(0,len(inc),step):
             #~ t0 = inc[i]
             #~ mu_0 = np.cos(t0)
             #~ mu_ex = mu_0*1. # test is for backscattering case
