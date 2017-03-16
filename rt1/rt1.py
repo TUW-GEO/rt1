@@ -192,7 +192,7 @@ class RT1(object):
         res = res.xreplace(dict(replacements3)).expand()
         return res
 
-    def _get_fn(self, fn, n, t_0, p_0, t_ex, p_ex):
+    def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
         """
         function to evaluate expansion coefficients
         as function of incident geometry
@@ -206,14 +206,14 @@ class RT1(object):
         # any symbol multiplied by 0 as 0, which results in a function that returns 0 instead of an array of zeroes!
         # -> see  https://github.com/sympy/sympy/issues/3935
 
-        if n >= len(fn):
+        if n >= len(self.fn):
             return 0.
         else:
-            if fn[n] == 0:
+            if (self.fn[n] == 0. or self.fn[n] == 0):
                 def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
                     return np.ones_like(theta_0) * np.ones_like(phi_0) * np.ones_like(theta_ex) * np.ones_like(phi_ex) * 0.
             else:
-                fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), fn[n], modules=["numpy", "sympy"])
+                fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), self.fn[n], modules=["numpy", "sympy"])
 
             return fnfunc(t_0, p_0, t_ex, p_ex)
 
@@ -269,7 +269,7 @@ class RT1(object):
         nmax = len(self.fn)
         hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)
         S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
-        fn = np.array([self._get_fn(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])
+        fn = np.array([self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
