@@ -4,10 +4,6 @@ import unittest
 import numpy as np
 
 import sys
-#import os
-#import tempfile
-
-#sys.path.append(os.path.join('..', 'mintrend'))
 sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh, HenyeyGreenstein

@@ -290,7 +290,7 @@ class RT1(object):
 
         #~ if False:
             #~ # standard way
-            #~ for n in xrange(nmax):
+            #~ for n in range(nmax):
                 #~
                 #~ S2 = np.sum(mu1**(-k) * (expn(k+1., self.RV.tau) - np.exp(-self.RV.tau/mu1)/k) for k in range(1,(n+1)+1))
                 #~ fn = self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2)
@@ -302,14 +302,14 @@ class RT1(object):
 
 
         if True:  # regular processing
-            fn = np.array([_get_fn_wrapper(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)])   # this is the by far slowes part!!
+            fn = np.array([_get_fn_wrapper(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])   # this is the by far slowes part!!
         else:  # parallel processing (IS MUCH SLOWER AT THE MOMENT!! REAL OVERHEAD DUE TO PARALLELIZATION)
             pool = multiprocessing.Pool(processes=self.ncpu)
             args = [(self.fn, n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in xrange(nmax)]
             fn = pool.map(_get_fn_wrapper1, args)
 
         #fn = np.random.random(nmax)
-        mu = np.array([mu1 ** (n + 1) for n in xrange(nmax)])
+        mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
 
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
 
