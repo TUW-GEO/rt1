@@ -18,7 +18,7 @@ import sys
 sys.path.append('..')
 from rt1.rt1 import RT1
 from rt1.volume import Rayleigh, HenyeyGreenstein
-from rt1.surface import Isotropic, CosineLobe
+from rt1.surface import CosineLobe
 
 
 class TestExamples(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestExamples(unittest.TestCase):
         SRF = CosineLobe(ncoefs=11, i=5, NormBRDF = np.pi) # 11 instead of 10 coefficients used to assure 7 digit precision
 
         fn = None
-        for i in xrange(len(inc)):
+        for i in range(len(inc)):
             # set geometries
             t_0 = np.deg2rad(inc[i])
             p_0 = np.deg2rad(0.)
@@ -88,7 +88,7 @@ class TestExamples(unittest.TestCase):
         SRF = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
 
         fn = None
-        for i in xrange(len(inc)):
+        for i in range(len(inc)):
             # set geometries
             t_0 = np.deg2rad(inc[i])
             p_0 = np.deg2rad(0.)
