@@ -1,18 +1,15 @@
 language: python
 python:
   - "2.7"
+  - "3.4"
+  - "3.5"
   - "3.6"
-#- "3.2"
-#  - "3.3"
-#  - "3.4"
-#  - "3.5"
 
 virtualenv:
 system_site_packages: true
  
 before_install:
   - sudo apt-get update
-  
   
 # command to install dependencies
 install:
