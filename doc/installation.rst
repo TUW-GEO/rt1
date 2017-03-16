@@ -50,7 +50,7 @@ Independent how you installed `rt1`, you should test that it was sucessfull by t
 
     python -c "from rt1 install RT1"
 
-If you don't get an error message, the module import was sucessfull.
+If you don't get an error message, the module import was sucessful.
 
 
 
