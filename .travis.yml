@@ -11,47 +11,9 @@ before_install:
   
 # command to install dependencies
 install:
-  #- pip install .
   - pip install matplotlib
   - pip install scipy
   - pip install sympy
 
-
-# general setup
-# - sudo apt-get install python-pip python-dev
-# now install package with pip and the uninstall it again
-#- sudo pip install geoval
-# latex environment
-#- sudo apt-get install texlive-latex-base texlive-latex-extra texlive-latex-recommended
-# basic python modules
-###- sudo apt-get install python-numpy
-# - sudo apt-get install python-scipy
-# todo clarify alternative installation for SCIPY to allow for most recent version ??
-#- pip install pyparsing
-
-#- sudo apt-get install python-mpltoolkits.basemap python-mpltoolkits.basemap-data
-# projection libraries
-# - sudo apt-get install libgeos-dev libproj-dev
-# testing environment
-###- pip install coveralls pytest-cov
-
-
-# I/O related things
-
-# netCDF4 installation
-#- sudo C_INCLUDE_PATH=/usr/include/mpi pip install netCDF4==1.1.1
-# todo: remove particular dependency on entCDF4 version here again!!!
-#git clone https://github.com/Unidata/netcdf4-python.git
-#pushd netcdf4-python
-#cp setup.cfg.template setup.cfg
-#popd
-
-# do actual installation
-####- sudo /usr/bin/python setup.py build_ext --inplace install
-#####- sudo /usr/bin/python setup.py build_ext does not work yet!
-# - sudo sh compile_extensions.sh
-
 script:
-  - nosetests --with-coverage --cover-package=geoval
-#after_success:
-#  - coveralls
+  - nosetests 
