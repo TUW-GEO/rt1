@@ -11,14 +11,14 @@ class Surface(Scatter):
     """
     basic class
     """
+
     def __init__(self, **kwargs):
         # set scattering angle generalization-matrix to [1,1,1] if it is not explicitly provided by the chosen class.
         # this results in a peak in specular-direction which is suitable for describing surface BRDF's
-        self.a = getattr(self, 'a', [1.,1.,1.])
+        self.a = getattr(self, 'a', [1., 1., 1.])
         self.NormBRDF = kwargs.get('NormBRDF', 1.)
-        assert isinstance(self.NormBRDF,float), 'Error: NormBRDF must be a floating-point number'
-        assert self.NormBRDF >= 0. , 'Error: NormBRDF must be greater than 0'
-
+        assert isinstance(self.NormBRDF, float), 'Error: NormBRDF must be a floating-point number'
+        assert self.NormBRDF >= 0., 'Error: NormBRDF must be greater than 0'
         
     def brdf(self, t_0, t_ex, p_0, p_ex):
         """
@@ -40,16 +40,15 @@ class Surface(Scatter):
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
-        brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex),self._func, modules = ["numpy","sympy"])
+        brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex), self._func, modules=["numpy", "sympy"])
 
         # in case _func is a constant, lambdify will produce a function with scalar output which
         # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
         # Therefore the following query is implemented to ensure correct array-output:
-        if not isinstance(brdffunc(np.array([.1,.2,.3]),.1,.1,.1),np.ndarray):
+        if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1), np.ndarray):
             brdffunc = np.vectorize(brdffunc)
 
         return brdffunc(t_0, t_ex, p_0, p_ex)
-
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
@@ -71,7 +70,6 @@ class Surface(Scatter):
 
         theta_s = sp.Symbol('theta_s')
         phi_s = sp.Symbol('phi_s')
-
 
         NBRDF = self.ncoefs
         n = sp.Symbol('n')
@@ -112,16 +110,14 @@ class Surface(Scatter):
                 raise AssertionError('wrong choice of phi_ex geometry')
 
         #print 'BRDF: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex)
-        return sp.Sum(self.legcoefs*sp.legendre(n,self.scat_angle(theta_s,theta_ex,phi_s,phi_ex, self.a)),(n,0,NBRDF-1))  ###.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
-
-
-
+        return sp.Sum(self.legcoefs * sp.legendre(n, self.scat_angle(theta_s, theta_ex, phi_s, phi_ex, self.a)), (n, 0, NBRDF - 1))  # ##.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class LinCombSRF(Surface):
         '''
         Class to generate linear-combinations of volume-class elements
         '''
+
         def __init__(self, SRFchoices=None, **kwargs):
             '''
             Parameters
@@ -155,8 +151,6 @@ class LinCombSRF(Surface):
             self.ncoefs = self._SRFcombiner().ncoefs
             self.legexpansion = self._SRFcombiner().legexpansion
 
-
-
         def _SRFcombiner(self):
             '''
             Returns a Surface-class element based on an input-array of Surface-class elements.
@@ -173,11 +167,11 @@ class LinCombSRF(Surface):
                 """
                 dummy-Surface-class object used to generate linear-combinations of BRDF-functions
                 """
+
                 def __init__(self, **kwargs):
                     super(BRDFfunction, self).__init__(**kwargs)
                     self._set_function()
                     self._set_legcoefficients()
-
 
                 def _set_function(self):
                     """
@@ -193,7 +187,6 @@ class LinCombSRF(Surface):
                     n = sp.Symbol('n')
                     self.legcoefs = 0.
 
-
             # initialize a combined phase-function class element
             SRFcomb = BRDFfunction()
             SRFcomb.ncoefs = max([SRF[1].ncoefs for SRF in self.SRFchoices])     # set ncoefs of the combined volume-class element to the maximum
@@ -201,17 +194,16 @@ class LinCombSRF(Surface):
                                                                     #   (this is necessary for correct evaluation of fn-coefficients)
 
             # find BRDF functions with equal a parameters
-            equals = [np.where((np.array([VV[1].a for VV in self.SRFchoices])==tuple(V[1].a)).all(axis=1))[0] for V in self.SRFchoices]
+            equals = [np.where((np.array([VV[1].a for VV in self.SRFchoices]) == tuple(V[1].a)).all(axis=1))[0] for V in self.SRFchoices]
             # evaluate index of BRDF-functions that have equal a parameter
             equal_a = list({tuple(row) for row in equals})          # find phase functions where a-parameter is equal
 
-
             # evaluation of combined expansion in legendre-polynomials
             dummylegexpansion = []
-            for i in range(0,len(equal_a)):
+            for i in range(0, len(equal_a)):
 
                 SRFdummy = BRDFfunction()
-                SRFequal = np.take(self.SRFchoices,equal_a[i],axis=0)        # select SRF choices where a parameter is equal
+                SRFequal = np.take(self.SRFchoices, equal_a[i], axis=0)        # select SRF choices where a parameter is equal
 
                 SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])  # set ncoefs to the maximum number within the choices with equal a-parameter
 
@@ -226,7 +218,7 @@ class LinCombSRF(Surface):
                 dummylegexpansion = dummylegexpansion + [SRFdummy.legexpansion]
 
             # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-            SRFcomb.legexpansion = lambda t_0,t_ex,p_0,p_ex,geometry : np.sum([lexp(t_0,t_ex,p_0,p_ex,geometry) for lexp in dummylegexpansion])
+            SRFcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum([lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion])
 
 
             for SRF in self.SRFchoices:
@@ -235,25 +227,20 @@ class LinCombSRF(Surface):
             return SRFcomb
 
 
-
-
-
-
-
 class Isotropic(Surface):
     """
     define an isotropic surface
     """
+
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
         self._set_function()
         self._set_legcoefficients()
 
-
     def _set_legcoefficients(self):
         self.ncoefs = 1
         n = sp.Symbol('n')
-        self.legcoefs = (self.NormBRDF/sp.pi)*sp.KroneckerDelta(0,n)
+        self.legcoefs = (self.NormBRDF / sp.pi) * sp.KroneckerDelta(0, n)
 
     def _set_function(self):
         """
@@ -264,10 +251,7 @@ class Isotropic(Surface):
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
         phi_ex = sp.Symbol('phi_ex')
-        self._func = self.NormBRDF/sp.pi
-
-
-
+        self._func = self.NormBRDF / sp.pi
 
 
 class CosineLobe(Surface):
@@ -284,25 +268,25 @@ class CosineLobe(Surface):
     to a=[1.,1.,1.], LafortuneLobe is the equal to the ordinary CosineLobe.
     """
 
-    def __init__(self, ncoefs=None, i=None, a=[1.,1.,1.],  **kwargs):
+    def __init__(self, ncoefs=None, i=None, a=[1., 1., 1.], **kwargs):
         assert ncoefs is not None, 'Error: number of coefficients needs to be provided!'
         assert i is not None, 'Error: Cosine lobe power needs to be specified!'
         super(CosineLobe, self).__init__(**kwargs)
         assert ncoefs > 0
         self.i = i
-        assert isinstance(self.i,int), 'Error: Cosine lobe power needs to be an integer!'
+        assert isinstance(self.i, int), 'Error: Cosine lobe power needs to be an integer!'
         assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
         self.a = a
-        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
-        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
-        assert all(type(x)==float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
+        assert isinstance(self.a, list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a) == 3, 'Error: Generalization-parameter list must contain 3 values'
+        assert all(type(x) == float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
         self.ncoefs = int(ncoefs)
         self._set_function()
         self._set_legcoefficients()
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF/sp.pi * ((2**(-2-self.i)*(1+2*n)*sp.sqrt(sp.pi)*sp.gamma(1+self.i))/(sp.gamma((2-n+self.i)*sp.Rational(1,2))*sp.gamma((3+n+self.i)*sp.Rational(1,2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        self.legcoefs = self.NormBRDF / sp.pi * ((2 ** (-2 - self.i) * (1 + 2 * n) * sp.sqrt(sp.pi) * sp.gamma(1 + self.i)) / (sp.gamma((2 - n + self.i) * sp.Rational(1, 2)) * sp.gamma((3 + n + self.i) * sp.Rational(1, 2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """
@@ -318,11 +302,8 @@ class CosineLobe(Surface):
         # alternative formulation avoiding the use of sp.Max()
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
-        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, a=self.a)
-        self._func = self.NormBRDF/sp.pi * (x*(1.+sp.sign(x))/2.)**self.i  # eq. A13
-
-
-
+        x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
+        self._func = self.NormBRDF / sp.pi * (x * (1. + sp.sign(x)) / 2.) ** self.i  # eq. A13
 
 
 class HenyeyGreenstein(Surface):
@@ -330,7 +311,8 @@ class HenyeyGreenstein(Surface):
     class to define HenyeyGreenstein scattering function
     for use as BRDF approximation function.
     """
-    def __init__(self, t=None, ncoefs=None, a=[1.,1.,1.], **kwargs):
+
+    def __init__(self, t=None, ncoefs=None, a=[1., 1., 1.], **kwargs):
         assert t is not None, 't parameter needs to be provided!'
         assert ncoefs is not None, 'Number of coefficients needs to be specified'
         super(HenyeyGreenstein, self).__init__(**kwargs)
@@ -339,8 +321,8 @@ class HenyeyGreenstein(Surface):
         assert self.ncoefs > 0
 
         self.a = a
-        assert isinstance(self.a,list), 'Error: Generalization-parameter needs to be a list'
-        assert len(a)==3, 'Error: Generalization-parameter list must contain 3 values'
+        assert isinstance(self.a, list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a) == 3, 'Error: Generalization-parameter list must contain 3 values'
         self._set_function()
         self._set_legcoefficients()
 
@@ -352,27 +334,11 @@ class HenyeyGreenstein(Surface):
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
         phi_ex = sp.Symbol('phi_ex')
-        
-        x = self.scat_angle(theta_0,theta_ex,phi_0,phi_ex, a=self.a)
 
-        self._func = self.NormBRDF * (1.-self.t**2.) / ((sp.pi)*(1.+self.t**2.-2.*self.t*x)**1.5)
+        x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
+
+        self._func = self.NormBRDF * (1. - self.t ** 2.) / ((sp.pi) * (1. + self.t ** 2. - 2. * self.t * x) ** 1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF * (1./(sp.pi)) * (2.*n+1)*self.t**n
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        self.legcoefs = self.NormBRDF * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
