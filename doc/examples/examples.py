@@ -24,11 +24,6 @@ from rt1.surface import HenyeyGreenstein as HGsurface
 from rt1.surface import Isotropic
 from rt1.surface import LinCombSRF
 
-from rt1.rt1 import RT1
-
-
-
-
 # start timer
 tic = timeit.default_timer()
 
@@ -83,8 +78,8 @@ elif example == 3:
     BRDFweights = [.3,.4,.3]
 
     # generate correctly shaped arrays of the phase-functions and their corresponding weighting-factors:
-    Vchoices = map(list,zip(Vweights, phasechoices))
-    SRFchoices = map(list,zip(BRDFweights, BRDFchoices))
+    Vchoices = [[Vweights[i],phasechoices[i]] for i in range(len(phasechoices))]
+    SRFchoices = [[BRDFweights[i],BRDFchoices[i]] for i in range(len(BRDFchoices))]
 
 
     V = LinCombV(tau=0.5, omega=0.4, Vchoices=Vchoices)
