@@ -39,8 +39,8 @@ install:
   - conda install pip
 
   # test installation from pip
-  - pip install rt1
-  - pip uninstall rt1
+  - pip install -q rt1
+  - pip uninstall -q rt1
 
   # test conda based installation (currently not activated as package still missing)
   # - conda install -c conda-forge rt1
