@@ -34,7 +34,7 @@ class RT1(object):
         Parameters
         ----------
         I0 : float
-            incidence radiation     
+            incidence radiation
         t_0 : float
                  incident zenith-angle
         p_0 : float
