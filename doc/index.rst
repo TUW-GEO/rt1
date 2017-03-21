@@ -14,8 +14,10 @@ Contents:
 
    introduction
    installation
+   theory
+   
    model_specification
-
+   examples
 
 Indices and tables
 ==================
