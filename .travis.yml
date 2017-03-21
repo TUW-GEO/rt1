@@ -31,5 +31,21 @@ install:
   - source activate test-environment
   - conda install -c conda-forge python-symengine
 
+  # before the actual installation we test first if existing
+  # installation mechanism using PIP and CONDA work
+  # with the versioned package on PyPi. Please note
+  # that this is not necessarily the same code as in the current development
+  # or master branches
+  - conda install pip
+
+  # test installation from pip
+  - pip install rt1
+  - pip uninstall rt1
+
+  # test conda based installation (currently not activated as package still missing)
+  # - conda install -c conda-forge rt1
+  # - conda uninstall -c conda-forge rt1
+
+
 script:
   - nosetests # -s to see print-output from nosetests
