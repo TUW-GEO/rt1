@@ -1,13 +1,7 @@
-Annex
-=====
+Technical documentation
+=======================
 
+.. toctree::
+   :maxdepth: 4
 
-
-
-TBD Alex: how to integrate automatically generated documentation?
-
-
-
-
-
-.. automodule:: rt1
+   autodoc/rt1
