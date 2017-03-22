@@ -25,7 +25,7 @@ To clarify the definitions, the used angles are illustrated in :numref:`evaluati
 
 .. _evaluation_angles:
 
-.. figure:: _static\evaluation_angles.png
+.. figure:: _static/evaluation_angles.png
    :align: center
    :width: 40%
    :alt: image illustrating the definitions of the used angles
