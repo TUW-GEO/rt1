@@ -3,3 +3,4 @@ autodoc
 _build
 dist
 rt1.egg-info
+.ipynb_checkpoints
