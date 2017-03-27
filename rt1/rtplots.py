@@ -8,9 +8,12 @@ polarplot() ... plot p and the BRDF as polar-plot
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 #plot of 3d scattering distribution
 import mpl_toolkits.mplot3d as plt3d
 from .scatter import Scatter
+
+
 
 class Plots(Scatter):
     """
@@ -20,7 +23,7 @@ class Plots(Scatter):
         pass
 
 
-    def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1. , plabel = 'Volume-Scattering Phase Function', BRDFlabel = 'Surface-BRDF', paprox = True, BRDFaprox = True):
+    def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1. , plabel = 'Volume-Scattering Phase Function', BRDFlabel = 'Surface-BRDF', paprox = True, BRDFaprox = True, plegend=True, plegpos = (0.75, 0.5) , BRDFlegend=True, BRDFlegpos = (0.285, 0.5) , groundcolor = "none"):
         """
         Generation of polar-plots of the volume- and the surface scattering phase function as well as
         the used approximations in terms of legendre-polynomials.
@@ -55,7 +58,18 @@ class Plots(Scatter):
                  Indicator if the approximation of the phase-function in terms of Legendre-polynomials will be plotted.
         BRDFaprox : boolean (default = True)
                  Indicator if the approximation of the BRDF in terms of Legendre-polynomials will be plotted.
-                 
+        plegend : boolean (default = True)
+                 Indicator if a legend should be shown that indicates the meaning of the different colors for the phase-function
+        plegpos : (float,float) (default = (0.75,0.5))
+                 Manual positioning of the legend for the phase-function plot (controlled via the matplotlib.legend keyword  bbox_to_anchor = plegpos )
+        BRDFlegend : boolean (default = True)
+                 Indicator if a legend should be shown that indicates the meaning of the different colors for the BRDF
+        BRDFlegpos : (float,float) (default = (0.285,0.5))
+                 Manual positioning of the legend for the BRDF plot (controlled via the matplotlib.legend keyword  bbox_to_anchor = BRDFlegpos )
+        groundcolor : string (default = "none")
+                 Matplotlib color-indicator to change the color of the lower hemisphere in the BRDF-plot
+                 possible values are: ('r', 'g' , 'b' , 'c' , 'm' , 'y' , 'k' , 'w' , 'none')
+
         Returns:
         ---------
         figure
@@ -105,10 +119,7 @@ class Plots(Scatter):
 
             # plot of volume-scattering phase-function's
             for V in V:
-                # define a plotfunction of the analytic form of p
-                phasefunkt = sp.lambdify(('theta_0', 'theta_ex', 'phi_0', 'phi_ex'), V._func,"numpy") 
                 # define a plotfunction of the legendre-approximation of p
-                #if paprox == True: phasefunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(V.legcoefs*sp.legendre(n,self.thetap('theta_i','theta_s','phi_i','phi_s', V.a)),(n,0,V.ncoefs-1)).doit(),"numpy") 
                 if paprox == True: phasefunktapprox = sp.lambdify(('theta_0', 'theta_s', 'phi_0', 'phi_s'), V.legexpansion('theta_0', 'theta_s', 'phi_0', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
                    
                 # set incidence-angles for which p is calculated
@@ -117,13 +128,14 @@ class Plots(Scatter):
                 # reset color-counter
                 i=0
                 
-                pmax = pmultip*np.max(phasefunkt(plottis, np.pi-plottis, 0., 0.))
+                pmax = pmultip*np.max( V.p(plottis, np.pi-plottis, 0., 0.))
                 
+                if plegend == True: legend_lines = []
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
                     thetass = np.arange(0.,2.*np.pi,.01)
-                    rad= [phasefunkt(ti, ts, 0., 0.) for ts in thetass]
+                    rad= V.p(ti, thetass, 0., 0.)
                     if paprox == True: radapprox = phasefunktapprox(np.pi-ti, thetass, 0., 0.) # the use of np.pi-ti stems from the definition of legexpansion() in volume.py
                     
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
@@ -137,7 +149,14 @@ class Plots(Scatter):
                     polarax.set_yticklabels([])
                     polarax.set_rmax(pmax*1.2)
                     polarax.set_title(plabel + '\n')
-            
+
+                    if plegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
+
+            if paprox == True and plegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+            if plegend == True:
+                legend = plt.legend(bbox_to_anchor=plegpos, loc = 2, handles=legend_lines)
+                legend.get_frame().set_facecolor('w')
+                legend.get_frame().set_alpha(.5)
    
                 
         if SRF !=None:
@@ -155,13 +174,10 @@ class Plots(Scatter):
                 polarax = polarfig.add_subplot(122,projection='polar')
 
 
-
+            if BRDFlegend == True: legend_lines = []
             # plot of BRDF
             for SRF in SRF:
                 # define a plotfunction of the analytic form of the BRDF
-                brdffunkt = sp.lambdify(('theta_0', 'theta_ex', 'phi_0', 'phi_ex'), SRF._func,"numpy") 
-                # define a plotfunction of the analytic form of the BRDF
-                #if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_i', 'theta_s', 'phi_i', 'phi_s'), sp.Sum(SRF.legcoefs*sp.legendre(n,self.thetaBRDF('theta_i','theta_s','phi_i','phi_s', SRF.a)),(n,0,SRF.ncoefs-1)).doit(),"numpy") 
                 if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"]) 
           
                 
@@ -170,29 +186,36 @@ class Plots(Scatter):
                 colors = ['k', 'r','g','b', 'c','m','y']*int(round((len(plottis)/7.+1)))
                 i=0
                 
-                brdfmax = BRDFmultip*np.max(brdffunkt(plottis, plottis, 0., 0.))
+                brdfmax = BRDFmultip*np.max(SRF.brdf(plottis, plottis, 0., 0.))
                 
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
                     thetass = np.arange(-np.pi/2.,np.pi/2.,.01)
-                    rad=[brdffunkt(ti, ts, 0., 0.) for ts in thetass]
+                    rad=SRF.brdf(ti, thetass, 0., 0.)
                     if BRDFaprox == True: radapprox = brdffunktapprox(ti, thetass, 0., 0.)
-                    
+
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
                     polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
-                    
+
                     polarax.plot(thetass,rad, color)
                     if BRDFaprox == True: polarax.plot(thetass,radapprox, color + '--')
-                    polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2,'k')
-                
-                
+                    polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2, color = groundcolor)
+
                     polarax.arrow(-ti,brdfmax*1.2  ,0.,-brdfmax*0.8, head_width =.0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
                     polarax.fill_between(thetass,rad,alpha=0.2, color=color)
                     polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$'])
                     polarax.set_yticklabels([])
                     polarax.set_rmax(brdfmax*1.2)
                     polarax.set_title(BRDFlabel + '\n')
+
+                    if BRDFlegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
+            if BRDFaprox == True and BRDFlegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+            if BRDFlegend == True:
+                legend = plt.legend(bbox_to_anchor=BRDFlegpos, loc = 2, handles=legend_lines)
+                legend.get_frame().set_facecolor('w')
+                legend.get_frame().set_alpha(.5)
+
         plt.show()
         return polarfig
 
@@ -331,7 +354,10 @@ class Plots(Scatter):
                 ax.set_title(label)
 
             ax.set_ylabel('$I^+$ [dB]')
-        ax.legend()
+        legend = ax.legend()
+        legend.get_frame().set_facecolor('w')
+        legend.get_frame().set_alpha(.5)
+
 
         if ylim == None:
             Itotmax = np.nan
@@ -373,7 +399,9 @@ class Plots(Scatter):
             else:
                 ax2.set_ylabel('$I / I_{tot}$')
             ax2.grid()
-            ax2.legend()
+            legend2 = ax2.legend()
+            legend2.get_frame().set_facecolor('w')
+            legend2.get_frame().set_alpha(.5)
         
         plt.show()
         return f
