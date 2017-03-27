@@ -1,3 +1,5 @@
+.. _cha_model_specification:
+
 Model Specification
 ====================
 
