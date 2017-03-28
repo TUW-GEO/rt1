@@ -106,25 +106,62 @@ Incorporating the above specifications, a solution to the RTE is obtained by ass
 Using this assumption, the RTE is expanded into a series with respect to powers of :math:`\kappa_s`, given by:
 
 .. math::
-   I^+ = I_{\textrm{surface}} + I_{\textrm{volume}} + I_{\textrm{interaction}} + \mathcal{O}(\kappa_s^2)
+   I^+ = I_{\textrm{surface}} + I_{\textrm{volume}} + I_{\textrm{interaction}} + (I_{svs}) + \mathcal{O}(\kappa_s^2)
 
 where the individual terms can be interpreted as follows:
 
-- :math:`I_{\textrm{surface}}`: radiation scattered once by the ground surface
-- :math:`I_{\textrm{volume}}`: radiation scattered once by the covering layer
-- :math:`I_{\textrm{interaction}}`: radiation scattered once by the ground surface and once by the covering layer
+- :math:`I_{\textrm{surface}}`:  radiation scattered once by the ground surface
+- :math:`I_{\textrm{volume}}`: radiation scattered once within the covering layer
+- :math:`I_{\textrm{interaction}}`: radiation scattered once by the ground surface and once within the covering layer
+- :math:`I_{svs}`: radiation scattered twice by the ground surface and once within the covering layer
+   (This contribution is assumed to be negligible due to second order surface-scattering) 
 
+After some algebraic manipulations the individual contributions are found to be given by (details can be found in [QuWa16]_):
 
 .. math::
-   I_{\textrm{surface}}(\theta_0, \theta_{ex}) = I_0 e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}} \cos(\theta_0) BRDF(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
+   I_{\textrm{surface}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}} \cos(\theta_0) BRDF(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
 
 .. math::
-   I_{\textrm{volume}}(\theta_0, \theta_{ex}) = I_0 \omega  \frac{\cos(\theta_0)}{\cos(\theta_0) + \cos(\theta_{ex})} \left( 1 - e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}}  \right)    \hat{p}(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
+   I_{\textrm{volume}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 ~\omega ~ \frac{\cos(\theta_0)}{\cos(\theta_0) + \cos(\theta_{ex})} \left( 1 - e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}}  \right)    \hat{p}(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
+
+.. math::
+   I_{\textrm{interaction}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 ~ \cos(\theta_0) ~ \omega \left\lbrace e^{-\frac{\tau}{\cos(\theta_{ex})}} F_{int}(\theta_0,\theta_{ex}) + e^{-\frac{\tau}{\cos(\theta_{ex})}} F_{int}(\theta_{ex},\theta_{0})    \right\rbrace
+
+.. math::
+   \textrm{with} \qquad \qquad F_{int}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = \int\limits_0^{2\pi} \int\limits_0^\pi   \frac{\cos(\theta)}{\cos(\theta_0)-\cos(\theta)} \left( e^{-\frac{\tau}{\cos(\theta_0)}} - e^{-\frac{\tau}{\cos(\theta)}} \right) ~ \hat{p}(\theta_0, \phi_0, \theta , \phi) BRDF(\pi - \theta, \phi, \theta_{ex}, \phi_{ex})  \sin(\theta) d\theta d\phi
 
 
 
+Evaluation of the interaction-contribution
+-----------------------------------
 
+In order to analytically evaluate the remaining integral appearing in the interaction-term, the BRDF and the scattering phase-function of the covering layer are approximated via a 
+Legendre-series in a (possibly generalized) scattering angle of the form:
+
+.. math::
+   BRDF(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = \sum_{n=0}^{N_b} b_n P_n(\cos(\Theta_{a_b})) 
    
+.. math::
+   \hat{p}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = \sum_{n=0}^{N_p} p_n P_n(\cos(\Theta_{a_p})) 
+
+where :math:`P_n(x)` denotes the :math:`\textrm{n}^\textrm{th}` Legendre-polynomial and the generalized scattering angle :math:`\Theta_a` is defined via:
+
+.. math::
+   \cos(\Theta_a) = a_0 \cos(\theta_0) \cos(\theta_s) + \sin(\theta_0) \sin(\theta_s) \left[a_1 \cos(\phi_0) \cos(\phi_s) + a_2 \sin(\phi_0) \sin(\phi_s)  \right]
+
+ 
+Once the :math:`b_n` and :math:`p_n` coefficients are known, the method developed in [QuWa16]_ is used to analytically solve :math:`I_{\textrm{interaction}}`.
+
+This is done in two steps:
+
+First, the so-called fn-coefficients are evaluated which are defined via:
+
+.. math::
+   fn = blablabla
    
+Second, :math:`I_{\textrm{interaction}}` is evaluated using an analytic solution to the remaining :math:`\theta`-integral.
+
+ 
+ 
 .. rubric:: References
 .. [QuWa16]  Raphael Quast and Wolfgang Wagner, "Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media," Appl. Opt. 55, 5379-5386 (2016) 
