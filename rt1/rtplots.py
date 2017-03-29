@@ -125,12 +125,13 @@ class Plots(Scatter):
                 # set incidence-angles for which p is calculated
                 plottis=np.deg2rad(incp)
                 colors = ['k','r','g','b','c','m','y']*int(round((len(plottis)/7.+1)))
-                # reset color-counter
-                i=0
                 
                 pmax = pmultip*np.max( V.p(plottis, np.pi-plottis, 0., 0.))
                 
                 if plegend == True: legend_lines = []
+
+                # set color-counter to 0
+                i=0
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
@@ -150,14 +151,19 @@ class Plots(Scatter):
                     polarax.set_rmax(pmax*1.2)
                     polarax.set_title(plabel + '\n')
 
-                    if plegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
-
-            if paprox == True and plegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+            # add legend for covering layer phase-functions
             if plegend == True:
+                i=0
+                for ti in plottis:
+                    color = colors[i]
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
+                    i = i +1
+                if paprox == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+
                 legend = plt.legend(bbox_to_anchor=plegpos, loc = 2, handles=legend_lines)
                 legend.get_frame().set_facecolor('w')
                 legend.get_frame().set_alpha(.5)
-   
+
                 
         if SRF !=None:
             # if SRF is a scalar, make it a list
@@ -184,10 +190,11 @@ class Plots(Scatter):
                 # set incidence-angles for which the BRDF is calculated
                 plottis=np.deg2rad(incBRDF)
                 colors = ['k', 'r','g','b', 'c','m','y']*int(round((len(plottis)/7.+1)))
-                i=0
-                
+
                 brdfmax = BRDFmultip*np.max(SRF.brdf(plottis, plottis, 0., 0.))
                 
+                # set color-counter to 0
+                i=0
                 for ti in plottis:
                     color = colors[i]
                     i=i+1
@@ -198,7 +205,7 @@ class Plots(Scatter):
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
                     polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
 
-                    polarax.plot(thetass,rad, color)
+                    polarax.plot(thetass, rad, color = color)
                     if BRDFaprox == True: polarax.plot(thetass,radapprox, color + '--')
                     polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2, color = groundcolor)
 
@@ -209,9 +216,15 @@ class Plots(Scatter):
                     polarax.set_rmax(brdfmax*1.2)
                     polarax.set_title(BRDFlabel + '\n')
 
-                    if BRDFlegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
-            if BRDFaprox == True and BRDFlegend == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+            # add legend for BRDF's
             if BRDFlegend == True:
+                i=0
+                for ti in plottis:
+                    color = colors[i]
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
+                    i = i +1
+                if BRDFaprox == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+
                 legend = plt.legend(bbox_to_anchor=BRDFlegpos, loc = 2, handles=legend_lines)
                 legend.get_frame().set_facecolor('w')
                 legend.get_frame().set_alpha(.5)
