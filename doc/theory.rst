@@ -34,7 +34,7 @@ The individual variables are hereby defined as follows:
  
 	A relationship between the module-functions and the functions within the subsequent discussion is therefore given by:
  
-	:code:`SRF.BRDF(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~BRDF(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex}) \quad` and :math:`\mbox{}\quad` :code:`V.p(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~\hat{p}(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex})`
+	:code:`SRF.brdf(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~BRDF(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex}) \quad` and :math:`\mbox{}\quad` :code:`V.p(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~\hat{p}(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex})`
 
  
 
@@ -46,7 +46,7 @@ Problem Geometry and Boundary Conditions
 
 .. figure:: _static/problem_geometry.png
    :align: center
-   :width: 40%
+   :width: 60%
    :alt: geometry applied to the RT1 module
    :figwidth: 100%
 
