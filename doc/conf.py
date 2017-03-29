@@ -19,7 +19,7 @@ import os
 # Enable figure-numbering in "latex-style" (i.e. autonumbering with Fig.1, Fig.2 etc.)
 numfig = True
 
-# Enable equation-numbering 
+# Enable equation-numbering
 math_number_all = True
 
 
