@@ -1,3 +1,5 @@
+.. _cha_model_specification:
+
 Model Specification
 ====================
 
@@ -6,9 +8,12 @@ Evaluation Geometries
 .. role:: latex(raw)
    :format: latex
 
-In order to speed up the evaluation-process, the the geometry at which
-the results are being evaluated must be specified. The geometry is defined by the value of the
-:code:`geometry`-parameter of the RT1-class object:
+From the general definition of the fn-coefficients :eq:`fn_coef_definition` it is apparent that they are in principle dependent on :math:`\theta_0,\phi_0,\theta_{ex}` and :math:`\phi_{ex}`.
+If the series-expansions (:eq:`brdf_expansion` and :eq:`p_expansion`) contain a high number of Legendre-polynomials, the resulting fn-coefficients turn out to be rather lengthy and moreover their evaluation might consume a lot of time.
+Since usually one is only interested in an evaluation with respect to a specific (a-priori known) geometry of the measurement-setup, the rt1-module incorporates a parameter that allows specifying the 
+geometry at which the results are being evaluated. This generally results in a considerable speedup for the fn-coefficient generation.
+
+The measurement-geometry is defined by the value of the :code:`geometry`-parameter of the RT1-class object:
 
 .. code::
 
@@ -59,10 +64,10 @@ The module is set to be evaluated at monostatic geometry by setting:
 
 
 
-**Notice:**
-	- If :code:`geometry` is set to :code:`'mono'`, the values of :code:`mu_ex` and :code:`phi_ex` have no effect on the calculated results since they are automatically set to :code:`mu_ex = mu_0` and :code:`phi_ex = phi_0 + Pi`
-	- For azimuthally symmetric phase-functions [#]_, the value of :code:`phi_0` has no effect
-	  on the calculated result and the best performance will be achieved by setting :code:`phi_0 = 0.`
+.. note::
+	- If :code:`geometry` is set to :code:`'mono'`, the values of :code:`t_ex` and :code:`p_ex` have no effect on the calculated results since they are automatically set to :code:`t_ex = t_0` and :code:`p_ex = p_0 + Pi`
+	- For azimuthally symmetric phase-functions [#]_, the value of :code:`p_0` has no effect
+	  on the calculated result and the best performance will be achieved by setting :code:`p_0 = 0.`
 
 
 .. [#] This referrs to any phase-function whose generalized scattering angle parameters satisfy :code:`a[0] = ?, a[1] == a[2] = ?`. The reason for this simplification stems from the fact that the azimuthal dependency of a generalized scattering angle with :code:`a[1] == a[2]` can be expressed in terms of :math:`\cos(\phi_0 - \phi_{ex})^n`. For the monostatic geometry this reduces to :math:`\cos(\pi)^n = 1` independent of the choice of :math:`\phi_0`.
@@ -79,10 +84,10 @@ the properties of the incidence- and exit angles (see :numref:`evaluation_angles
 
 .. code::
 
-	geometry[0] ...	mu_0
-	geometry[1] ... mu_ex
-	geometry[2] ... phi_0
-	geometry[3] ... phi_ex
+	geometry[0] ...	t_0
+	geometry[1] ... t_ex
+	geometry[2] ... p_0
+	geometry[3] ... p_ex
 
 
 - The character :code:`'f'` indicates a **fixed** angle
@@ -100,7 +105,7 @@ the properties of the incidence- and exit angles (see :numref:`evaluation_angles
 As an example, the choice :code:`geometry = 'fvfv'` represents a measurement setup where the surface is illuminated at
 constant (polar- and azimuth) incidence-angles and the location of the receiver is variable both in azimuth- and polar direction.
 
-**Notice:**
+.. note::
 	- Whenever a single angle is set *fixed*, the calculated fn-coefficients are only valid for this specific choice!
 	- If the chosen scattering-distributions reqire an approximation with a high degree of Legendre-polynomials, evaluating
 	  the interaction-contribution with :code:`geometry = 'vvvv'` might take considerable time since the resulting fn-coefficients
