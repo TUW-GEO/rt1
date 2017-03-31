@@ -3,6 +3,15 @@
 Model Specification
 ====================
 
+TBD: what I am missing here is the concept of linear combinations of phase functions
+
+TBD: I also suggest to add a subsection on current limitations, where you could mention for instance that something like peak like delta functions are not represented yet.
+
+TBD: some more cross references to the literature would be good as well, but has lower priority I would say.
+
+
+
+
 Evaluation Geometries
 ----------------------
 .. role:: latex(raw)

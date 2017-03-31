@@ -23,6 +23,11 @@ The individual variables are hereby defined as follows:
 
 - :math:`\theta` denotes the azimuth angle in a spherical coordinate system
 - :math:`\phi` denotes the polar angle in a spherical coordinate system
+
+TBD: isnt it the other way round? angle definition swapped ??
+
+
+
 - :math:`r` denotes the distance within the covering layer
 - :math:`I_f(r,\theta,\phi)` denotes the specific intensity at a distance :math:`r` within the covering layer propagating in direction :math:`(\theta,\phi)`.
 - :math:`\kappa_{ex}` denotes the extinction-coefficient (i.e. extinction cross section per unit volume)
@@ -51,6 +56,12 @@ Problem Geometry and Boundary Conditions
    :figwidth: 100%
 
    Illustration of the chosen geometry within the RT1-module (adapted from [QuWa16]_)
+
+
+
+
+TBD: we need to be very clear about the angle definitions. Commanly, the incidence angle in microwave remote sensing is denoted as THETAI and is defined as the deviation from the local normal. This is different to what is shown in the figure. For me the incidence angle would be THETA0 in the figure. Thus, what is the angle we use as input to the model? I guess it is THETA0, right??
+
 
 
 As shown in :numref:`problem_geometry`, the considered problem geometry is defined as a rough surface covered by a homogeneous layer of a scattering and absorbing medium.
@@ -108,7 +119,7 @@ Parameters used to describe the scattering properties of the ground surface
 
 where :math:`R(\theta,\phi)` denotes the **Directional-Hemispherical Reflectance** of the ground surface.
 
-
+TBD: perhaps describe also normalization conditions for p and BRDF
    
 First-order solution to the RTE
 --------------------------------
@@ -177,7 +188,7 @@ First, the so-called fn-coefficients are evaluated which are defined via:
 
 Second, :math:`I_{\textrm{interaction}}` is evaluated using the analytic solution to the remaining :math:`\theta`-integral for a given set of fn-coefficients as presented in [QuWa16]_.
  
- 
+TBD: it might help to show one example how these coefficients can be caluclated. You did send be a doucment there in the past, which is currently in the *exampels* directory. I would suggest to include this kind of example here. 
  
 .. rubric:: References
 .. [QuWa16]  R.Quast and W.Wagner, "Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media," Appl.Opt.55, 5379-5386 (2016) 
