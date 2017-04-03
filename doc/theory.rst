@@ -21,13 +21,8 @@ the geometry shown in :numref:`problem_geometry`.
 
 The individual variables are hereby defined as follows:
 
-- :math:`\theta` denotes the azimuth angle in a spherical coordinate system
-- :math:`\phi` denotes the polar angle in a spherical coordinate system
-
-TBD: isnt it the other way round? angle definition swapped ??
-
-
-
+- :math:`\theta` denotes the polar angle in a spherical coordinate system
+- :math:`\phi` denotes the azimuth angle in a spherical coordinate system
 - :math:`r` denotes the distance within the covering layer
 - :math:`I_f(r,\theta,\phi)` denotes the specific intensity at a distance :math:`r` within the covering layer propagating in direction :math:`(\theta,\phi)`.
 - :math:`\kappa_{ex}` denotes the extinction-coefficient (i.e. extinction cross section per unit volume)
@@ -57,10 +52,6 @@ Problem Geometry and Boundary Conditions
 
    Illustration of the chosen geometry within the RT1-module (adapted from [QuWa16]_)
 
-
-
-
-TBD: we need to be very clear about the angle definitions. Commanly, the incidence angle in microwave remote sensing is denoted as THETAI and is defined as the deviation from the local normal. This is different to what is shown in the figure. For me the incidence angle would be THETA0 in the figure. Thus, what is the angle we use as input to the model? I guess it is THETA0, right??
 
 
 
@@ -155,7 +146,7 @@ After some algebraic manipulations the individual contributions are found to be 
 
 
 Evaluation of the interaction-contribution
------------------------------------
+-------------------------------------------
 
 In order to analytically evaluate the remaining integral appearing in the interaction-term, the BRDF and the scattering phase-function of the covering layer are approximated via a 
 Legendre-series in a (possibly generalized) scattering angle of the form:
@@ -172,6 +163,7 @@ where :math:`P_n(x)` denotes the :math:`\textrm{n}^\textrm{th}` Legendre-polynom
 
 .. math::
    \cos(\Theta_a) = a_0 \cos(\theta) \cos(\theta_{s}) + \sin(\theta) \sin(\theta_{s}) \left[a_1 \cos(\phi) \cos(\phi_{s}) + a_2 \sin(\phi) \sin(\phi_{s})  \right]
+
 where :math:`\theta ,\phi` are the polar- and azimuth-angles of the incident radiation, :math:`\theta_{s}, \phi_{s}` are the polar- and azimuth-angles of the scattered radiation and :math:`a_1,a_2` and :math:`a_3`
 are constants that allow consideration of off-specular and anisotropic effects within the approximations.
 
@@ -187,8 +179,36 @@ First, the so-called fn-coefficients are evaluated which are defined via:
    :label: fn_coef_definition
 
 Second, :math:`I_{\textrm{interaction}}` is evaluated using the analytic solution to the remaining :math:`\theta`-integral for a given set of fn-coefficients as presented in [QuWa16]_.
- 
-TBD: it might help to show one example how these coefficients can be caluclated. You did send be a doucment there in the past, which is currently in the *exampels* directory. I would suggest to include this kind of example here. 
- 
+
+.. topic:: Example
+
+	In the following, a simple example on how to evaluate the fn-coefficients is given.
+	The ground is hereby defined as a Lambertian-surface and the covering layer is assumed to consist of Rayleigh-particles. Thus, we have: (:math:`R_0` hereby denotes the diffuse albedo of the surface)
+
+	- :math:`BRDF(\theta, \phi, \theta_{ex},\phi_{ex}) = \frac{R_0}{\pi}`
+	- :math:`p(\theta, \phi, \theta_{ex},\phi_{ex}) = \frac{3}{16\pi} (1+\cos(\Theta)^2) \quad` with :math:`\mbox{}\quad` :math:`\cos(\Theta) = \cos(\theta)\cos(\theta_{ex}) + \sin(\theta)\sin(\theta_{ex})\cos(\phi - \phi_{ex})`
+
+	.. math::
+	   INT &= \int_0^{2\pi} p(\theta_0, \phi_0, \theta,\phi) * BRDF(\pi-\theta, \phi, \theta_{ex},\phi_{ex}) d\phi
+	   \\ &= \frac{3 R_0}{16 \pi^2} \int\limits_{0}^{2\pi}  (1+[\cos(\theta_0)\cos(\theta) + \sin(\theta_0)\sin(\theta)\cos(\phi_0 - \phi)]^2) d\phi
+	   \\ &= \frac{3 R_0}{16 \pi^2} \int\limits_0^{2\pi} (1+ \mu_0^2 \mu^2 + 2 \mu_0 \mu \sin(\theta_0) \sin(\theta) \cos(\phi_0 - \phi) + (1-\mu_0)^2(1-\mu)^2 \cos(\phi_0 - \phi)^2 d\phi
+
+	where the shorthand-notation :math:`\mu_x = \cos(\theta_x)` has been introduced.
+
+	The above integral can now easily be solved by noticing:
+
+	.. math::
+	   \int\limits_0^{2\pi} \cos(\phi_0 - \phi)^n d\phi = \left\lbrace \begin{matrix} 2 \pi & \textrm{for } n=0 \\ 0 & \textrm{for } n=1 \\ \pi  & \textrm{for } n=2 \end{matrix} \right.
+
+	Using some algebraic manipulations we therefore find:
+
+	.. math::
+	   INT = \frac{3 R_0}{16\pi} \Big[ (3-\mu_0^2) + (3 \mu_0 -1) \mu^2 \Big] = \sum_{n=0}^2 f_n ~ \mu^n
+	   \\ \\
+	   \Rightarrow \quad f_0 = \frac{3 R_0}{16\pi}(3-\mu_0^2) \qquad f_1 = 0 \qquad f_2 = \frac{3 R_0}{16\pi}(3 \mu_0 -1) \qquad f_n = 0 ~ \forall ~n>2
+
+     An IPython-notebook that uses the RT1-module to evaluate the above fn-coefficients can be found `HERE <https://github.com/pygeo/rt1/tree/master/doc/examples/example_fn.ipynb>`_
+
+
 .. rubric:: References
 .. [QuWa16]  R.Quast and W.Wagner, "Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media," Appl.Opt.55, 5379-5386 (2016) 
