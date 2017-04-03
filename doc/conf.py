@@ -22,6 +22,9 @@ numfig = True
 # Enable equation-numbering
 math_number_all = True
 
+# define a function that adds custom css stylesheet see:https://samnicholls.net/2016/06/15/how-to-sphinx-readthedocs/
+def setup(app):
+    app.add_stylesheet('my_theme.css')
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
