@@ -4,11 +4,6 @@ Model Specification
 ====================
 
 
-TBD: some more cross references to the literature would be good as well, but has lower priority I would say.
-
-
-
-
 Evaluation Geometries
 ----------------------
 .. role:: latex(raw)
@@ -251,8 +246,8 @@ The resulting surface-class element can now be used completely similar to the pr
 Current limitations
 --------------------
 
-TBD
-- currently no delta functions implemented as BRDF or p
-- numerical prescision issues for ncoefs > 20
+- The list of pre-defined BRDF's and volume-scattering phase-functions currently contains only few example of possible choices and is intended to be extended.
+  For example the possibility of using delta-peaked scattering-distributions is contemplated for future versions of the code.
 
-+ add references to literature
++ If the expansion-coefficients of the BRDF and volume-scattering phase-function exceed a certain number (approx. ncoefs > 20)
+  one might run into numerical precision errors.
