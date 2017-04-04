@@ -3,9 +3,6 @@
 Model Specification
 ====================
 
-TBD: what I am missing here is the concept of linear combinations of phase functions
-
-TBD: I also suggest to add a subsection on current limitations, where you could mention for instance that something like peak like delta functions are not represented yet.
 
 TBD: some more cross references to the literature would be good as well, but has lower priority I would say.
 
@@ -121,3 +118,141 @@ constant (polar- and azimuth) incidence-angles and the location of the receiver 
 	  are very long symbolic expressions.
 
 
+Linear combination of scattering distributions
+---------------------------------------------
+
+Aside of directly specifying the scattering distributions by choosing one of the implemented functions, the RT1-module has
+a method to define linear-combinations of scattering distributions to allow consideration of more complex scattering characteristics.
+
+   An IPython-notebook that shows the basic usage of linear-combinations within the RT1-module is provided `HERE <https://github.com/pygeo/rt1/tree/master/doc/examples/example_lin_comb.ipynb>`_ .
+
+
+Combination of volume-scattering phase-functions
+''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Linear-combination of volume-scattering phase-functions is used to generate a combined volume-class element of the form:
+
+.. math::
+
+   \hat{p}_{combined}(\theta_0,\phi_0,\theta_{ex},\phi_{ex}) = \sum_{n=0}^N  w_n * \hat{p}_n(\cos(\Theta_{a_n}))
+   = \sum_{n=0}^N w_n * \sum_{k=0}^{K_n} \hat{P}_k(\cos(\Theta_{a_n})) * p^{(n)}_k
+
+where :math:`\hat{p}_n(\cos(\Theta_{a_n}))` denotes the scattering phase-functions to be combined, :math:`\cos(\Theta_{a_n})` denotes the individual scattering angles :eq:`general_scat_angle` used to define the 
+scattering phase-functions :math:`w_n` denotes the associated weighting-factors, :math:`p_k^{(n)}` denotes the :math:`\textrm{k}^{\textrm{th}}` Legendre-expansion-coefficient :eq:`p_expansion` of the 
+:math:`\textrm{n}^{\textrm{th}}` phase-function and :math:`\hat{P}_k(x)` denotes the :math:`\textrm{k}^{\textrm{th}}` Legendre-polynomial.
+
+.. note::
+
+   Since a volume-scattering phase-function must obey the normalization condition:
+
+   .. math::
+
+      \int_0^{2\pi}\int_0^{\pi} \hat{p}(\theta,\phi,\theta',\phi') \sin(\theta') d\theta' d\phi' = 1
+
+   and each individual phase-function that is combined already satisfies this condition,
+   the weighting-factors :math:`w_n` must equate to 1, i.e.:
+
+   .. math::
+
+	  \sum_{n=0}^N w_n = 1
+
+
+Within the RT1-module, linear-combination of volume-scattering phase-functions is performed by the :code:`LinCombV(omega, tau, Vchoices)` function:
+
+.. code::
+
+   from rt1.volume import LinCombV
+
+
+In order to generate a combined phase-function, one must provide the optical depth :code:`tau`, the single-scattering albedo :code:`omega`
+and a list of volume-class elements along with a set of weighting-factors (:code:`Vchoices`) of the form:
+
+.. code::
+
+  Vchoices = [ [weighting-factor , function] , [weighting-factor , function] , ...  ]
+
+Once the functions and weighting-factors have been defined, the combined phase-function is generated via:
+
+.. code::
+
+   V = LinCombV(tau, omega, Vchoices)
+
+The resulting volume-class element can now be used completely similar to the pre-defined scattering phase-functions.
+
+
+.. note::
+
+   Since one can combine functions with different choices for the generalized scattering angle (i.e. the :code:`a`-parameter),
+   and different numbers of expansion-coefficients (the :code:`ncoefs`-parameter) :code:`LinCombV()` will automatically combine
+   the associated Legendre-expansions based on the choices for :code:`a` and :code:`ncoefs`.
+
+   The parameters :code:`V.a`, :code:`V.scat_angle()` and :code:`V.ncoefs` of the resulting volume-class element are therefore **NOT** representative for the generated combined phase-function!
+
+
+Combination of BRDF's
+''''''''''''''''''''''
+
+Linear-combination of BRDF's is used to generate a combined surface-class element of the form:
+
+.. math::
+
+   BRDF_{combined}(\theta_0,\phi_0,\theta_{ex},\phi_{ex}) = \sum_{n=0}^N  w_n * BRDF_n(\cos(\Theta_{a_n}))
+   = \sum_{n=0}^N w_n * \sum_{k=0}^{K_n} \hat{P}_k(\cos(\Theta_{a_n})) * b^{(n)}_k
+
+where :math:`BRDF_n(\cos(\Theta_{a_n}))` denotes the BRDF's to be combined, :math:`\cos(\Theta_{a_n})` denotes the individual scattering angles :eq:`general_scat_angle` used to define the 
+BRDF's :math:`w_n` denotes the associated weighting-factors, :math:`b_k^{(n)}` denotes the :math:`\textrm{k}^{\textrm{th}}` Legendre-expansion-coefficient :eq:`brdf_expansion` of the 
+:math:`\textrm{n}^{\textrm{th}}` BRDF and :math:`\hat{P}_k(x)` denotes the :math:`\textrm{k}^{\textrm{th}}` Legendre-polynomial.
+
+.. note::
+   Since a BRDF must obey the following normalization condition:
+
+   .. math::
+
+      \int_0^{2\pi}\int_0^{\pi/2} BRDF(\theta,\phi,\theta',\phi') \cos(\theta') \sin(\theta') d\theta' d\phi' = R(\theta_0,\phi_0) \leq 1
+
+   there is in principle no restriction on the weighting-factors for combination of BRDF's!
+
+   It is however important to notice that the associated hemispherical reflectance :math:`R(\theta_0,\phi_0)` must always be lower or equal to 1.
+   In order to provide a simple tool that allows validating the above condition, the function :code:`RT1.Plots().hemreflect()` numerically evaluates 
+   the hemispherical reflectance using a simple Simpson-rule integration-scheme and generates a plot that displays :math:`R(\theta_0,\phi_0)`.
+
+
+Within the RT1-module, linear-combination of BRDF's is performed by the :code:`LinCombSRF(omega, tau, SRFchoices)` function:
+
+.. code::
+
+   from rt1.surface import LinCombSRF
+
+
+In order to generate a combined phase-function, one must provide a list of surface-class elements along with a set of weighting-factors (:code:`SRFchoices`) of the form:
+
+.. code::
+
+  SRFchoices = [ [weighting-factor , function] , [weighting-factor , function] , ...  ]
+
+Once the functions and weighting-factors have been defined, the combined BRDF is generated via:
+
+.. code::
+
+   SRF = LinCombSRF(SRFchoices)
+
+The resulting surface-class element can now be used completely similar to the pre-defined BRDF's.
+
+
+.. note::
+
+   Since one can combine functions with different choices for the generalized scattering angle (i.e. the :code:`a`-parameter),
+   and different numbers of expansion-coefficients (the :code:`ncoefs`-parameter) :code:`LinCombSRF()` will automatically combine
+   the associated Legendre-expansions based on the choices for :code:`a` and :code:`ncoefs`.
+
+   The parameters :code:`SRF.a`, :code:`SRF.scat_angle()` and :code:`SRF.ncoefs` of the resulting surface-class element are therefore **NOT** representative for the generated combined BRDF!
+
+
+Current limitations
+--------------------
+
+TBD
+- currently no delta functions implemented as BRDF or p
+- numerical prescision issues for ncoefs > 20
+
++ add references to literature

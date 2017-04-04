@@ -162,7 +162,8 @@ Legendre-series in a (possibly generalized) scattering angle of the form:
 where :math:`P_n(x)` denotes the :math:`\textrm{n}^\textrm{th}` Legendre-polynomial and the generalized scattering angle :math:`\Theta_a` is defined via:
 
 .. math::
-   \cos(\Theta_a) = a_0 \cos(\theta) \cos(\theta_{s}) + \sin(\theta) \sin(\theta_{s}) \left[a_1 \cos(\phi) \cos(\phi_{s}) + a_2 \sin(\phi) \sin(\phi_{s})  \right]
+   \cos(\Theta_a) = a_0 \cos(\theta) \cos(\theta_{s}) + \sin(\theta) \sin(\theta_{s}) \left[a_1 \cos(\phi) \cos(\phi_{s}) + a_2 \sin(\phi) \sin(\phi_{s}) \right]
+   :label: general_scat_angle
 
 where :math:`\theta ,\phi` are the polar- and azimuth-angles of the incident radiation, :math:`\theta_{s}, \phi_{s}` are the polar- and azimuth-angles of the scattered radiation and :math:`a_1,a_2` and :math:`a_3`
 are constants that allow consideration of off-specular and anisotropic effects within the approximations.
