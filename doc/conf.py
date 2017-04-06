@@ -14,6 +14,7 @@
 
 import sys
 import os
+import mock
 
 
 # Enable figure-numbering in "latex-style" (i.e. autonumbering with Fig.1, Fig.2 etc.)
@@ -28,10 +29,9 @@ def setup(app):
     app.add_stylesheet('my_theme.css')
 
 
-import mock
 MOCK_MODULES = ['numpy', 'scipy', 'scipy.special', 'sympy', 'symengine', 'matplotlib', 'matplotlib.pyplot', 'matplotlib.lines', 'mpl_toolkits', 'mpl_toolkits.mplot3d']
 for mod_name in MOCK_MODULES:
-	sys.modules[mod_name] = mock.Mock()
+    sys.modules[mod_name] = mock.Mock()
 
 
 # If extensions (or modules to document with autodoc) are in another directory,
