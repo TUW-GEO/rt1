@@ -29,8 +29,8 @@ class Plots(Scatter):
         the used approximations in terms of legendre-polynomials.
 
 
-        Parameters:
-        -------------
+        Parameters
+        -----------
         R : RT1-class object
             If R is provided, SRF and V are taken from it as V = R.RV and SRF = R.SRF
         SRF : RT1.surface class object
@@ -38,8 +38,8 @@ class Plots(Scatter):
         V : RT1.volume class object
             Alternative direct specification of the volume-scattering phase-function  e.g. V = Rayleigh()
 
-        Optional Parameters:
-        ----------------------
+        Other Parameters
+        -----------------
         incp : list of floats (default = [15.,35.,55.,75.])
                Incidence-angles in degree at which the volume-scattering phase-function will be plotted
         incBRDF : list of floats (default = [15.,35.,55.,75.])
@@ -70,7 +70,7 @@ class Plots(Scatter):
                  Matplotlib color-indicator to change the color of the lower hemisphere in the BRDF-plot
                  possible values are: ('r', 'g' , 'b' , 'c' , 'm' , 'y' , 'k' , 'w' , 'none')
 
-        Returns:
+        Returns
         ---------
         polarfig : figure
                    a matplotlib figure showing a polar-plot of the functions specified by V or SRF
@@ -226,16 +226,16 @@ class Plots(Scatter):
         Generate a plot of the monostatic backscattered Intensity or sigma_0 in dB as well as a
         plot showing the fractional contributions to the total signal.
 
-        Parameters:
-        ------------
+        Parameters
+        -----------
         inc : float-array
               Incidence-angle range used for calculating the intensities
         Itot, Ivol, Isurf, Iint : array_like(float)
                                   individual monostatic signal contributions
                                   i.e. outputs from RT1.calc()  with   RT1.geometry = 'mono'  and    RT1.t_0 = inc
                                   At least one of the arrays must be provided and it must be of the same length as inc!
-        Optional Parameters:
-        ---------------------
+        Other Parameters
+        -----------------
         ylim : [float , float]
                Manual entry of plot-boundaries as [ymin, ymax]
         sig0 : boolean (default = False)
@@ -429,8 +429,8 @@ class Plots(Scatter):
                                   i.e. outputs from RT1.calc()  with
                                   RT1.geometry = 'fvfv'   ,    RT1.t_ex = theta    ,     RT1.p_ex = phi.
                                   At least one of the arrays must be provided and they must have the same shape as theta and phi!
-        Optional Parameters
-        --------------------
+        Other Parameters
+        -----------------
         surfmultip : float (default = 1.)
                      Scaling factor for the plotted surface that indicates the ground.
         zoom : float (default = 2.)
@@ -545,15 +545,15 @@ class Plots(Scatter):
         Numerical evaluation of the hemispherical reflectance of the given BRDF-function
         using scipy's implementation of the Simpson-rule integration scheme.
 
-        Parameters:
+        Parameters
         ------------
         R : RT1-class object
             definition of the brdf-function to be evaluated (either R or SRF must be provided)
         SRF : Surface-class object
               definition of the brdf-function to be evaluated (either R or SRF must be provided)
 
-        Optional Parameters:
-        --------------------
+        Other Parameters
+        -----------------
         phi_0 : float
                 incident azimuth-angle
                 (for spherically symmetric phase-functions the result is independent of the choice of phi_0)
@@ -569,8 +569,8 @@ class Plots(Scatter):
         showpoints : boolean
                      show or hide integration-points in the plot
 
-        Returns:
-        ---------
+        Returns
+        --------
         fig : figure
             a matplotlib figure showing the incidence-angle dependent hemispherical reflectance
         '''
