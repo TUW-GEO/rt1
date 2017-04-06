@@ -18,7 +18,6 @@ Contents:
    model_specification
    examples
    annex_technical
-   test/modules
 
 Indices and tables
 ==================

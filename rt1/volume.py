@@ -18,19 +18,26 @@ class Volume(Scatter):
 
     def p(self, t_0, t_ex, p_0, p_ex):
         """
-        calculate phase function by subsituting current geometry in function
-        and then evaluate result
+        Calculate numerical value of the volume-scattering phase-function for chosen incidence- and exit angles.
 
         Parameters
         ----------
-        geometries of angles
-        t_0 : theta incidence
-        t_ex : theta scattering
-        p_0 : azimuth incident
-        p_ex : azimuth scattering
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
 
-        All in radians
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
 
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+
+        Returns
+        -------
+        array_like(float)
+                          Numerical value of the volume-scattering phase-function
         """
         # define sympy objects
         theta_0 = sp.Symbol('theta_0')
@@ -52,22 +59,55 @@ class Volume(Scatter):
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
+        """
+        Definition of the legendre-expansion of the volume-scattering phase-function
+
+        .. note::
+            The output represents the legendre-expansion as needed to compute the fn-coefficients
+            for the chosen geometry! (http://rt1.readthedocs.io/en/latest/theory.html#equation-fn_coef_definition)
+
+            The incidence-angle argument of the legexpansion() is different to the documentation
+            due to the direct definition of the argument as the zenith-angle (t_0) instead of the incidence-angle
+            defined in a spherical coordinate system (t_i). They are related via: t_i = pi - t_0
+
+
+        Parameters
+        ----------
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+
+        geometry : str
+            4 character string specifying which components of the angles should be fixed or variable
+            This is done to significantly speed up the evaluation-process of the fn-coefficient generation
+
+            The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
+
+            - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
+            - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
+            - Passing  geometry = 'mono'  indicates a monstatic geometry
+              (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
+              If monostatic geometry is used, the input-values of t_ex and p_ex
+              have no effect on the calculations!
+
+            For detailed information on the specification of the geometry-parameter,
+            please have a look at the "Evaluation Geometries" section of the documentation
+            (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
+        Returns
+        --------
+        sympy-expression
+                         The legendre-expansion of the volume-scattering phase-function for the chosen geometry
 
         """
-        Definition of the legendre-expansion of the volume-phase-function.
-
-        The geometry-parameter consists of 4 characters that define the
-        geometry of the experiment-setup:
-
-        The 4 characters represent in order: theta_i, theta_ex, phi_i, phi_ex
-
-        'f' indicates that the angle is treated 'fixed'
-        'v' indicates that the angle is treated 'variable'
-
-        Passing  geometry = 'mono'  indicates a monstatic geometry
-        (i.e.:  theta_i = theta_ex, phi_ex = phi_i + pi)
-        """
-
         theta_s = sp.Symbol('theta_s')
         phi_s = sp.Symbol('phi_s')
 
@@ -116,26 +156,30 @@ class Volume(Scatter):
 class LinCombV(Volume):
         '''
         Class to generate linear-combinations of volume-class elements
+
+        For details please look at the documentation (http://rt1.readthedocs.io/en/latest/model_specification.html#linear-combination-of-scattering-distributions)
+
+        .. note::
+            Since the normalization of a volume-scattering phase-function is fixed, the weighting-factors must equate to 1!
+
+        Parameters
+        ----------
+        tau : scalar(float)
+              Optical depth of the combined phase-function
+
+              ATTENTION: tau-values provided within the Vchoices-list will not be considered!
+
+        omega : scalar(float)
+                Single scattering albedo of the combined phase-function
+
+                ATTENTION: omega-values provided within the Vchoices-list will not be considered!
+
+        Vchoices : [ [float, Volume]  ,  [float, Volume]  ,  ...]
+                   a list that contains the the individual phase-functions (Volume-objects)
+                   and the associated weighting-factors (floats) of the linear-combination.
         '''
 
         def __init__(self, Vchoices=None, **kwargs):
-            '''
-            Parameters
-            ----------
-
-            tau : float
-                optical depth of the combined phase-function
-                ATTENTION: tau-values provided within the Vchoices-list will not be considered!
-            omega : float
-                single scattering albedo of the combined phase-function
-                ATTENTION: omega-values provided within the Vchoices-list will not be considered!
-
-            Vchoices : [ [float, Volume]  ,  [float, Volume]  ,  ...]
-                     a list that contains the the individual phase-functions (Volume-objects)
-                     and the associated weighting-factors (floats) of the linear-combination.
-                     ATTENTION: since the normalization of the phase-function is fixed, the weighting-factors must equate to 1 !
-
-            '''
             super(LinCombV, self).__init__(**kwargs)
 
             self.Vchoices = Vchoices
@@ -250,7 +294,22 @@ class LinCombV(Volume):
 
 class Rayleigh(Volume):
     """
-    class to define Rayleigh scattering function
+    Define a Rayleigh scattering function
+
+    Parameters
+    -----------
+    tau : scalar(float)
+          Optical depth
+
+    omega : scalar(float)
+            Single scattering albedo
+
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
+
+    a : [ float , float , float ] , optional (default = [-1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
 
     def __init__(self, **kwargs):
@@ -281,7 +340,25 @@ class Rayleigh(Volume):
 
 class HenyeyGreenstein(Volume):
     """
-    class to define HenyeyGreenstein scattering function
+    Define a HenyeyGreenstein scattering function
+
+    Parameters
+    -----------
+    tau : scalar(float)
+          Optical depth
+
+    omega : scalar(float)
+            Single scattering albedo
+
+    t : scalar(float)
+        Asymmetry parameter of the Henyey-Greenstein phase function
+
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
+
+    a : [ float , float , float ] , optional (default = [-1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
 
     def __init__(self, t=None, ncoefs=None, a=[-1., 1., 1.], **kwargs):
@@ -320,11 +397,30 @@ class HenyeyGreenstein(Volume):
 
 class HGRayleigh(Volume):
     """
-    class to define HenyeyGreenstein-Rayleigh scattering function as proposed in:
-    
-    'Quanhua Liu and Fuzhong Weng: Combined henyey-greenstein and rayleigh phase function,
-    Appl. Opt., 45(28):7475-7479, Oct 2006. doi: 10.1364/AO.45.'
+    Define a HenyeyGreenstein-Rayleigh scattering function as proposed in:
+
+        'Quanhua Liu and Fuzhong Weng: Combined henyey-greenstein and rayleigh phase function,
+        Appl. Opt., 45(28):7475-7479, Oct 2006. doi: 10.1364/AO.45.'
+
+    Parameters
+    -----------
+    tau : scalar(float)
+          Optical depth
+
+    omega : scalar(float)
+            Single scattering albedo
+
+    t : scalar(float)
+        Asymmetry parameter of the Henyey-Greenstein-Rayleigh phase function
+
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
+
+    a : [ float , float , float ] , optional (default = [-1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+
 
     def __init__(self, t=None, ncoefs=None, a=[-1., 1., 1.], **kwargs):
         assert t is not None, 't parameter needs to be provided!'

@@ -19,19 +19,31 @@ class Surface(Scatter):
         self.NormBRDF = kwargs.get('NormBRDF', 1.)
         assert isinstance(self.NormBRDF, float), 'Error: NormBRDF must be a floating-point number'
         assert self.NormBRDF >= 0., 'Error: NormBRDF must be greater than 0'
-        
+
     def brdf(self, t_0, t_ex, p_0, p_ex):
         """
-        Calculate BRDF as function of geometry
+        Calculate numerical value of the BRDF for chosen incidence- and exit angles.
 
         Parameters
         ----------
-        ctheta : float
-            cosine of scattering angle
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
 
         Returns
-        float
+        -------
+        array_like(float)
+                          Numerical value of the BRDF
         """
+
         # define sympy objects
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
@@ -51,22 +63,56 @@ class Surface(Scatter):
         return brdffunc(t_0, t_ex, p_0, p_ex)
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
-        assert self.ncoefs > 0
-
         """
         Definition of the legendre-expansion of the BRDF
 
-        The geometry-parameter consists of 4 characters that define the
-        geometry of the experiment-setup:
+        .. note::
+            The output represents the legendre-expansion as needed to compute the fn-coefficients
+            for the chosen geometry! (http://rt1.readthedocs.io/en/latest/theory.html#equation-fn_coef_definition)
 
-        The 4 characters represent in order: theta_i, theta_ex, phi_i, phi_ex
+            The incidence-angle argument of the legexpansion() is different to the documentation
+            due to the direct definition of the argument as the zenith-angle (t_0) instead of the incidence-angle
+            defined in a spherical coordinate system (t_i). They are related via: t_i = pi - t_0
 
-        'f' indicates that the angle is treated 'fixed'
-        'v' indicates that the angle is treated 'variable'
 
-        Passing  geometry = 'mono'  indicates a monstatic geometry
-        (i.e.:  theta_i = theta_ex, phi_ex = phi_i + pi)
+        Parameters
+        ----------
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+
+        geometry : str
+            4 character string specifying which components of the angles should be fixed or variable
+            This is done to significantly speed up the evaluation-process of the fn-coefficient generation
+
+            The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
+
+            - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
+            - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
+            - Passing  geometry = 'mono'  indicates a monstatic geometry
+              (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
+              If monostatic geometry is used, the input-values of t_ex and p_ex
+              have no effect on the calculations!
+
+            For detailed information on the specification of the geometry-parameter,
+            please have a look at the "Evaluation Geometries" section of the documentation
+            (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
+        Returns
+        --------
+        sympy-expression
+                         The legendre-expansion of the BRDF for the chosen geometry
+
         """
+        assert self.ncoefs > 0
 
         theta_s = sp.Symbol('theta_s')
         phi_s = sp.Symbol('phi_s')
@@ -116,18 +162,19 @@ class Surface(Scatter):
 class LinCombSRF(Surface):
         '''
         Class to generate linear-combinations of volume-class elements
+
+        For details please look at the documentation (http://rt1.readthedocs.io/en/latest/model_specification.html#linear-combination-of-scattering-distributions)
+
+        Parameters
+        ----------
+
+        SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
+                     A list that contains the the individual BRDF's (Surface-objects)
+                     and the associated weighting-factors (floats) for the linear-combination.
         '''
 
         def __init__(self, SRFchoices=None, **kwargs):
-            '''
-            Parameters
-            ----------
 
-            SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
-                        a list that contains the the individual phase-functions (Surface-objects)
-                        and the associated weighting-factors (floats) of the linear-combination.
-
-            '''
             super(LinCombSRF, self).__init__(**kwargs)
 
             self.SRFchoices = SRFchoices
@@ -229,7 +276,12 @@ class LinCombSRF(Surface):
 
 class Isotropic(Surface):
     """
-    define an isotropic surface
+    Define an isotropic surface brdf
+
+    Parameters
+    -----------
+    NormBRDF : float, optional (default = 1.)
+               Normalization-factor used to scale the BRDF, i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
     def __init__(self, **kwargs):
@@ -256,16 +308,22 @@ class Isotropic(Surface):
 
 class CosineLobe(Surface):
     """
-    define a generalized cosine-lobe of power i.
+    Define a (possibly generalized) cosine-lobe of power i.
 
-    the parameter a=[-,-,-] provides the diagonal-elements of the generalized scattering
-    angle as defined in:
-    'E.P.F. Lafortune et.al : Non-Linear Approximation of Reflectance Functions,
-    Proceedings of SIGGRAPH'97, pages 117-126, 1997'
+    Parameters
+    -----------
+    i : scalar(int)
+        Power of the cosine lobe, i.e. cos(x)^i
 
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
 
-    if the a-parameter is not provided explicitly or if it is set
-    to a=[1.,1.,1.], LafortuneLobe is the equal to the ordinary CosineLobe.
+    a : [ float , float , float ] , optional (default = [1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
+
+    NormBRDF : float, optional (default = 1.)
+               Normalization-factor used to scale the BRDF, i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
     def __init__(self, ncoefs=None, i=None, a=[1., 1., 1.], **kwargs):
@@ -308,8 +366,22 @@ class CosineLobe(Surface):
 
 class HenyeyGreenstein(Surface):
     """
-    class to define HenyeyGreenstein scattering function
-    for use as BRDF approximation function.
+    Define a HenyeyGreenstein scattering function for use as BRDF approximation function.
+
+    Parameters
+    -----------
+    t : scalar(float)
+        Asymmetry parameter of the Henyey-Greenstein function
+
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
+
+    a : [ float , float , float ] , optional (default = [1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
+
+    NormBRDF : float, optional (default = 1.)
+               Normalization-factor used to scale the BRDF, i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
     def __init__(self, t=None, ncoefs=None, a=[1., 1., 1.], **kwargs):
