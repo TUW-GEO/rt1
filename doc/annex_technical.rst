@@ -1,7 +1,37 @@
 Technical documentation
 =======================
 
-.. toctree::
-   :maxdepth: 4
+RT1-module
+------------
+.. automodule:: rt1.rt1
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   autodoc/rt1
+RTplots-module
+---------------
+.. automodule:: rt1.rtplots
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Scatter-module
+---------------
+.. automodule:: rt1.scatter
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Surface-module
+---------------
+.. automodule:: rt1.surface
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Volume-module
+--------------
+.. automodule:: rt1.volume
+   :members:
+   :undoc-members:
+   :show-inheritance:
