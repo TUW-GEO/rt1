@@ -25,43 +25,60 @@ except ImportError:
 
 
 class RT1(object):
-    """
-    main class to perform RT simulations
-    """
+        """ Main class to perform RT-simulations
 
-    def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
-        """
+
         Parameters
         ----------
-        I0 : float
-            incidence radiation
-        t_0 : float
-                 incident zenith-angle
-        p_0 : float
-               incident azimuth-angle
-        t_ex : float
-                  exit zenith-angle
-                  (if geometry is set to 'mono', theta_ex is automatically set to theta_0 !)
-        p_ex : float
-                exit azimuth-angle
-                (if geometry is set to 'mono', phi_ex is automatically set to phi_0 + np.pi !)
-        RV : Volume
-            random volume object
-        SRF: Surface
-            random surface object
-        fn : sympy expression
-            precalculated coefficient expression; otherwise it will be automatically calculated
-            usefull for speedup when caling with different geometries
+        I0 : scalar(float)
+             incidence intensity
+
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+               (if geometry is set to 'mono', theta_ex is automatically set to t_0 !)
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+               (if geometry is set to 'mono', phi_ex is automatically set to p_0 + np.pi !)
+
+        RV : rt1.volume
+             random object from rt1.volume class
+
+        SRF : surface
+              random object from rt1.surface class
+
+        fn : array_like(sympy expression), optional (default = None)
+             optional input of pre-calculated array of sympy-expressions to speedup
+             calculations where the same fn-coefficients can be used.
+             if None, the coefficients will be calculated automatically by calling rt1.fn
+
         geometry : str
             4 character string specifying which components of the angles should be fixed or variable
-            This is done to significantly speed up the calculations in the coefficient calculations
+            This is done to significantly speed up the evaluation-process of the fn-coefficient generation
 
-            mono = monostatic configuration
-            v
-            f
-            TODO --> describe setups here
+            The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
+
+            - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
+            - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
+            - Passing  geometry = 'mono'  indicates a monstatic geometry
+              (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
+              If monostatic geometry is used, the input-values of t_ex and p_ex
+              have no effect on the calculations!
+
+            For detailed information on the specification of the geometry-parameter,
+            please have a look at the "Evaluation Geometries" section of the documentation
+            (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
         """
 
+
+    def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         self.geometry = geometry
         assert isinstance(geometry, str), 'ERROR: geometry must be a 4-character string'
         assert len(self.geometry) == 4
@@ -126,6 +143,20 @@ class RT1(object):
 
         This is done by collecting the terms of expr with respect to powers of cos(theta_s) and
         simplifying the gained coefficients by applying a simple trigonometric identity.
+
+        Parameters
+        ----------
+
+        expr : sympy expression
+               prepared sympy-expression (output of _calc_interaction_expansion())
+               to be used for extracting the fn-coefficients
+
+        Returns
+        --------
+        fn : list(sympy expressions)
+             A list of sympy expressions that represent the fn-coefficients associated
+             with the given input-equation (expr).
+
         """
 
         theta_s = sp.Symbol('theta_s')
@@ -142,10 +173,21 @@ class RT1(object):
 
     def _calc_interaction_expansion(self):
         """
-        calculate expensions to be able to analytically estimate Eq.23 needed for the interaction term
-        The approach is as follows
-        1) expand the legrende coefficents of the surface and volume phase functions
-        2) replace the cosine terms in the Legrende polynomials by sines which corresponds to the intergration between 0 and 2*pi
+        Evaluation of the polar-integral from the definition of the fn-coefficients.
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-fn_coef_definition)
+
+        The approach is as follows:
+
+        1. Expand the Legrende coefficents of the surface and volume phase functions
+        2. Apply the function _integrate_0_2pi_phis() to evaluate the integral
+        3. Replace remaining sin(theta_s) terms in the Legrende polynomials by cos(theta_s) to prepare for fn-coefficient extraction
+        4. Expand again to ensure that a fully expanded expression is returned (to be used as input in _extract_coefficients() )
+
+        Returns
+        --------
+        res : sympy expression
+              A fully expanded expression that can be used as input for _extract_coefficients()
+
         """
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
@@ -167,7 +209,17 @@ class RT1(object):
 
     def _cosintegral(self, i):
         """
-        integral of cos(x)**i in the interval 0 ... 2*pi
+        Analytical solution to the integral of cos(x)**i in the interval 0 ... 2*pi
+
+        Parameters
+        ----------
+        i : scalar(int)
+            Power of the cosine function to be integrated, i.e.  cos(x)^i
+
+        Returns
+        -------
+        float
+              Numerical value of the integral of cos(x)^i in the interval 0 ... 2*pi
         """
         if i % 2 == 0:
             return (2 ** (-i)) * sp.binomial(i, i * sp.Rational(1, 2))
@@ -177,8 +229,25 @@ class RT1(object):
 
     def _integrate_0_2pi_phis(self, expr):
         """
-        integrate from zero to 2pi for phi_s
-        and return similified expression
+        Perforn symbolic integration of a pre-expanded power-series in sin(phi_s) and cos(phi_s)
+        over the variable phi_s in the interval 0 ... 2*pi
+
+        The approach is as follows:
+
+        1. Replace all appearing sin(phi_s)^odd with 0 since the integral vanishes
+        2. Replace all remaining sin(phi_s)^even with their representation in terms of cos(phi_s)
+        3. Replace all cos(phi_s)^i terms with _cosintegral(i)
+        4. Expand the gained solution for further processing
+
+        Parameters
+        ----------
+        expr : sympy expression
+               pre-expanded product of the legendre-expansions of RV.legexpansion() and SRF.legexpansion()
+
+        Returns
+        -------
+        res : sympy expression
+              resulting symbolic expression that results from integrating expr over the variable phi_s in the interval 0 ... 2*pi
         """
         phi_s = sp.Symbol('phi_s')
 
@@ -198,9 +267,31 @@ class RT1(object):
 
     def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
         """
-        function to evaluate expansion coefficients
-        as function of incident geometry
+        Function to numerically evaluate the fn-coefficients as function of incident geometry.
+
+        Parameters
+        ----------
+        n : scalar(int)
+            Number of fn-coefficient to be evaluated (starting with 0)
+
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+
+        Returns
+        -------
+        array_like(float)
+              Numerical value of the n^th fn-coefficient evaluated at the given angles.
         """
+
         theta_0 = sp.Symbol('theta_0')
         phi_0 = sp.Symbol('phi_0')
         theta_ex = sp.Symbol('theta_ex')
@@ -225,11 +316,24 @@ class RT1(object):
 
     def calc(self):
         """
-        Perform actual calculation of bistatic scattering at top of the random volume (z=0; tau(z) = 0)
+        Perform actual calculation of bistatic scattering at top of the random volume (z=0)
+        for the specified geometry. For details please have a look at the documentation
+        (http://rt1.readthedocs.io/en/latest/theory.html#first-order-solution-to-the-rte)
+
 
         Returns
         -------
-        specific intensities Itot, Isurf, Ivol, Iint
+        Itot : array_like(float)
+               Total scattered intensity (Itot = Isurf + Ivol + Iint)
+
+        Isurf : array_like(float)
+                Surface contribution
+
+        Ivol : array_like(float)
+               Volume contribution
+
+        Iint : array_like(float)
+               Interaction contribution
         """
         # (16)
         Isurf = self.surface()
@@ -243,19 +347,37 @@ class RT1(object):
 
     def surface(self):
         """
-        (17)
+        Numerical evaluation of the surface-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#surface_contribution)
+
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of the surface-contribution for the given set of parameters
         """
         return self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
 
     def volume(self):
         """
-        (18)
+        Numerical evaluation of the volume-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#volume_contribution)
+
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of the volume-contribution for the given set of parameters
         """
         return (self.I0 * self.RV.omega * self._mu_0 / (self._mu_0 + self._mu_ex)) * (1. - np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex))) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
 
     def interaction(self):
         """
-        (19)
+        Numerical evaluation of the volume-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#interaction_contribution)
+
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of the interaction-contribution for the given set of parameters
         """
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
@@ -263,12 +385,27 @@ class RT1(object):
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
-        (37)
-        first order interaction term
+        Numerical evaluation of the F_int() function used in the definition of the interaction-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#F_int)
 
-        in the original paper there is no dependency on PHI, but here it is
-        as the we don not assume per se that PHI1=0 like it is done in the
-        mansucript.
+        Parameters
+        -----------
+        mu1 : array_like(float)
+              cosine of the first polar-angle argument
+
+        mu2 : array_like(float)
+              cosine of the second polar-angle argument
+
+        phi1 : array_like(float)
+               first azimuth-angle argument in radians
+
+        phi2 : array_like(float)
+               second azimuth-angle argument in radians
+
+        Returns
+        --------
+        S : array_like(float)
+            Numerical value of F_int for the given set of parameters
         """
         nmax = len(self.fn)
         hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)

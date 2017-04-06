@@ -133,16 +133,19 @@ After some algebraic manipulations the individual contributions are found to be 
 
 .. math::
    I_{\textrm{surface}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}} \cos(\theta_0) BRDF(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
+   :label: surface_contribution
 
 .. math::
    I_{\textrm{volume}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 ~\omega ~ \frac{\cos(\theta_0)}{\cos(\theta_0) + \cos(\theta_{ex})} \left( 1 - e^{-\frac{\tau}{\cos(\theta_0)}} ~ e^{-\frac{\tau}{\cos(\theta_{ex})}}  \right)    \hat{p}(\pi-\theta_0, \phi_0, \theta_{ex}, \phi_{ex})
+   :label: volume_contribution
 
 .. math::
    I_{\textrm{interaction}}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = I_0 ~ \cos(\theta_0) ~ \omega \left\lbrace e^{-\frac{\tau}{\cos(\theta_{ex})}} F_{int}(\theta_0,\theta_{ex}) + e^{-\frac{\tau}{\cos(\theta_{ex})}} F_{int}(\theta_{ex},\theta_{0})    \right\rbrace
+   :label: interaction_contribution
 
 .. math::
    \textrm{with} \qquad \qquad F_{int}(\theta_0, \phi_0, \theta_{ex}, \phi_{ex}) = \int\limits_0^{2\pi} \int\limits_0^\pi   \frac{\cos(\theta)}{\cos(\theta_0)-\cos(\theta)} \left( e^{-\frac{\tau}{\cos(\theta_0)}} - e^{-\frac{\tau}{\cos(\theta)}} \right) ~ \hat{p}(\theta_0, \phi_0, \theta , \phi) BRDF(\pi - \theta, \phi, \theta_{ex}, \phi_{ex})  \sin(\theta) d\theta d\phi
-
+   :label: F_int
 
 
 Evaluation of the interaction-contribution
