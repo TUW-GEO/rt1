@@ -25,59 +25,57 @@ except ImportError:
 
 
 class RT1(object):
-        """ Main class to perform RT-simulations
+    """ Main class to perform RT-simulations
 
 
-        Parameters
-        ----------
-        I0 : scalar(float)
-             incidence intensity
+    Parameters
+    ----------
+    I0 : scalar(float)
+         incidence intensity
 
-        t_0 : array_like(float)
-              array of incident zenith-angles in radians
+    t_0 : array_like(float)
+          array of incident zenith-angles in radians
 
-        p_0 : array_like(float)
-              array of incident azimuth-angles in radians
+    p_0 : array_like(float)
+          array of incident azimuth-angles in radians
 
-        t_ex : array_like(float)
-               array of exit zenith-angles in radians
-               (if geometry is set to 'mono', theta_ex is automatically set to t_0 !)
+    t_ex : array_like(float)
+           array of exit zenith-angles in radians
+           (if geometry is set to 'mono', theta_ex is automatically set to t_0 !)
 
-        p_ex : array_like(float)
-               array of exit azimuth-angles in radians
-               (if geometry is set to 'mono', phi_ex is automatically set to p_0 + np.pi !)
+    p_ex : array_like(float)
+           array of exit azimuth-angles in radians
+           (if geometry is set to 'mono', phi_ex is automatically set to p_0 + np.pi !)
 
-        RV : rt1.volume
-             random object from rt1.volume class
+    RV : rt1.volume
+         random object from rt1.volume class
 
-        SRF : surface
-              random object from rt1.surface class
+    SRF : surface
+          random object from rt1.surface class
 
-        fn : array_like(sympy expression), optional (default = None)
-             optional input of pre-calculated array of sympy-expressions to speedup
-             calculations where the same fn-coefficients can be used.
-             if None, the coefficients will be calculated automatically by calling rt1.fn
+    fn : array_like(sympy expression), optional (default = None)
+         optional input of pre-calculated array of sympy-expressions to speedup
+         calculations where the same fn-coefficients can be used.
+         if None, the coefficients will be calculated automatically by calling rt1.fn
 
-        geometry : str
-            4 character string specifying which components of the angles should be fixed or variable
-            This is done to significantly speed up the evaluation-process of the fn-coefficient generation
+    geometry : str
+        4 character string specifying which components of the angles should be fixed or variable
+        This is done to significantly speed up the evaluation-process of the fn-coefficient generation
 
-            The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
+        The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
 
-            - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
-            - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
-            - Passing  geometry = 'mono'  indicates a monstatic geometry
-              (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
-              If monostatic geometry is used, the input-values of t_ex and p_ex
-              have no effect on the calculations!
+        - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
+        - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
+        - Passing  geometry = 'mono'  indicates a monstatic geometry
+          (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
+          If monostatic geometry is used, the input-values of t_ex and p_ex
+          have no effect on the calculations!
 
-            For detailed information on the specification of the geometry-parameter,
-            please have a look at the "Evaluation Geometries" section of the documentation
-            (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+        For detailed information on the specification of the geometry-parameter,
+        please have a look at the "Evaluation Geometries" section of the documentation
+        (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
 
-        """
-
-
+    """
     def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         self.geometry = geometry
         assert isinstance(geometry, str), 'ERROR: geometry must be a 4-character string'

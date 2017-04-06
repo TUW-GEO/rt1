@@ -114,7 +114,7 @@ constant (polar- and azimuth) incidence-angles and the location of the receiver 
 
 
 Linear combination of scattering distributions
----------------------------------------------
+-----------------------------------------------
 
 Aside of directly specifying the scattering distributions by choosing one of the implemented functions, the RT1-module has
 a method to define linear-combinations of scattering distributions to allow consideration of more complex scattering characteristics.
