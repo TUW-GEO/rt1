@@ -23,7 +23,6 @@ except ImportError:
     from sympy import expand
 
 
-
 class RT1(object):
     """ Main class to perform RT-simulations
 
@@ -76,6 +75,7 @@ class RT1(object):
         (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
 
     """
+
     def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
         self.geometry = geometry
         assert isinstance(geometry, str), 'ERROR: geometry must be a 4-character string'
@@ -114,9 +114,8 @@ class RT1(object):
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
-
         if fn is None:
-        # precalculate the expansiion coefficients for the interaction term
+            # precalculate the expansiion coefficients for the interaction term
             expr_int = self._calc_interaction_expansion()
 
             # now we have the integral formula ready. The next step is now to
@@ -200,7 +199,7 @@ class RT1(object):
 
         # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
         theta_s = sp.Symbol('theta_s')
-        replacements = [(sp.sin(theta_s) ** i, expand((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2)))  for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
+        replacements = [(sp.sin(theta_s) ** i, expand((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2))) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
         res = expand(expr.xreplace(dict(replacements)))
 
         return res
@@ -309,8 +308,6 @@ class RT1(object):
                 fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), self.fn[n], modules=["numpy", "sympy"])
 
             return fnfunc(t_0, p_0, t_ex, p_ex)
-
-
 
     def calc(self):
         """

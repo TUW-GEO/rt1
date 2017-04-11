@@ -9,21 +9,20 @@ import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-#plot of 3d scattering distribution
+# plot of 3d scattering distribution
 import mpl_toolkits.mplot3d as plt3d
 from .scatter import Scatter
-
 
 
 class Plots(Scatter):
     """
     The class provides pre-defined plotting-modules to easily visualize the used definitions and results.
     """
+
     def __init__(self, **kwargs):
         pass
 
-
-    def polarplot(self, R = None, SRF = None, V = None, incp = [15.,35.,55.,75.], incBRDF = [15.,35.,55.,75.], pmultip = 2., BRDFmultip = 1. , plabel = 'Volume-Scattering Phase Function', BRDFlabel = 'Surface-BRDF', paprox = True, BRDFaprox = True, plegend=True, plegpos = (0.75, 0.5) , BRDFlegend=True, BRDFlegpos = (0.285, 0.5) , groundcolor = "none"):
+    def polarplot(self, R=None, SRF=None, V=None, incp=[15., 35., 55., 75.], incBRDF=[15., 35., 55., 75.], pmultip=2., BRDFmultip=1., plabel='Volume-Scattering Phase Function', BRDFlabel='Surface-BRDF', paprox=True, BRDFaprox=True, plegend=True, plegpos=(0.75, 0.5), BRDFlegend=True, BRDFlegpos=(0.285, 0.5), groundcolor="none"):
         """
         Generation of polar-plots of the volume- and the surface scattering phase function as well as
         the used approximations in terms of legendre-polynomials.
@@ -76,164 +75,164 @@ class Plots(Scatter):
                    a matplotlib figure showing a polar-plot of the functions specified by V or SRF
         """
 
+        assert isinstance(incp, list), 'Error: incidence-angles for polarplot of p must be a list'
+        assert isinstance(incBRDF, list), 'Error: incidence-angles for polarplot of the BRDF must be a list'
+        for i in incBRDF:
+            assert i <= 90, 'ERROR: the incidence-angle of the BRDF in polarplot must be < 90'
 
-        assert isinstance(incp,list), 'Error: incidence-angles for polarplot of p must be a list'
-        assert isinstance(incBRDF,list), 'Error: incidence-angles for polarplot of the BRDF must be a list'
-        for i in incBRDF: assert i<=90, 'ERROR: the incidence-angle of the BRDF in polarplot must be < 90'
+        assert isinstance(pmultip, float), 'Error: plotrange-multiplier for polarplot of p must be a floating-point number'
+        assert isinstance(BRDFmultip, float), 'Error: plotrange-multiplier for polarplot of the BRDF must be a floating-point number'
 
-        assert isinstance(pmultip,float), 'Error: plotrange-multiplier for polarplot of p must be a floating-point number'
-        assert isinstance(BRDFmultip,float), 'Error: plotrange-multiplier for polarplot of the BRDF must be a floating-point number'
+        assert isinstance(plabel, str), 'Error: plabel of polarplot must be a string'
+        assert isinstance(BRDFlabel, str), 'Error: plabel of polarplot must be a string'
 
-        assert isinstance(plabel,str), 'Error: plabel of polarplot must be a string'
-        assert isinstance(BRDFlabel,str), 'Error: plabel of polarplot must be a string'
-
-
-
-        if R==None and SRF==None and V==None:
+        if R is None and SRF is None and V is None:
             assert False, 'Error: You must either provide R or SRF and/or V'
 
-
         # if R is provided, use it to define SRF and V, else use the provided functions
-        if R !=None:
+        if R is not None:
             SRF = R.SRF
             V = R.RV
 
         # define functions for plotting that evaluate the used approximations in terms of legendre-polynomials
-        n = sp.Symbol('n')
-
-
-        if V != None:
+        if V is not None:
             # if V is a scalar, make it a list
-            if np.ndim(V)==0:
+            if np.ndim(V) == 0:
                 V = [V]
 
             # make new figure
-            if SRF == None:
+            if SRF is None:
                 # if SRF is None, plot only a single plot of p
-                polarfig = plt.figure(figsize=(7,7))
-                polarax = polarfig.add_subplot(111,projection='polar')
+                polarfig = plt.figure(figsize=(7, 7))
+                polarax = polarfig.add_subplot(111, projection='polar')
             else:
                 # plot p and the BRDF together
-                polarfig = plt.figure(figsize=(14,7))
-                polarax = polarfig.add_subplot(121,projection='polar')
+                polarfig = plt.figure(figsize=(14, 7))
+                polarax = polarfig.add_subplot(121, projection='polar')
 
             # plot of volume-scattering phase-function's
             for V in V:
                 # define a plotfunction of the legendre-approximation of p
-                if paprox == True: phasefunktapprox = sp.lambdify(('theta_0', 'theta_s', 'phi_0', 'phi_s'), V.legexpansion('theta_0', 'theta_s', 'phi_0', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"])
+                if paprox is True:
+                    phasefunktapprox = sp.lambdify(('theta_0', 'theta_s', 'phi_0', 'phi_s'), V.legexpansion('theta_0', 'theta_s', 'phi_0', 'phi_s', 'vvvv').doit(), modules=["numpy", "sympy"])
 
                 # set incidence-angles for which p is calculated
-                plottis=np.deg2rad(incp)
-                colors = ['k','r','g','b','c','m','y']*int(round((len(plottis)/7.+1)))
+                plottis = np.deg2rad(incp)
+                colors = ['k', 'r', 'g', 'b', 'c', 'm', 'y'] * int(round((len(plottis) / 7. + 1)))
 
-                pmax = pmultip*np.max( V.p(plottis, np.pi-plottis, 0., 0.))
+                pmax = pmultip * np.max(V.p(plottis, np.pi - plottis, 0., 0.))
 
-                if plegend == True: legend_lines = []
+                if plegend is True:
+                    legend_lines = []
 
                 # set color-counter to 0
-                i=0
+                i = 0
                 for ti in plottis:
                     color = colors[i]
-                    i=i+1
-                    thetass = np.arange(0.,2.*np.pi,.01)
-                    rad= V.p(ti, thetass, 0., 0.)
-                    if paprox == True: radapprox = phasefunktapprox(np.pi-ti, thetass, 0., 0.) # the use of np.pi-ti stems from the definition of legexpansion() in volume.py
+                    i = i + 1
+                    thetass = np.arange(0., 2. * np.pi, .01)
+                    rad = V.p(ti, thetass, 0., 0.)
+                    if paprox is True:
+                        radapprox = phasefunktapprox(np.pi - ti, thetass, 0., 0.)  # the use of np.pi-ti stems from the definition of legexpansion() in volume.py
 
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
-                    polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
+                    polarax.set_theta_offset(np.pi / 2.)  # set theta to start at z-axis
 
-                    polarax.plot(thetass,rad, color)
-                    if paprox == True: polarax.plot(thetass,radapprox, color+'--')
-                    polarax.arrow(-ti,pmax*1.2  ,0.,-pmax*0.8, head_width = .0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
-                    polarax.fill_between(thetass,rad,alpha=0.2, color=color)
-                    polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$','$135^\circ$','$180^\circ$'])
+                    polarax.plot(thetass, rad, color)
+                    if paprox is True:
+                        polarax.plot(thetass, radapprox, color + '--')
+                    polarax.arrow(-ti, pmax * 1.2, 0., -pmax * 0.8, head_width=.0, head_length=.0, fc=color, ec=color, lw=1, alpha=0.3)
+                    polarax.fill_between(thetass, rad, alpha=0.2, color=color)
+                    polarax.set_xticklabels(['$0^\circ$', '$45^\circ$', '$90^\circ$', '$135^\circ$', '$180^\circ$'])
                     polarax.set_yticklabels([])
-                    polarax.set_rmax(pmax*1.2)
+                    polarax.set_rmax(pmax * 1.2)
                     polarax.set_title(plabel + '\n')
 
             # add legend for covering layer phase-functions
-            if plegend == True:
-                i=0
+            if plegend is True:
+                i = 0
                 for ti in plottis:
                     color = colors[i]
-                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
-                    i = i +1
-                if paprox == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str(np.round_(np.rad2deg(ti), decimals=1)) + '${}^\circ$')]
+                    i = i + 1
+                if paprox is True:
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color='k', linestyle='--', label='approx.')]
 
-                legend = plt.legend(bbox_to_anchor=plegpos, loc = 2, handles=legend_lines)
+                legend = plt.legend(bbox_to_anchor=plegpos, loc=2, handles=legend_lines)
                 legend.get_frame().set_facecolor('w')
                 legend.get_frame().set_alpha(.5)
 
-        if SRF !=None:
+        if SRF is not None:
             # if SRF is a scalar, make it a list
-            if np.ndim(SRF)==0:
+            if np.ndim(SRF) == 0:
                 SRF = [SRF]
 
             # append to figure or make new figure
-            if V == None:
+            if V is None:
                 # if V is None, plot only a single plot of the BRDF
-                polarfig = plt.figure(figsize=(7,7))
-                polarax = polarfig.add_subplot(111,projection='polar')
+                polarfig = plt.figure(figsize=(7, 7))
+                polarax = polarfig.add_subplot(111, projection='polar')
             else:
                 # plot p and the BRDF together
-                polarax = polarfig.add_subplot(122,projection='polar')
+                polarax = polarfig.add_subplot(122, projection='polar')
 
-
-            if BRDFlegend == True: legend_lines = []
+            if BRDFlegend is True:
+                legend_lines = []
             # plot of BRDF
             for SRF in SRF:
                 # define a plotfunction of the analytic form of the BRDF
-                if BRDFaprox == True: brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules = ["numpy","sympy"])
-
+                if BRDFaprox is True:
+                    brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules=["numpy", "sympy"])
 
                 # set incidence-angles for which the BRDF is calculated
-                plottis=np.deg2rad(incBRDF)
-                colors = ['k', 'r','g','b', 'c','m','y']*int(round((len(plottis)/7.+1)))
+                plottis = np.deg2rad(incBRDF)
+                colors = ['k', 'r', 'g', 'b', 'c', 'm', 'y'] * int(round((len(plottis) / 7. + 1)))
 
-                brdfmax = BRDFmultip*np.max(SRF.brdf(plottis, plottis, 0., 0.))
+                brdfmax = BRDFmultip * np.max(SRF.brdf(plottis, plottis, 0., 0.))
 
                 # set color-counter to 0
-                i=0
+                i = 0
                 for ti in plottis:
                     color = colors[i]
-                    i=i+1
-                    thetass = np.arange(-np.pi/2.,np.pi/2.,.01)
-                    rad=SRF.brdf(ti, thetass, 0., 0.)
-                    if BRDFaprox == True: radapprox = brdffunktapprox(ti, thetass, 0., 0.)
+                    i = i + 1
+                    thetass = np.arange(-np.pi / 2., np.pi / 2., .01)
+                    rad = SRF.brdf(ti, thetass, 0., 0.)
+                    if BRDFaprox is True:
+                        radapprox = brdffunktapprox(ti, thetass, 0., 0.)
 
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
-                    polarax.set_theta_offset(np.pi/2.) # set theta to start at z-axis
+                    polarax.set_theta_offset(np.pi / 2.)  # set theta to start at z-axis
 
-                    polarax.plot(thetass, rad, color = color)
-                    if BRDFaprox == True: polarax.plot(thetass,radapprox, color + '--')
-                    polarax.fill(np.arange(np.pi/2.,3.*np.pi/2.,.01),np.ones_like(np.arange(np.pi/2.,3.*np.pi/2.,.01))*brdfmax*1.2, color = groundcolor)
+                    polarax.plot(thetass, rad, color=color)
+                    if BRDFaprox is True:
+                        polarax.plot(thetass, radapprox, color + '--')
+                    polarax.fill(np.arange(np.pi / 2., 3. * np.pi / 2., .01), np.ones_like(np.arange(np.pi / 2., 3. * np.pi / 2., .01)) * brdfmax * 1.2, color=groundcolor)
 
-                    polarax.arrow(-ti,brdfmax*1.2  ,0.,-brdfmax*0.8, head_width =.0, head_length=.0, fc = color, ec = color, lw=1, alpha=0.3)
-                    polarax.fill_between(thetass,rad,alpha=0.2, color=color)
-                    polarax.set_xticklabels(['$0^\circ$','$45^\circ$','$90^\circ$'])
+                    polarax.arrow(-ti, brdfmax * 1.2, 0., -brdfmax * 0.8, head_width=.0, head_length=.0, fc=color, ec=color, lw=1, alpha=0.3)
+                    polarax.fill_between(thetass, rad, alpha=0.2, color=color)
+                    polarax.set_xticklabels(['$0^\circ$', '$45^\circ$', '$90^\circ$'])
                     polarax.set_yticklabels([])
-                    polarax.set_rmax(brdfmax*1.2)
+                    polarax.set_rmax(brdfmax * 1.2)
                     polarax.set_title(BRDFlabel + '\n')
 
             # add legend for BRDF's
-            if BRDFlegend == True:
-                i=0
+            if BRDFlegend is True:
+                i = 0
                 for ti in plottis:
                     color = colors[i]
-                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str( np.round_(np.rad2deg(ti),decimals=1) ) + '${}^\circ$' ) ]
-                    i = i +1
-                if BRDFaprox == True: legend_lines = legend_lines + [mlines.Line2D([], [], color = 'k', linestyle='--' , label='approx.') ]
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str(np.round_(np.rad2deg(ti), decimals=1)) + '${}^\circ$')]
+                    i = i + 1
+                if BRDFaprox is True:
+                    legend_lines = legend_lines + [mlines.Line2D([], [], color='k', linestyle='--', label='approx.')]
 
-                legend = plt.legend(bbox_to_anchor=BRDFlegpos, loc = 2, handles=legend_lines)
+                legend = plt.legend(bbox_to_anchor=BRDFlegpos, loc=2, handles=legend_lines)
                 legend.get_frame().set_facecolor('w')
                 legend.get_frame().set_alpha(.5)
 
         plt.show()
         return polarfig
 
-
-
-    def logmono(self, inc, Itot=None, Isurf= None, Ivol = None, Iint=None, ylim = None, sig0=False, noint=False, fractions = True, label = None, label_frac=None):
+    def logmono(self, inc, Itot=None, Isurf=None, Ivol=None, Iint=None, ylim=None, sig0=False, noint=False, fractions=True, label=None, label_frac=None):
         """
         Generate a plot of the monostatic backscattered Intensity or sigma_0 in dB as well as a
         plot showing the fractional contributions to the total signal.
@@ -273,99 +272,101 @@ class Plots(Scatter):
         def mask(x):
             return (x <= 0.)
 
-        assert isinstance(inc,np.ndarray), 'Error, inc must be a numpy array'
+        assert isinstance(inc, np.ndarray), 'Error, inc must be a numpy array'
 
         if Itot is not None:
-            assert isinstance(Itot,np.ndarray), 'Error, Itot must be a numpy array'
+            assert isinstance(Itot, np.ndarray), 'Error, Itot must be a numpy array'
             assert len(inc) == len(Itot), 'Error: Length of inc and Itot is not equal'
-            Itot = np.ma.array(Itot,mask=mask(Itot))
-
+            Itot = np.ma.array(Itot, mask=mask(Itot))
 
         if Isurf is not None:
-            assert isinstance(Isurf,np.ndarray), 'Error, Isurf must be a numpy array'
+            assert isinstance(Isurf, np.ndarray), 'Error, Isurf must be a numpy array'
             assert len(inc) == len(Isurf), 'Error: Length of inc and Isurf is not equal'
-            Isurf = np.ma.array(Isurf,mask=mask(Isurf))
-
+            Isurf = np.ma.array(Isurf, mask=mask(Isurf))
 
         if Ivol is not None:
-            assert isinstance(Ivol,np.ndarray), 'Error, Ivol must be a numpy array'
+            assert isinstance(Ivol, np.ndarray), 'Error, Ivol must be a numpy array'
             assert len(inc) == len(Ivol), 'Error: Length of inc and Ivol is not equal'
-            Ivol = np.ma.array(Ivol,mask=mask(Ivol))
-
+            Ivol = np.ma.array(Ivol, mask=mask(Ivol))
 
         if Iint is not None:
-            assert isinstance(Iint,np.ndarray), 'Error, Iint must be a numpy array'
+            assert isinstance(Iint, np.ndarray), 'Error, Iint must be a numpy array'
             assert len(inc) == len(Iint), 'Error: Length of inc and Iint is not equal'
-            Iint = np.ma.array(Iint,mask=mask(Iint))
+            Iint = np.ma.array(Iint, mask=mask(Iint))
 
+        if label is not None:
+            assert isinstance(label, str), 'Error, Label must be a string'
 
-        if label is not None:assert isinstance(label,str), 'Error, Label must be a string'
-
-
-        if ylim is not None: assert len(ylim)==2, 'Error: ylim must be an array of length 2!   ylim = [ymin, ymax]'
-        if ylim is not None: assert isinstance(ylim[0],(int,float)), 'Error: ymin must be a number'
-        if ylim is not None: assert isinstance(ylim[1],(int,float)), 'Error: ymax must be a number'
+        if ylim is not None:
+            assert len(ylim) == 2, 'Error: ylim must be an array of length 2!   ylim = [ymin, ymax]'
+        if ylim is not None:
+            assert isinstance(ylim[0], (int, float)), 'Error: ymin must be a number'
+        if ylim is not None:
+            assert isinstance(ylim[1], (int, float)), 'Error: ymax must be a number'
 
         if noint is True:
             assert Isurf is not None, 'Isurf must be provided if noint = True'
             assert Ivol is not None, 'Ivol must be provided if noint = True'
 
+        assert isinstance(sig0, bool), 'Error: sig0 must be either True or False'
+        assert isinstance(fractions, bool), 'Error: fractions must be either True or False'
 
+        ctot = 'black'
+        csurf = 'red'
+        cvol = 'green'
+        cint = 'blue'
 
-        assert isinstance(sig0,bool), 'Error: sig0 must be either True or False'
-        assert isinstance(fractions,bool), 'Error: fractions must be either True or False'
-
-
-        ctot='black'
-        csurf='red'
-        cvol='green'
-        cint='blue'
-
-
-        if sig0 == True:
+        if sig0 is True:
             #  I..  will be multiplied with sig0  to get sigma0 values instead of normalized intensity
-            signorm = 4.*np.pi*np.cos(np.deg2rad(inc))
+            signorm = 4. * np.pi * np.cos(np.deg2rad(inc))
         else:
             signorm = 1.
 
-        if fractions == True:
-            f = plt.figure(figsize=(14,7))
+        if fractions is True:
+            f = plt.figure(figsize=(14, 7))
             ax = f.add_subplot(121)
             ax2 = f.add_subplot(122)
         else:
-            f = plt.figure(figsize=(7,7))
+            f = plt.figure(figsize=(7, 7))
             ax = f.add_subplot(111)
 
         ax.grid()
         ax.set_xlabel('$\\theta_0$ [deg]')
 
-        if sig0 == True:
+        if sig0 is True:
 
-            if Itot is not None: ax.plot(inc, 10.*np.log10(signorm*Itot), color=ctot, label='$\\sigma_0^{tot}$')
-            if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$\\sigma_0^{surf}$')
-            if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$\\sigma_0^{vol}$')
-            if Iint is not None: ax.plot(inc, 10.*np.log10(signorm*Iint), color=cint, label='$\\sigma_0^{int}$')
-            if noint is True: ax.plot(inc, 10.*np.log10(signorm*(Ivol + Isurf)), color=ctot, linestyle = '--', label='$\\sigma_0^{surf}+\\sigma_0^{vol}$')
+            if Itot is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Itot), color=ctot, label='$\\sigma_0^{tot}$')
+            if Isurf is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Isurf), color=csurf, label='$\\sigma_0^{surf}$')
+            if Ivol is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Ivol), color=cvol, label='$\\sigma_0^{vol}$')
+            if Iint is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Iint), color=cint, label='$\\sigma_0^{int}$')
+            if noint is True:
+                ax.plot(inc, 10. * np.log10(signorm * (Ivol + Isurf)), color=ctot, linestyle='--', label='$\\sigma_0^{surf}+\\sigma_0^{vol}$')
 
-
-            if label == None:
+            if label is None:
                 ax.set_title('Bacscattering Coefficient')
             else:
                 ax.set_title(label)
 
             ax.set_ylabel('$\\sigma_0$ [dB]')
 
-
         else:
 
-            if Itot is not None: ax.plot(inc, 10.*np.log10(signorm*Itot), color=ctot, label='$I_{tot}$')
-            if Isurf is not None: ax.plot(inc, 10.*np.log10(signorm*Isurf), color=csurf, label='$I_{surf}$')
-            if Ivol is not None: ax.plot(inc, 10.*np.log10(signorm*Ivol), color=cvol, label='$I_{vol}$')
-            if Iint is not None: ax.plot(inc, 10.*np.log10(signorm*Iint), color=cint, label='$I_{int}$')
-            if noint is True: ax.plot(inc, 10.*np.log10(signorm*(Ivol + Isurf)), color=ctot, linestyle = '--', label='$I_0^{surf}+I_0^{vol}$')
+            if Itot is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Itot), color=ctot, label='$I_{tot}$')
+            if Isurf is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Isurf), color=csurf, label='$I_{surf}$')
+            if Ivol is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Ivol), color=cvol, label='$I_{vol}$')
+            if Iint is not None:
+                ax.plot(inc, 10. * np.log10(signorm * Iint), color=cint, label='$I_{int}$')
+            if noint is True:
+                ax.plot(inc, 10. * np.log10(signorm * (Ivol + Isurf)), color=ctot, linestyle='--', label='$I_0^{surf}+I_0^{vol}$')
 
-
-            if label == None:
+            if label is None:
                 ax.set_title('Normalized Intensity')
             else:
                 ax.set_title(label)
@@ -375,43 +376,47 @@ class Plots(Scatter):
         legend.get_frame().set_facecolor('w')
         legend.get_frame().set_alpha(.5)
 
-
-        if ylim == None:
+        if ylim is None:
             Itotmax = np.nan
-            Isurfmax= np.nan
+            Isurfmax = np.nan
             Ivolmax = np.nan
             Iintmax = np.nan
 
             # set minimum y to the smallest value of the maximas of the individual contributions -5.
-            if Itot  is not None: Itotmax  = np.nanmax(10.*np.log10(signorm*Itot))
-            if Isurf is not None: Isurfmax = np.nanmax(10.*np.log10(signorm*Isurf))
-            if Ivol  is not None: Ivolmax  = np.nanmax(10.*np.log10(signorm*Ivol))
-            if Iint  is not None: Iintmax  = np.nanmax(10.*np.log10(signorm*Iint))
+            if Itot is not None:
+                Itotmax = np.nanmax(10. * np.log10(signorm * Itot))
+            if Isurf is not None:
+                Isurfmax = np.nanmax(10. * np.log10(signorm * Isurf))
+            if Ivol is not None:
+                Ivolmax = np.nanmax(10. * np.log10(signorm * Ivol))
+            if Iint is not None:
+                Iintmax = np.nanmax(10. * np.log10(signorm * Iint))
 
-            ymin = np.nanmin([Itotmax, Isurfmax, Ivolmax, Iintmax])-5.
+            ymin = np.nanmin([Itotmax, Isurfmax, Ivolmax, Iintmax]) - 5.
 
             # set maximum y to the maximum value of the maximas of the individual contributions + 5.
-            ymax = np.nanmax([Itotmax, Isurfmax, Ivolmax, Iintmax])+5.
+            ymax = np.nanmax([Itotmax, Isurfmax, Ivolmax, Iintmax]) + 5.
 
-            ax.set_ylim(ymin,ymax)
+            ax.set_ylim(ymin, ymax)
         else:
-            ax.set_ylim(ylim[0],ylim[1])
+            ax.set_ylim(ylim[0], ylim[1])
 
-        if fractions == True:
+        if fractions is True:
             # plot fractions
-            if Itot is not None and Isurf is not None: ax2.plot(inc, Isurf/Itot, label='surface', color=csurf)
-            if Itot is not None and Ivol is not None: ax2.plot(inc, Ivol/Itot, label='volume', color=cvol)
-            if Itot is not None and Iint is not None: ax2.plot(inc, Iint/Itot, label='interaction', color=cint)
+            if Itot is not None and Isurf is not None:
+                ax2.plot(inc, Isurf / Itot, label='surface', color=csurf)
+            if Itot is not None and Ivol is not None:
+                ax2.plot(inc, Ivol / Itot, label='volume', color=cvol)
+            if Itot is not None and Iint is not None:
+                ax2.plot(inc, Iint / Itot, label='interaction', color=cint)
 
-            if label_frac == None:
+            if label_frac is None:
                 ax2.set_title('Fractional contributions to total signal')
             else:
                 ax2.set_title(label_frac)
 
-
-
             ax2.set_xlabel('$\\theta_0$ [deg]')
-            if sig0 == True:
+            if sig0 is True:
                 ax2.set_ylabel('$\\sigma_0 / \\sigma_0^{tot}$')
             else:
                 ax2.set_ylabel('$I / I_{tot}$')
@@ -423,9 +428,7 @@ class Plots(Scatter):
         plt.show()
         return f
 
-
-
-    def linplot3d(self, theta, phi, Itot=None, Isurf=None, Ivol=None, Iint=None, surfmultip = 1., zoom = 2.):
+    def linplot3d(self, theta, phi, Itot=None, Isurf=None, Ivol=None, Iint=None, surfmultip=1., zoom=2.):
         """
         Generation of a spherical 3D-plot to visualize bistatic scattering behaviour
 
@@ -457,18 +460,21 @@ class Plots(Scatter):
 
         """
 
-        assert isinstance(theta,np.ndarray), 'Error: theta must be a numpy-array'
-        assert isinstance(phi,np.ndarray), 'Error: phi must be a numpy-array'
-        if Itot is not None: assert isinstance(Itot,np.ndarray), 'Error: Itot3d must be a numpy-array'
-        if Isurf is not None: assert isinstance(Isurf,np.ndarray), 'Error: Isurf3d must be a numpy-array'
-        if Ivol is not None: assert isinstance(Ivol,np.ndarray), 'Error: Ivol3d must be a numpy-array'
-        if Iint is not None: assert isinstance(Iint,np.ndarray), 'Error: Iint3d must be a numpy-array'
+        assert isinstance(theta, np.ndarray), 'Error: theta must be a numpy-array'
+        assert isinstance(phi, np.ndarray), 'Error: phi must be a numpy-array'
+        if Itot is not None:
+            assert isinstance(Itot, np.ndarray), 'Error: Itot3d must be a numpy-array'
+        if Isurf is not None:
+            assert isinstance(Isurf, np.ndarray), 'Error: Isurf3d must be a numpy-array'
+        if Ivol is not None:
+            assert isinstance(Ivol, np.ndarray), 'Error: Ivol3d must be a numpy-array'
+        if Iint is not None:
+            assert isinstance(Iint, np.ndarray), 'Error: Iint3d must be a numpy-array'
         assert isinstance(surfmultip, float), 'Error: surfmultip must be a floating-point number'
-        assert surfmultip>0., 'Error: surfmultip must be larger than 0.'
+        assert surfmultip > 0., 'Error: surfmultip must be larger than 0.'
 
         assert isinstance(zoom, float), 'Error: zoom must be a floating-point number'
-        assert zoom>0., 'Error: zoom must be larger than 0.'
-
+        assert zoom > 0., 'Error: zoom must be larger than 0.'
 
         # transform values to spherical coordinate system
         def sphericaltransform(r):
@@ -478,81 +484,78 @@ class Plots(Scatter):
             X = r * np.sin(theta) * np.cos(phi)
             Y = r * np.sin(theta) * np.sin(phi)
             Z = r * np.cos(theta)
-            return X,Y,Z
+            return X, Y, Z
 
+        fig = plt.figure(figsize=(7, 7))
+        ax3d = fig.add_subplot(1, 1, 1, projection='3d')
 
-        fig = plt.figure(figsize=(7,7))
-        ax3d = fig.add_subplot(1,1,1,projection='3d')
-
-        #ax3d.view_init(elev=20.,azim=45)
+        # ax3d.view_init(elev=20.,azim=45)
 
         # calculate maximum value of all given imput-arrays
         m = []
-        if Itot is not None: m = m + [np.max(sphericaltransform(Itot)), np.abs(np.min(sphericaltransform(Itot)))]
-        if Isurf is not None: m = m + [np.max(sphericaltransform(Isurf)), np.abs(np.min(sphericaltransform(Isurf)))]
-        if Ivol is not None: m = m + [np.max(sphericaltransform(Ivol)), np.abs(np.min(sphericaltransform(Ivol)))]
-        if Iint is not None: m = m + [np.max(sphericaltransform(Iint)), np.abs(np.min(sphericaltransform(Iint)))]
+        if Itot is not None:
+            m = m + [np.max(sphericaltransform(Itot)), np.abs(np.min(sphericaltransform(Itot)))]
+        if Isurf is not None:
+            m = m + [np.max(sphericaltransform(Isurf)), np.abs(np.min(sphericaltransform(Isurf)))]
+        if Ivol is not None:
+            m = m + [np.max(sphericaltransform(Ivol)), np.abs(np.min(sphericaltransform(Ivol)))]
+        if Iint is not None:
+            m = m + [np.max(sphericaltransform(Iint)), np.abs(np.min(sphericaltransform(Iint)))]
         maximum = np.max(m)
 
+        xx = np.array([- surfmultip * maximum, surfmultip * maximum])
+        yy = np.array([0., surfmultip * maximum])
+        xxx, yyy = np.meshgrid(xx, yy)
+        zzz = np.ones_like(xxx) * (0.)
 
-
-        xx=np.array([- surfmultip*maximum, surfmultip*maximum ])
-        yy=np.array([0., surfmultip*maximum])
-        xxx,yyy = np.meshgrid(xx,yy)
-        zzz = np.ones_like(xxx)*(0.)
-
-        ax3d.plot_surface(xxx,yyy,zzz, alpha=0.2, color='k')
-
+        ax3d.plot_surface(xxx, yyy, zzz, alpha=0.2, color='k')
 
         if Itot is not None:
             ax3d.plot_surface(
-            sphericaltransform(Itot)[0],sphericaltransform(Itot)[1],sphericaltransform(Itot)[2] ,rstride=1, cstride=1, color='Gray',
-            linewidth=0, antialiased=True, alpha=.3)
+                sphericaltransform(Itot)[0], sphericaltransform(Itot)[1], sphericaltransform(Itot)[2], rstride=1, cstride=1, color='Gray',
+                linewidth=0, antialiased=True, alpha=.3)
 
         if Isurf is not None:
             ax3d.plot_surface(
-            sphericaltransform(Isurf)[0],sphericaltransform(Isurf)[1],sphericaltransform(Isurf)[2], rstride=1, cstride=1, color='Red',
-            linewidth=0, antialiased=True, alpha=.5)
+                sphericaltransform(Isurf)[0], sphericaltransform(Isurf)[1], sphericaltransform(Isurf)[2], rstride=1, cstride=1, color='Red',
+                linewidth=0, antialiased=True, alpha=.5)
 
         if Ivol is not None:
             ax3d.plot_surface(
-            sphericaltransform(Ivol)[0],sphericaltransform(Ivol)[1],sphericaltransform(Ivol)[2], rstride=1, cstride=1, color='Green',
-            linewidth=0, antialiased=True, alpha=.5)
+                sphericaltransform(Ivol)[0], sphericaltransform(Ivol)[1], sphericaltransform(Ivol)[2], rstride=1, cstride=1, color='Green',
+                linewidth=0, antialiased=True, alpha=.5)
 
         if Iint is not None:
             ax3d.plot_surface(
-            sphericaltransform(Iint)[0],sphericaltransform(Iint)[1],sphericaltransform(Iint)[2], rstride=1, cstride=1, color='Blue',
-            linewidth=0, antialiased=True, alpha=.5)
+                sphericaltransform(Iint)[0], sphericaltransform(Iint)[1], sphericaltransform(Iint)[2], rstride=1, cstride=1, color='Blue',
+                linewidth=0, antialiased=True, alpha=.5)
 
-        ax3d.w_xaxis.set_pane_color((1.,1.,1.,0.))
-        ax3d.w_xaxis.line.set_color((1.,1.,1.,0.))
-        ax3d.w_yaxis.set_pane_color((1.,1.,1.,0.))
-        ax3d.w_yaxis.line.set_color((1.,1.,1.,0.))
-        #ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
-        ax3d.w_zaxis.set_pane_color((1.,1.,1.,.0))
-        ax3d.w_zaxis.line.set_color((1.,1.,1.,0.))
+        ax3d.w_xaxis.set_pane_color((1., 1., 1., 0.))
+        ax3d.w_xaxis.line.set_color((1., 1., 1., 0.))
+        ax3d.w_yaxis.set_pane_color((1., 1., 1., 0.))
+        ax3d.w_yaxis.line.set_color((1., 1., 1., 0.))
+        # ax3d.w_zaxis.set_pane_color((0.,0.,0.,.1))
+        ax3d.w_zaxis.set_pane_color((1., 1., 1., .0))
+        ax3d.w_zaxis.line.set_color((1., 1., 1., 0.))
         ax3d.set_xticks([])
         ax3d.set_yticks([])
         ax3d.set_zticks([])
 
-
-        ax3d.set_xlim(-maximum/zoom, maximum/zoom)
-        ax3d.set_ylim(-maximum/zoom,maximum/zoom)
-        ax3d.set_zlim(0,2*maximum/zoom)
-
+        ax3d.set_xlim(-maximum / zoom, maximum / zoom)
+        ax3d.set_ylim(-maximum / zoom, maximum / zoom)
+        ax3d.set_zlim(0, 2 * maximum / zoom)
 
         # ensure display of correct aspect ratio (bug in mplot3d)
         # due to the bug it is only possible to have equally sized axes (without changing the mplotlib code itself)
 
-        #ax3d.auto_scale_xyz([np.min(sphericaltransform(Itot3d)),np.max(sphericaltransform(Itot3d))],
+        # ax3d.auto_scale_xyz([np.min(sphericaltransform(Itot3d)),np.max(sphericaltransform(Itot3d))],
         #                   [0.,np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d)))],
         #                     [-np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d))),np.max(sphericaltransform(Itot3d))+np.abs(np.min(sphericaltransform(Itot3d)))])
 
         plt.show()
         return fig
 
-
-    def hemreflect(self, R=None, SRF=None, phi_0 = 0., t_0_step = 5., t_0_min = 0., t_0_max = 90., simps_N = 1000, showpoints = True):
+    def hemreflect(self, R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0., t_0_max=90., simps_N=1000, showpoints=True):
         '''
         Numerical evaluation of the hemispherical reflectance of the given BRDF-function
         using scipy's implementation of the Simpson-rule integration scheme.
@@ -590,19 +593,19 @@ class Plots(Scatter):
         from scipy.integrate import simps
 
         # choose BRDF function to be evaluated
-        if R != None:
+        if R is not None:
             BRDF = R.SRF.brdf
-        elif SRF !=None:
+        elif SRF is not None:
             BRDF = SRF.brdf
         else:
             assert False, 'Error: You must provide either R or SRF'
 
         # set incident (zenith-angle) directions for which the integral should be evaluated!
-        incnum = np.arange(t_0_min,t_0_max,t_0_step)
+        incnum = np.arange(t_0_min, t_0_max, t_0_step)
 
         # define grid for integration
-        x=np.linspace(0.,np.pi/2., simps_N)
-        y=np.linspace(0.,2*np.pi, simps_N)
+        x = np.linspace(0., np.pi / 2., simps_N)
+        y = np.linspace(0., 2 * np.pi, simps_N)
 
         # initialize array for solutions
         sol = []
@@ -611,11 +614,11 @@ class Plots(Scatter):
         for theta_0 in np.deg2rad(incnum):
             # define the function that has to be integrated (i.e. Eq.20 in the paper)
             # notice the additional  np.sin(thetas)  which oritinates from integrating over theta_s instead of mu_s
-            def integfunkt(theta_s,phi_s):
-                return np.sin(theta_s)*np.cos(theta_s)*BRDF(theta_0,theta_s,phi_0,phi_s)
+            def integfunkt(theta_s, phi_s):
+                return np.sin(theta_s) * np.cos(theta_s) * BRDF(theta_0, theta_s, phi_0, phi_s)
             # evaluate the integral using Simpson's Rule twice
-            z=integfunkt(x[:,None],y)
-            sol = sol + [simps(simps(z,y),x)]
+            z = integfunkt(x[:, None], y)
+            sol = sol + [simps(simps(z, y), x)]
 
         sol = np.array(sol)
 
@@ -625,15 +628,16 @@ class Plots(Scatter):
 
         # generation of plot
         fig = plt.figure()
-        axnum = fig.add_subplot(1,1,1)
+        axnum = fig.add_subplot(1, 1, 1)
 
-        axnum.plot(incnum,sol, 'k')
-        if showpoints == True: axnum.plot(incnum,sol, 'r.')
+        axnum.plot(incnum, sol, 'k')
+        if showpoints is True:
+            axnum.plot(incnum, sol, 'r.')
 
         axnum.set_xlabel('$\\theta_0$ [deg]')
         axnum.set_ylabel('$R(\\theta_0)$')
-        axnum.set_title('Hemispherical reflectance ') # for $\\phi_i = $' + str(phii) +'$)$')
-        axnum.set_ylim(0.,np.max(sol)*1.1)
+        axnum.set_title('Hemispherical reflectance ')  # for $\\phi_i = $' + str(phii) +'$)$')
+        axnum.set_ylim(0., np.max(sol) * 1.1)
 
         axnum.grid()
         plt.show()
