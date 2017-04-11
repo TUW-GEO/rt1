@@ -86,24 +86,24 @@ class Plots(Scatter):
         assert isinstance(plabel, str), 'Error: plabel of polarplot must be a string'
         assert isinstance(BRDFlabel, str), 'Error: plabel of polarplot must be a string'
 
-        if R == None and SRF == None and V == None:
+        if R is None and SRF is None and V is None:
             assert False, 'Error: You must either provide R or SRF and/or V'
 
         # if R is provided, use it to define SRF and V, else use the provided functions
-        if R != None:
+        if R is not None:
             SRF = R.SRF
             V = R.RV
 
         # define functions for plotting that evaluate the used approximations in terms of legendre-polynomials
         n = sp.Symbol('n')
 
-        if V != None:
+        if V is not None:
             # if V is a scalar, make it a list
             if np.ndim(V) == 0:
                 V = [V]
 
             # make new figure
-            if SRF == None:
+            if SRF is None:
                 # if SRF is None, plot only a single plot of p
                 polarfig = plt.figure(figsize=(7, 7))
                 polarax = polarfig.add_subplot(111, projection='polar')
@@ -115,7 +115,7 @@ class Plots(Scatter):
             # plot of volume-scattering phase-function's
             for V in V:
                 # define a plotfunction of the legendre-approximation of p
-                if paprox == True:
+                if paprox is True:
                     phasefunktapprox = sp.lambdify(('theta_0', 'theta_s', 'phi_0', 'phi_s'), V.legexpansion('theta_0', 'theta_s', 'phi_0', 'phi_s', 'vvvv').doit(), modules=["numpy", "sympy"])
 
                 # set incidence-angles for which p is calculated
@@ -124,7 +124,7 @@ class Plots(Scatter):
 
                 pmax = pmultip * np.max(V.p(plottis, np.pi - plottis, 0., 0.))
 
-                if plegend == True:
+                if plegend is True:
                     legend_lines = []
 
                 # set color-counter to 0
@@ -134,14 +134,14 @@ class Plots(Scatter):
                     i = i + 1
                     thetass = np.arange(0., 2. * np.pi, .01)
                     rad = V.p(ti, thetass, 0., 0.)
-                    if paprox == True:
+                    if paprox is True:
                         radapprox = phasefunktapprox(np.pi - ti, thetass, 0., 0.)  # the use of np.pi-ti stems from the definition of legexpansion() in volume.py
 
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
                     polarax.set_theta_offset(np.pi / 2.)  # set theta to start at z-axis
 
                     polarax.plot(thetass, rad, color)
-                    if paprox == True:
+                    if paprox is True:
                         polarax.plot(thetass, radapprox, color + '--')
                     polarax.arrow(-ti, pmax * 1.2, 0., -pmax * 0.8, head_width=.0, head_length=.0, fc=color, ec=color, lw=1, alpha=0.3)
                     polarax.fill_between(thetass, rad, alpha=0.2, color=color)
@@ -151,26 +151,26 @@ class Plots(Scatter):
                     polarax.set_title(plabel + '\n')
 
             # add legend for covering layer phase-functions
-            if plegend == True:
+            if plegend is True:
                 i = 0
                 for ti in plottis:
                     color = colors[i]
                     legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str(np.round_(np.rad2deg(ti), decimals=1)) + '${}^\circ$')]
                     i = i + 1
-                if paprox == True:
+                if paprox is True:
                     legend_lines = legend_lines + [mlines.Line2D([], [], color='k', linestyle='--', label='approx.')]
 
                 legend = plt.legend(bbox_to_anchor=plegpos, loc=2, handles=legend_lines)
                 legend.get_frame().set_facecolor('w')
                 legend.get_frame().set_alpha(.5)
 
-        if SRF != None:
+        if SRF is not None:
             # if SRF is a scalar, make it a list
             if np.ndim(SRF) == 0:
                 SRF = [SRF]
 
             # append to figure or make new figure
-            if V == None:
+            if V is None:
                 # if V is None, plot only a single plot of the BRDF
                 polarfig = plt.figure(figsize=(7, 7))
                 polarax = polarfig.add_subplot(111, projection='polar')
@@ -178,12 +178,12 @@ class Plots(Scatter):
                 # plot p and the BRDF together
                 polarax = polarfig.add_subplot(122, projection='polar')
 
-            if BRDFlegend == True:
+            if BRDFlegend is True:
                 legend_lines = []
             # plot of BRDF
             for SRF in SRF:
                 # define a plotfunction of the analytic form of the BRDF
-                if BRDFaprox == True:
+                if BRDFaprox is True:
                     brdffunktapprox = sp.lambdify(('theta_ex', 'theta_s', 'phi_ex', 'phi_s'), SRF.legexpansion('theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv').doit(), modules=["numpy", "sympy"])
 
                 # set incidence-angles for which the BRDF is calculated
@@ -199,14 +199,14 @@ class Plots(Scatter):
                     i = i + 1
                     thetass = np.arange(-np.pi / 2., np.pi / 2., .01)
                     rad = SRF.brdf(ti, thetass, 0., 0.)
-                    if BRDFaprox == True:
+                    if BRDFaprox is True:
                         radapprox = brdffunktapprox(ti, thetass, 0., 0.)
 
                     polarax.set_theta_direction(-1)   # set theta direction to clockwise
                     polarax.set_theta_offset(np.pi / 2.)  # set theta to start at z-axis
 
                     polarax.plot(thetass, rad, color=color)
-                    if BRDFaprox == True:
+                    if BRDFaprox is True:
                         polarax.plot(thetass, radapprox, color + '--')
                     polarax.fill(np.arange(np.pi / 2., 3. * np.pi / 2., .01), np.ones_like(np.arange(np.pi / 2., 3. * np.pi / 2., .01)) * brdfmax * 1.2, color=groundcolor)
 
@@ -218,13 +218,13 @@ class Plots(Scatter):
                     polarax.set_title(BRDFlabel + '\n')
 
             # add legend for BRDF's
-            if BRDFlegend == True:
+            if BRDFlegend is True:
                 i = 0
                 for ti in plottis:
                     color = colors[i]
                     legend_lines = legend_lines + [mlines.Line2D([], [], color=color, label='$\\theta_0$ = ' + str(np.round_(np.rad2deg(ti), decimals=1)) + '${}^\circ$')]
                     i = i + 1
-                if BRDFaprox == True:
+                if BRDFaprox is True:
                     legend_lines = legend_lines + [mlines.Line2D([], [], color='k', linestyle='--', label='approx.')]
 
                 legend = plt.legend(bbox_to_anchor=BRDFlegpos, loc=2, handles=legend_lines)
@@ -318,13 +318,13 @@ class Plots(Scatter):
         cvol = 'green'
         cint = 'blue'
 
-        if sig0 == True:
+        if sig0 is True:
             #  I..  will be multiplied with sig0  to get sigma0 values instead of normalized intensity
             signorm = 4. * np.pi * np.cos(np.deg2rad(inc))
         else:
             signorm = 1.
 
-        if fractions == True:
+        if fractions is True:
             f = plt.figure(figsize=(14, 7))
             ax = f.add_subplot(121)
             ax2 = f.add_subplot(122)
@@ -335,7 +335,7 @@ class Plots(Scatter):
         ax.grid()
         ax.set_xlabel('$\\theta_0$ [deg]')
 
-        if sig0 == True:
+        if sig0 is True:
 
             if Itot is not None:
                 ax.plot(inc, 10. * np.log10(signorm * Itot), color=ctot, label='$\\sigma_0^{tot}$')
@@ -348,7 +348,7 @@ class Plots(Scatter):
             if noint is True:
                 ax.plot(inc, 10. * np.log10(signorm * (Ivol + Isurf)), color=ctot, linestyle='--', label='$\\sigma_0^{surf}+\\sigma_0^{vol}$')
 
-            if label == None:
+            if label is None:
                 ax.set_title('Bacscattering Coefficient')
             else:
                 ax.set_title(label)
@@ -368,7 +368,7 @@ class Plots(Scatter):
             if noint is True:
                 ax.plot(inc, 10. * np.log10(signorm * (Ivol + Isurf)), color=ctot, linestyle='--', label='$I_0^{surf}+I_0^{vol}$')
 
-            if label == None:
+            if label is None:
                 ax.set_title('Normalized Intensity')
             else:
                 ax.set_title(label)
@@ -378,7 +378,7 @@ class Plots(Scatter):
         legend.get_frame().set_facecolor('w')
         legend.get_frame().set_alpha(.5)
 
-        if ylim == None:
+        if ylim is None:
             Itotmax = np.nan
             Isurfmax = np.nan
             Ivolmax = np.nan
@@ -403,7 +403,7 @@ class Plots(Scatter):
         else:
             ax.set_ylim(ylim[0], ylim[1])
 
-        if fractions == True:
+        if fractions is True:
             # plot fractions
             if Itot is not None and Isurf is not None:
                 ax2.plot(inc, Isurf / Itot, label='surface', color=csurf)
@@ -412,13 +412,13 @@ class Plots(Scatter):
             if Itot is not None and Iint is not None:
                 ax2.plot(inc, Iint / Itot, label='interaction', color=cint)
 
-            if label_frac == None:
+            if label_frac is None:
                 ax2.set_title('Fractional contributions to total signal')
             else:
                 ax2.set_title(label_frac)
 
             ax2.set_xlabel('$\\theta_0$ [deg]')
-            if sig0 == True:
+            if sig0 is True:
                 ax2.set_ylabel('$\\sigma_0 / \\sigma_0^{tot}$')
             else:
                 ax2.set_ylabel('$I / I_{tot}$')
@@ -595,9 +595,9 @@ class Plots(Scatter):
         from scipy.integrate import simps
 
         # choose BRDF function to be evaluated
-        if R != None:
+        if R is not None:
             BRDF = R.SRF.brdf
-        elif SRF != None:
+        elif SRF is not  None:
             BRDF = SRF.brdf
         else:
             assert False, 'Error: You must provide either R or SRF'
@@ -633,7 +633,7 @@ class Plots(Scatter):
         axnum = fig.add_subplot(1, 1, 1)
 
         axnum.plot(incnum, sol, 'k')
-        if showpoints == True:
+        if showpoints is True:
             axnum.plot(incnum, sol, 'r.')
 
         axnum.set_xlabel('$\\theta_0$ [deg]')
