@@ -597,7 +597,7 @@ class Plots(Scatter):
         # choose BRDF function to be evaluated
         if R is not None:
             BRDF = R.SRF.brdf
-        elif SRF is not  None:
+        elif SRF is not None:
             BRDF = SRF.brdf
         else:
             assert False, 'Error: You must provide either R or SRF'
