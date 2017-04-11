@@ -155,123 +155,121 @@ class Surface(Scatter):
             else:
                 raise AssertionError('wrong choice of phi_ex geometry')
 
-        #print 'BRDF: ', self.scat_angle(theta_s,theta_ex,phi_s,phi_ex)
         return sp.Sum(self.legcoefs * sp.legendre(n, self.scat_angle(theta_s, theta_ex, phi_s, phi_ex, self.a)), (n, 0, NBRDF - 1))  # ##.doit()  # this generates a code still that is not yet evaluated; doit() will result in GMMA error due to potential negative numbers
 
 
 class LinCombSRF(Surface):
+    '''
+    Class to generate linear-combinations of volume-class elements
+
+    For details please look at the documentation (http://rt1.readthedocs.io/en/latest/model_specification.html#linear-combination-of-scattering-distributions)
+
+    Parameters
+    ----------
+
+    SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
+                 A list that contains the the individual BRDF's (Surface-objects)
+                 and the associated weighting-factors (floats) for the linear-combination.
+    '''
+
+    def __init__(self, SRFchoices=None, **kwargs):
+
+        super(LinCombSRF, self).__init__(**kwargs)
+
+        self.SRFchoices = SRFchoices
+        self._set_function()
+        self._set_legexpansion()
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+        self._func = self._SRFcombiner()._func
+
+    def _set_legexpansion(self):
         '''
-        Class to generate linear-combinations of volume-class elements
+        set legexpansion to the combined legexpansion
+        '''
+        self.ncoefs = self._SRFcombiner().ncoefs
+        self.legexpansion = self._SRFcombiner().legexpansion
 
-        For details please look at the documentation (http://rt1.readthedocs.io/en/latest/model_specification.html#linear-combination-of-scattering-distributions)
+    def _SRFcombiner(self):
+        '''
+        Returns a Surface-class element based on an input-array of Surface-class elements.
+        The array must be shaped in the form:
+            SRFchoices = [  [ weighting-factor   ,   Surface-class element ]  ,  [ weighting-factor   ,   Surface-class element ]  , .....]
 
-        Parameters
-        ----------
-
-        SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
-                     A list that contains the the individual BRDF's (Surface-objects)
-                     and the associated weighting-factors (floats) for the linear-combination.
+        ATTENTION: the .legexpansion()-function of the combined surface-class element is no longer related to its legcoefs (which are set to 0.)
+                   since the individual legexpansions of the combined surface-class elements are possibly evaluated with a different a-parameter
+                   of the generalized scattering angle! This does not affect any calculations, since the evaluation is exclusively based on the
+                   use of the .legexpansion()-function.
         '''
 
-        def __init__(self, SRFchoices=None, **kwargs):
-
-            super(LinCombSRF, self).__init__(**kwargs)
-
-            self.SRFchoices = SRFchoices
-            self._set_function()
-            self._set_legexpansion()
-
-        def _set_function(self):
+        class BRDFfunction(Surface):
             """
-            define phase function as sympy object for later evaluation
+            dummy-Surface-class object used to generate linear-combinations of BRDF-functions
             """
-            theta_0 = sp.Symbol('theta_0')
-            theta_ex = sp.Symbol('theta_ex')
-            phi_0 = sp.Symbol('phi_0')
-            phi_ex = sp.Symbol('phi_ex')
-            self._func = self._SRFcombiner()._func
 
-        def _set_legexpansion(self):
-            '''
-            set legexpansion to the combined legexpansion
-            '''
-            self.ncoefs = self._SRFcombiner().ncoefs
-            self.legexpansion = self._SRFcombiner().legexpansion
+            def __init__(self, **kwargs):
+                super(BRDFfunction, self).__init__(**kwargs)
+                self._set_function()
+                self._set_legcoefficients()
 
-        def _SRFcombiner(self):
-            '''
-            Returns a Surface-class element based on an input-array of Surface-class elements.
-            The array must be shaped in the form:
-                SRFchoices = [  [ weighting-factor   ,   Surface-class element ]  ,  [ weighting-factor   ,   Surface-class element ]  , .....]
-
-            ATTENTION: the .legexpansion()-function of the combined surface-class element is no longer related to its legcoefs (which are set to 0.)
-                       since the individual legexpansions of the combined surface-class elements are possibly evaluated with a different a-parameter
-                       of the generalized scattering angle! This does not affect any calculations, since the evaluation is exclusively based on the
-                       use of the .legexpansion()-function.
-            '''
-
-            class BRDFfunction(Surface):
+            def _set_function(self):
                 """
-                dummy-Surface-class object used to generate linear-combinations of BRDF-functions
+                define phase function as sympy object for later evaluation
                 """
+                theta_0 = sp.Symbol('theta_0')
+                theta_ex = sp.Symbol('theta_ex')
+                phi_0 = sp.Symbol('phi_0')
+                phi_ex = sp.Symbol('phi_ex')
+                self._func = 0.
 
-                def __init__(self, **kwargs):
-                    super(BRDFfunction, self).__init__(**kwargs)
-                    self._set_function()
-                    self._set_legcoefficients()
+            def _set_legcoefficients(self):
+                n = sp.Symbol('n')
+                self.legcoefs = 0.
 
-                def _set_function(self):
-                    """
-                    define phase function as sympy object for later evaluation
-                    """
-                    theta_0 = sp.Symbol('theta_0')
-                    theta_ex = sp.Symbol('theta_ex')
-                    phi_0 = sp.Symbol('phi_0')
-                    phi_ex = sp.Symbol('phi_ex')
-                    self._func = 0.
+        # initialize a combined phase-function class element
+        SRFcomb = BRDFfunction()
+        SRFcomb.ncoefs = max([SRF[1].ncoefs for SRF in self.SRFchoices])     # set ncoefs of the combined volume-class element to the maximum
+        #   number of coefficients within the chosen functions.
+        #   (this is necessary for correct evaluation of fn-coefficients)
 
-                def _set_legcoefficients(self):
-                    n = sp.Symbol('n')
-                    self.legcoefs = 0.
+        # find BRDF functions with equal a parameters
+        equals = [np.where((np.array([VV[1].a for VV in self.SRFchoices]) == tuple(V[1].a)).all(axis=1))[0] for V in self.SRFchoices]
+        # evaluate index of BRDF-functions that have equal a parameter
+        equal_a = list({tuple(row) for row in equals})          # find phase functions where a-parameter is equal
 
-            # initialize a combined phase-function class element
-            SRFcomb = BRDFfunction()
-            SRFcomb.ncoefs = max([SRF[1].ncoefs for SRF in self.SRFchoices])     # set ncoefs of the combined volume-class element to the maximum
-                                                                    #   number of coefficients within the chosen functions.
-                                                                    #   (this is necessary for correct evaluation of fn-coefficients)
+        # evaluation of combined expansion in legendre-polynomials
+        dummylegexpansion = []
+        for i in range(0, len(equal_a)):
 
-            # find BRDF functions with equal a parameters
-            equals = [np.where((np.array([VV[1].a for VV in self.SRFchoices]) == tuple(V[1].a)).all(axis=1))[0] for V in self.SRFchoices]
-            # evaluate index of BRDF-functions that have equal a parameter
-            equal_a = list({tuple(row) for row in equals})          # find phase functions where a-parameter is equal
+            SRFdummy = BRDFfunction()
+            SRFequal = np.take(self.SRFchoices, equal_a[i], axis=0)        # select SRF choices where a parameter is equal
 
-            # evaluation of combined expansion in legendre-polynomials
-            dummylegexpansion = []
-            for i in range(0, len(equal_a)):
+            SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])  # set ncoefs to the maximum number within the choices with equal a-parameter
 
-                SRFdummy = BRDFfunction()
-                SRFequal = np.take(self.SRFchoices, equal_a[i], axis=0)        # select SRF choices where a parameter is equal
+            for SRF in SRFequal:                                    # loop over phase-functions with equal a-parameter
 
-                SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])  # set ncoefs to the maximum number within the choices with equal a-parameter
+                # set parameters based on chosen phase-functions and evaluate combined legendre-expansion
+                SRFdummy.a = SRF[1].a
+                SRFdummy.NormBRDF = SRF[1].NormBRDF
+                SRFdummy._func = SRFdummy._func + SRF[1]._func * SRF[0]
+                SRFdummy.legcoefs = SRFdummy.legcoefs + SRF[1].legcoefs * SRF[0]
 
-                for SRF in SRFequal:                                    # loop over phase-functions with equal a-parameter
+            dummylegexpansion = dummylegexpansion + [SRFdummy.legexpansion]
 
-                    # set parameters based on chosen phase-functions and evaluate combined legendre-expansion
-                    SRFdummy.a = SRF[1].a
-                    SRFdummy.NormBRDF = SRF[1].NormBRDF
-                    SRFdummy._func = SRFdummy._func + SRF[1]._func * SRF[0]
-                    SRFdummy.legcoefs = SRFdummy.legcoefs + SRF[1].legcoefs * SRF[0]
+        # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
+        SRFcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum([lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion])
 
-                dummylegexpansion = dummylegexpansion + [SRFdummy.legexpansion]
-
-            # combine legendre-expansions for each a-parameter based on given combined legendre-coefficients
-            SRFcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum([lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion])
-
-
-            for SRF in self.SRFchoices:
-                # set parameters based on chosen classes to define analytic function representation
-                SRFcomb._func = SRFcomb._func + SRF[1]._func * SRF[0]
-            return SRFcomb
+        for SRF in self.SRFchoices:
+            # set parameters based on chosen classes to define analytic function representation
+            SRFcomb._func = SRFcomb._func + SRF[1]._func * SRF[0]
+        return SRFcomb
 
 
 class Isotropic(Surface):
@@ -298,7 +296,7 @@ class Isotropic(Surface):
         """
         define phase function as sympy object for later evaluation
         """
-        #def pfunkt(t0):
+        # def pfunkt(t0):
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -355,7 +353,7 @@ class CosineLobe(Surface):
         phi_0 = sp.Symbol('phi_0')
         phi_ex = sp.Symbol('phi_ex')
 
-        #self._func = sp.Max(self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a), 0.)**self.i  # eq. A13
+        # self._func = sp.Max(self.scat_angle(theta_i,theta_s,phi_i,phi_s, a=self.a), 0.)**self.i  # eq. A13
 
         # alternative formulation avoiding the use of sp.Max()
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
