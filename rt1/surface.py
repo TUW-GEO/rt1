@@ -184,16 +184,14 @@ class LinCombSRF(Surface):
         """
         define phase function as sympy object for later evaluation
         """
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+
         self._func = self._SRFcombiner()._func
 
     def _set_legexpansion(self):
         '''
         set legexpansion to the combined legexpansion
         '''
+
         self.ncoefs = self._SRFcombiner().ncoefs
         self.legexpansion = self._SRFcombiner().legexpansion
 
@@ -223,14 +221,9 @@ class LinCombSRF(Surface):
                 """
                 define phase function as sympy object for later evaluation
                 """
-                theta_0 = sp.Symbol('theta_0')
-                theta_ex = sp.Symbol('theta_ex')
-                phi_0 = sp.Symbol('phi_0')
-                phi_ex = sp.Symbol('phi_ex')
                 self._func = 0.
 
             def _set_legcoefficients(self):
-                n = sp.Symbol('n')
                 self.legcoefs = 0.
 
         # initialize a combined phase-function class element
@@ -296,11 +289,6 @@ class Isotropic(Surface):
         """
         define phase function as sympy object for later evaluation
         """
-        # def pfunkt(t0):
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
         self._func = self.NormBRDF / sp.pi
 
 

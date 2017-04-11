@@ -95,8 +95,6 @@ class Plots(Scatter):
             V = R.RV
 
         # define functions for plotting that evaluate the used approximations in terms of legendre-polynomials
-        n = sp.Symbol('n')
-
         if V is not None:
             # if V is a scalar, make it a list
             if np.ndim(V) == 0:
