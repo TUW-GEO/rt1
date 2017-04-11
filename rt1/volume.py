@@ -190,16 +190,14 @@ class LinCombV(Volume):
         """
         define phase function as sympy object for later evaluation
         """
-        #theta_0 = sp.Symbol('theta_0')
-        #theta_ex = sp.Symbol('theta_ex')
-        #phi_0 = sp.Symbol('phi_0')
-        #phi_ex = sp.Symbol('phi_ex')
+
         self._func = self._Vcombiner()._func
 
     def _set_legexpansion(self):
         '''
         set legexpansion to the combined legexpansion
         '''
+
         self.ncoefs = self._Vcombiner().ncoefs
         self.legexpansion = self._Vcombiner().legexpansion
 
@@ -217,7 +215,6 @@ class LinCombV(Volume):
                    since the individual legexpansions of the combined volume-class elements are possibly evaluated with a different a-parameter
                    of the generalized scattering angle! This does not affect any calculations, since the evaluation is exclusively based on the
                    use of the .legexpansion()-function.
-
         '''
 
         class Phasefunction(Volume):
@@ -234,10 +231,7 @@ class LinCombV(Volume):
                 """
                 define phase function as sympy object for later evaluation
                 """
-                #theta_0 = sp.Symbol('theta_0')
-                #theta_ex = sp.Symbol('theta_ex')
-                #phi_0 = sp.Symbol('phi_0')
-                #phi_ex = sp.Symbol('phi_ex')
+
                 self._func = 0.
 
             def _set_legcoefficients(self):
@@ -246,7 +240,6 @@ class LinCombV(Volume):
                 needs to be a function that can be later evaluated by subsituting 'n'
                 """
 
-                #n = sp.Symbol('n')
                 self.legcoefs = 0.
 
         # test if the weighting-factors equate to 1.
