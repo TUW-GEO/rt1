@@ -348,6 +348,10 @@ class RT1(object):
             Isurf = self.surface()
 
             # store initial parameter-values
+            old_t_0 = self.t_0
+            old_p_0 = self.p_0
+            old_t_ex = self.t_ex
+            old_p_ex = self.p_ex
             old_tau = self.RV.tau
             old_omega = self.RV.omega
             old_NN = self.SRF.NormBRDF
@@ -358,15 +362,23 @@ class RT1(object):
             invalid_index = np.where(~mask)
 
             # set parameter-values to valid values for calculation
-            self.RV.tau = old_tau[mask]
-            self.RV.omega = old_omega[mask]
-            self.SRF.NormBRDF = old_NN[mask]
+            self.t_0 = old_t_0[valid_index[0]]
+            self.p_0 = old_p_0[valid_index[0]]
+            self.t_ex = old_t_ex[valid_index[0]]
+            self.p_ex = old_p_ex[valid_index[0]]
+            self.RV.tau = old_tau[valid_index[0]]
+            self.RV.omega = old_omega[valid_index[0]]
+            self.SRF.NormBRDF = old_NN[valid_index[0]]
 
             # calculate volume and surface term where tau-values are valid
             _Ivol = self.volume()
             _Iint = self.interaction()
 
             # reset parameter values to old values
+            self.t_0 = old_t_0
+            self.p_0 = old_p_0
+            self.t_ex = old_t_ex
+            self.p_ex = old_p_ex
             self.RV.tau = old_tau
             self.RV.omega = old_omega
             self.SRF.NormBRDF = old_NN
@@ -374,19 +386,16 @@ class RT1(object):
             # combine calculated volume-contributions for valid tau-values
             # with zero-arrays for invalid tau-values
             Ivol = np.ones_like(self.t_0)
-            Ivol[valid_index] = _Ivol
-            Ivol[invalid_index] = np.ones_like(Ivol[~mask]) * 0.
+            Ivol[valid_index[0]] = _Ivol
+            Ivol[invalid_index[0]] = np.ones_like(Ivol[invalid_index[0]]) * 0.
 
             # combine calculated interaction-contributions for valid tau-values
             # with zero-arrays for invalid tau-values
             Iint = np.ones_like(self.t_0)
-            Iint[valid_index] = _Iint
-            Iint[invalid_index] = np.ones_like(Iint[~mask]) * 0.
+            Iint[valid_index[0]] = _Iint
+            Iint[invalid_index[0]] = np.ones_like(Iint[invalid_index[0]]) * 0.
 
         return Isurf + Ivol + Iint, Isurf, Ivol, Iint
-
-
-
 
     def surface(self):
         """
@@ -398,7 +407,10 @@ class RT1(object):
         array_like(float)
                           Numerical value of the surface-contribution for the given set of parameters
         """
-        return self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+        Isurf = self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+        return self.SRF.NormBRDF * Isurf
 
     def volume(self):
         """
@@ -414,7 +426,7 @@ class RT1(object):
 
     def interaction(self):
         """
-        Numerical evaluation of the volume-contribution
+        Numerical evaluation of the interaction-contribution
         (http://rt1.readthedocs.io/en/latest/theory.html#interaction_contribution)
 
         Returns
@@ -424,7 +436,10 @@ class RT1(object):
         """
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
-        return self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
+
+        Iint = self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
+
+        return self.SRF.NormBRDF * Iint
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
@@ -435,13 +450,10 @@ class RT1(object):
         -----------
         mu1 : array_like(float)
               cosine of the first polar-angle argument
-
         mu2 : array_like(float)
               cosine of the second polar-angle argument
-
         phi1 : array_like(float)
                first azimuth-angle argument in radians
-
         phi2 : array_like(float)
                second azimuth-angle argument in radians
 
@@ -458,3 +470,129 @@ class RT1(object):
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
         return S
+
+    def _dvolume_dtau(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to tau
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIvol/dtau for the given set of parameters
+        """
+
+        return (self.I0 * self.RV.omega * (self._mu_0 / (self._mu_0 + self._mu_ex))
+                * (
+            - (- 1. / self._mu_0 - 1. / self._mu_ex**(-1)) *
+            np.exp(- self.RV.tau / self._mu_0 - self.RV.tau / self._mu_ex)
+        )
+            * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
+        )
+
+    def _dvolume_domega(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to omega
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIvol/domega for the given set of parameters
+        """
+
+        return (self.I0 * self._mu_0 / (self._mu_0 + self._mu_ex)) * (1. - np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex))) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+    def _dvolume_dR(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to R (the hemispherical reflectance)
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIvol/dR for the given set of parameters
+        """
+
+        return 0.
+
+    def _dsurface_dtau(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to tau
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIsurf/dtau for the given set of parameters
+        """
+
+        # Calculate the surface-contribution
+        dIsurf = (self.I0
+                  * (- 1. / self._mu_0 - 1. / self._mu_ex) *
+                  np.exp(- self.RV.tau / self._mu_0
+                         - self.RV.tau / self._mu_ex)
+                  * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+                  )
+
+        # Incorporate BRDF-normalization factor
+        dIsurf = self.SRF.NormBRDF * dIsurf
+
+        return dIsurf
+
+    def _dsurface_domega(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to omega
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIsurf/domega for the given set of parameters
+        """
+
+        # Calculate the surface-contribution
+
+        return 0.
+
+    def _dsurface_dR(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to R (the hemispherical reflectance)
+        Returns
+        --------
+        array_like(float)
+                          Numerical value of dIsurf/dR for the given set of parameters
+        """
+
+        # Calculate the surface-contribution
+        dIsurf = self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+        return dIsurf
+
+    def jacobian(self):
+        '''
+        returns the jacobian of the total backscatter with respect
+        to omega, tau and NormBRDF.
+        the contribution of the interaction-term is neglected !
+        '''
+
+
+#        jac = [
+#                self._dsurface_domega() + self._dvolume_domega() + self._dinteraction_domega(),
+#                self._dsurface_dtau() + self._dvolume_dtau() + self._dinteraction_dtau(),
+#                self._dsurface_dR() + self._dvolume_dR() + self._dinteraction_dR()
+#                ]
+
+
+#        jac = [
+#                self._dsurface_domega() + self._dvolume_domega(),
+#                self._dsurface_dtau() + self._dvolume_dtau(),
+#                self._dsurface_dR() + self._dvolume_dR()
+#                ]
+
+        from scipy.linalg import block_diag
+        # TODO correct treatment of scalar inputs for omega, tau and NormBRDF
+
+        jac = [
+            block_diag(*(self._dsurface_domega() + self._dvolume_domega())),
+            block_diag(*(self._dsurface_dtau() + self._dvolume_dtau())),
+            block_diag(*(self._dsurface_dR() + self._dvolume_dR()))
+        ]
+
+        return np.array(jac)
