@@ -104,12 +104,12 @@ class RT1(object):
         assert self.RV.omega is not None, 'Single scattering albedo needs to be provided'
         assert self.RV.tau is not None, 'Optical depth needs to be provided'
 
-        assert self.RV.omega >= 0.
-        assert self.RV.omega <= 1.
-        assert self.RV.tau >= 0.
+        # TODO assert self.RV.omega >= 0.
+        # TODO assert self.RV.omega <= 1.
+        # TODO assert self.RV.tau >= 0.
 
-        if self.RV.tau == 0.:
-            assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+        # TODO if self.RV.tau == 0.:
+        # TODO     assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
@@ -331,14 +331,62 @@ class RT1(object):
                Interaction contribution
         """
         # (16)
-        Isurf = self.surface()
-        if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
-            Ivol = self.volume()
-            Iint = self.interaction()
+
+        # the following if-else query ensures that volume- and interaction-terms
+        # are only calculated if tau > 0. (to avoid nan-values from invalid function-evaluations)
+
+        if np.isscalar(self.RV.tau):
+            Isurf = self.surface()
+            if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
+                Ivol = self.volume()
+                Iint = self.interaction()
+            else:
+                Ivol = 0.
+                Iint = 0.
         else:
-            Ivol = 0.
-            Iint = 0.
+            # calculate surface-term (valid for any tau-value)
+            Isurf = self.surface()
+
+            # store initial parameter-values
+            old_tau = self.RV.tau
+            old_omega = self.RV.omega
+            old_NN = self.SRF.NormBRDF
+
+            # set mask for tau > 0.
+            mask = old_tau > 0.
+            valid_index = np.where(mask)
+            invalid_index = np.where(~mask)
+
+            # set parameter-values to valid values for calculation
+            self.RV.tau = old_tau[mask]
+            self.RV.omega = old_omega[mask]
+            self.SRF.NormBRDF = old_NN[mask]
+
+            # calculate volume and surface term where tau-values are valid
+            _Ivol = self.volume()
+            _Iint = self.interaction()
+
+            # reset parameter values to old values
+            self.RV.tau = old_tau
+            self.RV.omega = old_omega
+            self.SRF.NormBRDF = old_NN
+
+            # combine calculated volume-contributions for valid tau-values
+            # with zero-arrays for invalid tau-values
+            Ivol = np.ones_like(self.t_0)
+            Ivol[valid_index] = _Ivol
+            Ivol[invalid_index] = np.ones_like(Ivol[~mask]) * 0.
+
+            # combine calculated interaction-contributions for valid tau-values
+            # with zero-arrays for invalid tau-values
+            Iint = np.ones_like(self.t_0)
+            Iint[valid_index] = _Iint
+            Iint[invalid_index] = np.ones_like(Iint[~mask]) * 0.
+
         return Isurf + Ivol + Iint, Isurf, Ivol, Iint
+
+
+
 
     def surface(self):
         """
