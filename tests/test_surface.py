@@ -28,7 +28,7 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(S.brdf(t_0, t_ex, p_0, p_ex), 1./np.pi)
 
     def test_cosine(self):
-        S = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
+        S = CosineLobe(ncoefs=10, i=5)
         t_0 = np.pi/2.
         t_ex = 0.234234
         p_0 = np.pi/2.
@@ -42,19 +42,19 @@ class TestSurface(unittest.TestCase):
         p_0 = 0.
         p_ex = 0.
         self.assertAlmostEqual(S.scat_angle(t_0,t_ex, p_0, p_ex, S.a),0.5,15) #--> 0.5
-        self.assertAlmostEqual(S.brdf(t_0, t_ex, p_0, p_ex), 0.5**5., 10)
+        self.assertAlmostEqual(S.brdf(t_0, t_ex, p_0, p_ex), 0.5**5./np.pi, 10)
 
     def test_cosine_coeff(self):
         # test legcoefs for example in paper
         n=10
-        S = CosineLobe(ncoefs=n, i=5, NormBRDF = np.pi)
+        S = CosineLobe(ncoefs=n, i=5)
         for i in range(n):
-            z1 = 120.*np.sqrt(np.pi)*(1./128.+i/64.)
+            z1 = 120.*(1./128.+i/64.)/np.sqrt(np.pi)
             z2 = sc.gamma((7.-i)*0.5)*sc.gamma((8.+i)*0.5)
             self.assertAlmostEqual(S._get_legcoef(i), z1/z2)
 
-        self.assertAlmostEqual(S._get_legcoef(0), 15.*np.sqrt(np.pi)/(16.*sc.gamma(3.5)*sc.gamma(4.)))
-        self.assertAlmostEqual(S._get_legcoef(2), 75.*np.sqrt(np.pi)/(16.*sc.gamma(2.5)*sc.gamma(5.)))
+        self.assertAlmostEqual(S._get_legcoef(0), 15./(16.*sc.gamma(3.5)*sc.gamma(4.)*np.sqrt(np.pi)))
+        self.assertAlmostEqual(S._get_legcoef(2), 75./(16.*sc.gamma(2.5)*sc.gamma(5.)*np.sqrt(np.pi)))
 
     def test_expansion_cosine_lobe(self):
         # theta_i = np.pi/2.
@@ -64,7 +64,7 @@ class TestSurface(unittest.TestCase):
 
         # reference solution based on first N Legrende polynomials
         ncoefs = 10
-        S = CosineLobe(ncoefs=ncoefs, i=5, NormBRDF = np.pi)   # means coefficients 0...9; i=5 is for the example in the paper
+        S = CosineLobe(ncoefs=ncoefs, i=5)   # means coefficients 0...9; i=5 is for the example in the paper
 
         # input parameters are set in a way that COS_THETA = 1
         # and therefore only the legendre coefficients should be returned
