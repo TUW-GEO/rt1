@@ -16,8 +16,20 @@ class Surface(Scatter):
         # set scattering angle generalization-matrix to [1,1,1] if it is not explicitly provided by the chosen class.
         # this results in a peak in specular-direction which is suitable for describing surface BRDF's
         self.a = getattr(self, 'a', [1., 1., 1.])
+
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
 
+    def _get_NormBRDF(self):
+        return self.__NormBRDF
+
+    def _set_NormBRDF(self, NormBRDF):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        NormBRDF = np.array(NormBRDF)
+        NormBRDF.shape = NormBRDF.shape + (1,)
+        self.__NormBRDF = NormBRDF
+
+    NormBRDF = property(_get_NormBRDF, _set_NormBRDF)
 
     def brdf(self, t_0, t_ex, p_0, p_ex):
         """
@@ -169,7 +181,7 @@ class LinCombSRF(Surface):
     SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
                  A list that contains the the individual BRDF's (Surface-objects)
                  and the associated weighting-factors (floats) for the linear-combination.
-                 
+
     NormBRDf : scalar(float)
                Hemispherical reflectance of the combined BRDF
 

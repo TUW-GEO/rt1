@@ -340,7 +340,7 @@ class RT1(object):
         # the following if-else query ensures that volume- and interaction-terms
         # are only calculated if tau > 0. (to avoid nan-values from invalid function-evaluations)
 
-        if np.isscalar(self.RV.tau):
+        if self.RV.tau.shape == (1,):
             Isurf = self.surface()
             if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
                 Ivol = self.volume()
@@ -357,9 +357,10 @@ class RT1(object):
             old_p_0 = self.p_0
             old_t_ex = self.t_ex
             old_p_ex = self.p_ex
-            old_tau = self.RV.tau
-            old_omega = self.RV.omega
-            old_NN = self.SRF.NormBRDF
+
+            old_tau = self.RV._get_tau()
+            old_omega = self.RV._get_omega()
+            old_NN = self.SRF._get_NormBRDF()
 
             # set mask for tau > 0.
             mask = old_tau > 0.
@@ -371,9 +372,12 @@ class RT1(object):
             self.p_0 = old_p_0[valid_index[0]]
             self.t_ex = old_t_ex[valid_index[0]]
             self.p_ex = old_p_ex[valid_index[0]]
-            self.RV.tau = old_tau[valid_index[0]]
-            self.RV.omega = old_omega[valid_index[0]]
-            self.SRF.NormBRDF = old_NN[valid_index[0]]
+
+            # squeezing the arrays is necessary since the setter-function for
+            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            self.RV.tau = np.squeeze(old_tau[valid_index[0]])
+            self.RV.omega = np.squeeze(old_omega[valid_index[0]])
+            self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
 
             # calculate volume and surface term where tau-values are valid
             _Ivol = self.volume()
@@ -384,9 +388,12 @@ class RT1(object):
             self.p_0 = old_p_0
             self.t_ex = old_t_ex
             self.p_ex = old_p_ex
-            self.RV.tau = old_tau
-            self.RV.omega = old_omega
-            self.SRF.NormBRDF = old_NN
+
+            # squeezing the arrays is necessary since the setter-function for
+            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            self.RV.tau = np.squeeze(old_tau)
+            self.RV.omega = np.squeeze(old_omega)
+            self.SRF.NormBRDF = np.squeeze(old_NN)
 
             # combine calculated volume-contributions for valid tau-values
             # with zero-arrays for invalid tau-values
@@ -574,30 +581,22 @@ class RT1(object):
         '''
         returns the jacobian of the total backscatter with respect
         to omega, tau and NormBRDF.
-        the contribution of the interaction-term is neglected !
+        the contribution of the interaction-term is currently neglected!
         '''
-
-
-#        jac = [
-#                self._dsurface_domega() + self._dvolume_domega() + self._dinteraction_domega(),
-#                self._dsurface_dtau() + self._dvolume_dtau() + self._dinteraction_dtau(),
-#                self._dsurface_dR() + self._dvolume_dR() + self._dinteraction_dR()
-#                ]
-
-
-#        jac = [
-#                self._dsurface_domega() + self._dvolume_domega(),
-#                self._dsurface_dtau() + self._dvolume_dtau(),
-#                self._dsurface_dR() + self._dvolume_dR()
-#                ]
-
         from scipy.linalg import block_diag
-        # TODO correct treatment of scalar inputs for omega, tau and NormBRDF
 
-        jac = [
-            block_diag(*(self._dsurface_domega() + self._dvolume_domega())),
-            block_diag(*(self._dsurface_dtau() + self._dvolume_dtau())),
-            block_diag(*(self._dsurface_dR() + self._dvolume_dR()))
-        ]
+        # destinction for parameter inputs as scalars or arrays
+        if len(self.surface().shape) == 1:
+            jac = [
+                self._dsurface_domega() + self._dvolume_domega(),
+                self._dsurface_dtau() + self._dvolume_dtau(),
+                self._dsurface_dR() + self._dvolume_dR()
+            ]
+        else:
+            jac = [
+                block_diag(*(self._dsurface_domega() + self._dvolume_domega())),
+                block_diag(*(self._dsurface_dtau() + self._dvolume_dtau())),
+                block_diag(*(self._dsurface_dR() + self._dvolume_dR()))
+            ]
 
         return np.array(jac)
