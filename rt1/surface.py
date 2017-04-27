@@ -16,12 +16,8 @@ class Surface(Scatter):
         # set scattering angle generalization-matrix to [1,1,1] if it is not explicitly provided by the chosen class.
         # this results in a peak in specular-direction which is suitable for describing surface BRDF's
         self.a = getattr(self, 'a', [1., 1., 1.])
-
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
 
-        # TODO Fix asserts for NormBRDF
-        # TODO assert isinstance(self.NormBRDF, float), 'Error: NormBRDF must be a floating-point number'
-        # TODO assert self.NormBRDF >= 0., 'Error: NormBRDF must be greater than 0'
 
     def brdf(self, t_0, t_ex, p_0, p_ex):
         """
