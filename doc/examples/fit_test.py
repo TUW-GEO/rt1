@@ -103,22 +103,23 @@ Nmeasurements = 5
 # objective function for the fit
 
 
-def fun(params, x, data):
-    params = params[:, np.newaxis]
+def fun(params, inc, data):
+    params = params
     V.omega = params[0:int(len(params) / 3)]
     V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
     SRF.NormBRDF = params[int(2 * len(params) / 3):int(len(params))]
-    R = RT1(I0, x, x, np.ones_like(x) * 0., np.ones_like(x) * 0., RV=V, SRF=SRF, fn=fn, geometry='mono')
+    R = RT1(I0, inc, inc, np.ones_like(inc) * 0., np.ones_like(inc) * 0., RV=V, SRF=SRF, fn=fn, geometry='mono')
 
     errs = R.calc()[0]
     errs = np.concatenate(errs) - data
+
     return errs
 
 # function to evaluate the jacobian
 
 
 def dfun(params, x, data):
-    params = params[:, np.newaxis]
+    params = params
     V.omega = params[0:int(len(params) / 3)]
     V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
     SRF.NormBRDF = params[int(2 * len(params) / 3):int(len(params))]
@@ -144,7 +145,7 @@ incnum = 20  # number of incidence-angles
 
 omin, omax = 0.2, 0.5  # minimal and maximal values for omega
 tmin, tmax = 0.1, 0.85  # minimal and maximal values for tau
-rmin, rmax = 0.05, 0.5  # minimal and maximal values for NormBRDF
+rmin, rmax = 0.1, 0.5  # minimal and maximal values for NormBRDF
 
 noiserate = 50.  # scale of noise added to the data (   data = data + max(data)/noiserate   )
 
@@ -154,7 +155,8 @@ inc = []
 for i in range(Nmeasurements):
     x = np.random.randint(mininc, maxinc - minincsep - 1)
     y = np.random.randint(x + minincsep, maxinc)
-    length = np.random.randint(20, 40)
+    #length = [5,100][i]
+    length = np.random.randint(20, 50)
     inc = inc + [np.linspace(x, y, length)]
 
 
@@ -194,17 +196,51 @@ x02 = np.concatenate((np.ones_like(omegadata) * 0.1,
 #      support nan-values, and also it doesn't work with masked arrays...
 #      currently the problem for missing values is adressed by repeating
 #      the values from the nearest available neighbour....
-# TODO this results in an inhomogeneous treatment of the measurements!
-#      -> mehtod only implemented to see if it's actually working...
 
-for i, j in enumerate(data):
-    if np.isnan(j):
-        data[i] = data[i - 1]
+#      this results in an inhomogeneous treatment of the measurements!
+#      -> mehtod only implemented to see if it's actually working...
+#      -> the inhomogeneous weighting of the duplicates is now corrected
+#         using a weighting-matrix
+
+weights = np.ones_like(data)
+
+i = 0
+
+while i < len(data):
+    if np.isnan(data[i]):
+        j = 0
+        while np.isnan(data[i + j]):
+            data[i + j] = data[i + j - 1]
+            j = j + 1
+            if i + j >= len(data):
+                break
+        # the weights are calculated as one over the square-root of the number of repetitions
+        # in order to cancel out the repeated measurements in the sum of SQUARED residuals
+        weights[i - 1: i + j] = 1. / np.sqrt(float(j + 1))
+    i = i + 1
+
 
 for i, j in enumerate(inc):
     for k, l in enumerate(j):
         if np.isnan(l):
             inc[i][k] = inc[i][k - 1]
+
+# define a new function that corrects for non-rectangular arrays
+# by weighting the repeated values with respect to the number of repetitions
+
+
+def funnew(params, inc, data):
+    return weights * fun(params, inc, data)
+
+
+# for i, j in enumerate(data):
+#    if np.isnan(j):
+#        data[i] = data[i - 1]
+#
+# for i, j in enumerate(inc):
+#    for k, l in enumerate(j):
+#        if np.isnan(l):
+#            inc[i][k] = inc[i][k - 1]
 
 
 '''
@@ -215,11 +251,14 @@ perform actual fits
 
 tic = timeit.default_timer()
 
-res_lsq2 = least_squares(fun, x02, args=(inc, data), verbose=2, bounds=([0.] * len(x02), [1.] * len(x02)), jac=dfun, xtol=1.e-4, ftol=1.e-4, gtol=1.e-4)
+# fit with incorrect weighting of manually added duplicates
+#res_lsq1 = least_squares(fun, x02, args=(inc, data), verbose=2, bounds=([0.] * len(x02), [1.] * len(x02)), jac=dfun, xtol=1.e-4, ftol=1.e-4, gtol=1.e-4)
+
+# fit with correct weighting of duplicates
+res_lsq2 = least_squares(funnew, x02, args=(inc, data), verbose=2, bounds=([0.1] * len(x02), [1.] * len(x02)), jac=dfun, xtol=1.e-4, ftol=1.e-4, gtol=1.e-4)
 
 toc = timeit.default_timer()
 print('it took ' + str(toc - tic) + ' seconds')
-
 
 ''' 
 -------------
@@ -227,8 +266,9 @@ print results
 -------------
 '''
 
-
 # function to evaluate the model on the estimated parameters
+
+
 def fun(x, t, y):
     V.omega = x[0]
     V.tau = x[1]
@@ -258,14 +298,16 @@ rfits = res_lsq2.x[int(2 * len(res_lsq2.x) / 3):int(len(res_lsq2.x))]
 
 incplot = np.array([np.deg2rad(np.linspace(1., 89., 100))] * Nmeasurements)
 
-fitplot = fun([omegafits[:, np.newaxis], taufits[:, np.newaxis], rfits[:, np.newaxis]], incplot, 0.)
+fitplot = fun([omegafits, taufits, rfits], incplot, 0.)
 
 
 for i, val in enumerate(fitplot):
     ax.plot(incplot[i], val, alpha=0.4, label=i)
 
 ax.plot(incplot[0], fun(x02[::Nmeasurements], incplot[0], 0.), 'k--', linewidth=2, label='fitstart')
-plt.legend()
+plt.legend(loc=1)
+plt.xlabel('$\\theta_0$ [deg]')
+plt.ylabel('$I_{tot}$')
 
 
 ax2 = fig.add_subplot(212)
@@ -304,7 +346,12 @@ h3 = mlines.Line2D([], [], color='black', label='errors', linestyle=':', alpha=0
 handles, labels = ax2.get_legend_handles_labels()
 plt.legend(handles=handles + [h1, h2, h3], loc=1)
 
+# set ticks
+plt.xticks(range(Nmeasurements))
+plt.xlabel('# Measurement')
+plt.ylabel('Parameters / Errors')
 
+plt.tight_layout()
 '''
 ------------------------------------------------------
 the rest is comments (i.e. unfinished stuff and tests)
