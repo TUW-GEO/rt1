@@ -83,22 +83,15 @@ class RT1(object):
 
         self.I0 = I0
 
-        # use only theta_0 and phi_0 if geometry is set to mono
-        if self.geometry == 'mono':
-            self.t_0 = t_0
-            self.t_ex = t_0
-            self.p_0 = p_0
-            self.p_ex = p_0 + np.pi
-        else:
-            self.t_0 = t_0
-            self.t_ex = t_ex
-            self.p_0 = p_0
-            self.p_ex = p_ex
-
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
+
+        self._set_t_0(t_0)
+        self._set_t_ex(t_ex)
+        self._set_p_0(p_0)
+        self._set_p_ex(p_ex)
 
         # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
         # to allow calling Volume-elements without providing omega & tau which is needed to generate
@@ -129,6 +122,62 @@ class RT1(object):
             self.fn = self._extract_coefficients(expr_int)
         else:
             self.fn = fn
+
+    def _get_t_0(self):
+        return self.__t_0
+
+    def _set_t_0(self, t_0):
+        # if t_0 is given as scalar input, convert it to 1d numpy array
+        if np.isscalar(t_0):
+            t_0 = np.array([t_0])
+        self.__t_0 = t_0
+        # if geometry is mono, set t_ex to t_0
+        if self.geometry == 'mono':
+            self._set_t_ex(t_0)
+
+    t_0 = property(_get_t_0, _set_t_0)
+
+    def _get_t_ex(self):
+        return self.__t_ex
+
+    def _set_t_ex(self, t_ex):
+        # if geometry is mono, set t_ex to t_0
+        if self.geometry == 'mono':
+            t_ex = self._get_t_0()
+        else:
+            # if t_ex is given as scalar input, convert it to 1d numpy array
+            if np.isscalar(t_ex):
+                t_ex = np.array([t_ex])
+        self.__t_ex = t_ex
+    t_ex = property(_get_t_ex, _set_t_ex)
+
+    def _get_p_0(self):
+        return self.__p_0
+
+    def _set_p_0(self, p_0):
+        # if p_o is given as scalar input, convert it to 1d numpy array
+        if np.isscalar(p_0):
+            p_0 = np.array([p_0])
+        self.__p_0 = p_0
+        # if geometry is mono, set p_ex to p_0
+        if self.geometry == 'mono':
+            self._set_p_ex(p_0)
+
+    p_0 = property(_get_p_0, _set_p_0)
+
+    def _get_p_ex(self):
+        return self.__p_ex
+
+    def _set_p_ex(self, p_ex):
+        # if geometry is mono, set p_ex to p_0
+        if self.geometry == 'mono':
+            p_ex = self._get_p_0() + np.pi
+        else:
+            # if p_ex is given as scalar input, convert it to 1d numpy array
+            if np.isscalar(p_ex):
+                p_ex = np.array([p_ex])
+        self.__p_ex = p_ex
+    p_ex = property(_get_p_ex, _set_p_ex)
 
     # calculate cosines of incident- and exit angle
     def _get_mu_0(self):
@@ -346,8 +395,8 @@ class RT1(object):
                 Ivol = self.volume()
                 Iint = self.interaction()
             else:
-                Ivol = 0.
-                Iint = 0.
+                Ivol = np.array([0.])
+                Iint = np.array([0.])
         else:
             # calculate surface-term (valid for any tau-value)
             Isurf = self.surface()

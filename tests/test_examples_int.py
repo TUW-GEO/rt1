@@ -57,7 +57,7 @@ class TestExamples(unittest.TestCase):
         for i in range(len(inc)):
             # set geometries
             t_0 = np.deg2rad(inc[i])
-            p_0 = np.deg2rad(0.)
+            p_0 = np.ones_like(t_0) * 0.
             p_ex = p_0 + np.pi
 
 
@@ -67,7 +67,8 @@ class TestExamples(unittest.TestCase):
 
 
         #for i in range(0,len(self.inc1)):
-            self.assertAlmostEqual(self.int_num_1[i],Iint[i])
+            #self.assertAlmostEqual(self.int_num_1[i],Iint[i])
+            self.assertTrue(np.allclose(self.int_num_1[i],Iint[i]))
 
 
     def test_example_2_int(self):
@@ -90,8 +91,8 @@ class TestExamples(unittest.TestCase):
         fn = None
         for i in range(len(inc)):
             # set geometries
-            t_0 = np.deg2rad(inc[i])
-            p_0 = np.deg2rad(0.)
+            t_0 = np.array([np.deg2rad(inc[i])])
+            p_0 = np.ones_like(t_0) * 0.
             p_ex = p_0 + np.pi
 
 

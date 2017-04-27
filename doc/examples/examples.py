@@ -43,7 +43,7 @@ possible choices for example = ?
 2 : example 2 from the paper
 3 : example using a linear-combination for p and the BRDF
 '''
-example = 4
+example = 3
 
 
 # ----------- definition of examples -----------

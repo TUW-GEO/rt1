@@ -98,14 +98,14 @@ class TestSurface(unittest.TestCase):
 
         for i in range(N):
             I = Isotropic()
-            self.assertEqual(I.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
+            self.assertTrue(np.allclose(I.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi))
 
             ncoefs = 10
             C = CosineLobe(ncoefs=ncoefs, i=0)
-            self.assertEqual(C.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
+            self.assertTrue(np.allclose(C.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi))
 
             H = HenyeyGreenstein(t=0, ncoefs=5)
-            self.assertEqual(H.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi)
+            self.assertTrue(np.allclose(H.brdf(t_0[i], t_ex[i], p_0, p_ex), 1./np.pi))
 
 
 
