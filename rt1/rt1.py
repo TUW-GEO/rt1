@@ -531,3 +531,169 @@ class RT1(object):
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
         return S
+
+    def _dvolume_dtau(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to tau
+        Returns
+        --------
+        dvdt : array_like(float)
+               Numerical value of dIvol/dtau for the given set of parameters
+        """
+
+        dvdt = (self.I0 * self.RV.omega
+                * (self._mu_0 / (self._mu_0 + self._mu_ex))
+                * ((1. / self._mu_0 + 1. / self._mu_ex**(-1))
+                   * np.exp(- self.RV.tau / self._mu_0 -
+                            self.RV.tau / self._mu_ex))
+                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
+                )
+
+        return dvdt
+
+    def _dvolume_domega(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to omega
+        Returns
+        --------
+        dvdo : array_like(float)
+               Numerical value of dIvol/domega for the given set of parameters
+        """
+
+        dvdo = ((self.I0 * self._mu_0 / (self._mu_0 + self._mu_ex)) *
+                (
+                1. - np.exp(-(self.RV.tau / self._mu_0) -
+                            (self.RV.tau / self._mu_ex))
+                ) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex))
+
+        return dvdo
+
+    def _dvolume_dR(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to R (the hemispherical reflectance)
+        Returns
+        --------
+        dvdr : array_like(float)
+               Numerical value of dIvol/dR for the given set of parameters
+        """
+
+        dvdr = 0.
+
+        return dvdr
+
+    def _dsurface_dtau(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to tau
+        Returns
+        --------
+        dsdt : array_like(float)
+               Numerical value of dIsurf/dtau for the given set of parameters
+        """
+
+        dsdt = (self.I0
+                * (- 1. / self._mu_0 - 1. / self._mu_ex)
+                * np.exp(- self.RV.tau / self._mu_0
+                         - self.RV.tau / self._mu_ex)
+                * self._mu_0
+                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+                )
+
+        # Incorporate BRDF-normalization factor
+        dsdt = self.SRF.NormBRDF * dsdt
+
+        return dsdt
+
+    def _dsurface_domega(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to omega
+        Returns
+        --------
+        dsdo : array_like(float)
+               Numerical value of dIsurf/domega for the given set of parameters
+        """
+
+        dsdo = 0.
+
+        return dsdo
+
+    def _dsurface_dR(self):
+        """
+        Numerical evaluation of the derivative of the
+        surface-contribution with respect to R (the hemispherical reflectance)
+        Returns
+        --------
+        dsdr : array_like(float)
+               Numerical value of dIsurf/dR for the given set of parameters
+        """
+
+        dsdr = (self.I0
+                * np.exp(-(self.RV.tau / self._mu_0)
+                         - (self.RV.tau / self._mu_ex))
+                * self._mu_0
+                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+                )
+
+        return dsdr
+
+    def jacobian(self, dB=False, sig0=False):
+        '''
+        Returns the jacobian of the total backscatter with respect
+        to omega, tau and NormBRDF.
+
+        The jacobian can be evaluated for measurements in linear or dB units,
+        and for either intensity- or sigma_0 values.
+
+        Note: The contribution of the interaction-term is currently neglected!
+
+        Parameters:
+        -------------
+        dB : boolean (default = False)
+             Indicator whether linear or dB units are used.
+             The applied relation is given by:
+                dI_dB(x) / dx = 10 / [log(10) * I_linear(x)] * dI_linear(x)/dx
+
+        sig0 : boolean (default = False)
+               Indicator wheather intensity-values or sigma_0-values are used
+               The applied relation is given by:
+                  sig_0 = 4 * pi * cos(inc) * I
+               where inc denotes the incident zenith-angle and I is the
+               corresponding intensity
+
+        Returns:
+        ---------
+        jac : array-like(float)
+              The jacobian of the total backscatter with respect to
+              omega, tau and NormBRDF
+        '''
+        from scipy.linalg import block_diag
+
+        if sig0 is True and dB is False:
+            norm = 4. * np.pi * np.cos(self.t_0)
+        if dB is True:
+            norm = 10. / (np.log(10.) * (self.surface() + self.volume()))
+        else:
+            norm = 1.
+
+        # destinction for parameter inputs as scalars or arrays
+        if len(self.surface().shape) == 1:
+            jac = [
+                (self._dsurface_domega() + self._dvolume_domega()) * norm,
+                (self._dsurface_dtau() + self._dvolume_dtau()) * norm,
+                (self._dsurface_dR() + self._dvolume_dR()) * norm
+            ]
+        else:
+            jac = [
+                block_diag(
+                 *((self._dsurface_domega() + self._dvolume_domega()) * norm)),
+                block_diag(
+                 *((self._dsurface_dtau() + self._dvolume_dtau()) * norm)),
+                block_diag(
+                 *((self._dsurface_dR() + self._dvolume_dR()) * norm))
+            ]
+
+        return np.array(jac)
