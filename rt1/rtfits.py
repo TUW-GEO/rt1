@@ -392,19 +392,6 @@ class Fits(Scatter):
 
         ax2.set_ylim(0., 1.)
 
-        ilabel = ['omega', 'tau', 'R']
-
-        # plot fitted values
-        plt.gca().set_prop_cycle(None)
-        for i, val in enumerate(np.split(fit_res.x, 3)):
-            ax2.plot(val, alpha=0.75, label=ilabel[i])
-        plt.gca().set_prop_cycle(None)
-        for i, val in enumerate(np.split(fit_res.x, 3)):
-            ax2.plot(val, 'k.', alpha=0.75)
-
-        h1 = mlines.Line2D([], [], color='black', label='estimates',
-                           linestyle='-', alpha=0.75, marker='.')
-
         if truevals is not None:
 
             # plot actual values
@@ -436,6 +423,20 @@ class Fits(Scatter):
                                linestyle='--', alpha=0.75, marker='o')
             h3 = mlines.Line2D([], [], color='black', label='errors',
                                linestyle=':', alpha=0.5, marker='.')
+
+
+        ilabel = ['omega', 'tau', 'R']
+
+        # plot fitted values
+        plt.gca().set_prop_cycle(None)
+        for i, val in enumerate(np.split(fit_res.x, 3)):
+            ax2.plot(val, alpha=0.75, label=ilabel[i])
+        plt.gca().set_prop_cycle(None)
+        for i, val in enumerate(np.split(fit_res.x, 3)):
+            ax2.plot(val, 'k.', alpha=0.75)
+
+        h1 = mlines.Line2D([], [], color='black', label='estimates',
+                           linestyle='-', alpha=0.75, marker='.')
 
         handles, labels = ax2.get_legend_handles_labels()
         if truevals is None:
