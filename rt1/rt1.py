@@ -626,26 +626,60 @@ class RT1(object):
 
         return dIsurf
 
-    def jacobian(self):
+    def jacobian(self, dB=False, sig0=False):
         '''
-        returns the jacobian of the total backscatter with respect
+        Returns the jacobian of the total backscatter with respect
         to omega, tau and NormBRDF.
-        the contribution of the interaction-term is currently neglected!
+
+        The jacobian can be evaluated for measurements in linear or dB units,
+        and for either intensity- or sigma_0 values.
+
+        Note: The contribution of the interaction-term is currently neglected!
+
+        Parameters:
+        -------------
+        dB : boolean (default = False)
+             Indicator whether linear or dB units are used.
+             The applied relation is given by:
+                dI_dB(x) / dx = 10 / [log(10) * I_linear(x)] * dI_linear(x)/dx
+
+        sig0 : boolean (default = False)
+               Indicator wheather intensity-values or sigma_0-values are used
+               The applied relation is given by:
+                  sig_0 = 4 * pi * cos(inc) * I
+               where inc denotes the incident zenith-angle and I is the
+               corresponding intensity
+
+        Returns:
+        ---------
+        jac : array-like(float)
+              The jacobian of the total backscatter with respect to
+              omega, tau and NormBRDF
         '''
         from scipy.linalg import block_diag
+
+        if sig0 is True and dB is False:
+            norm = 4. * np.pi * np.cos(self.t_0)
+        if dB is True:
+            norm = 10. / (np.log(10.) * (self.surface() + self.volume()))
+        else:
+            norm = 1.
 
         # destinction for parameter inputs as scalars or arrays
         if len(self.surface().shape) == 1:
             jac = [
-                self._dsurface_domega() + self._dvolume_domega(),
-                self._dsurface_dtau() + self._dvolume_dtau(),
-                self._dsurface_dR() + self._dvolume_dR()
+                (self._dsurface_domega() + self._dvolume_domega()) * norm,
+                (self._dsurface_dtau() + self._dvolume_dtau()) * norm,
+                (self._dsurface_dR() + self._dvolume_dR()) * norm
             ]
         else:
             jac = [
-                block_diag(*(self._dsurface_domega() + self._dvolume_domega())),
-                block_diag(*(self._dsurface_dtau() + self._dvolume_dtau())),
-                block_diag(*(self._dsurface_dR() + self._dvolume_dR()))
-            ]
+                block_diag(
+                 *((self._dsurface_domega() + self._dvolume_domega()) * norm)),
+                block_diag(
+                 *((self._dsurface_dtau() + self._dvolume_dtau()) * norm)),
+                block_diag(
+                 *((self._dsurface_dR() + self._dvolume_dR()) * norm))
+                ]
 
         return np.array(jac)
