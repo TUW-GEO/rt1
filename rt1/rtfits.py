@@ -1,0 +1,443 @@
+"""
+Class for quick visualization of results and used phasefunctions
+
+preparedata() ... rectangularize dataset containing multiple measurements
+                  to allow simultaneous fitting
+monofit() ... Perform a simultaneous fit of the model defined via V and SRF to
+              monostatic measurements.
+printresults() .. quick visualization of the gained results
+                  the function can be called via:
+                      a = monofit(...)
+                      printresults(*a)
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from scipy.optimize import least_squares
+
+from .scatter import Scatter
+from .rt1 import RT1
+
+
+class Fits(Scatter):
+    '''
+    Class to perform nonlinear least-squares fits to data.
+
+    Parameters:
+    ------------
+    sig0 : boolean (default = False)
+           Indicator whether the data is given as sigma_0-values (sig_0) or as
+           intensity-values (I). The applied relation is:
+               sig_0 = 4. * np.pi * np.cos(inc) * I
+           where inc is the corresponding incident zenith-angle.
+    dB : boolean (default = False)
+         Indicator whether the data is given in linear units or in dB.
+         The applied relation is:    x_dB = 10. * np.log10( x_linear )
+    '''
+
+    def __init__(self, sig0=False, dB=False, **kwargs):
+        self.sig0 = sig0
+        self.dB = dB
+
+    def preparedata(self, dataset):
+        '''
+        prepare data such that it is applicable to least_squres fitting
+        - separate incidence-angles and data-values
+        - rectangularize the data-array
+        - provide weighting-matrix to correct for rectangularization
+
+        Parameters:
+        ------------
+        dataset: array-like
+                 input-dataset as list of the shape:
+                     [[inc_0, data_0], [inc_1, data_2], ...]
+
+        Returns:
+        ---------
+        inc : array-like
+              a rectangular array consisting of the incidence-angles as
+              provided in the dataset, rectangularized by repeating the last
+              values of each row to fit in length.
+        data : array-like
+               a rectangular array consisting of the data-values as provided
+               in the dataset, rectangularized by repeating the last values
+               of each row to fit in length
+        weights : array-like
+                  an array of equal shape as inc and data, consisting of the
+                  weighting-factors that need to be applied in order to correct
+                  for the rectangularization. The weighting-factors for each
+                  individual data-element are given by
+                      weight_i = 1 / np.sqrt(N_i)
+                  where N_i is the number of repetitions of the i'th value
+                  that have been added in order to rectangularize the dataset.
+
+                  Including the weighting-factors within the least-squares
+                  approach will result in a cancellation of the repeated
+                  results such that the artificially added values (necessary
+                  to have a rectangular array) will have no effect on the fit.
+        N : int
+            number of measurements that have been provided within the dataset
+        '''
+        # save number of datasets
+        N = len(dataset)
+
+        # get incidence-angles and data-values into separate lists
+        inc, data = [], []
+        for i, val in enumerate(dataset):
+            inc = inc + [val[0]]
+            data = data + [val[1]]
+
+        # rectangularize numpy array by adding nan-values
+        # (necessary because numpy can only deal with rectangular arrays)
+        maxLen = np.max(np.array([len(j) for i, j in enumerate(inc)]))
+        for i, j in enumerate(inc):
+            if len(j) < maxLen:
+                inc[i] = np.append(inc[i],
+                                   np.tile(np.nan, maxLen - len(inc[i])))
+                data[i] = np.append(data[i],
+                                    np.tile(np.nan, maxLen - len(data[i])))
+
+        # concatenate data-matrix to 1d-array
+        # (necessary since least_squares can only deal with 1d arrays)
+        data = np.concatenate(data)
+        inc = np.concatenate(inc)
+
+        # prepare data to avoid nan-values
+        #      since numpy only supports rectangular arrays, and least_squares
+        #      does neither support masked arrays, nor containing nan-values,
+        #      the problem of missing values within the dataset is currently
+        #      adressed by repeating the values from the nearest available
+        #      neighbour to rectangularize the dataset.
+
+        #      this of course results in an inhomogeneous treatment of the
+        #      measurements since the duplicates have been added artificially!
+        #      -> in order to correct for the added duplicates, a
+        #      weighting-matrix is provided that can be used to correct for
+        #      the unwanted duplicates.
+
+        weights = np.ones_like(data)
+        i = 0
+
+        while i < len(data):
+            if np.isnan(data[i]):
+                j = 0
+                while np.isnan(data[i + j]):
+                    data[i + j] = data[i + j - 1]
+                    inc[i + j] = inc[i + j - 1]
+                    j = j + 1
+                    if i + j >= len(data):
+                        break
+                # the weights are calculated as one over the square-root of
+                # the number of repetitions in order to cancel out the
+                # repeated measurements in the sum of SQUARED residuals.
+                weights[i - 1: i + j] = 1. / np.sqrt(float(j + 1))
+            i = i + 1
+
+        inc = np.array(np.split(inc, N))
+
+        return inc, data, weights, N
+
+    def monofit(self, V, SRF, dataset,
+                startvals=None,
+                bounds=None,
+                fn=None,
+                **kwargs):
+        '''
+        Perform a simultaneous fit of the model defined via V and SRF to
+        monostatic measurements.
+
+
+        Parameters:
+        ------------
+        V : RT1.volume class object
+            The volume scattering phase-function used to define the fit-model
+        SRF: RT1.surface class object
+             The surface BRDF used to define the fit-model
+        dataset : list
+                 list of input-data and incidence-angles arranged in the form
+                     [[inc_0,data_0], [inc_1,data_1], ...]
+                 where inc_i denotes the incident zenith-angles in radians
+                 and the data_i denotes the corresponding data-values
+
+        Other Parameters:
+        ------------------
+        startvals : array-like
+                    start-values for the fit
+                    Default, the start-values for all measurements
+                    are set to 0.3
+        bounds : array-like
+                 boundary-values for the fit
+                 Default, the boundaries for all measurements are set
+                 to (0., 1.)
+        fn : array-like
+             pre-calculated fn-coefficients
+        **kwargs : -
+                 **kwargs passed to scipy's least_squares function
+
+        Returns:
+        ---------
+        res_lsq2 : dict
+                   output of scipy's least_squares function
+        data : array-like
+               used dataset for the fit
+        inc : array-like
+              used incidence-angle data for the fit
+        V : volume-class element
+            used volume-scattering phase function for the fit
+        SRF : surface-class element
+              used surface-BRDF for the fit
+        fn : array-like
+             used fn-coefficients for the fit
+        startvals : array-like
+                    used start-values for the fit
+        '''
+
+        # prepare data for fit
+        inc, data, weights, Nmeasurements = self.preparedata(dataset)
+
+        # pre-calculate fn-coefficients if they are not provided explicitly
+        R = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=fn, geometry='mono')
+        fn = R.fn  # store coefficients for faster iteration
+
+        def fun(params, inc, data):
+            '''
+            function to evaluate the residuals in the shape as required
+            by scipy's least_squares function
+            '''
+            V.omega = params[0:int(len(params) / 3)]
+            V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
+            SRF.NormBRDF = params[int(2 * len(params) / 3):int(len(params))]
+            R = RT1(1.,
+                    inc, inc,
+                    np.ones_like(inc) * 0., np.ones_like(inc) * np.pi,
+                    RV=V, SRF=SRF, fn=fn, geometry='mono')
+
+            errs = R.calc()[0]
+
+            if self.sig0 is True:
+                # convert the calculated results to sigma_0
+                signorm = 4. * np.pi * np.cos(inc)
+                errs = signorm * errs
+
+            if self.dB is True:
+                # convert the calculated results to dB
+                errs = 10. * np.log10(errs)
+
+            return np.concatenate(errs) - data
+
+        def funnew(params, inc, data):
+            '''
+            function to incorporate the weighting-matrix
+            '''
+            return weights * fun(params, inc, data)
+
+        # function to evaluate the jacobian
+        def dfun(params, inc, data):
+            '''
+            function to evaluate the jacobian in the shape as required
+            by scipy's least_squares function
+            '''
+            V.omega = params[0:int(len(params) / 3)]
+            V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
+            SRF.NormBRDF = params[int(2 * len(params) / 3):int(len(params))]
+            R = RT1(1.,
+                    inc, inc,
+                    np.ones_like(inc) * 0., np.ones_like(inc) * np.pi,
+                    RV=V, SRF=SRF, fn=fn, geometry='mono')
+
+            jac = R.jacobian(sig0=self.sig0, dB=self.dB)
+
+            return np.concatenate(jac).T
+
+        # define boundaries if none have been provided explicitly
+        if bounds is None:
+            bounds = ([0.] * 3 * Nmeasurements, [1.] * 3 * Nmeasurements)
+
+        # define start-values if none have been provided explicitly
+        if startvals is None:
+            startvals = np.concatenate((
+                np.linspace(1, 1, Nmeasurements) * 0.3,
+                np.linspace(1, 1, Nmeasurements) * 0.3,
+                np.linspace(1, 1, Nmeasurements) * 0.3))
+
+        # fit with correct weighting of duplicates
+        res_lsq2 = least_squares(funnew, startvals, args=(inc, data),
+                                 bounds=bounds, jac=dfun, **kwargs)
+
+        # get the data in the same shape as the incidence-angles
+        data = np.array(np.split(data, Nmeasurements))
+
+        return res_lsq2, data, inc, V, SRF, fn, startvals
+
+    def calc_res(self, res_lsq2, data, inc, V, SRF, fn):
+        '''
+        function to evaluate the residuals, i.e. :
+            res = (model - data)**2
+        '''
+        params = res_lsq2.x
+        V.omega = params[0:int(len(params) / 3)]
+        V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
+        SRF.NormBRDF = params[int(2 * len(params) / 3):int(len(params))]
+
+        R = RT1(1.,
+                inc, inc,
+                np.ones_like(inc) * 0., np.ones_like(inc) * np.pi,
+                RV=V, SRF=SRF, fn=fn, geometry='mono')
+
+        estimates = R.calc()[0]
+
+        if self.sig0 is True:
+            # convert the calculated results to sigma_0
+            estimates = 4. * np.pi * np.cos(inc) * estimates
+
+        if self.dB is True:
+            # convert the calculated results to dB
+            estimates = 10. * np.log10(estimates)
+
+        res = (estimates - data)**2
+        return res
+
+    def printresults(self, fit_res, data, inc, V, SRF, fn, startvals,
+                     truevals=None):
+        '''
+        a function to quickly print fit-results
+
+        Parametsrs:
+        ------------
+        fit_res, data, inc, V, SRF, fn, startvals : output of monofit-function
+            i.e. if a = monofit(...), then printresults(*a) will
+            print the results of the fit.
+
+        truevals : array-like (default = None)
+                   array of the expected parameter-values (must be of the
+                   same shape as the parameter-values gained from the fit).
+                   if provided, the difference between the expected- and
+                   fitted values is plotted
+        '''
+        Nmeasurements = len(inc)
+
+        # function to evaluate the model on the estimated parameters
+        def fun(x, t):
+            V.omega = x[0]
+            V.tau = x[1]
+            SRF.NormBRDF = x[2]
+            R = RT1(1.,
+                    t, t,
+                    np.ones_like(t) * 0., np.ones_like(t) * 0.,
+                    RV=V, SRF=SRF, fn=fn, geometry='mono')
+
+            errs = R.calc()[0]
+
+            if self.sig0 is True:
+                signorm = 4. * np.pi * np.cos(t)
+                errs = signorm * errs
+
+            if self.dB is True:
+                errs = 10. * np.log10(errs)
+
+            return errs
+
+        fig = plt.figure()
+
+        ax = fig.add_subplot(211)
+
+        for i, j in enumerate(data):
+            ax.plot(inc[i], j, '.')
+
+        plt.gca().set_prop_cycle(None)
+
+        ofits = fit_res.x[0:int(len(fit_res.x) / 3)]
+        tfits = fit_res.x[int(len(fit_res.x) / 3):int(2 * len(fit_res.x) / 3)]
+        rfits = fit_res.x[int(2 * len(fit_res.x) / 3):int(len(fit_res.x))]
+
+        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
+                           * Nmeasurements)
+
+        fitplot = fun([ofits, tfits, rfits], incplot)
+
+        for i, val in enumerate(fitplot):
+            ax.plot(incplot[i], val, alpha=0.4, label=i)
+
+        # ----------- plot error-bars ------------
+        #fitdata = fun([ofits, tfits, rfits], inc)
+        # plt.gca().set_prop_cycle(None)
+        # for i, val in enumerate(fitdata):
+        #    errors = data[i] - val
+        #    ax.errorbar(inc[i], val, errors, linestyle='None', fmt = '-')
+
+        ax.plot(incplot[0],
+                fun(startvals[::Nmeasurements], incplot[0]),
+                'k--', linewidth=2, label='fitstart')
+
+        plt.legend(loc=1)
+
+        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
+        if mintic < 0.:
+            mintic = 0.
+        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
+        if maxtic > 360.:
+            maxtic = 360.
+
+        ticks = np.arange(np.rad2deg(np.min(inc)),
+                          np.rad2deg(np.max(inc)) + 1.,
+                          (maxtic - mintic) / 10.)
+        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
+        plt.xlabel('$\\theta_0$ [deg]')
+        plt.ylabel('$I_{tot}$')
+
+        ax2 = fig.add_subplot(212)
+        ax2.set_ylim(0., 1.)
+
+        ilabel = ['omega', 'tau', 'R']
+
+        # plot fitted values
+        plt.gca().set_prop_cycle(None)
+        for i, val in enumerate(np.split(fit_res.x, 3)):
+            ax2.plot(val, alpha=0.75, label=ilabel[i])
+        plt.gca().set_prop_cycle(None)
+        for i, val in enumerate(np.split(fit_res.x, 3)):
+            ax2.plot(val, 'k.', alpha=0.75)
+
+        h1 = mlines.Line2D([], [], color='black', label='estimates',
+                           linestyle='-', alpha=0.75, marker='.')
+
+        if truevals is not None:
+            # plot actual values
+            plt.gca().set_prop_cycle(None)
+            for i, val in enumerate(np.split(truevals, 3)):
+                ax2.plot(val, '--', alpha=0.75)
+            plt.gca().set_prop_cycle(None)
+            for i, val in enumerate(np.split(truevals, 3)):
+                ax2.plot(val, 'o')
+
+            # plot errors
+            plt.gca().set_prop_cycle(None)
+            for i, val in enumerate(np.split(fit_res.x - truevals, 3)):
+                ax2.plot(val, ':', alpha=.5)
+            plt.gca().set_prop_cycle(None)
+            for i, val in enumerate(np.split(fit_res.x - truevals, 3)):
+                ax2.plot(val, '.', alpha=.5)
+
+            h2 = mlines.Line2D([], [], color='black', label='data',
+                               linestyle='--', alpha=0.75, marker='o')
+            h3 = mlines.Line2D([], [], color='black', label='errors',
+                               linestyle=':', alpha=0.5, marker='.')
+
+        handles, labels = ax2.get_legend_handles_labels()
+        if truevals is None:
+            plt.legend(handles=handles + [h1], loc=1)
+        else:
+            plt.legend(handles=handles + [h1, h2, h3], loc=1)
+
+        # set ticks
+        plt.xticks(range(Nmeasurements))
+        plt.xlabel('# Measurement')
+        if truevals is None:
+            plt.ylabel('Parameters')
+        else:
+            plt.ylabel('Parameters / Errors')
+
+        plt.tight_layout()
+
+        return fig
