@@ -273,7 +273,7 @@ class Fits(Scatter):
     def calc_res(self, res_lsq2, data, inc, V, SRF, fn):
         '''
         function to evaluate the residuals, i.e. :
-            res = (model - data)**2
+            res = np.sqrt( (model - data)**2 )
         '''
         params = res_lsq2.x
         V.omega = params[0:int(len(params) / 3)]
@@ -295,7 +295,7 @@ class Fits(Scatter):
             # convert the calculated results to dB
             estimates = 10. * np.log10(estimates)
 
-        res = (estimates - data)**2
+        res = np.sqrt((estimates - data)**2)
         return res
 
     def printresults(self, fit_res, data, inc, V, SRF, fn, startvals,
@@ -341,6 +341,7 @@ class Fits(Scatter):
         fig = plt.figure()
 
         ax = fig.add_subplot(211)
+        ax.set_title('Fit-results')
 
         for i, j in enumerate(data):
             ax.plot(inc[i], j, '.')
@@ -387,6 +388,8 @@ class Fits(Scatter):
         plt.ylabel('$I_{tot}$')
 
         ax2 = fig.add_subplot(212)
+        ax2.set_title('Estimated parameters')
+
         ax2.set_ylim(0., 1.)
 
         ilabel = ['omega', 'tau', 'R']
@@ -403,6 +406,7 @@ class Fits(Scatter):
                            linestyle='-', alpha=0.75, marker='.')
 
         if truevals is not None:
+
             # plot actual values
             plt.gca().set_prop_cycle(None)
             for i, val in enumerate(np.split(truevals, 3)):
@@ -412,12 +416,21 @@ class Fits(Scatter):
                 ax2.plot(val, 'o')
 
             # plot errors
+            param_errs = np.split(fit_res.x - truevals, 3)
+
             plt.gca().set_prop_cycle(None)
-            for i, val in enumerate(np.split(fit_res.x - truevals, 3)):
+            for i, val in enumerate(param_errs):
                 ax2.plot(val, ':', alpha=.5)
             plt.gca().set_prop_cycle(None)
-            for i, val in enumerate(np.split(fit_res.x - truevals, 3)):
+            for i, val in enumerate(param_errs):
                 ax2.plot(val, '.', alpha=.5)
+
+            # set boundaries to allow displaying errors
+            param_errs_min = np.min(param_errs)
+            if param_errs_min > 0.:
+                param_errs_min = 0
+
+            ax2.set_ylim(np.min(param_errs), 1.)
 
             h2 = mlines.Line2D([], [], color='black', label='data',
                                linestyle='--', alpha=0.75, marker='o')
@@ -438,6 +451,101 @@ class Fits(Scatter):
         else:
             plt.ylabel('Parameters / Errors')
 
-        plt.tight_layout()
+        fig.tight_layout()
 
         return fig
+
+    def printerr(self, fit_res, data, inc, V, SRF, fn):
+
+        Nmeasurements = len(inc)
+        res = self.calc_res(fit_res, data, inc, V, SRF, fn)
+
+        # make new figure
+        figres = plt.figure()
+        axres = figres.add_subplot(212)
+        axres.set_title('Mean residual per measurement')
+
+        axres2 = figres.add_subplot(211)
+        axres2.set_title('Residuals per incidence-angle')
+
+        # plot residuals for each emasurement
+        for i, resval in enumerate(res):
+            for j in resval:
+                axres.plot(i + 1, j, '.', alpha=0.5)
+
+        # plot mean residual for each measurement
+        axres.plot(np.arange(1, Nmeasurements + 1), np.mean(res, axis=1),
+                   'k', linewidth=3, marker='o', fillstyle='none')
+
+        # add some legends
+        res_h = mlines.Line2D(
+            [], [], color='black', label='Mean res.  per measurement',
+            linestyle='-', linewidth=3, marker='o', fillstyle='none')
+        res_h_dots = mlines.Line2D(
+            [], [], color='black', label='Residuals',
+            linestyle='-', linewidth=0, marker='.', alpha=0.5)
+
+        handles, labels = axres.get_legend_handles_labels()
+        axres.legend(handles=handles + [res_h_dots] + [res_h], loc=1)
+        axres.set_xticks(np.arange(1, Nmeasurements + 1))
+
+        axres.set_xlabel('# Measurement')
+        axres.set_ylabel('Residual')
+
+        # evaluate mean residuals per incidence-angle
+        incsorted = np.full_like(inc, 0.)
+        ressorted = np.full_like(res, 0.)
+        for i, j in enumerate(res):
+            sortpattern = np.argsort(inc[i])
+            incsorted[i] = inc[i][sortpattern]
+            ressorted[i] = res[i][sortpattern]
+
+        meanincs = np.unique(np.concatenate(incsorted))
+        mean = np.full_like(meanincs, 0.)
+
+        for a, meanval in enumerate(mean):
+            count = 0.
+            for i, incrow in enumerate(incsorted):
+                for j, incval in enumerate(incrow):
+                    if incval == meanincs[a]:
+                        count = count + 1.
+                        mean[a] = mean[a] + ressorted[i][j]
+            mean[a] = mean[a] / count
+
+        # plot residuals per incidence-angle for each measurement
+        for i, resval in enumerate(ressorted):
+            axres2.plot(incsorted[i], resval, ':', alpha=0.5)
+
+        # plot mean residual per incidence-angle
+        axres2.plot(meanincs, mean,
+                    'k', linewidth=3, marker='o', fillstyle='none')
+
+        # add some legends
+        res_h2 = mlines.Line2D(
+            [], [], color='black', label='Mean res.  per inc-angle',
+            linestyle='-', linewidth=3, marker='o', fillstyle='none')
+        res_h_lines = mlines.Line2D(
+            [], [], color='black', label='Residuals',
+            linestyle=':', alpha=0.5)
+
+        handles2, labels2 = axres2.get_legend_handles_labels()
+        axres2.legend(handles=handles2 + [res_h_lines] + [res_h2], loc=1)
+
+        axres2.set_xlabel('$\\theta_0$ [deg]')
+        axres2.set_ylabel('Residual')
+
+        # set incidence-angle ticks
+        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
+        if mintic < 0.:
+            mintic = 0.
+        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
+        if maxtic > 360.:
+            maxtic = 360.
+
+        ticks = np.arange(np.rad2deg(np.min(inc)),
+                          np.rad2deg(np.max(inc)) + 1.,
+                          (maxtic - mintic) / 10.)
+        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
+        figres.tight_layout()
+
+        return figres
