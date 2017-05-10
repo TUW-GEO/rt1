@@ -12,6 +12,7 @@ printresults() .. quick visualization of the gained results
 """
 
 import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from scipy.optimize import least_squares
@@ -98,6 +99,9 @@ class Fits(Scatter):
                 data[i] = np.append(data[i],
                                     np.tile(np.nan, maxLen - len(data[i])))
 
+        # generate a mask to be able to re-create the initial datset
+        mask = np.isnan(data)
+
         # concatenate data-matrix to 1d-array
         # (necessary since least_squares can only deal with 1d arrays)
         data = np.concatenate(data)
@@ -136,7 +140,7 @@ class Fits(Scatter):
 
         inc = np.array(np.split(inc, N))
 
-        return inc, data, weights, N
+        return inc, data, weights, N, mask
 
     def monofit(self, V, SRF, dataset,
                 startvals=None,
@@ -194,7 +198,7 @@ class Fits(Scatter):
         '''
 
         # prepare data for fit
-        inc, data, weights, Nmeasurements = self.preparedata(dataset)
+        inc, data, weights, Nmeasurements, mask = self.preparedata(dataset)
 
         # pre-calculate fn-coefficients if they are not provided explicitly
         R = RT1(1., 0., 0., 0., 0., RV=V, SRF=SRF, fn=fn, geometry='mono')
@@ -268,13 +272,14 @@ class Fits(Scatter):
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
 
-        return res_lsq2, data, inc, V, SRF, fn, startvals
+        return res_lsq2, data, inc, V, SRF, fn, startvals, mask
 
-    def calc_res(self, res_lsq2, data, inc, V, SRF, fn):
+    def calc_res(self, res_lsq2, data, inc, V, SRF, fn, _dummy, mask):
         '''
         function to evaluate the residuals, i.e. :
             res = np.sqrt( (model - data)**2 )
         '''
+
         params = res_lsq2.x
         V.omega = params[0:int(len(params) / 3)]
         V.tau = params[int(len(params) / 3):int(2 * len(params) / 3)]
@@ -295,10 +300,15 @@ class Fits(Scatter):
             # convert the calculated results to dB
             estimates = 10. * np.log10(estimates)
 
-        res = np.sqrt((estimates - data)**2)
+        # !!IMPORTANT!!
+        # calculate the residuals based on masked arrays
+        masked_estimates = np.ma.masked_array(estimates, mask=mask)
+        masked_data = np.ma.masked_array(data, mask=mask)
+
+        res = np.ma.sqrt((masked_estimates - masked_data)**2)
         return res
 
-    def printresults(self, fit_res, data, inc, V, SRF, fn, startvals,
+    def printresults(self, fit_res, data, inc, V, SRF, fn, startvals, mask,
                      truevals=None):
         '''
         a function to quickly print fit-results
@@ -358,7 +368,7 @@ class Fits(Scatter):
         fitplot = fun([ofits, tfits, rfits], incplot)
 
         for i, val in enumerate(fitplot):
-            ax.plot(incplot[i], val, alpha=0.4, label=i)
+            ax.plot(incplot[i], val, alpha=0.4, label=i + 1)
 
         # ----------- plot error-bars ------------
         #fitdata = fun([ofits, tfits, rfits], inc)
@@ -397,20 +407,21 @@ class Fits(Scatter):
             # plot actual values
             plt.gca().set_prop_cycle(None)
             for i, val in enumerate(np.split(truevals, 3)):
-                ax2.plot(val, '--', alpha=0.75)
+                ax2.plot(np.arange(1, Nmeasurements + 1), val,
+                         '--', alpha=0.75)
             plt.gca().set_prop_cycle(None)
             for i, val in enumerate(np.split(truevals, 3)):
-                ax2.plot(val, 'o')
+                ax2.plot(np.arange(1, Nmeasurements + 1), val, 'o')
 
             # plot errors
             param_errs = np.split(fit_res.x - truevals, 3)
 
             plt.gca().set_prop_cycle(None)
             for i, val in enumerate(param_errs):
-                ax2.plot(val, ':', alpha=.5)
+                ax2.plot(np.arange(1, Nmeasurements + 1), val, ':', alpha=.5)
             plt.gca().set_prop_cycle(None)
             for i, val in enumerate(param_errs):
-                ax2.plot(val, '.', alpha=.5)
+                ax2.plot(np.arange(1, Nmeasurements + 1), val, '.', alpha=.5)
 
             # set boundaries to allow displaying errors
             param_errs_min = np.min(param_errs)
@@ -424,16 +435,16 @@ class Fits(Scatter):
             h3 = mlines.Line2D([], [], color='black', label='errors',
                                linestyle=':', alpha=0.5, marker='.')
 
-
         ilabel = ['omega', 'tau', 'R']
 
         # plot fitted values
         plt.gca().set_prop_cycle(None)
         for i, val in enumerate(np.split(fit_res.x, 3)):
-            ax2.plot(val, alpha=0.75, label=ilabel[i])
+            ax2.plot(np.arange(1, Nmeasurements + 1), val,
+                     alpha=0.75, label=ilabel[i])
         plt.gca().set_prop_cycle(None)
         for i, val in enumerate(np.split(fit_res.x, 3)):
-            ax2.plot(val, 'k.', alpha=0.75)
+            ax2.plot(np.arange(1, Nmeasurements + 1), val, 'k.', alpha=0.75)
 
         h1 = mlines.Line2D([], [], color='black', label='estimates',
                            linestyle='-', alpha=0.75, marker='.')
@@ -445,7 +456,7 @@ class Fits(Scatter):
             plt.legend(handles=handles + [h1, h2, h3], loc=1)
 
         # set ticks
-        plt.xticks(range(Nmeasurements))
+        ax2.set_xticks(np.arange(1, Nmeasurements + 1))
         plt.xlabel('# Measurement')
         if truevals is None:
             plt.ylabel('Parameters')
@@ -456,10 +467,14 @@ class Fits(Scatter):
 
         return fig
 
-    def printerr(self, fit_res, data, inc, V, SRF, fn):
+    def printerr(self, fit_res, data, inc, V, SRF, fn, _dummy, mask):
 
         Nmeasurements = len(inc)
-        res = self.calc_res(fit_res, data, inc, V, SRF, fn)
+        res = self.calc_res(fit_res, data, inc, V, SRF, fn, _dummy, mask)
+
+        # apply mask to data and incidence-angles
+        inc = np.ma.masked_array(inc, mask=mask)
+        data = np.ma.masked_array(data, mask=mask)
 
         # make new figure
         figres = plt.figure()
@@ -475,7 +490,7 @@ class Fits(Scatter):
                 axres.plot(i + 1, j, '.', alpha=0.5)
 
         # plot mean residual for each measurement
-        axres.plot(np.arange(1, Nmeasurements + 1), np.mean(res, axis=1),
+        axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
                    'k', linewidth=3, marker='o', fillstyle='none')
 
         # add some legends
@@ -493,29 +508,44 @@ class Fits(Scatter):
         axres.set_xlabel('# Measurement')
         axres.set_ylabel('Residual')
 
-        # evaluate mean residuals per incidence-angle
-        incsorted = np.full_like(inc, 0.)
-        ressorted = np.full_like(res, 0.)
-        for i, j in enumerate(res):
-            sortpattern = np.argsort(inc[i])
-            incsorted[i] = inc[i][sortpattern]
-            ressorted[i] = res[i][sortpattern]
+#        # evaluate mean residuals per incidence-angle
+#        incsorted = np.full_like(inc, 0.)
+#        ressorted = np.full_like(res, 0.)
+#        for i, j in enumerate(res):
+#            sortpattern = np.argsort(inc[i])
+#            incsorted[i] = inc[i][sortpattern]
+#            ressorted[i] = res[i][sortpattern]
+#
+#        meanincs = np.unique(np.concatenate(incsorted))
+#        mean = np.full_like(meanincs, 0.)
+#
+#        for a, meanval in enumerate(mean):
+#            count = 0.
+#            for i, incrow in enumerate(incsorted):
+#                for j, incval in enumerate(incrow):
+#                    if incval == meanincs[a]:
+#                        count = count + 1.
+#                        mean[a] = mean[a] + ressorted[i][j]
+#            mean[a] = mean[a] / count
 
-        meanincs = np.unique(np.concatenate(incsorted))
+        meanincs = np.unique(np.concatenate(inc))
         mean = np.full_like(meanincs, 0.)
 
-        for a, meanval in enumerate(mean):
-            count = 0.
-            for i, incrow in enumerate(incsorted):
-                for j, incval in enumerate(incrow):
-                    if incval == meanincs[a]:
-                        count = count + 1.
-                        mean[a] = mean[a] + ressorted[i][j]
-            mean[a] = mean[a] / count
+        for a, incval in enumerate(meanincs):
+            select = np.where(inc == incval)
+            res_selected = res[select[0][:, np.newaxis],
+                               select[1][:, np.newaxis]]
+            mean[a] = np.mean(res_selected)
+
+        sortpattern = np.argsort(meanincs)
+        meanincs = meanincs[sortpattern]
+        mean = mean[sortpattern]
 
         # plot residuals per incidence-angle for each measurement
-        for i, resval in enumerate(ressorted):
-            axres2.plot(incsorted[i], resval, ':', alpha=0.5)
+        for i, resval in enumerate(res):
+            sortpattern = np.argsort(inc[i])
+            axres2.plot(inc[i][sortpattern], res[i][sortpattern],
+                        ':', alpha=0.5, marker='.')
 
         # plot mean residual per incidence-angle
         axres2.plot(meanincs, mean,
