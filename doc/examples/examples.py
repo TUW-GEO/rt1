@@ -163,7 +163,6 @@ toc = timeit.default_timer()
 print('evaluating print-values took ' + str(toc - tic))
 
 
-
 if len(Itot.shape) > 1:
     if Nres == 'all':
         for Nres in range(len(Itot)):

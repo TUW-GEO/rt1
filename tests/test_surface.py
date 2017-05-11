@@ -34,7 +34,7 @@ class TestSurface(unittest.TestCase):
         p_0 = np.pi / 2.
         p_ex = 0.
 
-        self.assertAlmostEqual(S.scat_angle(t_0, t_ex, p_0, p_ex, S.a), 0.,15)
+        self.assertAlmostEqual(S.scat_angle(t_0, t_ex, p_0, p_ex, S.a), 0., 15)
         self.assertAlmostEqual(S.brdf(t_0, t_ex, p_0, p_ex), 0., 20)
 
         t_0 = 0.
@@ -55,7 +55,7 @@ class TestSurface(unittest.TestCase):
             z2 = sc.gamma((7. - i) * 0.5) * sc.gamma((8. + i) * 0.5)
             self.assertAlmostEqual(S._get_legcoef(i), z1 / z2)
 
-        self.assertAlmostEqual(S._get_legcoef(0), 
+        self.assertAlmostEqual(S._get_legcoef(0),
                                15. / (16. * sc.gamma(3.5) * sc.gamma(4.) *
                                       np.sqrt(np.pi)))
         self.assertAlmostEqual(S._get_legcoef(2),
