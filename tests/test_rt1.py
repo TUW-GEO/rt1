@@ -28,6 +28,7 @@ class TestRT1(unittest.TestCase):
     def test_init(self):
         RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex,
                  RV=self.V, SRF=self.S)
+        self.assertTrue(RT.t_0 == self.t_0)
 
     def test_calc(self):
         # just try to get it running simply without further testing
