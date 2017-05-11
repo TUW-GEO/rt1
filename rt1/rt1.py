@@ -83,20 +83,16 @@ class RT1(object):
 
         self.I0 = I0
 
-        # use only theta_0 and phi_0 if geometry is set to mono
-        if self.geometry == 'mono':
-            self.t_0 = t_0
-            self.t_ex = t_0
-            self.p_0 = p_0
-            self.p_ex = p_0 + np.pi
-        else:
-            self.t_0 = t_0
-            self.t_ex = t_ex
-            self.p_0 = p_0
-            self.p_ex = p_ex
-
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
+        assert SRF is not None, 'ERROR: needs to provide surface information'
+        self.SRF = SRF
+
+        self._set_t_0(t_0)
+        self._set_t_ex(t_ex)
+        self._set_p_0(p_0)
+        self._set_p_ex(p_ex)
+
         # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
         # to allow calling Volume-elements without providing omega & tau which is needed to generate
         # linear-combinations of Volume-elements with unambiguous tau- & omega-specifications
@@ -104,12 +100,14 @@ class RT1(object):
         assert self.RV.omega is not None, 'Single scattering albedo needs to be provided'
         assert self.RV.tau is not None, 'Optical depth needs to be provided'
 
-        assert self.RV.omega >= 0.
-        assert self.RV.omega <= 1.
-        assert self.RV.tau >= 0.
+        assert np.any(self.RV.omega >= 0.), 'Single scattering albedo must be greater than 0'
+        assert np.any(self.RV.omega <= 1.), 'Single scattering albedo must be smaller than 1'
+        assert np.any(self.RV.tau >= 0.), 'Optical depth must be > 0'
 
-        if self.RV.tau == 0.:
-            assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+        assert np.any(self.SRF.NormBRDF >= 0.), 'Error: NormBRDF must be greater than 0'
+
+        # TODO if self.RV.tau == 0.:
+        # TODO     assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
@@ -124,6 +122,62 @@ class RT1(object):
             self.fn = self._extract_coefficients(expr_int)
         else:
             self.fn = fn
+
+    def _get_t_0(self):
+        return self.__t_0
+
+    def _set_t_0(self, t_0):
+        # if t_0 is given as scalar input, convert it to 1d numpy array
+        if np.isscalar(t_0):
+            t_0 = np.array([t_0])
+        self.__t_0 = t_0
+        # if geometry is mono, set t_ex to t_0
+        if self.geometry == 'mono':
+            self._set_t_ex(t_0)
+
+    t_0 = property(_get_t_0, _set_t_0)
+
+    def _get_t_ex(self):
+        return self.__t_ex
+
+    def _set_t_ex(self, t_ex):
+        # if geometry is mono, set t_ex to t_0
+        if self.geometry == 'mono':
+            t_ex = self._get_t_0()
+        else:
+            # if t_ex is given as scalar input, convert it to 1d numpy array
+            if np.isscalar(t_ex):
+                t_ex = np.array([t_ex])
+        self.__t_ex = t_ex
+    t_ex = property(_get_t_ex, _set_t_ex)
+
+    def _get_p_0(self):
+        return self.__p_0
+
+    def _set_p_0(self, p_0):
+        # if p_o is given as scalar input, convert it to 1d numpy array
+        if np.isscalar(p_0):
+            p_0 = np.array([p_0])
+        self.__p_0 = p_0
+        # if geometry is mono, set p_ex to p_0
+        if self.geometry == 'mono':
+            self._set_p_ex(p_0)
+
+    p_0 = property(_get_p_0, _set_p_0)
+
+    def _get_p_ex(self):
+        return self.__p_ex
+
+    def _set_p_ex(self, p_ex):
+        # if geometry is mono, set p_ex to p_0
+        if self.geometry == 'mono':
+            p_ex = self._get_p_0() + np.pi
+        else:
+            # if p_ex is given as scalar input, convert it to 1d numpy array
+            if np.isscalar(p_ex):
+                p_ex = np.array([p_ex])
+        self.__p_ex = p_ex
+    p_ex = property(_get_p_ex, _set_p_ex)
 
     # calculate cosines of incident- and exit angle
     def _get_mu_0(self):
@@ -331,13 +385,77 @@ class RT1(object):
                Interaction contribution
         """
         # (16)
-        Isurf = self.surface()
-        if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
-            Ivol = self.volume()
-            Iint = self.interaction()
+
+        # the following if-else query ensures that volume- and interaction-terms
+        # are only calculated if tau > 0. (to avoid nan-values from invalid function-evaluations)
+
+        if self.RV.tau.shape == (1,):
+            Isurf = self.surface()
+            if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
+                Ivol = self.volume()
+                Iint = self.interaction()
+            else:
+                Ivol = np.array([0.])
+                Iint = np.array([0.])
         else:
-            Ivol = 0.
-            Iint = 0.
+            # calculate surface-term (valid for any tau-value)
+            Isurf = self.surface()
+
+            # store initial parameter-values
+            old_t_0 = self.t_0
+            old_p_0 = self.p_0
+            old_t_ex = self.t_ex
+            old_p_ex = self.p_ex
+
+            old_tau = self.RV._get_tau()
+            old_omega = self.RV._get_omega()
+            old_NN = self.SRF._get_NormBRDF()
+
+            # set mask for tau > 0.
+            mask = old_tau > 0.
+            valid_index = np.where(mask)
+            invalid_index = np.where(~mask)
+
+            # set parameter-values to valid values for calculation
+            self.t_0 = old_t_0[valid_index[0]]
+            self.p_0 = old_p_0[valid_index[0]]
+            self.t_ex = old_t_ex[valid_index[0]]
+            self.p_ex = old_p_ex[valid_index[0]]
+
+            # squeezing the arrays is necessary since the setter-function for
+            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            self.RV.tau = np.squeeze(old_tau[valid_index[0]])
+            self.RV.omega = np.squeeze(old_omega[valid_index[0]])
+            self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
+
+            # calculate volume and surface term where tau-values are valid
+            _Ivol = self.volume()
+            _Iint = self.interaction()
+
+            # reset parameter values to old values
+            self.t_0 = old_t_0
+            self.p_0 = old_p_0
+            self.t_ex = old_t_ex
+            self.p_ex = old_p_ex
+
+            # squeezing the arrays is necessary since the setter-function for
+            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            self.RV.tau = np.squeeze(old_tau)
+            self.RV.omega = np.squeeze(old_omega)
+            self.SRF.NormBRDF = np.squeeze(old_NN)
+
+            # combine calculated volume-contributions for valid tau-values
+            # with zero-arrays for invalid tau-values
+            Ivol = np.ones_like(self.t_0)
+            Ivol[valid_index[0]] = _Ivol
+            Ivol[invalid_index[0]] = np.ones_like(Ivol[invalid_index[0]]) * 0.
+
+            # combine calculated interaction-contributions for valid tau-values
+            # with zero-arrays for invalid tau-values
+            Iint = np.ones_like(self.t_0)
+            Iint[valid_index[0]] = _Iint
+            Iint[invalid_index[0]] = np.ones_like(Iint[invalid_index[0]]) * 0.
+
         return Isurf + Ivol + Iint, Isurf, Ivol, Iint
 
     def surface(self):
@@ -350,7 +468,10 @@ class RT1(object):
         array_like(float)
                           Numerical value of the surface-contribution for the given set of parameters
         """
-        return self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+        Isurf = self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+
+        return self.SRF.NormBRDF * Isurf
 
     def volume(self):
         """
@@ -366,7 +487,7 @@ class RT1(object):
 
     def interaction(self):
         """
-        Numerical evaluation of the volume-contribution
+        Numerical evaluation of the interaction-contribution
         (http://rt1.readthedocs.io/en/latest/theory.html#interaction_contribution)
 
         Returns
@@ -376,7 +497,10 @@ class RT1(object):
         """
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
-        return self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
+
+        Iint = self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
+
+        return self.SRF.NormBRDF * Iint
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
@@ -387,13 +511,10 @@ class RT1(object):
         -----------
         mu1 : array_like(float)
               cosine of the first polar-angle argument
-
         mu2 : array_like(float)
               cosine of the second polar-angle argument
-
         phi1 : array_like(float)
                first azimuth-angle argument in radians
-
         phi2 : array_like(float)
                second azimuth-angle argument in radians
 
