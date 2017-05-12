@@ -487,7 +487,10 @@ class Fits(Scatter):
         # plot residuals for each emasurement
         for i, resval in enumerate(res):
             for j in resval:
-                axres.plot(i + 1, j, '.', alpha=0.5)
+                # the use of np.array() is incorporated for
+                # python 2 compatibility since otherwise an error occurs
+                # when masked values are plotted
+                axres.plot(np.array(i + 1), np.array(j), '.', alpha=0.5)
 
         # plot mean residual for each measurement
         axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
