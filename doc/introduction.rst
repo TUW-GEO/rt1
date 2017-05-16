@@ -17,7 +17,7 @@ The developers would very much appreciate to receive feedback how the model is u
 
 When you are using `RT1` as part of your publications, please give the developers credit by giving reference to the following papers:
 
-* xxxx
+* R.Quast and W.Wagner, `Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media`, Appl.Opt.55, 5379-5386 (2016)
 * xxxx
 
 
