@@ -15,6 +15,13 @@ RTplots-module
    :undoc-members:
    :show-inheritance:
 
+RTfits-module
+--------------
+.. automodule:: rt1.rtfits
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Scatter-module
 ---------------
 .. automodule:: rt1.scatter
