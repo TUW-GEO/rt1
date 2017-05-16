@@ -564,8 +564,10 @@ class Plots(Scatter):
         ------------
         R : RT1-class object
             definition of the brdf-function to be evaluated (either R or SRF must be provided)
+            The BRDf is defined via:    BRDF = R.SRF.NormBRDF * R.SRF.brdf()
         SRF : Surface-class object
               definition of the brdf-function to be evaluated (either R or SRF must be provided)
+              The BRDf is defined via:     BRDF = SRF.NormBRDF * SRF.brdf()
 
         Other Parameters
         -----------------
@@ -595,8 +597,10 @@ class Plots(Scatter):
         # choose BRDF function to be evaluated
         if R is not None:
             BRDF = R.SRF.brdf
+            NormBRDF = R.SRF.NormBRDF
         elif SRF is not None:
             BRDF = SRF.brdf
+            NormBRDF = SRF.NormBRDF
         else:
             assert False, 'Error: You must provide either R or SRF'
 
@@ -608,6 +612,7 @@ class Plots(Scatter):
         y = np.linspace(0., 2 * np.pi, simps_N)
 
         # initialize array for solutions
+
         sol = []
 
         # ---- evaluation of Integral
@@ -620,7 +625,7 @@ class Plots(Scatter):
             z = integfunkt(x[:, None], y)
             sol = sol + [simps(simps(z, y), x)]
 
-        sol = np.array(sol)
+        sol = np.array(sol) * NormBRDF
 
         # print warning if the hemispherical reflectance exceeds 1
         if np.any(sol > 1.):
@@ -630,14 +635,22 @@ class Plots(Scatter):
         fig = plt.figure()
         axnum = fig.add_subplot(1, 1, 1)
 
-        axnum.plot(incnum, sol, 'k')
-        if showpoints is True:
-            axnum.plot(incnum, sol, 'r.')
+        if len(sol.shape) > 1:
+            for i, sol in enumerate(sol):
+                axnum.plot(incnum, sol, label='NormBRDF = ' + str(NormBRDF[i][0]))
+                if showpoints is True:
+                    axnum.plot(incnum, sol, 'r.')
+        else:
+            axnum.plot(incnum, sol, 'k', label='NormBRDF = ' + str(NormBRDF[0]))
+            if showpoints is True:
+                axnum.plot(incnum, sol, 'r.')
 
         axnum.set_xlabel('$\\theta_0$ [deg]')
         axnum.set_ylabel('$R(\\theta_0)$')
         axnum.set_title('Hemispherical reflectance ')  # for $\\phi_i = $' + str(phii) +'$)$')
         axnum.set_ylim(0., np.max(sol) * 1.1)
+
+        axnum.legend()
 
         axnum.grid()
         plt.show()

@@ -16,9 +16,20 @@ class Surface(Scatter):
         # set scattering angle generalization-matrix to [1,1,1] if it is not explicitly provided by the chosen class.
         # this results in a peak in specular-direction which is suitable for describing surface BRDF's
         self.a = getattr(self, 'a', [1., 1., 1.])
-        self.NormBRDF = kwargs.get('NormBRDF', 1.)
-        assert isinstance(self.NormBRDF, float), 'Error: NormBRDF must be a floating-point number'
-        assert self.NormBRDF >= 0., 'Error: NormBRDF must be greater than 0'
+
+        self.NormBRDF = kwargs.pop('NormBRDF', 1.)
+
+    def _get_NormBRDF(self):
+        return self.__NormBRDF
+
+    def _set_NormBRDF(self, NormBRDF):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        NormBRDF = np.array(NormBRDF)
+        NormBRDF.shape = NormBRDF.shape + (1,)
+        self.__NormBRDF = NormBRDF
+
+    NormBRDF = property(_get_NormBRDF, _set_NormBRDF)
 
     def brdf(self, t_0, t_ex, p_0, p_ex):
         """
@@ -170,6 +181,11 @@ class LinCombSRF(Surface):
     SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
                  A list that contains the the individual BRDF's (Surface-objects)
                  and the associated weighting-factors (floats) for the linear-combination.
+
+    NormBRDf : scalar(float)
+               Hemispherical reflectance of the combined BRDF
+
+               ATTENTION: NormBRDF-values provided within the SRFchoices-list will not be considered!
     '''
 
     def __init__(self, SRFchoices=None, **kwargs):
@@ -227,7 +243,7 @@ class LinCombSRF(Surface):
                 self.legcoefs = 0.
 
         # initialize a combined phase-function class element
-        SRFcomb = BRDFfunction()
+        SRFcomb = BRDFfunction(NormBRDf=self.NormBRDF)
         SRFcomb.ncoefs = max([SRF[1].ncoefs for SRF in self.SRFchoices])     # set ncoefs of the combined volume-class element to the maximum
         #   number of coefficients within the chosen functions.
         #   (this is necessary for correct evaluation of fn-coefficients)
@@ -283,13 +299,13 @@ class Isotropic(Surface):
     def _set_legcoefficients(self):
         self.ncoefs = 1
         n = sp.Symbol('n')
-        self.legcoefs = (self.NormBRDF / sp.pi) * sp.KroneckerDelta(0, n)
+        self.legcoefs = (1. / sp.pi) * sp.KroneckerDelta(0, n)
 
     def _set_function(self):
         """
         define phase function as sympy object for later evaluation
         """
-        self._func = self.NormBRDF / sp.pi
+        self._func = 1. / sp.pi
 
 
 class CosineLobe(Surface):
@@ -330,7 +346,7 @@ class CosineLobe(Surface):
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF / sp.pi * ((2 ** (-2 - self.i) * (1 + 2 * n) * sp.sqrt(sp.pi) * sp.gamma(1 + self.i)) / (sp.gamma((2 - n + self.i) * sp.Rational(1, 2)) * sp.gamma((3 + n + self.i) * sp.Rational(1, 2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
+        self.legcoefs = 1. / sp.pi * ((2 ** (-2 - self.i) * (1 + 2 * n) * sp.sqrt(sp.pi) * sp.gamma(1 + self.i)) / (sp.gamma((2 - n + self.i) * sp.Rational(1, 2)) * sp.gamma((3 + n + self.i) * sp.Rational(1, 2))))    # A13   The Rational(is needed as otherwise a Gamma function Pole error is issued)
 
     def _set_function(self):
         """
@@ -347,7 +363,7 @@ class CosineLobe(Surface):
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")   generates a function
         #      that can not interpret array inputs.)
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
-        self._func = self.NormBRDF / sp.pi * (x * (1. + sp.sign(x)) / 2.) ** self.i  # eq. A13
+        self._func = 1. / sp.pi * (x * (1. + sp.sign(x)) / 2.) ** self.i  # eq. A13
 
 
 class HenyeyGreenstein(Surface):
@@ -395,8 +411,8 @@ class HenyeyGreenstein(Surface):
 
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
-        self._func = self.NormBRDF * (1. - self.t ** 2.) / ((sp.pi) * (1. + self.t ** 2. - 2. * self.t * x) ** 1.5)
+        self._func = 1. * (1. - self.t ** 2.) / ((sp.pi) * (1. + self.t ** 2. - 2. * self.t * x) ** 1.5)
 
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
-        self.legcoefs = self.NormBRDF * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
+        self.legcoefs = 1. * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n

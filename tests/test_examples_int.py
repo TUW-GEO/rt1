@@ -26,89 +26,78 @@ class TestExamples(unittest.TestCase):
     def setUp(self):
         # read reference solutions for backscattering case
         fname1 = os.path.dirname(__file__) + os.sep + 'example1_int.csv'
-        x1 = np.loadtxt(fname1, delimiter=',',skiprows=0)
-        self.inc1 = x1[:,0]
-        self.int_num_1 = x1[:,1]
+        x1 = np.loadtxt(fname1, delimiter=',', skiprows=0)
+        self.inc1 = x1[:, 0]
+        self.int_num_1 = x1[:, 1]
 
         fname2 = os.path.dirname(__file__) + os.sep + 'example2_int.csv'
-        x2 = np.loadtxt(fname2, delimiter=',',skiprows=0)
-        self.inc2 = x2[:,0]
-        self.int_num_2 = x2[:,1]
+        x2 = np.loadtxt(fname2, delimiter=',', skiprows=0)
+        self.inc2 = x2[:, 0]
+        self.int_num_2 = x2[:, 1]
 
     def test_example_1_int(self):
         print('Testing Example 1 ...')
 
-
         inc = self.inc1
 
         # initialize output fields for faster processing
-        Itot = np.ones_like(inc)*np.nan
-        Isurf = np.ones_like(inc)*np.nan
-        Ivol = np.ones_like(inc)*np.nan
-        Iint = np.ones_like(inc)*np.nan
-
-
+        Itot = np.ones_like(inc) * np.nan
+        Isurf = np.ones_like(inc) * np.nan
+        Ivol = np.ones_like(inc) * np.nan
+        Iint = np.ones_like(inc) * np.nan
 
         # ---- evaluation of first example
         V = Rayleigh(tau=0.7, omega=0.3)
-        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF = np.pi) # 11 instead of 10 coefficients used to assure 7 digit precision
+        # 11 instead of 10 coefficients used to assure 7 digit precision
+        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF=np.pi)
 
         fn = None
         for i in range(len(inc)):
             # set geometries
             t_0 = np.deg2rad(inc[i])
-            p_0 = np.deg2rad(0.)
+            p_0 = np.ones_like(t_0) * 0.
             p_ex = p_0 + np.pi
 
-
-            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn,
+                    geometry='mono')
             fn = R.fn  # store coefficients for faster itteration
             Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
-
-        #for i in range(0,len(self.inc1)):
-            self.assertAlmostEqual(self.int_num_1[i],Iint[i])
-
+        # for i in range(0,len(self.inc1)):
+            # self.assertAlmostEqual(self.int_num_1[i],Iint[i])
+            self.assertTrue(np.allclose(self.int_num_1[i], Iint[i]))
 
     def test_example_2_int(self):
         print('Testing Example 2 ...')
 
-
         inc = self.inc2
 
         # initialize output fields for faster processing
-        Itot = np.ones_like(inc)*np.nan
-        Isurf = np.ones_like(inc)*np.nan
-        Ivol = np.ones_like(inc)*np.nan
-        Iint = np.ones_like(inc)*np.nan
-
+        Itot = np.ones_like(inc) * np.nan
+        Isurf = np.ones_like(inc) * np.nan
+        Ivol = np.ones_like(inc) * np.nan
+        Iint = np.ones_like(inc) * np.nan
 
         # ---- evaluation of second example
         V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
-        SRF = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
+        SRF = CosineLobe(ncoefs=10, i=5, NormBRDF=np.pi)
 
         fn = None
         for i in range(len(inc)):
             # set geometries
-            t_0 = np.deg2rad(inc[i])
-            p_0 = np.deg2rad(0.)
+            t_0 = np.array([np.deg2rad(inc[i])])
+            p_0 = np.ones_like(t_0) * 0.
             p_ex = p_0 + np.pi
 
-
-            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
+            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn,
+                    geometry='mono')
             fn = R.fn  # store coefficients for faster itteration
             Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
 
-
-        #for i in range(0,len(self.inc1)):
-            self.assertAlmostEqual(self.int_num_2[i],Iint[i],6) # test at 6-digit precision
-
+        # for i in range(0,len(self.inc1)):
+            # test at 6-digit precision
+            self.assertAlmostEqual(self.int_num_2[i], Iint[i], 6)
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-
-

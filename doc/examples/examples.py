@@ -29,8 +29,6 @@ tic = timeit.default_timer()
 
 # set incident intensity to 1.
 I0 = 1.
-# define incidence-angle range for generation of backscatter-plots
-inc = np.arange(1., 89., 1.)
 
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
@@ -50,27 +48,35 @@ example = 3
 
 # ----------- definition of examples -----------
 if example == 1:
+    # define incidence-angle range for generation of backscatter-plots
+    inc = np.arange(1., 89., 1.)
+
     # Example 1
     V = Rayleigh(tau=0.7, omega=0.3)
     SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 1'
 elif example == 2:
+    # define incidence-angle range for generation of backscatter-plots
+    inc = np.arange(1., 89., 1.)
+
     V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
     SRF = CosineLobe(ncoefs=10, i=5)
     label = 'Example 2'
 elif example == 3:
+    # define incidence-angle range for generation of backscatter-plots
+    inc = np.arange(1., 89., 1.)
     # list of volume-scattering phase-functions to be combined
-    phasechoices = [HenyeyGreenstein(t=  0.5, ncoefs = 10, a=[-1.,1.,1.]),  # forward-scattering-peak
-                    HenyeyGreenstein(t= -0.2, ncoefs = 10, a=[-1.,1.,1.]),  # backscattering-peak
-                    HenyeyGreenstein(t= -0.5, ncoefs = 10, a=[ 1.,1.,1.]),  # downward-specular peak
-                    HenyeyGreenstein(t=  0.2, ncoefs = 10, a=[ 1.,1.,1.]),  # upward-specular peak
-                   ]
+    phasechoices = [HenyeyGreenstein(t=0.5, ncoefs=10, a=[-1., 1., 1.]),  # forward-scattering-peak
+                    HenyeyGreenstein(t=-0.2, ncoefs=10, a=[-1., 1., 1.]),  # backscattering-peak
+                    HenyeyGreenstein(t=-0.5, ncoefs=10, a=[1., 1., 1.]),  # downward-specular peak
+                    HenyeyGreenstein(t=0.2, ncoefs=10, a=[1., 1., 1.]),  # upward-specular peak
+                    ]
     # weighting-factors for the individual phase-functions
     Vweights = [.3, .3, .2, .2]
 
     # list of surface-BRDF-functions to be combined
-    BRDFchoices = [HGsurface(ncoefs=10, t=-.4, a=[-.8,1.,1.], NormBRDF=.1),         # backscattering peak
-                   HGsurface(ncoefs=10, t= .5, a=[ .8,1.,1.], NormBRDF=.1),         # specular peak
+    BRDFchoices = [HGsurface(ncoefs=10, t=-.4, a=[-.8, 1., 1.]),         # backscattering peak
+                   HGsurface(ncoefs=10, t=.5, a=[.8, 1., 1.]),         # specular peak
                    Isotropic(NormBRDF=.1),        # isotropic scattering contribution
                    ]
     # weighting-factors for the individual BRDF's
@@ -81,8 +87,56 @@ elif example == 3:
     SRFchoices = [[BRDFweights[i], BRDFchoices[i]] for i in range(len(BRDFchoices))]
 
     V = LinCombV(tau=0.5, omega=0.4, Vchoices=Vchoices)
+    SRF = LinCombSRF(SRFchoices=SRFchoices, NormBRDF=0.1)
 
-    SRF = LinCombSRF(SRFchoices=SRFchoices)
+elif example == 4:
+    # functions are defined as in example 3, but now multiple measurements
+    # are calculated simultaneously!
+
+    # define incidence-angle range for generation of backscatter-plots
+
+    # since the incidence-angle arrays do not have equal size, nan-values
+    # are added to generate a rectangular incidence-angle array
+    inc1 = np.arange(1., 89., 1.)
+    inc2 = np.full_like(inc1, np.nan)
+
+    for i in range(49):
+        inc2[i] = np.arange(1., 50., 1.)[i]
+
+    inc = [inc1, inc2]
+
+    # list of volume-scattering phase-functions to be combined
+    phasechoices = [HenyeyGreenstein(t=0.5, ncoefs=10, a=[-1., 1., 1.]),  # forward-scattering-peak
+                    HenyeyGreenstein(t=-0.2, ncoefs=10, a=[-1., 1., 1.]),  # backscattering-peak
+                    HenyeyGreenstein(t=-0.5, ncoefs=10, a=[1., 1., 1.]),  # downward-specular peak
+                    HenyeyGreenstein(t=0.2, ncoefs=10, a=[1., 1., 1.]),  # upward-specular peak
+                    ]
+    # weighting-factors for the individual phase-functions
+    Vweights = [.3, .3, .2, .2]
+
+    # list of surface-BRDF-functions to be combined
+    BRDFchoices = [HGsurface(ncoefs=10, t=-.4, a=[-.8, 1., 1.]),         # backscattering peak
+                   HGsurface(ncoefs=10, t=.5, a=[.8, 1., 1.]),         # specular peak
+                   Isotropic(NormBRDF=.1),        # isotropic scattering contribution
+                   ]
+    # weighting-factors for the individual BRDF's
+    BRDFweights = [.3, .4, .3]
+
+    # generate correctly shaped arrays of the phase-functions and their corresponding weighting-factors:
+    Vchoices = [[Vweights[i], phasechoices[i]] for i in range(len(phasechoices))]
+    SRFchoices = [[BRDFweights[i], BRDFchoices[i]] for i in range(len(BRDFchoices))]
+
+    # define input-parameter arrays
+    tau = np.array([.4, .5])
+    omega = np.array([.4, .24])
+    NormBRDF = np.array([.2, .3])
+
+    V = LinCombV(tau=tau, omega=omega, Vchoices=Vchoices)
+    SRF = LinCombSRF(SRFchoices=SRFchoices, NormBRDF=NormBRDF)
+
+    # choose the number of the result to be plotted if multiple results have been evaluated
+    # alternatively choose    Nres = 'all'     to plot all results
+    Nres = 'all'
 else:
     assert False, 'Choose an existing example-number or specify V and SRF explicitly'
 
@@ -99,8 +153,8 @@ print('time for coefficient evaluation: ' + str(toc - tic))
 # specification of measurement-geometry
 t_0 = np.deg2rad(inc)
 t_ex = t_0 * 1.
-p_0 = np.ones_like(inc) * 0.
-p_ex = np.ones_like(inc) * 0. + np.pi
+p_0 = np.ones_like(t_0) * 0.
+p_ex = np.ones_like(t_0) * 0. + np.pi
 
 tic = timeit.default_timer()
 R = RT1(I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=SRF, fn=fn, geometry='mono')
@@ -109,10 +163,25 @@ toc = timeit.default_timer()
 print('evaluating print-values took ' + str(toc - tic))
 
 
+if len(Itot.shape) > 1:
+    if Nres == 'all':
+        for Nres in range(len(Itot)):
+            incp, Itotp, Isurfp, Ivolp, Iintp = inc[Nres], Itot[Nres], Isurf[Nres], Ivol[Nres], Iint[Nres]
+            label = 'Backscattering Coefficient' + '\n $\\omega$ = ' + str(R.RV.omega[Nres][0]) + '$ \quad \\tau$ = ' + str(R.RV.tau[Nres][0])
+            plot2 = Plots().logmono(incp, Itot=Itotp, Isurf=Isurfp, Ivol=Ivolp, Iint=Iintp, sig0=True, noint=True, label=label)  # , ylim=[-25,0])
+    else:
+        incp, Itotp, Isurfp, Ivolp, Iintp = inc[Nres], Itot[Nres], Isurf[Nres], Ivol[Nres], Iint[Nres]
+        label = 'Backscattering Coefficient' + '\n $\\omega$ = ' + str(R.RV.omega[Nres][0]) + '$ \quad \\tau$ = ' + str(R.RV.tau[Nres][0])
+else:
+    incp, Itotp, Isurfp, Ivolp, Iintp = inc, Itot, Isurf, Ivol, Iint
+    label = 'Backscattering Coefficient' + '\n $\\omega$ = ' + str(R.RV.omega) + '$ \quad \\tau$ = ' + str(R.RV.tau)
+
+
 # ---------------- EVALUATION OF HEMISPHERICAL REFLECTANCE ----------------
 
 # plot the hemispherical reflectance associated with the chosen BRDF
-#hemr = Plots().hemreflect(R=R, t_0_step = 5., simps_N = 500)
+hemr = Plots().hemreflect(R=R, t_0_step=5., simps_N=500)
+
 # ---------------- GENERATION OF POLAR-PLOTS ----------------
 #       plot both p and the BRDF in a single plot
 plot1 = Plots().polarplot(R, incp=list(np.linspace(0, 120, 5)), incBRDF=list(np.linspace(0, 90, 5)), pmultip=1.5)
@@ -138,10 +207,10 @@ plot1 = Plots().polarplot(R, incp=list(np.linspace(0, 120, 5)), incBRDF=list(np.
 #       example: isotropic phase function
 #iso = Plots().polarplot(SRF = SRFisotropic(), BRDFlabel = 'Isotropic BRDF', BRDFaprox = False, incBRDF = [45], BRDFmultip = 2.)
 
-
 # ---------------- GENERATION OF BACKSCATTER PLOTS ----------------
 #       plot backscattered intensity and fractional contributions
-plot2 = Plots().logmono(inc, Itot=Itot, Isurf=Isurf, Ivol=Ivol, Iint=Iint, sig0=True, noint=True, label='Backscattering Coefficient' + '\n $\\omega$ = ' + str(R.RV.omega) + '$ \quad \\tau$ = ' + str(R.RV.tau))  # , ylim=[-25,0])
+if len(Itot.shape) == 1:
+    plot2 = Plots().logmono(incp, Itot=Itotp, Isurf=Isurfp, Ivol=Ivolp, Iint=Iintp, sig0=True, noint=True, label=label)  # , ylim=[-25,0])
 
 #       plot only backscattering coefficient without fractions
 #Plots().logmono(inc, Itot = Itot, Isurf = Isurf, Ivol = Ivol, Iint = Iint, sig0=True, fractions = False)

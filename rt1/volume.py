@@ -16,6 +16,30 @@ class Volume(Scatter):
         # this results in a peak in forward-direction which is suitable for describing volume-scattering phase-functions
         self.a = getattr(self, 'a', [-1., 1., 1.])
 
+    def _get_omega(self):
+        return self.__omega
+
+    def _set_omega(self, omega):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        omega = np.array(omega)
+        omega.shape = omega.shape + (1,)
+        self.__omega = omega
+
+    omega = property(_get_omega, _set_omega)
+
+    def _get_tau(self):
+        return self.__tau
+
+    def _set_tau(self, tau):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        tau = np.array(tau)
+        tau.shape = tau.shape + (1,)
+        self.__tau = tau
+
+    tau = property(_get_tau, _set_tau)
+
     def p(self, t_0, t_ex, p_0, p_ex):
         """
         Calculate numerical value of the volume-scattering phase-function for chosen incidence- and exit angles.
