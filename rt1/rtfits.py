@@ -1,14 +1,6 @@
 """
-Class for quick visualization of results and used phasefunctions
-
-preparedata() ... rectangularize dataset containing multiple measurements
-                  to allow simultaneous fitting
-monofit() ... Perform a simultaneous fit of the model defined via V and SRF to
-              monostatic measurements.
-printresults() .. quick visualization of the gained results
-                  the function can be called via:
-                      a = monofit(...)
-                      printresults(*a)
+Class to perform least_squares fitting of given datasets.
+(wrapper for scipy.optimize.least_squares)
 """
 
 import numpy as np
@@ -149,7 +141,7 @@ class Fits(Scatter):
                 **kwargs):
         '''
         Perform a simultaneous fit of the model defined via V and SRF to
-        monostatic measurements.
+        to the monostatic measurements provided via the dataset.
 
 
         Parameters:
@@ -162,7 +154,9 @@ class Fits(Scatter):
                  list of input-data and incidence-angles arranged in the form
                      [[inc_0,data_0], [inc_1,data_1], ...]
                  where inc_i denotes the incident zenith-angles in radians
-                 and the data_i denotes the corresponding data-values
+                 and data_i denotes the corresponding data-values of the i^th
+                 measurement. Each measurement can contain different numbers
+                 of datapoints!
 
         Other Parameters:
         ------------------
@@ -185,8 +179,10 @@ class Fits(Scatter):
                    output of scipy's least_squares function
         data : array-like
                used dataset for the fit
+               (rectangularized to allow array processing)
         inc : array-like
               used incidence-angle data for the fit
+              (rectangularized to allow array processing)
         V : volume-class element
             used volume-scattering phase function for the fit
         SRF : surface-class element
@@ -195,6 +191,12 @@ class Fits(Scatter):
              used fn-coefficients for the fit
         startvals : array-like
                     used start-values for the fit
+        mask : array-like (boolean)
+               a mask that shows the added values to the data and inc arrays
+               which can be used to generate masked-arrays containing only
+               the original entries by using:
+                   inc_orig  = numpy.ma.masked_array(inc, mask)
+                   data_orig = numpy.ma.masked_array(data, mask)
         '''
 
         # prepare data for fit
@@ -308,16 +310,14 @@ class Fits(Scatter):
         res = np.ma.sqrt((masked_estimates - masked_data)**2)
         return res
 
-    def printresults(self, fit_res, data, inc, V, SRF, fn, startvals, mask,
-                     truevals=None):
+    def printresults(self, fit, truevals=None):
         '''
         a function to quickly print fit-results
 
         Parametsrs:
         ------------
-        fit_res, data, inc, V, SRF, fn, startvals : output of monofit-function
-            i.e. if a = monofit(...), then printresults(*a) will
-            print the results of the fit.
+        fit : list
+            output of monofit()-function
 
         truevals : array-like (default = None)
                    array of the expected parameter-values (must be of the
@@ -325,6 +325,9 @@ class Fits(Scatter):
                    if provided, the difference between the expected- and
                    fitted values is plotted
         '''
+
+        fit_res, data, inc, V, SRF, fn, startvals, mask = fit
+
         Nmeasurements = len(inc)
 
         # function to evaluate the model on the estimated parameters
@@ -467,7 +470,18 @@ class Fits(Scatter):
 
         return fig
 
-    def printerr(self, fit_res, data, inc, V, SRF, fn, _dummy, mask):
+    def printerr(self, fit):
+        '''
+        a function to quickly print residuals for each measurement
+        and for each incidence-angle value
+
+        Parametsrs:
+        ------------
+        fit : list
+            output of monofit()-function
+        '''
+
+        fit_res, data, inc, V, SRF, fn, _dummy, mask = fit
 
         Nmeasurements = len(inc)
         res = self.calc_res(fit_res, data, inc, V, SRF, fn, _dummy, mask)
