@@ -153,9 +153,9 @@ fit0 = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
 # define true-values for comparison
 truevals = np.concatenate([omegadata, taudata, rdata])
 # print fit-results
-fit_figure0 = testfit.printresults(*fit0, truevals=truevals)
+fit_figure0 = testfit.printresults(fit0, truevals=truevals)
 # print residuals
-fit_err_figure0 = testfit.printerr(*fit0)
+fit_err_figure0 = testfit.printerr(fit0)
 
 
 assert False, 'Manual stop before second fit'
@@ -202,6 +202,6 @@ fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
 # define true-values for comparison
 truevals = np.concatenate([omegadata, taudata, rdata])
 # print fit-results
-fit_figure = testfit.printresults(*fit, truevals=truevals)
+fit_figure = testfit.printresults(fit, truevals=truevals)
 # print residuals
-fit_err_figure = testfit.printerr(*fit)
+fit_err_figure = testfit.printerr(fit)
