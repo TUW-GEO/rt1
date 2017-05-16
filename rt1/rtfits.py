@@ -351,7 +351,7 @@ class Fits(Scatter):
 
             return errs
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=(14, 10))
 
         ax = fig.add_subplot(211)
         ax.set_title('Fit-results')
@@ -491,7 +491,7 @@ class Fits(Scatter):
         data = np.ma.masked_array(data, mask=mask)
 
         # make new figure
-        figres = plt.figure()
+        figres = plt.figure(figsize=(14, 10))
         axres = figres.add_subplot(212)
         axres.set_title('Mean residual per measurement')
 
