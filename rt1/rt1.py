@@ -26,7 +26,6 @@ except ImportError:
 class RT1(object):
     """ Main class to perform RT-simulations
 
-
     Parameters
     ----------
     I0 : scalar(float)
@@ -40,11 +39,11 @@ class RT1(object):
 
     t_ex : array_like(float)
            array of exit zenith-angles in radians
-           (if geometry is set to 'mono', theta_ex is automatically set to t_0 !)
+           (if geometry is 'mono', theta_ex is automatically set to t_0)
 
     p_ex : array_like(float)
            array of exit azimuth-angles in radians
-           (if geometry is set to 'mono', phi_ex is automatically set to p_0 + np.pi !)
+           (if geometry is 'mono', phi_ex is automatically set to p_0 + np.pi)
 
     RV : rt1.volume
          random object from rt1.volume class
@@ -53,35 +52,46 @@ class RT1(object):
           random object from rt1.surface class
 
     fn : array_like(sympy expression), optional (default = None)
-         optional input of pre-calculated array of sympy-expressions to speedup
-         calculations where the same fn-coefficients can be used.
-         if None, the coefficients will be calculated automatically by calling rt1.fn
+         optional input of pre-calculated array of sympy-expressions
+         to speedup calculations where the same fn-coefficients can be used.
+         if None, the coefficients will be calculated automatically at the
+         initialization of the RT1-object
 
     geometry : str
-        4 character string specifying which components of the angles should be fixed or variable
-        This is done to significantly speed up the evaluation-process of the fn-coefficient generation
+        4 character string specifying which components of the angles should
+        be fixed or variable. This is done to significantly speed up the
+        evaluation-process of the fn-coefficient generation
 
-        The 4 characters represent in order the properties of: t_0, t_ex, p_0, p_ex
+        The 4 characters represent in order the properties of:
+            t_0, t_ex, p_0, p_ex
 
-        - 'f' indicates that the angle is treated 'fixed' (i.e. as a numerical constant)
-        - 'v' indicates that the angle is treated 'variable' (i.e. as a sympy-variable)
+        - 'f' indicates that the angle is treated 'fixed'
+        (i.e. as a numerical constant)
+        - 'v' indicates that the angle is treated 'variable'
+        (i.e. as a sympy-variable)
         - Passing  geometry = 'mono'  indicates a monstatic geometry
           (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
           If monostatic geometry is used, the input-values of t_ex and p_ex
           have no effect on the calculations!
 
-        For detailed information on the specification of the geometry-parameter,
-        please have a look at the "Evaluation Geometries" section of the documentation
+        For detailed information on the specification of the
+        geometry-parameter, please have a look at the "Evaluation Geometries"
+        section of the documentation:
         (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
-
+    param_dict : dict
+                 a dictionary to assign numerical values to sympy.Symbols
+                 appearing in the definitions of V and SRF.
     """
 
-    def __init__(self, I0, t_0, t_ex, p_0, p_ex, RV=None, SRF=None, fn=None, geometry='vvvv'):
+    def __init__(self, I0, t_0, t_ex, p_0, p_ex,
+                 RV=None, SRF=None, fn=None, geometry='vvvv', param_dict={}):
         self.geometry = geometry
-        assert isinstance(geometry, str), 'ERROR: geometry must be a 4-character string'
+        assert isinstance(geometry, str), ('ERROR: geometry must be ' +
+                                           'a 4-character string')
         assert len(self.geometry) == 4
 
         self.I0 = I0
+        self.param_dict = param_dict
 
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
@@ -93,35 +103,98 @@ class RT1(object):
         self._set_p_0(p_0)
         self._set_p_ex(p_ex)
 
-        # the asserts for omega & tau are performed inside the RT1-class rather than the Volume-class
-        # to allow calling Volume-elements without providing omega & tau which is needed to generate
-        # linear-combinations of Volume-elements with unambiguous tau- & omega-specifications
+        self._set_fn(fn)
 
-        assert self.RV.omega is not None, 'Single scattering albedo needs to be provided'
+        # the asserts for omega & tau are performed inside the RT1-class
+        # rather than the Volume-class to allow calling Volume-elements without
+        # providing omega & tau which is needed to generate linear-combinations
+        # of Volume-elements with unambiguous tau- & omega-specifications
+
+        assert self.RV.omega is not None, ('Single scattering albedo ' +
+                                           'needs to be provided')
         assert self.RV.tau is not None, 'Optical depth needs to be provided'
 
-        assert np.any(self.RV.omega >= 0.), 'Single scattering albedo must be greater than 0'
-        assert np.any(self.RV.omega <= 1.), 'Single scattering albedo must be smaller than 1'
+        assert np.any(self.RV.omega >= 0.), ('Single scattering albedo ' +
+                                             'must be greater than 0')
+        assert np.any(self.RV.omega <= 1.), ('Single scattering albedo ' +
+                                             'must be smaller than 1')
         assert np.any(self.RV.tau >= 0.), 'Optical depth must be > 0'
 
-        assert np.any(self.SRF.NormBRDF >= 0.), 'Error: NormBRDF must be greater than 0'
+        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
+                                                 'be greater than 0')
 
-        # TODO if self.RV.tau == 0.:
-        # TODO     assert self.RV.omega == 0., 'ERROR: If optical depth is equal to zero, then OMEGA can not be larger than zero'
+
+        # check if all parameters have been provided (and also if no
+        # unused parameter has been specified)
+        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
+                *map(str, self.param_dict.keys()))))
+
+        funcset = self.RV._func.free_symbols | self.SRF._func.free_symbols
+
+
+        if refset <= funcset:
+            errdict = ' in the definition of V and SRF'
+        elif refset >= funcset:
+            errdict = ' in the definition of param_dict'
+        else:
+            errdict = ' in the definition of V, SRF and param_dict'
+
+        assert (funcset == refset), ('false parameter-specification, please ' +
+                                  'please check assignment of the parameters '
+                                  + str(refset ^ funcset) + errdict)
+
+
+
+#        TODO if self.RV.tau == 0.:
+#        TODO     assert self.RV.omega == 0., ('ERROR: If optical depth is ' +
+#                                              'equal to zero, then OMEGA' +
+#                                              ' can not be larger than zero')
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
+    def _get_fn(self):
+        return self.__fn
+
+    def _set_fn(self, fn):
+        # set the fn-coefficients and generate lambdified versions
+        # of the fn-coefficients for evaluation
         if fn is None:
             # precalculate the expansiion coefficients for the interaction term
             expr_int = self._calc_interaction_expansion()
-
-            # now we have the integral formula ready. The next step is now to
             # extract the expansion coefficients
-            #~ print 'Integral expansion before extraction:'
-            self.fn = self._extract_coefficients(expr_int)
+            self.__fn = self._extract_coefficients(expr_int)
         else:
-            self.fn = fn
+            self.__fn = fn
+
+        # define new lambda-functions for each fn-coefficient
+        variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
+                *map(str, self.param_dict.keys())))
+
+#        fnfuncs = [sp.lambdify((variables),
+#                               i, modules=["numpy", "sympy"]
+#                               ) for i in self.__fn]
+#
+#        self._fnfuncs = fnfuncs
+
+
+        self._fnevals = sp.lambdify((variables),
+                               self.__fn,
+                               modules=["numpy", "sympy"],
+                               dummify = False)
+
+        self._fnevals.__doc__ = ('''
+                                 A function to numerically evaluate the
+                                 fn-coefficients a for given set of incidence
+                                 angles and parameter-values as defined
+                                 in the param_dict dictionary.
+
+                                 The call-signature is:
+                                     RT1-object._fnevals(theta_0, phi_0, \
+                                     theta_ex, phi_ex, *param_dict.values())
+                                 ''')
+
+    fn = property(_get_fn, _set_fn)
 
     def _get_t_0(self):
         return self.__t_0
@@ -192,21 +265,22 @@ class RT1(object):
         """
         extract Fn coefficients from given forumula.
 
-        This is done by collecting the terms of expr with respect to powers of cos(theta_s) and
-        simplifying the gained coefficients by applying a simple trigonometric identity.
+        This is done by collecting the terms of expr with respect to powers
+        of cos(theta_s) and simplifying the gained coefficients by applying
+        a simple trigonometric identity.
 
         Parameters
         ----------
 
         expr : sympy expression
-               prepared sympy-expression (output of _calc_interaction_expansion())
-               to be used for extracting the fn-coefficients
+               prepared sympy-expression to be used for extracting
+               the fn-coefficients (output of _calc_interaction_expansion())
 
         Returns
         --------
         fn : list(sympy expressions)
-             A list of sympy expressions that represent the fn-coefficients associated
-             with the given input-equation (expr).
+             A list of sympy expressions that represent the fn-coefficients
+             associated with the given input-equation (expr).
 
         """
 
@@ -215,52 +289,74 @@ class RT1(object):
         expr_sort = sp.collect(expr, sp.cos(theta_s), evaluate=False)
 
         # convert generated dictionary to list of coefficients
-        # the use of  .get() is necessary for getting the dict-values since otherwise coefficients that are actually 0.
-        # would not appear in the list of fn-coefficients
+        # the use of  .get() is necessary for getting the dict-values since
+        # otherwise coefficients that are actually 0. would not appear
+        #  in the list of fn-coefficients
 
-        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.) for n in range(self.SRF.ncoefs + self.RV.ncoefs + 1)]
+        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.)
+              for n in range(self.SRF.ncoefs + self.RV.ncoefs - 1)]
 
         return fn
 
     def _calc_interaction_expansion(self):
         """
-        Evaluation of the polar-integral from the definition of the fn-coefficients.
+        Evaluation of the polar-integral from the definition of
+        the fn-coefficients.
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-fn_coef_definition)
 
         The approach is as follows:
 
-        1. Expand the Legrende coefficents of the surface and volume phase functions
-        2. Apply the function _integrate_0_2pi_phis() to evaluate the integral
-        3. Replace remaining sin(theta_s) terms in the Legrende polynomials by cos(theta_s) to prepare for fn-coefficient extraction
-        4. Expand again to ensure that a fully expanded expression is returned (to be used as input in _extract_coefficients() )
+            1. Expand the Legrende coefficents of the surface and volume
+               phase functions
+            2. Apply the function _integrate_0_2pi_phis() to evaluate
+               the integral
+            3. Replace remaining sin(theta_s) terms in the Legrende polynomials
+               by cos(theta_s) to prepare for fn-coefficient extraction
+            4. Expand again to ensure that a fully expanded expression
+               is returned (to be used as input in _extract_coefficients() )
 
         Returns
         --------
         res : sympy expression
-              A fully expanded expression that can be used as input for _extract_coefficients()
+              A fully expanded expression that can be used as
+              input for _extract_coefficients()
 
         """
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
 
-        volexp = self.RV.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
-        brdfexp = self.SRF.legexpansion(self.t_0, self.t_ex, self.p_0, self.p_ex, self.geometry).doit()
-        #   preparation of the product of p*BRDF for coefficient retrieval
-        fPoly = expand(2 * sp.pi * volexp * brdfexp)  # this is the eq.23. and would need to be integrated from 0 to 2pi
+        volexp = self.RV.legexpansion(self.t_0, self.t_ex,
+                                      self.p_0, self.p_ex,
+                                      self.geometry).doit()
+
+        brdfexp = self.SRF.legexpansion(self.t_0, self.t_ex,
+                                        self.p_0, self.p_ex,
+                                        self.geometry).doit()
+
+        # preparation of the product of p*BRDF for coefficient retrieval
+        # this is the eq.23. and would need to be integrated from 0 to 2pi
+        fPoly = expand(2 * sp.pi * volexp * brdfexp)
 
         # do integration of eq. 23
         expr = self._integrate_0_2pi_phis(fPoly)
 
-        # now we do still simplify the expression to be able to express things as power series of cos(theta_s)
+        # now we do still simplify the expression to be able to express
+        # things as power series of cos(theta_s)
         theta_s = sp.Symbol('theta_s')
-        replacements = [(sp.sin(theta_s) ** i, expand((1. - sp.cos(theta_s) ** 2) ** sp.Rational(i, 2))) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
+        replacements = [(sp.sin(theta_s) ** i,
+                         expand((1. - sp.cos(theta_s) ** 2)
+                                ** sp.Rational(i, 2)))
+                        for i in range(1, self.SRF.ncoefs + self.RV.ncoefs - 1)
+                        if i % 2 == 0]
+
         res = expand(expr.xreplace(dict(replacements)))
 
         return res
 
     def _cosintegral(self, i):
         """
-        Analytical solution to the integral of cos(x)**i in the interval 0 ... 2*pi
+        Analytical solution to the integral of cos(x)**i
+        in the interval 0 ... 2*pi
 
         Parameters
         ----------
@@ -269,9 +365,11 @@ class RT1(object):
 
         Returns
         -------
-        float
-              Numerical value of the integral of cos(x)^i in the interval 0 ... 2*pi
+        - : float
+              Numerical value of the integral of cos(x)^i
+              in the interval 0 ... 2*pi
         """
+
         if i % 2 == 0:
             return (2 ** (-i)) * sp.binomial(i, i * sp.Rational(1, 2))
         else:
@@ -280,93 +378,109 @@ class RT1(object):
 
     def _integrate_0_2pi_phis(self, expr):
         """
-        Perforn symbolic integration of a pre-expanded power-series in sin(phi_s) and cos(phi_s)
-        over the variable phi_s in the interval 0 ... 2*pi
+        Perforn symbolic integration of a pre-expanded power-series
+        in sin(phi_s) and cos(phi_s) over the variable phi_s
+        in the interval 0 ... 2*pi
 
         The approach is as follows:
 
-        1. Replace all appearing sin(phi_s)^odd with 0 since the integral vanishes
-        2. Replace all remaining sin(phi_s)^even with their representation in terms of cos(phi_s)
-        3. Replace all cos(phi_s)^i terms with _cosintegral(i)
-        4. Expand the gained solution for further processing
+            1. Replace all appearing sin(phi_s)^odd with 0 since the
+               integral vanishes
+            2. Replace all remaining sin(phi_s)^even with their representation
+               in terms of cos(phi_s)
+            3. Replace all cos(phi_s)^i terms with _cosintegral(i)
+            4. Expand the gained solution for further processing
 
         Parameters
         ----------
         expr : sympy expression
-               pre-expanded product of the legendre-expansions of RV.legexpansion() and SRF.legexpansion()
+               pre-expanded product of the legendre-expansions of
+               RV.legexpansion() and SRF.legexpansion()
 
         Returns
         -------
         res : sympy expression
-              resulting symbolic expression that results from integrating expr over the variable phi_s in the interval 0 ... 2*pi
+              resulting symbolic expression that results from integrating
+              expr over the variable phi_s in the interval 0 ... 2*pi
         """
+
         phi_s = sp.Symbol('phi_s')
 
-        # replace first all odd powers of sin(phi_s) as these are all zero for the integral
-        replacements1 = [(sp.sin(phi_s) ** i, 0.) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 1]
+        # replace first all odd powers of sin(phi_s) as these are
+        # all zero for the integral
+        replacements1 = [(sp.sin(phi_s) ** i, 0.)
+                         for i in range(1, self.SRF.ncoefs +
+                                        self.RV.ncoefs + 1) if i % 2 == 1]
 
         # then substitute the sine**2 by 1-cos**2
-        replacements1 = replacements1 + [(sp.sin(phi_s) ** i, expand((1. - sp.cos(phi_s) ** 2) ** sp.Rational(i, 2))) for i in range(2, self.SRF.ncoefs + self.RV.ncoefs + 1) if i % 2 == 0]
+        replacements1 = (replacements1 +
+                         [(sp.sin(phi_s) ** i,
+                           expand((1. -
+                                   sp.cos(phi_s) ** 2) ** sp.Rational(i, 2)))
+                          for i in range(2, self.SRF.ncoefs +
+                                         self.RV.ncoefs + 1) if i % 2 == 0])
+
         res = expand(expr.xreplace(dict(replacements1)))
 
-        # replacements need to be done simultaneously, otherwise all remaining sin(phi_s)**even will be replaced by 0
+        # replacements need to be done simultaneously, otherwise all
+        # remaining sin(phi_s)**even will be replaced by 0
 
         # integrate the cosine terms
-        replacements3 = [(sp.cos(phi_s) ** i, self._cosintegral(i)) for i in range(1, self.SRF.ncoefs + self.RV.ncoefs + 1)]
+        replacements3 = [(sp.cos(phi_s) ** i, self._cosintegral(i))
+                         for i in range(1, self.SRF.ncoefs +
+                                        self.RV.ncoefs + 1)]
+
         res = expand(res.xreplace(dict(replacements3)))
         return res
 
-    def _get_fn(self, n, t_0, p_0, t_ex, p_ex):
-        """
-        Function to numerically evaluate the fn-coefficients as function of incident geometry.
-
-        Parameters
-        ----------
-        n : scalar(int)
-            Number of fn-coefficient to be evaluated (starting with 0)
-
-        t_0 : array_like(float)
-              array of incident zenith-angles in radians
-
-        p_0 : array_like(float)
-              array of incident azimuth-angles in radians
-
-        t_ex : array_like(float)
-               array of exit zenith-angles in radians
-
-        p_ex : array_like(float)
-               array of exit azimuth-angles in radians
-
-        Returns
-        -------
-        array_like(float)
-              Numerical value of the n^th fn-coefficient evaluated at the given angles.
-        """
-
-        theta_0 = sp.Symbol('theta_0')
-        phi_0 = sp.Symbol('phi_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_ex = sp.Symbol('phi_ex')
-
-        # the destinction between zero and nonzero fn-coefficients is necessary because sympy treats
-        # any symbol multiplied by 0 as 0, which results in a function that returns 0 instead of an array of zeroes!
-        # -> see  https://github.com/sympy/sympy/issues/3935
-
-        if n >= len(self.fn):
-            return 0.
-        else:
-            if (self.fn[n] == 0. or self.fn[n] == 0):
-                def fnfunc(theta_0, phi_0, theta_ex, phi_ex):
-                    return np.ones_like(theta_0) * np.ones_like(phi_0) * np.ones_like(theta_ex) * np.ones_like(phi_ex) * 0.
-            else:
-                fnfunc = sp.lambdify((theta_0, phi_0, theta_ex, phi_ex), self.fn[n], modules=["numpy", "sympy"])
-
-            return fnfunc(t_0, p_0, t_ex, p_ex)
+#    def _eval_fn(self, n, t_0, p_0, t_ex, p_ex):
+#        """
+#        Function to numerically evaluate the fn-coefficients as
+#        function of incident geometry.
+#
+#        Parameters
+#        ----------
+#        n : scalar(int)
+#            Number of fn-coefficient to be evaluated (starting with 0)
+#
+#        t_0 : array_like(float)
+#              array of incident zenith-angles in radians
+#
+#        p_0 : array_like(float)
+#              array of incident azimuth-angles in radians
+#
+#        t_ex : array_like(float)
+#               array of exit zenith-angles in radians
+#
+#        p_ex : array_like(float)
+#               array of exit azimuth-angles in radians
+#
+#        Returns
+#        -------
+#        array_like(float)
+#              Numerical value of the n^th fn-coefficient evaluated
+#              at the given angles.
+#        """
+#
+#        # the destinction between zero and nonzero fn-coefficients is
+#        # necessary because sympy treats any symbol multiplied by 0 as 0, which
+#        # results in a function that returns 0 instead of an array of zeroes!
+#        # -> see  https://github.com/sympy/sympy/issues/3935
+#
+#        if n > len(self.fn):
+#            return np.zeros_like(t_0)
+#        else:
+#            new_fn = self._fnfuncs[n](t_0, p_0, t_ex, p_ex,
+#                                      *self.param_dict.values())
+#            if np.isscalar(new_fn):
+#                new_fn = np.full_like(t_0, new_fn)
+#            return new_fn
 
     def calc(self):
         """
-        Perform actual calculation of bistatic scattering at top of the random volume (z=0)
-        for the specified geometry. For details please have a look at the documentation
+        Perform actual calculation of bistatic scattering at top of the
+        random volume (z=0) for the specified geometry. For details please
+        have a look at the documentation:
         (http://rt1.readthedocs.io/en/latest/theory.html#first-order-solution-to-the-rte)
 
 
@@ -386,12 +500,14 @@ class RT1(object):
         """
         # (16)
 
-        # the following if-else query ensures that volume- and interaction-terms
-        # are only calculated if tau > 0. (to avoid nan-values from invalid function-evaluations)
+        # the following if query ensures that volume- and interaction-terms
+        # are only calculated if tau > 0.
+        # (to avoid nan-values from invalid function-evaluations)
 
         if self.RV.tau.shape == (1,):
             Isurf = self.surface()
-            if self.RV.tau > 0.:  # explicit differentiation for non-existing canopy, as otherwise NAN values
+            # differentiation for non-existing canopy, as otherwise NAN values
+            if self.RV.tau > 0.:
                 Ivol = self.volume()
                 Iint = self.interaction()
             else:
@@ -423,7 +539,7 @@ class RT1(object):
             self.p_ex = old_p_ex[valid_index[0]]
 
             # squeezing the arrays is necessary since the setter-function for
-            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            # tau, omega and NormBRDF automatically adds an axis to the arrays!
             self.RV.tau = np.squeeze(old_tau[valid_index[0]])
             self.RV.omega = np.squeeze(old_omega[valid_index[0]])
             self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
@@ -439,7 +555,7 @@ class RT1(object):
             self.p_ex = old_p_ex
 
             # squeezing the arrays is necessary since the setter-function for
-            # tau and omega and NormBRDF automatically add an axis to the numpy arrays!
+            # tau, omega and NormBRDF automatically add an axis to the arrays!
             self.RV.tau = np.squeeze(old_tau)
             self.RV.omega = np.squeeze(old_omega)
             self.SRF.NormBRDF = np.squeeze(old_NN)
@@ -465,11 +581,16 @@ class RT1(object):
 
         Returns
         --------
-        array_like(float)
-                          Numerical value of the surface-contribution for the given set of parameters
+        - : array_like(float)
+            Numerical value of the surface-contribution for the
+            given set of parameters
         """
 
-        Isurf = self.I0 * np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex)) * self._mu_0 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
+        Isurf = (self.I0 * np.exp(-(self.RV.tau / self._mu_0) -
+                                  (self.RV.tau / self._mu_ex)) * self._mu_0
+                 * self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict))
 
         return self.SRF.NormBRDF * Isurf
 
@@ -480,10 +601,16 @@ class RT1(object):
 
         Returns
         --------
-        array_like(float)
-                          Numerical value of the volume-contribution for the given set of parameters
+        - : array_like(float)
+            Numerical value of the volume-contribution for the
+            given set of parameters
         """
-        return (self.I0 * self.RV.omega * self._mu_0 / (self._mu_0 + self._mu_ex)) * (1. - np.exp(-(self.RV.tau / self._mu_0) - (self.RV.tau / self._mu_ex))) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
+        return ((self.I0 * self.RV.omega *
+                 self._mu_0 / (self._mu_0 + self._mu_ex))
+                * (1. - np.exp(-(self.RV.tau / self._mu_0) -
+                               (self.RV.tau / self._mu_ex)))
+                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                            param_dict=self.param_dict))
 
     def interaction(self):
         """
@@ -492,19 +619,23 @@ class RT1(object):
 
         Returns
         --------
-        array_like(float)
-                          Numerical value of the interaction-contribution for the given set of parameters
+        - : array_like(float)
+            Numerical value of the interaction-contribution for
+            the given set of parameters
         """
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
 
-        Iint = self.I0 * self._mu_0 * self.RV.omega * (np.exp(-self.RV.tau / self._mu_ex) * Fint1 + np.exp(-self.RV.tau / self._mu_0) * Fint2)
+        Iint = (self.I0 * self._mu_0 * self.RV.omega *
+                (np.exp(-self.RV.tau / self._mu_ex) * Fint1 +
+                 np.exp(-self.RV.tau / self._mu_0) * Fint2))
 
         return self.SRF.NormBRDF * Iint
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
-        Numerical evaluation of the F_int() function used in the definition of the interaction-contribution
+        Numerical evaluation of the F_int() function used in the definition
+        of the interaction-contribution
         (http://rt1.readthedocs.io/en/latest/theory.html#F_int)
 
         Parameters
@@ -524,12 +655,27 @@ class RT1(object):
             Numerical value of F_int for the given set of parameters
         """
         nmax = len(self.fn)
-        hlp1 = np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1)) - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1) * expi(self.RV.tau / mu1 - self.RV.tau)
-        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) - np.exp(-self.RV.tau / mu1) / k) for k in range(1, (n + 1) + 1)) for n in range(nmax)])
-        fn = np.array([self._get_fn(n, np.arccos(mu1), phi1, np.arccos(mu2), phi2) for n in range(nmax)])
+        hlp1 = (np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1))
+                - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1)
+                * expi(self.RV.tau / mu1 - self.RV.tau))
+
+        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) -
+                                             np.exp(-self.RV.tau / mu1) / k)
+                              for k in range(1, (n + 1) + 1))
+                       for n in range(nmax)])
+
+#        fn = (np.array([self._eval_fn(n, np.arccos(mu1),
+#                                      phi1, np.arccos(mu2), phi2)
+#                        for n in range(nmax)]))
+#
+        fn = self._fnevals(np.arccos(mu1), phi1, np.arccos(mu2),
+                           phi2, *self.param_dict.values())
+
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
+
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
+
         return S
 
     def _dvolume_dtau(self):
@@ -547,8 +693,8 @@ class RT1(object):
                 * ((1. / self._mu_0 + 1. / self._mu_ex**(-1))
                    * np.exp(- self.RV.tau / self._mu_0 -
                             self.RV.tau / self._mu_ex))
-                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex)
-                )
+                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                            self.param_dict))
 
         return dvdt
 
@@ -566,7 +712,8 @@ class RT1(object):
                 (
                 1. - np.exp(-(self.RV.tau / self._mu_0) -
                             (self.RV.tau / self._mu_ex))
-                ) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex))
+                ) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                              self.param_dict))
 
         return dvdo
 
@@ -599,8 +746,8 @@ class RT1(object):
                 * np.exp(- self.RV.tau / self._mu_0
                          - self.RV.tau / self._mu_ex)
                 * self._mu_0
-                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
-                )
+                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                                self.param_dict))
 
         # Incorporate BRDF-normalization factor
         dsdt = self.SRF.NormBRDF * dsdt
@@ -635,34 +782,104 @@ class RT1(object):
                 * np.exp(-(self.RV.tau / self._mu_0)
                          - (self.RV.tau / self._mu_ex))
                 * self._mu_0
-                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex)
-                )
+                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                                self.param_dict))
 
         return dsdr
 
-    def jacobian(self, dB=False, sig0=False):
+    # define functions that evaluate the derivatives with
+    # respect to the defined parameters
+    def _d_surface_ddummy(self, key):
+        '''
+        Generation of a function that evaluates the derivative of the
+        surface-contribution with respect to the provided key
+
+        Parameters:
+        ------------
+        key : string
+
+
+        Returns:
+        --------
+        - : array_like(float)
+            Numerical value of dIsurf/dkey for the given set of parameters
+        '''
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+
+        dummyd = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
+                              *self.param_dict.keys()),
+                             sp.diff(self.SRF._func, sp.Symbol(key)),
+                             modules=["numpy", "sympy"])
+
+        dIsurf = (self.I0 *
+                  np.exp(-(self.RV.tau / self._mu_0) -
+                         (self.RV.tau / self._mu_ex))
+                  * self._mu_0
+                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                           **self.param_dict)
+                  )
+
+        return self.SRF.NormBRDF * dIsurf
+
+    def _d_volume_ddummy(self, key):
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+
+        dummyd = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
+                              *self.param_dict.keys()),
+                             sp.diff(self.RV._func, sp.Symbol(key)),
+                             modules=["numpy", "sympy"])
+
+        dIvol = (self.I0 * self.RV.omega
+                 * self._mu_0 / (self._mu_0 + self._mu_ex)
+                 * (1. - np.exp(-(self.RV.tau / self._mu_0) -
+                                (self.RV.tau / self._mu_ex)))
+                 * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                          **self.param_dict))
+        return dIvol
+
+    def jacobian(self, dB=False, sig0=False, param_list=['omega', 'tau', 'NormBRDF']):
         '''
         Returns the jacobian of the total backscatter with respect
-        to omega, tau and NormBRDF.
+        to the parameters provided in param_list.
+        (default: param_list = ['omega', 'tau', 'NormBRDF'])
 
-        The jacobian can be evaluated for measurements in linear or dB units,
-        and for either intensity- or sigma_0 values.
+        The jacobian can be evaluated for measurements in linear or dB
+        units, and for either intensity- or sigma_0 values.
 
-        Note: The contribution of the interaction-term is currently neglected!
+        Note:
+            The contribution of the interaction-term is currently
+            not considered in the calculation of the jacobian!
 
         Parameters:
         -------------
         dB : boolean (default = False)
              Indicator whether linear or dB units are used.
              The applied relation is given by:
-                dI_dB(x) / dx = 10 / [log(10) * I_linear(x)] * dI_linear(x)/dx
+
+             dI_dB(x)/dx =
+             10 / [log(10) * I_linear(x)] * dI_linear(x)/dx
 
         sig0 : boolean (default = False)
-               Indicator wheather intensity-values or sigma_0-values are used
+               Indicator wheather intensity- or sigma_0-values are used
                The applied relation is given by:
-                  sig_0 = 4 * pi * cos(inc) * I
+
+               sig_0 = 4 * pi * cos(inc) * I
+
                where inc denotes the incident zenith-angle and I is the
                corresponding intensity
+        param_list : list
+                     a list of strings that correspond to the parameters
+                     for which the jacobian should be evaluated.
+
+                     possible values are: 'omega', 'tau' 'NormBRDF' and
+                     any string corresponding to a sympy.Symbol used in the
+                     definition of V or SRF
 
         Returns:
         ---------
@@ -672,28 +889,37 @@ class RT1(object):
         '''
         from scipy.linalg import block_diag
 
+        jacdict = {}
+        if 'omega' in param_list:
+            jacdict['omega'] = (self._dsurface_domega() +
+                                self._dvolume_domega())
+        if 'tau' in param_list:
+            jacdict['tau'] = (self._dsurface_dtau() +
+                              self._dvolume_dtau())
+
+        if 'NormBRDF' in param_list:
+            jacdict['NormBRDF'] = (self._dsurface_dR() +
+                                   self._dvolume_dR())
+
+        for key in self.param_dict:
+            if key in param_list:
+                jacdict[key] = (self._d_surface_ddummy(key) +
+                                self._d_volume_ddummy(key))
+
         if sig0 is True and dB is False:
             norm = 4. * np.pi * np.cos(self.t_0)
         if dB is True:
-            norm = 10. / (np.log(10.) * (self.surface() + self.volume()))
+            norm = 10. / (np.log(10.) * (self.surface()
+                                         + self.volume()))
         else:
             norm = 1.
 
-        # destinction for parameter inputs as scalars or arrays
-        if len(self.surface().shape) == 1:
-            jac = [
-                (self._dsurface_domega() + self._dvolume_domega()) * norm,
-                (self._dsurface_dtau() + self._dvolume_dtau()) * norm,
-                (self._dsurface_dR() + self._dvolume_dR()) * norm
-            ]
-        else:
-            jac = [
-                block_diag(
-                 *((self._dsurface_domega() + self._dvolume_domega()) * norm)),
-                block_diag(
-                 *((self._dsurface_dtau() + self._dvolume_dtau()) * norm)),
-                block_diag(
-                 *((self._dsurface_dR() + self._dvolume_dR()) * norm))
-            ]
+        jac = []
+        for key in param_list:
+            if len(self.surface().shape) == 1:
+                jac = [jacdict[str(key)] * norm for key in param_list]
+            else:
+                jac = [block_diag(*(jacdict[str(key)] * norm))
+                       for key in param_list]
 
         return np.array(jac)
