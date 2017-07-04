@@ -585,7 +585,8 @@ class Fits(Scatter):
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
 
-        return res_lsq, R, data, inc, mask, res_dict, start_dict, fixed_dict
+        return [res_lsq, R, data, inc, mask, weights,
+                res_dict, start_dict, fixed_dict]
 
 
 
@@ -627,7 +628,8 @@ class Fits(Scatter):
         fig : matplotlib.figure object
         '''
 
-        res_lsq, R, data, inc, mask, res_dict, start_dict, fixed_dict = fit
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
 
         # reset incidence-angles in case they have been altered beforehand
         R.t_0 = inc
@@ -806,23 +808,29 @@ class Fits(Scatter):
                datelist = [[2014, 2015], [ [1,2],[1,2]] ]
         '''
 
-        res_lsq, R, data, inc, mask, res_dict, start_dict, fixed_dict = fit
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
 
         Nmeasurements = len(inc)
 
-        R.t_0 = inc
-        R.p_0 = np.zeros_like(inc)
+        # get residuals from fit into desired shape for plotting
+        # Attention -> incorporate weights and mask !
+        res = np.ma.masked_array(np.reshape(
+                np.abs(res_lsq.fun/weights), data.shape), mask)
 
-        calc_dict = dict(**res_dict, **fixed_dict)
-
-        estimates = self._calc_model(R, calc_dict)
-
-        # !!IMPORTANT!!
-        # calculate the residuals based on masked arrays
-        masked_estimates = np.ma.masked_array(estimates, mask=mask)
-        masked_data = np.ma.masked_array(data, mask=mask)
-
-        res = np.ma.sqrt((masked_estimates - masked_data)**2)
+#        # Alternative way of calculating the residuals
+#        # (based on R, inc and res_dict)
+#
+#        R.t_0 = inc
+#        R.p_0 = np.zeros_like(inc)
+#
+#        calc_dict = dict(**res_dict, **fixed_dict)
+#        estimates = self._calc_model(R, calc_dict)
+#        # calculate the residuals based on masked arrays
+#        masked_estimates = np.ma.masked_array(estimates, mask=mask)
+#        masked_data = np.ma.masked_array(data, mask=mask)
+#
+#        res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
         # apply mask to data and incidence-angles
         inc = np.ma.masked_array(inc, mask=mask)
@@ -836,13 +844,8 @@ class Fits(Scatter):
         axres2 = figres.add_subplot(211)
         axres2.set_title('Residuals per incidence-angle')
 
-        # plot residuals for each emasurement
-        for i, resval in enumerate(res):
-            for j in resval:
-                # the use of np.array() is incorporated for
-                # python 2 compatibility since otherwise an error occurs
-                # when masked values are plotted
-                axres.plot(np.array(i + 1), np.array(j), '.', alpha=0.5)
+        # the use of masked arrays might cause python 2 compatibility issues!
+        axres.plot(np.arange(len(res)) + 1, res, '.', alpha=0.5)
 
         # plot mean residual for each measurement
         axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
@@ -970,7 +973,8 @@ class Fits(Scatter):
                  kwargs passed to matplotlib.pyplot.scatter()
         '''
 
-        res_lsq, R, data, inc, mask, res_dict, start_dict, fixed_dict = fit
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
 
         # reset incidence-angles in case they have been altered beforehand
         R.t_0 = inc
@@ -1009,15 +1013,16 @@ class Fits(Scatter):
         else:
             scale = ''
 
-        ax.set_xlabel('measured ' + quantity + scale)
-        ax.set_ylabel('modelled ' + quantity + scale)
+        ax.set_xlabel('modelled ' + quantity + scale)
+        ax.set_ylabel('measured ' + quantity + scale)
 
         if regression is True:
             # evaluate linear regression to get r-value etc.
             slope, intercept, r_value, p_value, std_err = linregress(estimates,
                                                                      measures)
 
-            ax.plot(np.sort(measures), intercept + slope*np.sort(measures), 'r--', alpha = 0.4)
+            ax.plot(np.sort(measures),
+                    intercept + slope*np.sort(measures), 'r--', alpha = 0.4)
 
             ax.text(0.8, .1,'$R^2$ = ' + str(np.round(r_value**2, 2)),
                  horizontalalignment='center',
@@ -1039,7 +1044,8 @@ class Fits(Scatter):
               output of the monofit()-function
         measurements : list
                        a list containing the number of the measurement
-                       that should be plotted
+                       that should be plotted (starting from 1)
+
         Other Parameters:
         ------------------
         datelist : list
@@ -1072,19 +1078,39 @@ class Fits(Scatter):
                      a dict containing arguments to customize the hexbin-plot
         '''
 
-        res_lsq, R, data, inc, mask, res_dict, start_dict, fixed_dict = fit
+        from matplotlib.colors import LinearSegmentedColormap
+        from matplotlib.colors import Normalize
+
+        # function to generate colormap that fades between colors
+        def CustomCmap(from_rgb, to_rgb):
+
+            # from color r,g,b
+            r1, g1, b1 = from_rgb
+
+            # to color r,g,b
+            r2, g2, b2 = to_rgb
+
+            cdict = {'red': ((0, r1, r1),
+                           (1, r2, r2)),
+                   'green': ((0, g1, g1),
+                            (1, g2, g2)),
+                   'blue': ((0, b1, b1),
+                           (1, b2, b2))}
+
+            cmap = LinearSegmentedColormap('custom_cmap', cdict)
+            return cmap
+
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
 
         # reset incidence-angles in case they have been altered beforehand
         R.t_0 = inc
         R.p_0 = np.zeros_like(inc)
 
-
         estimates = self._calc_model(R, dict(**res_dict, **fixed_dict))
-
 
         if datelist is None and dates is not None:
             assert False, 'you can only provide dates if dateslist is provided'
-
 
         if dates is not None:
             measurements = []
@@ -1100,18 +1126,16 @@ class Fits(Scatter):
                     measurements = measurements + [mval]
                 except:
                     assert False, 'There is something wrong with the dates'
+        else:
+            # since python starts counting at 0 ...
+            measurements = np.array(measurements) -1
 
-        # set colormaps to be used
-
-        cmaps = ['Blues', 'Oranges', 'Greens', 'Reds', 'Purples']
-        colors = ['blue', 'orange', 'green', 'red', 'purple']
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
         for m_i, m in enumerate(measurements):
             y = estimates[m][~mask[m]]
-
             # plot data
             if datelist is None:
                 label = m
@@ -1129,15 +1153,33 @@ class Fits(Scatter):
             xdata = np.rad2deg(inc[m][~mask[m]])
             ydata = data[m][~mask[m]]
 
+            # get color that will be applied to the next line drawn
+            dummy, = ax.plot(xdata[0], ydata[0], '.', alpha = 0.)
+            color = dummy.get_color()
+
             if hexbinQ is True:
-                args = dict(gridsize = 5, mincnt = 1,
-                            linewidths = 0., vmin=0.5, alpha = 0.5)
+                args = dict(gridsize = 15, mincnt = 1,
+                            linewidths = 0., vmin=0.5, alpha = 0.7)
                 args.update(hexbinargs)
 
-                ax.hexbin(xdata, ydata, cmap = cmaps[m_i % len(cmaps)], **args)
+                # evaluate the hexbinplot once to get the maximum number of
+                # datapoints within a single hexagonal (used for normalization)
+                dummyargs = args.copy()
+                dummyargs.update({'alpha' : 0.})
+                hb = ax.hexbin(xdata, ydata, **dummyargs)
 
+                # generate colormap that fades from white to the color
+                # of the plotted data  (asdf.get_color())
+                cmap = CustomCmap([1.00, 1.00, 1.00],
+                                  plt.cm.colors.hex2color(color))
+                # setup correct normalizing instance
+                norm = Normalize(vmin = 0, vmax = hb.get_array().max())
+
+                ax.hexbin(xdata, ydata, cmap = cmap, norm = norm, **args)
+
+            # plot datapoints
             asdf, = ax.plot(xdata, ydata, '.',
-                            color = colors[m_i % len(colors)], alpha = 1.,
+                            color = color, alpha = 1.,
                             label = label, markersize = 10)
 
             # plot results
@@ -1150,6 +1192,5 @@ class Fits(Scatter):
 
             ax.set_xlabel('$\\theta_0$ [deg]')
             ax.set_ylabel('$\\sigma_0$ [dB]')
-
 
         ax.legend()
