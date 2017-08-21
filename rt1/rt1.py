@@ -57,7 +57,15 @@ class RT1(object):
          if None, the coefficients will be calculated automatically at the
          initialization of the RT1-object
 
-    geometry : str
+    _fnevals : callable, optional (default = None)
+               optional input of pre-compiled function to numerically evaluate
+               the fn_coefficients. if None, the function will be compiled
+               using the fn-coefficients provided.
+               Note that once the _fnevals function is provided, the
+               fn-coefficients are no longer needed and have no effect on the
+               calculated results!
+
+    geometry : str (default = 'vvvv')
         4 character string specifying which components of the angles should
         be fixed or variable. This is done to significantly speed up the
         evaluation-process of the fn-coefficient generation
@@ -78,13 +86,49 @@ class RT1(object):
         geometry-parameter, please have a look at the "Evaluation Geometries"
         section of the documentation:
         (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
-    param_dict : dict
+    param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
+    lambda_backend : str (default = 'sympy')
+                     indicator to select the module that shall be used
+                     to compile a function for numerical evaluation of the
+                     fn-coefficients.
+
+                     possible values are:
+                         - 'sympy' :  sympy.lambdify is used to compile
+                           the _fnevals function
+                         - 'symengine' : symengine.LambdifyCSE is used to
+                           compile the _fnevals function. This results in
+                           considerable speedup for long fn-coefficients
+                         - 'theano' : sympy.printing.theanocode.theano_function
+                           is used to compile a theano-function that is capable
+                           of evaluating long fn-coefficients very fast.
+                           The compilation of the theano-function can take some
+                           time and therefore it is advisable to store the
+                           pre-compiled function for later use once the
+                           compilation is finished.
+
+                           Since theano requires the dimension of the
+                           input-arguments to be pre-specified at the time of
+                           compilation of the function, the additional argument
+                           theano_dim must be set correctly!
+    theano_dim : int (default = 2)
+                 dimension of the input-argument arrays (i.e. t_0, p_0, etc.)
+                 (this parameter is only needed if lambda_backend is set to
+                 'theano'.)
+
+                 Note: this parameter will only affect the generated _fnevals
+                 function at the time of compilation! If a pre-compiled
+                 _fnevals function is passed to RT1, the parameter will not
+                 have any effect.
     """
 
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
-                 RV=None, SRF=None, fn=None, geometry='vvvv', param_dict={}):
+                 RV=None, SRF=None, fn=None, _fnevals=None,
+                 geometry='vvvv', param_dict={},
+                 lambda_backend = 'theano',
+                 theano_dim = 2):
+
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
                                            'a 4-character string')
@@ -92,6 +136,8 @@ class RT1(object):
 
         self.I0 = I0
         self.param_dict = param_dict
+        self.lambda_backend = lambda_backend
+        self.theano_dim = theano_dim
 
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
@@ -104,7 +150,7 @@ class RT1(object):
         self._set_p_ex(p_ex)
 
         self._set_fn(fn)
-
+        self._set_fnevals(_fnevals)
         # the asserts for omega & tau are performed inside the RT1-class
         # rather than the Volume-class to allow calling Volume-elements without
         # providing omega & tau which is needed to generate linear-combinations
@@ -143,13 +189,6 @@ class RT1(object):
                                   'please check assignment of the parameters '
                                   + str(refset ^ funcset) + errdict)
 
-
-
-#        TODO if self.RV.tau == 0.:
-#        TODO     assert self.RV.omega == 0., ('ERROR: If optical depth is ' +
-#                                              'equal to zero, then OMEGA' +
-#                                              ' can not be larger than zero')
-
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
@@ -167,34 +206,89 @@ class RT1(object):
         else:
             self.__fn = fn
 
-        # define new lambda-functions for each fn-coefficient
-        variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                *map(str, self.param_dict.keys())))
-
-#        fnfuncs = [sp.lambdify((variables),
-#                               i, modules=["numpy", "sympy"]
-#                               ) for i in self.__fn]
-#
-#        self._fnfuncs = fnfuncs
-
-
-        self._fnevals = sp.lambdify((variables),
-                               self.__fn,
-                               modules=["numpy", "sympy"],
-                               dummify = False)
-
-        self._fnevals.__doc__ = ('''
-                                 A function to numerically evaluate the
-                                 fn-coefficients a for given set of incidence
-                                 angles and parameter-values as defined
-                                 in the param_dict dictionary.
-
-                                 The call-signature is:
-                                     RT1-object._fnevals(theta_0, phi_0, \
-                                     theta_ex, phi_ex, *param_dict.values())
-                                 ''')
-
     fn = property(_get_fn, _set_fn)
+
+    def _get_fnevals(self):
+        return self.__fnevals
+
+    def _set_fnevals(self, _fnevals):
+        if _fnevals is None:
+            import timeit
+            tic = timeit.default_timer()
+
+            # define new lambda-functions for each fn-coefficient
+            variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
+                    *map(str, self.param_dict.keys())))
+
+            # use symengine's Lambdify if symengine has been used within
+            # the fn-coefficient generation
+            if self.lambda_backend == 'symengine':
+                print('symengine')
+                # set lambdify module
+                lambdify = lambdify_symengine
+
+                self.__fnevals = lambdify(list(variables),
+                                       self.fn, real = True)
+
+            if self.lambda_backend == 'theano':
+                print('theano')
+
+                from sympy.printing import theanocode
+
+                # set the dimensions of the input-arguments
+                dims = dict([[i, self.theano_dim] for i in list(variables)])
+
+                tic = timeit.default_timer()
+                funs = list(map(sp.sympify,self.fn))
+                toc = timeit.default_timer()
+                print('sympifying took ' + str(toc-tic))
+
+                # TODO since theanocode can not process functions that are
+                # identical to zero, all zero coefficients will be replaced
+                # with "machine-precision zero"  times  "theta_0"
+                # ->
+
+                for i, fun in enumerate(funs):
+                    if fun == 0:
+                        funs[i] = np.finfo('float64').eps * variables[0]
+
+                # use sympy to generate a theano-function
+                self.__fnevals  = theanocode.theano_function(
+                                    list(variables), funs,
+                                    dims=dims,
+                                    dtypes=dict([[i, 'float64']
+                                               for i in list(variables)])
+                                    ,on_unused_input='ignore')
+                                  #,mode='FAST_COMPILE')
+
+            if self.lambda_backend == 'sympy':
+                print('sympy')
+                # set lambdify module
+                lambdify = lambdify_sympy
+
+                sympy_fn = list(map(sp.sympify, self.fn))
+
+                self.__fnevals = lambdify((variables),
+                                       sp.sympify(sympy_fn),
+                                       modules=["numpy", "sympy"],
+                                       dummify = False)
+
+                self.__fnevals.__doc__ = ('''
+                                    A function to numerically evaluate the
+                                    fn-coefficients a for given set of
+                                    incidence angles and parameter-values
+                                    as defined in the param_dict dict.
+
+                                    The call-signature is:
+                                        RT1-object._fnevals(theta_0, phi_0, \
+                                        theta_ex, phi_ex, *param_dict.values())
+                                    ''')
+            toc = timeit.default_timer()
+            print('lambdification finished, it took ' + str(toc-tic) + ' sec')
+        else:
+            self.__fnevals = _fnevals
+
+    _fnevals = property(_get_fnevals, _set_fnevals)
 
     def _get_t_0(self):
         return self.__t_0
@@ -285,16 +379,37 @@ class RT1(object):
         """
 
         theta_s = sp.Symbol('theta_s')
-        # collect terms with equal powers of cos(theta_s)
-        expr_sort = sp.collect(expr, sp.cos(theta_s), evaluate=False)
 
-        # convert generated dictionary to list of coefficients
-        # the use of  .get() is necessary for getting the dict-values since
-        # otherwise coefficients that are actually 0. would not appear
-        #  in the list of fn-coefficients
+        N_fn = self.SRF.ncoefs + self.RV.ncoefs - 1
 
-        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.)
-              for n in range(self.SRF.ncoefs + self.RV.ncoefs - 1)]
+        fn = []
+
+        # find f_0 coefficient
+        repl0 = dict([[sp.cos(theta_s), 0]])
+        fn = fn + [expr.xreplace(repl0)]
+
+        # find f_1 coefficient
+        repl1 = dict([[sp.cos(theta_s)**i, 0] for i in list(range(N_fn, 0, -1))
+                     if i != 1] + [[sp.cos(theta_s), 1]])
+        fn = fn + [expr.xreplace(repl1) - fn[0]]
+
+
+        for n in np.arange(2, N_fn, dtype = int):
+            repln = dict([[sp.cos(theta_s)**int(n) , 1]])
+            fn = fn + [(expr.xreplace(repln)).xreplace(repl0) - fn[0]]
+
+#        # alternative way of extracting the coefficients:
+#        theta_s = sp.Symbol('theta_s')
+#        # collect terms with equal powers of cos(theta_s)
+#        expr_sort = sp.collect(expr, sp.cos(theta_s), evaluate=False)
+#
+#        # convert generated dictionary to list of coefficients
+#        # the use of  .get() is necessary for getting the dict-values since
+#        # otherwise coefficients that are actually 0. would not appear
+#        #  in the list of fn-coefficients
+#
+#        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.)
+#              for n in range(self.SRF.ncoefs + self.RV.ncoefs - 1)]
 
         return fn
 
@@ -654,7 +769,53 @@ class RT1(object):
         S : array_like(float)
             Numerical value of F_int for the given set of parameters
         """
-        nmax = len(self.fn)
+
+        # evaluate fn-coefficients
+        if self.lambda_backend == 'symengine':
+            print('using symengine')
+            # the somewhat strange call signature originates from the
+            # broadcasting-rules of symengines Lamdify-function
+#            fn = np.reshape(self._fnevals(np.ravel(np.broadcast_arrays(
+#                    *[np.arccos(mu1), phi1, np.arccos(mu2),
+#                     phi2, *self.param_dict.values()]), order='F')),
+#                     (len(self.fn), *mu1.shape), order='F')
+
+            # for lambdifyCSE
+            inputs = np.broadcast_arrays( *[np.arccos(mu1), phi1,
+                                            np.arccos(mu2), phi2,
+                                            *self.param_dict.values()])
+
+            # avoid annoying output of LambdifyCSE
+            import sys
+            import os
+            oldout = sys.stdout
+            sys.stdout = open(os.devnull, 'w')
+
+            fn = np.reshape(
+                    self._fnevals(np.reshape(np.ravel(inputs, order = 'F'),
+                                            (-1, len(inputs)), order = 'C')).T,
+                                            (-1, *mu1.shape), order = 'F')
+
+            #reset output to console
+            sys.stdout = oldout
+
+        if self.lambda_backend == 'sympy':
+            args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
+                               phi2, *self.param_dict.values())
+            # to correct for 0 dimensional arrays if a fn-coefficient
+            # is identical to 0 (in a symbolic manner)
+            fn = np.broadcast_arrays(*self._fnevals(*args))
+
+        if self.lambda_backend == 'theano':
+            args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
+                               phi2, *self.param_dict.values())
+            fn = self._fnevals(*args)
+
+#            fn = self._fnevals(np.arccos(mu1), phi1, np.arccos(mu2),
+#                               phi2, *self.param_dict.values())
+
+        nmax = len(fn)
+
         hlp1 = (np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1))
                 - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1)
                 * expi(self.RV.tau / mu1 - self.RV.tau))
@@ -668,9 +829,6 @@ class RT1(object):
 #                                      phi1, np.arccos(mu2), phi2)
 #                        for n in range(nmax)]))
 #
-        fn = self._fnevals(np.arccos(mu1), phi1, np.arccos(mu2),
-                           phi2, *self.param_dict.values())
-
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
 
@@ -843,7 +1001,8 @@ class RT1(object):
                           **self.param_dict))
         return dIvol
 
-    def jacobian(self, dB=False, sig0=False, param_list=['omega', 'tau', 'NormBRDF']):
+    def jacobian(self, dB=False, sig0=False,
+                 param_list=['omega', 'tau', 'NormBRDF']):
         '''
         Returns the jacobian of the total backscatter with respect
         to the parameters provided in param_list.

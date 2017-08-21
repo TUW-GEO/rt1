@@ -555,7 +555,7 @@ class Plots(Scatter):
         plt.show()
         return fig
 
-    def hemreflect(self, R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0., t_0_max=90., simps_N=1000, showpoints=True):
+    def hemreflect(self, R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0., t_0_max=90., simps_N=1000, showpoints=True, returnarray = False):
         '''
         Numerical evaluation of the hemispherical reflectance of the given BRDF-function
         using scipy's implementation of the Simpson-rule integration scheme.
@@ -631,27 +631,31 @@ class Plots(Scatter):
         if np.any(sol > 1.):
             print('ATTENTION, Hemispherical Reflectance > 1 !')
 
-        # generation of plot
-        fig = plt.figure()
-        axnum = fig.add_subplot(1, 1, 1)
 
-        if len(sol.shape) > 1:
-            for i, sol in enumerate(sol):
-                axnum.plot(incnum, sol, label='NormBRDF = ' + str(NormBRDF[i][0]))
+        if returnarray is True:
+            return sol
+        else:
+            # generation of plot
+            fig = plt.figure()
+            axnum = fig.add_subplot(1, 1, 1)
+
+            if len(sol.shape) > 1:
+                for i, sol in enumerate(sol):
+                    axnum.plot(incnum, sol, label='NormBRDF = ' + str(NormBRDF[i][0]))
+                    if showpoints is True:
+                        axnum.plot(incnum, sol, 'r.')
+            else:
+                axnum.plot(incnum, sol, 'k', label='NormBRDF = ' + str(NormBRDF[0]))
                 if showpoints is True:
                     axnum.plot(incnum, sol, 'r.')
-        else:
-            axnum.plot(incnum, sol, 'k', label='NormBRDF = ' + str(NormBRDF[0]))
-            if showpoints is True:
-                axnum.plot(incnum, sol, 'r.')
 
-        axnum.set_xlabel('$\\theta_0$ [deg]')
-        axnum.set_ylabel('$R(\\theta_0)$')
-        axnum.set_title('Hemispherical reflectance ')  # for $\\phi_i = $' + str(phii) +'$)$')
-        axnum.set_ylim(0., np.max(sol) * 1.1)
+            axnum.set_xlabel('$\\theta_0$ [deg]')
+            axnum.set_ylabel('$R(\\theta_0)$')
+            axnum.set_title('Hemispherical reflectance ')  # for $\\phi_i = $' + str(phii) +'$)$')
+            axnum.set_ylim(0., np.max(sol) * 1.1)
 
-        axnum.legend()
+            axnum.legend()
 
-        axnum.grid()
-        plt.show()
-        return fig
+            axnum.grid()
+            plt.show()
+            return fig

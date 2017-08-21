@@ -198,9 +198,9 @@ class Fits(Scatter):
 
 
 
-    def monofit(self, V, SRF, dataset,
-                    param_dict, bounds_dict={}, fixed_dict = {},
-                    fn=None, **kwargs):
+    def monofit(self, V, SRF, dataset, param_dict,
+                bounds_dict={}, fixed_dict = {}, param_dyn_dict = {},
+                fn=None, _fnevals=None, **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -286,6 +286,35 @@ class Fits(Scatter):
                      (if the parameter is constant for all measurements it
                      can equally well be passed directly in the definition
                      of the phase-functions.)
+        param_dyn_dict : dict
+                     A dictionary containing the names of the parameters that
+                     are intended to be fitted together with a list of unique
+                     integers for each key, specifying the number of individual
+                     parameters that shall be fitted.
+
+                     For example (Number of measurements = 4):
+
+                         - param_dyn_dict = {'tau' : [1, 2, 3, 4]}
+                           results in 4 distinct values for tau
+                         - param_dyn_dict = {'tau' : [1, 1, 1, 1]}
+                           results in a single value for tau.
+                         - param_dyn_dict = {'tau' : [1, 2, 2, 1]}
+                           results in two values for tau, where the first
+                           value is used in the fit of the fist and last
+                           measurement, and the second value is used in the
+                           fit of the second and third measurement.
+
+                    If param_dyn_dict is not set explicitly ( = {}),
+                    the number of start-values in param_dict will be used to
+                    generate an appropriate dictionary. i.e.:
+
+                        - param_dict = {'tau' : .3}
+                          results in param_dyn_dict = {'tau' : [1, 1, 1, 1]}
+                        - param_dict = {'tau' : [.2, .2, .2, .2]}
+                          results in param_dyn_dict = {'tau' : [1, 2, 3, 4]}
+
+                          (no distinction between equal and varying
+                          start-values is implemented...)
 
 
         Other Parameters:
@@ -295,30 +324,38 @@ class Fits(Scatter):
              if the same model has to be fitted to multiple datasets, the
              fn-coefficients that are returned in the first fit can be used
              as input for the second fit to avoid repeated calculations.
+        _fnevals : callable
+             a slot for pre-compiled function to evaluate the fn-coefficients
+             Note that once the _fnevals function is provided, the
+             fn-coefficients are no longer needed and have no effect on the
+             calculated results!
         kwargs :
                  keyword arguments passed to scipy's least_squares function
 
         Returns:
         ---------
-        res_lsq2 : dict
-                   output of scipy's least_squares function
+        res_lsq : dict
+                  output of scipy's least_squares function
+        R : RT1-object
+            the RT1-object used to perform the fit
         data : array-like
                used dataset for the fit
         inc : array-like
               used incidence-angle data for the fit
-        V : volume-class element
-            used volume-scattering phase function for the fit
-        SRF : surface-class element
-              used surface-BRDF for the fit
-        fn : array-like
-             used fn-coefficients for the fit
-        startvals : array-like
-                    used start-values for the fit
+        mask : array-like(bool)
+               the masked that needs to be applied to the rectangularized
+               dataset to get the valid entries (see preparedata-function)
+        weights : array-like
+                  the weighting-matrix that has been applied to correct for the
+                  rectangularization of the dataset (see preparedata-function)
         res_dict : dict
-                   a dictionary containing the names of the fitted parameters
-                   and the corresponding fit-results
+                   a dictionary containing the fit-results for the parameters
+        start_dict : dict
+                     a dictionary containing the used start-values
+        fixed_dict : dict
+                   a dictionary containing the parameter-values that have been
+                   used as constants during the fit
         '''
-
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
@@ -348,32 +385,33 @@ class Fits(Scatter):
                        str((vsymb | srfsymb) - paramset) +
                        ' must be provided in param_dict')
 
-
-        if omega is not None and not np.isscalar(omega):
-            assert len(omega) == Nmeasurements, ('length of omega-array must' +
-                      'be equal to the length of the dataset')
-        if omega is None:
-            assert len(V.omega) == Nmeasurements, ('length of' +
-                      ' omega-array provided in the definition of V must' +
-                      ' be equal to the length of the dataset')
-
-        if tau is not None and not np.isscalar(tau):
-            assert len(tau) == Nmeasurements, ('length of tau-array' +
-                      ' must be equal to the length of the dataset')
-        if tau is None:
-            assert len(V.tau) == Nmeasurements, ('length of tau-array' +
-                      ' provided in the definition of V must be equal to' +
-                      ' the length of the dataset')
-
-        if NormBRDF is not None and not np.isscalar(NormBRDF):
-            assert len(NormBRDF) == Nmeasurements, ('length of' +
-                      ' NormBRDF-array must be equal to the' +
-                      ' length of the dataset')
-        if NormBRDF is None:
-            assert len(SRF.NormBRDF) == Nmeasurements, ('length of' +
-                      ' NormBRDF-array provided in the definition of SRF' +
-                      ' must be equal to the length of the dataset')
-
+# TODO fix asserts
+#        if omega is not None and not np.isscalar(omega):
+#            assert len(omega) == Nmeasurements, ('length of omega-array must' +
+#                      'be equal to the length of the dataset')
+#        if omega is None:
+#            assert len(V.omega) == Nmeasurements, ('length of' +
+#                      ' omega-array provided in the definition of V must' +
+#                      ' be equal to the length of the dataset')
+#
+#        if tau is not None and not np.isscalar(tau):
+#            assert len(tau) == Nmeasurements, ('length of tau-array' +
+#                      ' must be equal to the length of the dataset')
+#
+#        if tau is None:
+#            assert len(V.tau) == Nmeasurements, ('length of tau-array' +
+#                      ' provided in the definition of V must be equal to' +
+#                      ' the length of the dataset')
+#
+#        if NormBRDF is not None and not np.isscalar(NormBRDF):
+#            assert len(NormBRDF) == Nmeasurements, ('length of' +
+#                      ' NormBRDF-array must be equal to the' +
+#                      ' length of the dataset')
+#        if NormBRDF is None:
+#            assert len(SRF.NormBRDF) == Nmeasurements, ('length of' +
+#                      ' NormBRDF-array provided in the definition of SRF' +
+#                      ' must be equal to the length of the dataset')
+#
 
         # generate a dict containing only the parameters needed to evaluate
         # the fn-coefficients
@@ -394,27 +432,46 @@ class Fits(Scatter):
             R.t_ex = inc
             R.p_ex = np.full_like(inc, np.pi)
         else:
-            # define rt1-object
-            R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
-                    RV=V, SRF=SRF, fn=fn, geometry='mono',
-                    param_dict = param_R)
+            if _fnevals is None:
+                # define rt1-object
+                R = RT1(1., inc, inc, np.zeros_like(inc),
+                        np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
+                        geometry='mono', param_dict = param_R)
+            else:
+                # define rt1-object
+                R = RT1(1., inc, inc, np.zeros_like(inc),
+                        np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
+                        _fnevals = _fnevals, geometry='mono',
+                        param_dict = param_R)
 
-
+        # if param_dyn_dict is not set explicitly, use the number of
+        # start-values provided in param_dict to assign the dynamics of
+        # the parameters (i.e. either constant or varying for each measurement)
+        if param_dyn_dict == {}:
+            for key in param_dict:
+                    param_dyn_dict[key] = np.linspace(1,
+                                  len(np.atleast_1d(param_dict[key])),
+                                  Nmeasurements)
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
         def fun(params):
+
             # generate a dictionary to assign values based on input
-            count_0, count_1 = 0, 0
+            count = 0
             newdict = {}
-            for key in order:
-                count_1 = count_1 + len(np.atleast_1d(param_dict[key]))
-                if np.isscalar(param_dict[key]):
-                    newdict[key] = np.array(list(params[count_0: count_1])
-                                            * Nmeasurements)
-                else:
-                    newdict[key] = params[count_0: count_1]
-                count_0 = count_0 + len(np.atleast_1d(param_dict[key]))
+            for i, key in enumerate(order):
+                # find unique parameter estimates and how often they occur
+                uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
+                                           return_counts=True,
+                                           return_index=True,
+                                           return_inverse=True)
+
+                # shift index to next parameter
+                inverse = inverse + count
+
+                newdict[key] = np.array(params)[inverse]
+                count = count + len(np.unique(param_dyn_dict[key]))
 
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but dynamic parameter-values)
@@ -425,7 +482,6 @@ class Fits(Scatter):
             # of artificially added values (see _preparedata()-fucntion)
             errs = weights * errs
             return errs
-
 
 
         # function to evaluate the jacobian
@@ -446,16 +502,20 @@ class Fits(Scatter):
             '''
 
             # generate a dictionary to assign values based on input
-            count_0, count_1 = 0, 0
+            count = 0
             newdict = {}
-            for key in order:
-                count_1 = count_1 + len(np.atleast_1d(param_dict[key]))
-                if np.isscalar(param_dict[key]):
-                    newdict[key] = np.array(list(params[count_0: count_1])
-                                            * Nmeasurements)
-                else:
-                    newdict[key] = params[count_0: count_1]
-                count_0 = count_0 + len(np.atleast_1d(param_dict[key]))
+            for i, key in enumerate(order):
+                # find unique parameter estimates and how often they occur
+                uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
+                                           return_counts=True,
+                                           return_index=True,
+                                           return_inverse=True)
+
+                # shift index to next parameter
+                inverse = inverse + count
+
+                newdict[key] = np.array(params)[inverse]
+                count = count + len(np.unique(param_dyn_dict[key]))
 
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but dynamic parameter-values)
@@ -486,15 +546,29 @@ class Fits(Scatter):
             jac = R.jacobian(sig0=self.sig0, dB=self.dB,
                                  param_list = order)
 
+#            # remove unwanted columns from the jacobian
+#            splitjac = np.split(np.concatenate(jac), len(order))
+#            newjacdict = {}
+#            for i, key in enumerate(order):
+#                if np.isscalar(param_dict[key]):
+#                    newjacdict[key] = np.array([np.sum(splitjac[i], axis=0)])
+#                else:
+#                    newjacdict[key] = splitjac[i]
+#
+#            jac_lsq = np.concatenate([newjacdict[key] for key in newjacdict])
+
+
             # remove unwanted columns from the jacobian
             splitjac = np.split(np.concatenate(jac), len(order))
             newjacdict = {}
             for i, key in enumerate(order):
-                if np.isscalar(param_dict[key]):
-                    newjacdict[key] = np.array([np.sum(splitjac[i], axis=0)])
-                else:
-                    newjacdict[key] = splitjac[i]
-
+                newjacdict[key] = np.zeros_like(
+                        splitjac[i][:len(np.unique(param_dyn_dict[key]))])
+                col = 0
+                for n in np.unique(param_dyn_dict[key]):
+                    rule = (param_dyn_dict[key] == n)
+                    newjacdict[key][col] = np.sum(splitjac[i][rule], axis = 0)
+                    col = col + 1
             jac_lsq = np.concatenate([newjacdict[key] for key in newjacdict])
 
             # return the transposed jacobian as needed by scipy's least_squares
@@ -562,22 +636,23 @@ class Fits(Scatter):
                                 **kwargs)
 
         # generate a dictionary to assign values based on fit-results
-        c_res_0, c_res_1 = 0, 0
+        count = 0
         res_dict = {}
         start_dict = {}
-        for key in order:
-            c_res_1 = c_res_1 + len(np.atleast_1d(param_dict[key]))
-            if np.isscalar(param_dict[key]):
-                res_dict[key] = np.array(list(res_lsq.x[c_res_0: c_res_1]
-                                              ) * Nmeasurements)
-                start_dict[key] = np.array(list(startvals[c_res_0: c_res_1]
-                                              ) * Nmeasurements)
-            else:
-                res_dict[key] = res_lsq.x[c_res_0: c_res_1]
-                start_dict[key] = startvals[c_res_0: c_res_1]
+        for i, key in enumerate(order):
+            # find unique parameter estimates and how often they occur
+            uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
+                                       return_counts=True,
+                                       return_index=True,
+                                       return_inverse=True)
 
-            c_res_0 = c_res_0 + len(np.atleast_1d(param_dict[key]))
+            # shift index to next parameter
+            inverse = inverse + count
 
+            res_dict[key] = np.array(res_lsq.x)[inverse]
+            start_dict[key] = np.array(startvals)[inverse]
+
+            count = count + len(np.unique(param_dyn_dict[key]))
 
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
@@ -635,7 +710,7 @@ class Fits(Scatter):
         R.t_0 = inc
         R.p_0 = np.zeros_like(inc)
 
-
+        # evaluate number of measurements
         Nmeasurements = len(inc)
 
         if truevals is not None:
@@ -648,26 +723,34 @@ class Fits(Scatter):
                 else:
                     truevals[key] = truevals[key]
 
-
+        # generate figure
         fig = plt.figure(figsize=(14, 10))
-
         ax = fig.add_subplot(211)
         ax.set_title('Fit-results')
 
-        for i, j in enumerate(data):
+        # plot datapoints
+        for i, j in enumerate(np.ma.masked_array(data, mask)):
             ax.plot(inc[i], j, '.')
 
+        # reset color-cycle
         plt.gca().set_prop_cycle(None)
 
+        # define incidence-angle range for plotting
         incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
                            * Nmeasurements)
-
+        # set new incidence-angles
         R.t_0 = incplot
         R.p_0 = np.zeros_like(incplot)
 
+        # get parameter-values
         calc_dict = dict(**res_dict, **fixed_dict)
-
+        # calculate results
         fitplot = self._calc_model(R, calc_dict)
+
+        # generate a mask that hides all measurements where no data has
+        # been provided (i.e. whose parameter-results are still the startvals)
+        newmask = np.ones_like(incplot) * np.all(mask, axis=1)[:,np.newaxis]
+        fitplot = np.ma.masked_array(fitplot, newmask)
 
         for i, val in enumerate(fitplot):
             ax.plot(incplot[i], val, alpha=0.4, label=i + 1)
@@ -739,12 +822,13 @@ class Fits(Scatter):
         # plot fitted values
         plt.gca().set_prop_cycle(None)
         for key in res_dict:
-            ax2.plot(np.arange(1, Nmeasurements + 1), res_dict[key],
-                     alpha=0.5, label=key)
+            ax2.plot(np.arange(1, Nmeasurements + 1),
+                     np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
+                     alpha=1., label=key)
+#            ax2.plot(np.arange(1, Nmeasurements + 1),
+#                     np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
+#                     'k.', alpha=0.5)
         plt.gca().set_prop_cycle(None)
-        for key in res_dict:
-            ax2.plot(np.arange(1, Nmeasurements + 1), res_dict[key],
-                     'k.', alpha=0.5)
 
         h1 = mlines.Line2D([], [], color='black', label='estimates',
                            linestyle='-', alpha=0.75, marker='.')
@@ -786,7 +870,7 @@ class Fits(Scatter):
 
 
 
-    def printerr(self, fit, datelist = None):
+    def printerr(self, fit, datelist = None, newcalc = False):
         '''
         a function to quickly print residuals for each measurement
         and for each incidence-angle value
@@ -806,6 +890,16 @@ class Fits(Scatter):
            e.g. if you had a measurement in January and February
            for the years 2014 and 2015, you have:
                datelist = [[2014, 2015], [ [1,2],[1,2]] ]
+        newcalc : bool (default = False)
+                  indicator whether the residuals shall be re-calculated
+                  or not.
+
+                  True:
+                      the residuals are calculated using R, inc, mask,
+                      res_dict and fixed_dict from the fit-argument
+                  False:
+                      the residuals are taken from the output of
+                      res_lsq from the fit-argument
         '''
 
         (res_lsq, R, data, inc, mask, weights,
@@ -813,24 +907,25 @@ class Fits(Scatter):
 
         Nmeasurements = len(inc)
 
-        # get residuals from fit into desired shape for plotting
-        # Attention -> incorporate weights and mask !
-        res = np.ma.masked_array(np.reshape(
-                np.abs(res_lsq.fun/weights), data.shape), mask)
+        if newcalc is False:
+            # get residuals from fit into desired shape for plotting
+            # Attention -> incorporate weights and mask !
+            res = np.ma.masked_array(np.reshape(
+                    np.abs(res_lsq.fun/weights), data.shape), mask)
+        else:
+            # Alternative way of calculating the residuals
+            # (based on R, inc and res_dict)
 
-#        # Alternative way of calculating the residuals
-#        # (based on R, inc and res_dict)
-#
-#        R.t_0 = inc
-#        R.p_0 = np.zeros_like(inc)
-#
-#        calc_dict = dict(**res_dict, **fixed_dict)
-#        estimates = self._calc_model(R, calc_dict)
-#        # calculate the residuals based on masked arrays
-#        masked_estimates = np.ma.masked_array(estimates, mask=mask)
-#        masked_data = np.ma.masked_array(data, mask=mask)
-#
-#        res = np.ma.sqrt((masked_estimates - masked_data)**2)
+            R.t_0 = inc
+            R.p_0 = np.zeros_like(inc)
+
+            calc_dict = dict(**res_dict, **fixed_dict)
+            estimates = self._calc_model(R, calc_dict)
+            # calculate the residuals based on masked arrays
+            masked_estimates = np.ma.masked_array(estimates, mask=mask)
+            masked_data = np.ma.masked_array(data, mask=mask)
+
+            res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
         # apply mask to data and incidence-angles
         inc = np.ma.masked_array(inc, mask=mask)
@@ -1138,7 +1233,7 @@ class Fits(Scatter):
             y = estimates[m][~mask[m]]
             # plot data
             if datelist is None:
-                label = m
+                label = m + 1
             else:
                 monlen = 0
                 for i, mon in enumerate(datelist[1]):
@@ -1193,4 +1288,76 @@ class Fits(Scatter):
             ax.set_xlabel('$\\theta_0$ [deg]')
             ax.set_ylabel('$\\sigma_0$ [dB]')
 
-        ax.legend()
+        if dates is None:
+            ax.legend(title = '# Measurement')
+            #plt.setp(legend.get_title(),fontsize=8) # change fontsize
+        else:
+            ax.legend(title = '# Date')
+
+
+
+
+    def printseries(self, fit, datelist = None, legends = True, minmax = None):
+        '''
+        a function to quickly print the fit-results and the gained parameters
+
+        Parametsrs:
+        ------------
+        fit : list
+              output of monofit_all()-function
+        datelist : list
+                   a list used to label the x-axis
+                   the shape must be [ groups, indicators ]
+                   where groups is a list of G values that are used to
+                   group the measurements, and
+                   indicators is a list containing N elements grouped into
+                   G groups, where N is the number of measurements.
+
+                   e.g. if you had a measurement in January and February
+                   for the years 2014 and 2015, you have:
+                       datelist = [[2014, 2015], [[1,2],[1,2]] ]
+        legends : bool (default = True)
+                  indicator if legends should be plotted
+
+        Returns:
+        ---------
+        fig : matplotlib.figure object
+        '''
+
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
+
+        if minmax is None:
+            minmax = [0, len(data)]
+
+        calc_dict = dict(**res_dict, **fixed_dict)
+        estimates = self._calc_model(R, calc_dict)
+
+        maskedestimates = np.ma.masked_array(estimates,
+                                             mask)[minmax[0]:minmax[1]]
+
+        # get number of measurement as index
+        Nvals = np.ones_like(maskedestimates,
+                             dtype=int)*(np.arange(*minmax))[:,np.newaxis]
+        Nvals = np.ma.concatenate(Nvals)
+        sorts = np.ma.argsort(Nvals)
+
+        maskedestimates = np.concatenate(maskedestimates)
+        maskeddata = np.ma.concatenate(
+                np.ma.masked_array(data, mask)[minmax[0]:minmax[1]])
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+        ax.plot(Nvals[sorts], maskeddata[sorts], '-',
+                label = 'data', marker = '.')
+        ax.plot(Nvals[sorts], maskedestimates[sorts], '-',
+                label = 'model', marker = '.', alpha = 0.5)
+
+        ax.set_xlabel('Measurements')
+        ax.set_ylabel('$\\sigma_0$ [dB]')
+
+        if legends is True:
+            plt.legend()
+
+        return fig
