@@ -118,7 +118,7 @@ class TestRT1(unittest.TestCase):
         ref0 = 1. / 4. * b0 * (8. * a0 - a2 - 3. * a2 * np.cos(2. * t_0))
         ref2 = 3. / 4. * a2 * b0 * (1. + 3. * np.cos(2. * t_0))
 
-        self.assertTrue(np.allclose([ref0, ref1, ref2], res))
+        self.assertTrue(np.allclose([ref0, ref2], [res[0], res[2]]))
 
         # ncoefs = 2
         # first and third coef should be the same as for ncoefs=1
