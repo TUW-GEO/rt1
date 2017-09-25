@@ -200,7 +200,8 @@ class Fits(Scatter):
 
     def monofit(self, V, SRF, dataset, param_dict,
                 bounds_dict={}, fixed_dict = {}, param_dyn_dict = {},
-                fn=None, _fnevals=None, **kwargs):
+                fn=None, _fnevals=None, int_Q=True,
+                lambda_backend = 'cse', **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -424,7 +425,8 @@ class Fits(Scatter):
             # define rt1-object
             R = RT1(1., 0., 0., 0., 0.,
                 RV=V, SRF=SRF, fn=None, geometry='mono',
-                param_dict = param_R)
+                param_dict=param_R, int_Q=int_Q,
+                lambda_backend = lambda_backend)
 
             # set geometry
             R.t_0 = inc
@@ -436,13 +438,15 @@ class Fits(Scatter):
                 # define rt1-object
                 R = RT1(1., inc, inc, np.zeros_like(inc),
                         np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
-                        geometry='mono', param_dict = param_R)
+                        geometry='mono', param_dict = param_R, int_Q=int_Q,
+                        lambda_backend = lambda_backend)
             else:
                 # define rt1-object
                 R = RT1(1., inc, inc, np.zeros_like(inc),
                         np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
                         _fnevals = _fnevals, geometry='mono',
-                        param_dict = param_R)
+                        param_dict = param_R, int_Q=int_Q,
+                        lambda_backend = lambda_backend)
 
         # if param_dyn_dict is not set explicitly, use the number of
         # start-values provided in param_dict to assign the dynamics of

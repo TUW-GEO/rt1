@@ -69,7 +69,7 @@ class Surface(Scatter):
         # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
         # Therefore the following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1, *[i[0] for i in param_dict.values()]), np.ndarray):
+        if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1, *[.345 for i in param_dict.values()]), np.ndarray):
             brdffunc = np.vectorize(brdffunc)
 
         return brdffunc(t_0, t_ex, p_0, p_ex, *param_dict.values())

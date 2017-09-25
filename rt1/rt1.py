@@ -23,6 +23,18 @@ except ImportError:
     from sympy import expand
 
 
+# try to import modules needed for symengine and theano backend
+try:
+    from symengine import LambdifyCSE as lambdify_symengine
+except ImportError:
+    print('symengine could not be imported fn-function generation')
+try:
+    import theano
+except ImportError:
+    print('theano could not be imported for fn-function generation')
+
+
+
 class RT1(object):
     """ Main class to perform RT-simulations
 
@@ -89,7 +101,7 @@ class RT1(object):
     param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
-    lambda_backend : str (default = 'sympy')
+    lambda_backend : str (default = 'cse')
                      indicator to select the module that shall be used
                      to compile a function for numerical evaluation of the
                      fn-coefficients.
@@ -112,6 +124,8 @@ class RT1(object):
                            input-arguments to be pre-specified at the time of
                            compilation of the function, the additional argument
                            theano_dim must be set correctly!
+                         - 'cse' : sympy.lambdify is used together with
+                           sympy.cse to generate a fast evaluation-function
     theano_dim : int (default = 2)
                  dimension of the input-argument arrays (i.e. t_0, p_0, etc.)
                  (this parameter is only needed if lambda_backend is set to
@@ -121,13 +135,15 @@ class RT1(object):
                  function at the time of compilation! If a pre-compiled
                  _fnevals function is passed to RT1, the parameter will not
                  have any effect.
+    int_Q : bool (default = True)
+            indicator whether the interaction-term should be calculated or not
     """
 
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
                  RV=None, SRF=None, fn=None, _fnevals=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend = 'theano',
-                 theano_dim = 2):
+                 lambda_backend = 'cse',
+                 theano_dim = 2, int_Q = True):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -138,6 +154,7 @@ class RT1(object):
         self.param_dict = param_dict
         self.lambda_backend = lambda_backend
         self.theano_dim = theano_dim
+        self.int_Q = int_Q
 
         assert RV is not None, 'ERROR: needs to provide volume information'
         self.RV = RV
@@ -186,7 +203,7 @@ class RT1(object):
             errdict = ' in the definition of V, SRF and param_dict'
 
         assert (funcset == refset), ('false parameter-specification, please ' +
-                                  'please check assignment of the parameters '
+                                  'check assignment of the parameters '
                                   + str(refset ^ funcset) + errdict)
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
@@ -198,11 +215,19 @@ class RT1(object):
     def _set_fn(self, fn):
         # set the fn-coefficients and generate lambdified versions
         # of the fn-coefficients for evaluation
-        if fn is None:
+        if fn is None and self.int_Q is True:
+            import timeit
+            tic = timeit.default_timer()
             # precalculate the expansiion coefficients for the interaction term
             expr_int = self._calc_interaction_expansion()
+            toc = timeit.default_timer()
+            print('expansion calculated, it took ' + str(toc-tic) + ' sec')
+
             # extract the expansion coefficients
+            tic = timeit.default_timer()
             self.__fn = self._extract_coefficients(expr_int)
+            toc = timeit.default_timer()
+            print('coefficients extracted, it took ' + str(toc-tic) + ' sec')
         else:
             self.__fn = fn
 
@@ -212,7 +237,7 @@ class RT1(object):
         return self.__fnevals
 
     def _set_fnevals(self, _fnevals):
-        if _fnevals is None:
+        if _fnevals is None and self.int_Q is True:
             import timeit
             tic = timeit.default_timer()
 
@@ -230,41 +255,73 @@ class RT1(object):
                 self.__fnevals = lambdify(list(variables),
                                        self.fn, real = True)
 
-            if self.lambda_backend == 'theano':
-                print('theano')
-
-                from sympy.printing import theanocode
-
-                # set the dimensions of the input-arguments
-                dims = dict([[i, self.theano_dim] for i in list(variables)])
+            elif self.lambda_backend == 'cse':
+                print('cse - sympy')
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex', *map(str, self.param_dict.keys())))
 
                 tic = timeit.default_timer()
+                # convert the equations to sympy formulas
+                # (needed if symengine has been used to expand the products)
                 funs = list(map(sp.sympify,self.fn))
                 toc = timeit.default_timer()
                 print('sympifying took ' + str(toc-tic))
 
-                # TODO since theanocode can not process functions that are
-                # identical to zero, all zero coefficients will be replaced
-                # with "machine-precision zero"  times  "theta_0"
-                # ->
+                # initialize arrasy that store the cse-functions and variables
+                fn_cse_funs = []
+                fn_cse_repfuncs = []
+                fn_cse_vars = []
+                for nf, fncoef in enumerate(funs):
+                    # evaluate cse functions and variables for the i'th coef.
+                    fn_repl, fn_csefun = sp.cse(fncoef)
+                    print('fn_repl has ' + str(len(fn_repl)) + ' elements')
+                    # store for later use
+                    fn_cse_funs = fn_cse_funs + [fn_csefun[0]]
 
-                for i, fun in enumerate(funs):
-                    if fun == 0:
-                        funs[i] = np.finfo('float64').eps * variables[0]
+                    fn_funcs = []
+                    cse_variables = list(variables)
+                    for i, ff in enumerate(fn_repl):
+                        # replace xn's with deferred vector elements
+                        defvec = sp.DeferredVector('defvec')
+                        defvecrepl = [[var, defvec[i]] for i, var in enumerate(cse_variables)]
+                        ff_replaced = ff[1].xreplace(dict(defvecrepl))
 
-                # use sympy to generate a theano-function
-                self.__fnevals  = theanocode.theano_function(
-                                    list(variables), funs,
-                                    dims=dims,
-                                    dtypes=dict([[i, 'float64']
-                                               for i in list(variables)])
-                                    ,on_unused_input='ignore')
-                                  #,mode='FAST_COMPILE')
+                        fn_funcs.append(sp.lambdify(defvec, ff_replaced, modules='numpy'))
+                        cse_variables.append(ff[0])
 
-            if self.lambda_backend == 'sympy':
+                    fn_cse_repfuncs = fn_cse_repfuncs + [fn_funcs]
+                    fn_cse_vars = fn_cse_vars + [cse_variables]
+                    print('cse of coefficient ' + str(nf) + '/' + str(len(funs)) + ' finished')
+
+                ifuncs = []
+                for n in range(len(fn_cse_funs)):
+                    # replace xn's with deferred vector elements
+                    defvec2 = sp.DeferredVector('defvec2')
+                    defvecrepl2 = [[var, defvec2[i]] for i, var in enumerate(fn_cse_vars[n])]
+                    fn_cse_fun_replaced = fn_cse_funs[n].xreplace(dict(defvecrepl2))
+
+                    ifunc = sp.lambdify(defvec2, fn_cse_fun_replaced, modules='numpy')
+                    ifuncs = ifuncs + [ifunc]
+
+                # define a function that evaluates the i'th fn-coefficient
+                def fneval(*variables):
+                    sol = []
+                    for n in range(len(fn_cse_funs)):
+                        xs = [*variables]
+                        i = 0
+                        for f in fn_cse_repfuncs[n]:
+                            xs.append(f(xs))
+                            xs = np.broadcast_arrays(*xs)
+                            i = i + 1
+
+                        sol = sol + [ifuncs[n](xs)]
+                    return sol
+
+                self.__fnevals = fneval
+
+            elif self.lambda_backend == 'sympy':
                 print('sympy')
                 # set lambdify module
-                lambdify = lambdify_sympy
+                lambdify = sp.lambdify
 
                 sympy_fn = list(map(sp.sympify, self.fn))
 
@@ -283,8 +340,70 @@ class RT1(object):
                                         RT1-object._fnevals(theta_0, phi_0, \
                                         theta_ex, phi_ex, *param_dict.values())
                                     ''')
+
+
+            elif self.lambda_backend == 'theano':
+                from sympy.printing import theanocode
+                print('theano')
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex', *map(str, self.param_dict.keys())))
+
+                # set the dimensions of the input-arguments
+                dims = dict([[i, self.theano_dim] for i in list(variables)])
+
+                tic = timeit.default_timer()
+                funs = list(map(sp.sympify,self.fn))
+                toc = timeit.default_timer()
+                print('sympifying took ' + str(toc-tic))
+
+                # TODO since theanocode can not process functions that are
+                # identical to zero, all zero coefficients will be replaced
+                # with "machine-precision zero"  times  "theta_0"
+                # ->
+
+                for i, fun in enumerate(funs):
+                    if fun == 0:
+                        funs[i] = np.finfo('float64').eps * variables[0]
+
+#                # use sympy to generate a theano-function
+#                tic = timeit.default_timer()
+#                self.__fnevals  = theanocode.theano_function(
+#                                    list(variables), funs,
+#                                    dims=dims,
+#                                    dtypes=dict([[i, 'float64']
+#                                               for i in list(variables)])
+#                                    ,on_unused_input='ignore')
+#                                  #,mode='FAST_COMPILE')
+#                toc = timeit.default_timer()
+#                print('finished, it took ' + str(np.round(toc-tic, 2)) + ' sec')
+
+                __fnevals_i = []
+                for nf, ff in enumerate(funs):
+                    tic = timeit.default_timer()
+                    __fnevals_i  = __fnevals_i + [theanocode.theano_function(
+                                        list(variables), [ff],
+                                        dims=dims,
+                                        dtypes=dict([[i, 'float64']
+                                                   for i in list(variables)])
+                                        ,on_unused_input='ignore'
+                                        #, mode='FAST_RUN'
+                                        , mode = theano.compile.mode.Mode(linker='cvm_nogc', optimizer='fast_run')
+                                        )]
+
+                    toc = timeit.default_timer()
+                    print('fn_coef ' + str(nf) + '/' + str(len(funs)) + ' finished, it took ' + str(np.round(toc-tic, 2)) + ' sec')
+
+                def __fnevals_all(self, *variables):
+                    var = [*variables]
+                    return [i(self, *var) for i in __fnevals_i]
+
+                self.__fnevals = __fnevals_all
+            else:
+                print('lambda_backend "' + self.lambda_backend + '" is not available')
+
+
             toc = timeit.default_timer()
             print('lambdification finished, it took ' + str(toc-tic) + ' sec')
+
         else:
             self.__fnevals = _fnevals
 
@@ -624,7 +743,10 @@ class RT1(object):
             # differentiation for non-existing canopy, as otherwise NAN values
             if self.RV.tau > 0.:
                 Ivol = self.volume()
-                Iint = self.interaction()
+                if self.int_Q is True:
+                    Iint = self.interaction()
+                else:
+                    Iint = np.array([0.])
             else:
                 Ivol = np.array([0.])
                 Iint = np.array([0.])
@@ -659,9 +781,12 @@ class RT1(object):
             self.RV.omega = np.squeeze(old_omega[valid_index[0]])
             self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
 
-            # calculate volume and surface term where tau-values are valid
+            # calculate volume and interaction term where tau-values are valid
             _Ivol = self.volume()
-            _Iint = self.interaction()
+            if self.int_Q is True:
+                _Iint = self.interaction()
+            else:
+                _Iint = np.full_like(self.t_0, 0.)
 
             # reset parameter values to old values
             self.t_0 = old_t_0
@@ -683,9 +808,12 @@ class RT1(object):
 
             # combine calculated interaction-contributions for valid tau-values
             # with zero-arrays for invalid tau-values
-            Iint = np.ones_like(self.t_0)
-            Iint[valid_index[0]] = _Iint
-            Iint[invalid_index[0]] = np.ones_like(Iint[invalid_index[0]]) * 0.
+            if self.int_Q is True:
+                Iint = np.ones_like(self.t_0)
+                Iint[valid_index[0]] = _Iint
+                Iint[invalid_index[0]] = np.ones_like(Iint[invalid_index[0]]) * 0.
+            else:
+                Iint = np.full_like(self.t_0, 0.)
 
         return Isurf + Ivol + Iint, Isurf, Ivol, Iint
 
@@ -772,7 +900,6 @@ class RT1(object):
 
         # evaluate fn-coefficients
         if self.lambda_backend == 'symengine':
-            print('using symengine')
             # the somewhat strange call signature originates from the
             # broadcasting-rules of symengines Lamdify-function
 #            fn = np.reshape(self._fnevals(np.ravel(np.broadcast_arrays(
@@ -799,7 +926,7 @@ class RT1(object):
             #reset output to console
             sys.stdout = oldout
 
-        if self.lambda_backend == 'sympy':
+        if self.lambda_backend == 'sympy' or self.lambda_backend == 'cse':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                phi2, *self.param_dict.values())
             # to correct for 0 dimensional arrays if a fn-coefficient
@@ -809,7 +936,9 @@ class RT1(object):
         if self.lambda_backend == 'theano':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                phi2, *self.param_dict.values())
-            fn = self._fnevals(*args)
+            # to correct for 0 dimensional arrays if a fn-coefficient
+            # is identical to 0 (in a symbolic manner)
+            fn = np.broadcast_arrays(*self._fnevals(*args))
 
 #            fn = self._fnevals(np.arccos(mu1), phi1, np.arccos(mu2),
 #                               phi2, *self.param_dict.values())
