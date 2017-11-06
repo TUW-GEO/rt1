@@ -308,7 +308,6 @@ class RT1(object):
                     ifunc = sp.lambdify(defvec2, fn_cse_fun_replaced,
                                         modules='numpy')
                     ifuncs = ifuncs + [ifunc]
-                    ifuncs = ifuncs + [ifunc]
 
                 # define a function that evaluates the i'th fn-coefficient
                 def fneval(*variables):
