@@ -19,20 +19,10 @@ try:
     # this try-exept is necessary since symengine does currently not
     # build correctly with conda using a python 2.7 environment
     from symengine import expand
-except ImportError:
-    from sympy import expand
-
-
-# try to import modules needed for symengine and theano backend
-try:
     from symengine import Lambdify as lambdify_seng
 except ImportError:
+    from sympy import expand
     print('symengine could not be imported fn-function generation')
-try:
-    import theano
-except ImportError:
-    print('theano could not be imported for fn-function generation')
-
 
 
 class RT1(object):
@@ -112,29 +102,8 @@ class RT1(object):
                          - 'symengine' : symengine.LambdifyCSE is used to
                            compile the _fnevals function. This results in
                            considerable speedup for long fn-coefficients
-                         - 'theano' : sympy.printing.theanocode.theano_function
-                           is used to compile a theano-function that is capable
-                           of evaluating long fn-coefficients very fast.
-                           The compilation of the theano-function can take some
-                           time and therefore it is advisable to store the
-                           pre-compiled function for later use once the
-                           compilation is finished.
-
-                           Since theano requires the dimension of the
-                           input-arguments to be pre-specified at the time of
-                           compilation of the function, the additional argument
-                           theano_dim must be set correctly!
                          - 'cse' : sympy.lambdify is used together with
                            sympy.cse to generate a fast evaluation-function
-    theano_dim : int (default = 2)
-                 dimension of the input-argument arrays (i.e. t_0, p_0, etc.)
-                 (this parameter is only needed if lambda_backend is set to
-                 'theano'.)
-
-                 Note: this parameter will only affect the generated _fnevals
-                 function at the time of compilation! If a pre-compiled
-                 _fnevals function is passed to RT1, the parameter will not
-                 have any effect.
     int_Q : bool (default = True)
             indicator whether the interaction-term should be calculated or not
     """
@@ -142,8 +111,7 @@ class RT1(object):
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
                  RV=None, SRF=None, fn=None, _fnevals=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend='cse',
-                 theano_dim=2, int_Q=True):
+                 lambda_backend='cse', int_Q=True):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -153,7 +121,6 @@ class RT1(object):
         self.I0 = I0
         self.param_dict = param_dict
         self.lambda_backend = lambda_backend
-        self.theano_dim = theano_dim
         self.int_Q = int_Q
 
         assert RV is not None, 'ERROR: needs to provide volume information'
@@ -176,16 +143,15 @@ class RT1(object):
         assert self.RV.omega is not None, ('Single scattering albedo ' +
                                            'needs to be provided')
         assert self.RV.tau is not None, 'Optical depth needs to be provided'
-
-        assert np.any(self.RV.omega >= 0.), ('Single scattering albedo ' +
-                                             'must be greater than 0')
-        assert np.any(self.RV.omega <= 1.), ('Single scattering albedo ' +
-                                             'must be smaller than 1')
-        assert np.any(self.RV.tau >= 0.), 'Optical depth must be > 0'
-
-        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
-                                                 'be greater than 0')
-
+# TODO  fix asserts to allow symbolic parameters
+#        assert np.any(self.RV.omega >= 0.), ('Single scattering albedo ' +
+#                                             'must be greater than 0')
+#        assert np.any(self.RV.omega <= 1.), ('Single scattering albedo ' +
+#                                             'must be smaller than 1')
+#        assert np.any(self.RV.tau >= 0.), 'Optical depth must be > 0'
+#
+#        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
+#                                                 'be greater than 0')
 
         # check if all parameters have been provided (and also if no
         # unused parameter has been specified)
@@ -247,12 +213,12 @@ class RT1(object):
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
-                print('symengine')
+                print('symengine -> currently only working with dev-version!!')
                 # set lambdify module
                 lambdify = lambdify_seng
 
                 self.__fnevals = lambdify(list(variables),
-                                       self.fn, real = True)
+                                          self.fn, order='F')
 
             elif self.lambda_backend == 'cse':
                 print('cse - sympy')
@@ -348,62 +314,6 @@ class RT1(object):
                                         theta_ex, phi_ex, *param_dict.values())
                                     ''')
 
-
-            elif self.lambda_backend == 'theano':
-                from sympy.printing import theanocode
-                print('theano')
-                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex', *map(str, self.param_dict.keys())))
-
-                # set the dimensions of the input-arguments
-                dims = dict([[i, self.theano_dim] for i in list(variables)])
-
-                tic = timeit.default_timer()
-                funs = list(map(sp.sympify,self.fn))
-                toc = timeit.default_timer()
-                print('sympifying took ' + str(toc-tic))
-
-                # TODO since theanocode can not process functions that are
-                # identical to zero, all zero coefficients will be replaced
-                # with "machine-precision zero"  times  "theta_0"
-                # ->
-
-                for i, fun in enumerate(funs):
-                    if fun == 0:
-                        funs[i] = np.finfo('float64').eps * variables[0]
-
-#                # use sympy to generate a theano-function
-#                tic = timeit.default_timer()
-#                self.__fnevals  = theanocode.theano_function(
-#                                    list(variables), funs,
-#                                    dims=dims,
-#                                    dtypes=dict([[i, 'float64']
-#                                               for i in list(variables)])
-#                                    ,on_unused_input='ignore')
-#                                  #,mode='FAST_COMPILE')
-#                toc = timeit.default_timer()
-#                print('finished, it took ' + str(np.round(toc-tic, 2)) + ' sec')
-
-                __fnevals_i = []
-                for nf, ff in enumerate(funs):
-                    tic = timeit.default_timer()
-                    __fnevals_i  = __fnevals_i + [theanocode.theano_function(
-                                        list(variables), [ff],
-                                        dims=dims,
-                                        dtypes=dict([[i, 'float64']
-                                                   for i in list(variables)])
-                                        ,on_unused_input='ignore'
-                                        #, mode='FAST_RUN'
-                                        , mode = theano.compile.mode.Mode(linker='cvm_nogc', optimizer='fast_run')
-                                        )]
-
-                    toc = timeit.default_timer()
-                    print('fn_coef ' + str(nf) + '/' + str(len(funs)) + ' finished, it took ' + str(np.round(toc-tic, 2)) + ' sec')
-
-                def __fnevals_all(self, *variables):
-                    var = [*variables]
-                    return [i(self, *var) for i in __fnevals_i]
-
-                self.__fnevals = __fnevals_all
             else:
                 print('lambda_backend "' + self.lambda_backend +
                       '" is not available')
@@ -906,31 +816,11 @@ class RT1(object):
 
         # evaluate fn-coefficients
         if self.lambda_backend == 'symengine':
-            # the somewhat strange call signature originates from the
-            # broadcasting-rules of symengines Lamdify-function
-#            fn = np.reshape(self._fnevals(np.ravel(np.broadcast_arrays(
-#                    *[np.arccos(mu1), phi1, np.arccos(mu2),
-#                     phi2, *self.param_dict.values()]), order='F')),
-#                     (len(self.fn), *mu1.shape), order='F')
-
-            # for lambdifyCSE
-            inputs = np.broadcast_arrays( *[np.arccos(mu1), phi1,
-                                            np.arccos(mu2), phi2,
-                                            *self.param_dict.values()])
-
-            # avoid annoying output of LambdifyCSE
-            import sys
-            import os
-            oldout = sys.stdout
-            sys.stdout = open(os.devnull, 'w')
-
-            fn = np.reshape(
-                    self._fnevals(np.reshape(np.ravel(inputs, order = 'F'),
-                                            (-1, len(inputs)), order = 'C')).T,
-                                            (-1, *mu1.shape), order = 'F')
-
-            #reset output to console
-            sys.stdout = oldout
+            args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
+                                       phi2, *self.param_dict.values())
+            # to correct for 0 dimensional arrays if a fn-coefficient
+            # is identical to 0 (in a symbolic manner)
+            fn = np.broadcast_arrays(*self._fnevals([*args]))
 
         if self.lambda_backend == 'sympy' or self.lambda_backend == 'cse':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
@@ -938,16 +828,6 @@ class RT1(object):
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(*args))
-
-        if self.lambda_backend == 'theano':
-            args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
-                                       phi2, *self.param_dict.values())
-            # to correct for 0 dimensional arrays if a fn-coefficient
-            # is identical to 0 (in a symbolic manner)
-            fn = np.broadcast_arrays(*self._fnevals(*args))
-
-#            fn = self._fnevals(np.arccos(mu1), phi1, np.arccos(mu2),
-#                               phi2, *self.param_dict.values())
 
         nmax = len(fn)
 
@@ -963,7 +843,6 @@ class RT1(object):
 #        fn = (np.array([self._eval_fn(n, np.arccos(mu1),
 #                                      phi1, np.arccos(mu2), phi2)
 #                        for n in range(nmax)]))
-#
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
 
