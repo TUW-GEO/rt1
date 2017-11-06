@@ -12,7 +12,7 @@ from scipy.special import expi
 from scipy.special import expn
 
 import sympy as sp
-#import time
+# import time
 
 try:
     # if symengine is available, use it to perform series-expansions
@@ -25,7 +25,7 @@ except ImportError:
 
 # try to import modules needed for symengine and theano backend
 try:
-    from symengine import LambdifyCSE as lambdify_symengine
+    from symengine import Lambdify as lambdify_seng
 except ImportError:
     print('symengine could not be imported fn-function generation')
 try:
@@ -142,8 +142,8 @@ class RT1(object):
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
                  RV=None, SRF=None, fn=None, _fnevals=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend = 'cse',
-                 theano_dim = 2, int_Q = True):
+                 lambda_backend='cse',
+                 theano_dim=2, int_Q=True):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -190,10 +190,9 @@ class RT1(object):
         # check if all parameters have been provided (and also if no
         # unused parameter has been specified)
         refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                *map(str, self.param_dict.keys()))))
+                             *map(str, self.param_dict.keys()))))
 
         funcset = self.RV._func.free_symbols | self.SRF._func.free_symbols
-
 
         if refset <= funcset:
             errdict = ' in the definition of V and SRF'
@@ -203,8 +202,8 @@ class RT1(object):
             errdict = ' in the definition of V, SRF and param_dict'
 
         assert (funcset == refset), ('false parameter-specification, please ' +
-                                  'check assignment of the parameters '
-                                  + str(refset ^ funcset) + errdict)
+                                     'check assignment of the parameters '
+                                     + str(refset ^ funcset) + errdict)
 
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
@@ -243,26 +242,27 @@ class RT1(object):
 
             # define new lambda-functions for each fn-coefficient
             variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                    *map(str, self.param_dict.keys())))
+                                *map(str, self.param_dict.keys())))
 
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
                 print('symengine')
                 # set lambdify module
-                lambdify = lambdify_symengine
+                lambdify = lambdify_seng
 
                 self.__fnevals = lambdify(list(variables),
                                        self.fn, real = True)
 
             elif self.lambda_backend == 'cse':
                 print('cse - sympy')
-                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex', *map(str, self.param_dict.keys())))
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
+                                    *map(str, self.param_dict.keys())))
 
                 tic = timeit.default_timer()
                 # convert the equations to sympy formulas
                 # (needed if symengine has been used to expand the products)
-                funs = list(map(sp.sympify,self.fn))
+                funs = list(map(sp.sympify, self.fn))
                 toc = timeit.default_timer()
                 print('sympifying took ' + str(toc-tic))
 
@@ -282,24 +282,32 @@ class RT1(object):
                     for i, ff in enumerate(fn_repl):
                         # replace xn's with deferred vector elements
                         defvec = sp.DeferredVector('defvec')
-                        defvecrepl = [[var, defvec[i]] for i, var in enumerate(cse_variables)]
+                        defvecrepl = [[var, defvec[i]] for
+                                      i, var in enumerate(cse_variables)]
+
                         ff_replaced = ff[1].xreplace(dict(defvecrepl))
 
-                        fn_funcs.append(sp.lambdify(defvec, ff_replaced, modules='numpy'))
+                        fn_funcs.append(sp.lambdify(defvec, ff_replaced,
+                                                    modules='numpy'))
                         cse_variables.append(ff[0])
 
                     fn_cse_repfuncs = fn_cse_repfuncs + [fn_funcs]
                     fn_cse_vars = fn_cse_vars + [cse_variables]
-                    print('cse of coefficient ' + str(nf) + '/' + str(len(funs)) + ' finished')
+                    print('cse of coefficient ' + str(nf) + '/' +
+                          str(len(funs)) + ' finished')
 
                 ifuncs = []
                 for n in range(len(fn_cse_funs)):
                     # replace xn's with deferred vector elements
                     defvec2 = sp.DeferredVector('defvec2')
-                    defvecrepl2 = [[var, defvec2[i]] for i, var in enumerate(fn_cse_vars[n])]
-                    fn_cse_fun_replaced = fn_cse_funs[n].xreplace(dict(defvecrepl2))
+                    dvrep2 = [[var, defvec2[i]] for
+                              i, var in enumerate(fn_cse_vars[n])]
 
-                    ifunc = sp.lambdify(defvec2, fn_cse_fun_replaced, modules='numpy')
+                    fn_cse_fun_replaced = fn_cse_funs[n].xreplace(dict(dvrep2))
+
+                    ifunc = sp.lambdify(defvec2, fn_cse_fun_replaced,
+                                        modules='numpy')
+                    ifuncs = ifuncs + [ifunc]
                     ifuncs = ifuncs + [ifunc]
 
                 # define a function that evaluates the i'th fn-coefficient
@@ -326,9 +334,9 @@ class RT1(object):
                 sympy_fn = list(map(sp.sympify, self.fn))
 
                 self.__fnevals = lambdify((variables),
-                                       sp.sympify(sympy_fn),
-                                       modules=["numpy", "sympy"],
-                                       dummify = False)
+                                          sp.sympify(sympy_fn),
+                                          modules=["numpy", "sympy"],
+                                          dummify=False)
 
                 self.__fnevals.__doc__ = ('''
                                     A function to numerically evaluate the
@@ -398,8 +406,8 @@ class RT1(object):
 
                 self.__fnevals = __fnevals_all
             else:
-                print('lambda_backend "' + self.lambda_backend + '" is not available')
-
+                print('lambda_backend "' + self.lambda_backend +
+                      '" is not available')
 
             toc = timeit.default_timer()
             print('lambdification finished, it took ' + str(toc-tic) + ' sec')
@@ -512,9 +520,8 @@ class RT1(object):
                      if i != 1] + [[sp.cos(theta_s), 1]])
         fn = fn + [expr.xreplace(repl1) - fn[0]]
 
-
-        for n in np.arange(2, N_fn, dtype = int):
-            repln = dict([[sp.cos(theta_s)**int(n) , 1]])
+        for n in np.arange(2, N_fn, dtype=int):
+            repln = dict([[sp.cos(theta_s)**int(n), 1]])
             fn = fn + [(expr.xreplace(repln)).xreplace(repl0) - fn[0]]
 
 #        # alternative way of extracting the coefficients:
@@ -697,7 +704,7 @@ class RT1(object):
 #        """
 #
 #        # the destinction between zero and nonzero fn-coefficients is
-#        # necessary because sympy treats any symbol multiplied by 0 as 0, which
+#        # necessary because sympy treats symbols multiplied by 0 as 0, which
 #        # results in a function that returns 0 instead of an array of zeroes!
 #        # -> see  https://github.com/sympy/sympy/issues/3935
 #
@@ -767,7 +774,7 @@ class RT1(object):
             # set mask for tau > 0.
             mask = old_tau > 0.
             valid_index = np.where(mask)
-            invalid_index = np.where(~mask)
+            inval_index = np.where(~mask)
 
             # set parameter-values to valid values for calculation
             self.t_0 = old_t_0[valid_index[0]]
@@ -804,14 +811,14 @@ class RT1(object):
             # with zero-arrays for invalid tau-values
             Ivol = np.ones_like(self.t_0)
             Ivol[valid_index[0]] = _Ivol
-            Ivol[invalid_index[0]] = np.ones_like(Ivol[invalid_index[0]]) * 0.
+            Ivol[inval_index[0]] = np.ones_like(Ivol[inval_index[0]]) * 0.
 
             # combine calculated interaction-contributions for valid tau-values
             # with zero-arrays for invalid tau-values
             if self.int_Q is True:
                 Iint = np.ones_like(self.t_0)
                 Iint[valid_index[0]] = _Iint
-                Iint[invalid_index[0]] = np.ones_like(Iint[invalid_index[0]]) * 0.
+                Iint[inval_index[0]] = np.ones_like(Iint[inval_index[0]]) * 0.
             else:
                 Iint = np.full_like(self.t_0, 0.)
 
@@ -928,14 +935,14 @@ class RT1(object):
 
         if self.lambda_backend == 'sympy' or self.lambda_backend == 'cse':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
-                               phi2, *self.param_dict.values())
+                                       phi2, *self.param_dict.values())
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(*args))
 
         if self.lambda_backend == 'theano':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
-                               phi2, *self.param_dict.values())
+                                       phi2, *self.param_dict.values())
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(*args))
