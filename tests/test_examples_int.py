@@ -48,7 +48,7 @@ class TestExamples(unittest.TestCase):
         # evaluate _fnevals functions
         _fnevals = RT1(1., 0, 0, 0, 0, RV=V, SRF=SRF,
                 fn=None, geometry='mono',
-                lambda_backend = 'cse', theano_dim = 1,
+                lambda_backend = 'cse',
                 _fnevals = None)._fnevals
 
         R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
