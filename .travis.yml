@@ -8,6 +8,14 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
+
+env:
+  # don't use gmpy in mpmath to avoid pickling errors caused by a bug
+  # that affects the rtfits-module
+  # see: https://github.com/sympy/sympy/issues/12895
+  # see: https://github.com/sympy/sympy/pull/13530
+  - MPMATH_NOGMPY=1
+
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
