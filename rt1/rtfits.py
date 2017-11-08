@@ -5,7 +5,6 @@ Class to perform least_squares fitting of given datasets.
 
 import numpy as np
 import sympy as sp
-import pandas as pd
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -1534,6 +1533,7 @@ class Fits(Scatter):
         ---------
         fig : matplotlib.figure object
         '''
+        import pandas as pd
 
         (res_lsq, R, data, inc, mask, weights,
          res_dict, start_dict, fixed_dict) = fit
