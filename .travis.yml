@@ -56,4 +56,4 @@ install:
 
 
 script:
-  - nosetests # -s to see print-output from nosetests
+  - nosetests -v # -s to see print-output from nosetests
