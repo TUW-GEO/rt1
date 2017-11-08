@@ -7,7 +7,7 @@ import unittest
 # import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
-# import random
+from scipy.stats import linregress
 
 from rt1.rt1 import RT1
 from rt1.rtfits import Fits
@@ -137,7 +137,6 @@ class TestRTfits(unittest.TestCase):
                                         Nmeasurements)
         selects = []
         for i in range(Nmeasurements):
-            #selects += [random.sample(range(maxincnum), inc_lengths[i])]
             np.random.seed(0)  # reset seed to have a reproducible test
             selects += [np.random.choice(range(maxincnum), inc_lengths[i],
                                          replace=False)]
@@ -216,10 +215,32 @@ class TestRTfits(unittest.TestCase):
                               max_nfev=500
                               )
 
-        scatterplot, r2 = testfit.printscatter(fit, pointsize=4,
-                                               c=fit[3][~fit[4]],
-                                               cmap='coolwarm',
-                                               regression=True)
+        # ----------- calculate R^2 values and errors of parameters -----------
+
+        # scatterplot, r2 = testfit.printscatter(fit, pointsize=4,
+        #                                       c=fit[3][~fit[4]],
+        #                                       cmap='coolwarm',
+        #                                       regression=True)
+
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit
+
+        # sicne fit[0].fun gives the residuals weighted with respect to
+        # weights, the model calculation can be gained via
+        # estimates = fit[0].fun/weights + measurements
+
+        estimates = np.reshape(
+                    fit[0].fun/weights, data.shape)
+
+        # apply mask
+        measures = data[~mask]
+        estimates = estimates[~mask] + measures
+
+        # evaluate linear regression to get r-value etc.
+        slope, intercept, r_value, p_value, std_err = linregress(estimates,
+                                                                 measures)
+        # calculate R^2 value
+        r2 = r_value**2
 
         # check if r^2 between original and fitted data is > 0.95
         self.assertTrue(r2 > 0.95, msg='r^2 condition not  met')
