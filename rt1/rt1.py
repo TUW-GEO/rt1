@@ -111,7 +111,7 @@ class RT1(object):
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
                  RV=None, SRF=None, fn=None, _fnevals=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend='cse_symengine_sympy', int_Q=True):
+                 lambda_backend='cse', int_Q=True):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
