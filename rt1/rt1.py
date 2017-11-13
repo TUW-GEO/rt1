@@ -111,7 +111,7 @@ class RT1(object):
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
                  RV=None, SRF=None, fn=None, _fnevals=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend='cse', int_Q=True):
+                 lambda_backend='cse_symengine_sympy', int_Q=True):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -222,6 +222,15 @@ class RT1(object):
 
             elif self.lambda_backend == 'cse':
                 print('cse - sympy')
+
+                # define a generator function to use deferred vectors for cse
+                def defgen(name='defvec'):
+                    x = sp.DeferredVector(name)
+                    n = 0
+                    while(True):
+                        yield x[n]
+                        n += 1
+
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
                                     *map(str, self.param_dict.keys())))
 
@@ -236,24 +245,27 @@ class RT1(object):
                 fn_cse_funs = []
                 fn_cse_repfuncs = []
                 fn_cse_vars = []
+
+                # initialize a deferred vector and an associated generator
+
                 for nf, fncoef in enumerate(funs):
+                    defvecgen = defgen('defvec')
+
                     # evaluate cse functions and variables for the i'th coef.
-                    fn_repl, fn_csefun = sp.cse(fncoef)
+                    fn_repl, fn_csefun = sp.cse(fncoef, symbols=defvecgen,
+                                                order='none')
                     print('fn_repl has ' + str(len(fn_repl)) + ' elements')
                     # store for later use
                     fn_cse_funs = fn_cse_funs + [fn_csefun[0]]
 
                     fn_funcs = []
-                    cse_variables = list(variables)
+                    cse_variables = []  # list(variables)
                     for i, ff in enumerate(fn_repl):
-                        # replace xn's with deferred vector elements
+                        # use a deferred vector in lambdify to avoid exceeding
+                        # allowed maximum number of arguments
                         defvec = sp.DeferredVector('defvec')
-                        defvecrepl = [[var, defvec[i]] for
-                                      i, var in enumerate(cse_variables)]
-
-                        ff_replaced = ff[1].xreplace(dict(defvecrepl))
-
-                        fn_funcs.append(sp.lambdify(defvec, ff_replaced,
+                        symbs = list(variables) + [defvec]
+                        fn_funcs.append(sp.lambdify(symbs, ff[1],
                                                     modules='numpy'))
                         cse_variables.append(ff[0])
 
@@ -264,14 +276,11 @@ class RT1(object):
 
                 ifuncs = []
                 for n in range(len(fn_cse_funs)):
-                    # replace xn's with deferred vector elements
-                    defvec2 = sp.DeferredVector('defvec2')
-                    dvrep2 = [[var, defvec2[i]] for
-                              i, var in enumerate(fn_cse_vars[n])]
-
-                    fn_cse_fun_replaced = fn_cse_funs[n].xreplace(dict(dvrep2))
-
-                    ifunc = sp.lambdify(defvec2, fn_cse_fun_replaced,
+                    # use a deferred vector in lambdify to avoid exceeding
+                    # allowed maximum number of arguments
+                    defvec = sp.DeferredVector('defvec')
+                    symbs = list(variables) + [defvec]
+                    ifunc = sp.lambdify(symbs, fn_cse_funs[n],
                                         modules='numpy')
                     ifuncs = ifuncs + [ifunc]
 
@@ -279,14 +288,15 @@ class RT1(object):
                 def fneval(*variables):
                     sol = []
                     for n in range(len(fn_cse_funs)):
-                        xs = [*variables]
+                        xs = []
                         i = 0
                         for f in fn_cse_repfuncs[n]:
-                            xs.append(f(xs))
-                            xs = np.broadcast_arrays(*xs)
+                            # broadcast arrays to ensure correct shape
+                            xscalc = np.broadcast_arrays(f(*variables, xs),
+                                                         variables[0])[0]
+                            xs = xs + [xscalc]
                             i = i + 1
-
-                        sol = sol + [ifuncs[n](xs)]
+                        sol = sol + [ifuncs[n](*variables, xs)]
                     return sol
 
                 self.__fnevals = fneval
@@ -313,6 +323,72 @@ class RT1(object):
                                         RT1-object._fnevals(theta_0, phi_0, \
                                         theta_ex, phi_ex, *param_dict.values())
                                     ''')
+
+            elif self.lambda_backend == 'cse_symengine_sympy':
+                '''
+                sympy's cse functionality is used to avoid sympifying the whole
+                fn-coefficient array.
+
+                symengines lambdify is used since it turns out to be superior
+                in terms of computational speed compared to symengines
+                currently available Lambdify function.
+                '''
+
+                print('use symengines cse and sympys lambdify with numpy')
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
+                                    *map(str, self.param_dict.keys())))
+
+                from symengine import cse as cse_seng
+                funs = self.fn
+
+                # initialize array that store the cse-functions and variables
+                fn_cse_funs = []  # resulting cse-function for each coefficient
+                fn_cse_repfuncs = []  # replacement functions for each coef.
+                for nf, fncoef in enumerate(funs):
+                    # evaluate cse functions and variables for the i'th coef.
+                    fn_repl, fn_csefun = cse_seng([fncoef])
+
+                    print('fn_repl has ' + str(len(fn_repl)) + ' elements')
+
+                    # generate lambda-functions for replacements
+                    fn_rfuncs = {}
+                    defvec_subs = {}
+                    for i, repl in enumerate(fn_repl):
+                        defvec = sp.DeferredVector('defvec')
+                        defvec_subs[sp.sympify(repl[0])] = defvec[i]
+                        # replace xn's with deferred vector elements
+                        funcreplaced = sp.sympify(
+                                repl[1]).xreplace(defvec_subs)
+                        symbs = list(variables) + [defvec]
+                        fn_rfuncs[defvec[i]] = sp.lambdify(
+                            symbs,
+                            funcreplaced,
+                            modules=['numpy'])
+
+                    fn_cse_repfuncs += [fn_rfuncs]
+
+                    # generate lambda-functions for cse_functions
+                    fn_csefun_defvec = sp.sympify(
+                            fn_csefun[0]).xreplace(defvec_subs)
+                    funargs = list(variables) + [defvec]
+                    fn_cse_funs += [sp.lambdify(funargs,
+                                                fn_csefun_defvec,
+                                                modules=['numpy'])]
+
+                    print('cse of coefficient ' + str(nf) + '/' +
+                          str(len(funs)) + ' finished')
+
+                def fneval(*variables):
+                    sol = []
+                    for n, fn_cse_fun in enumerate(fn_cse_funs):
+                        replvec = []
+                        for key in fn_cse_repfuncs[n]:
+                            replvec += [fn_cse_repfuncs[n][key](
+                                *variables, replvec)]
+                        sol += [fn_cse_fun(*variables, replvec)]
+                    return sol
+
+                self.__fnevals = fneval
 
             else:
                 print('lambda_backend "' + self.lambda_backend +
@@ -821,8 +897,7 @@ class RT1(object):
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals([*args]))
-
-        if self.lambda_backend == 'sympy' or self.lambda_backend == 'cse':
+        else:
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                        phi2, *self.param_dict.values())
             # to correct for 0 dimensional arrays if a fn-coefficient
