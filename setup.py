@@ -2,14 +2,14 @@
 
 """
 This file is part of RT1.
-(c) 2016- Alexander Loew
+(c) 2016- Raphael Quast
 For COPYING and LICENSE details, please refer to the LICENSE file
 """
 
 from setuptools import setup
-from setuptools import find_packages  
+from setuptools import find_packages
 
-install_requires = ["numpy", "sympy", "symengine"]  
+install_requires = ["numpy", "sympy", "symengine"]
 
 def get_packages():
     find_packages(exclude=['contrib', 'docs', 'tests*']),
@@ -25,14 +25,14 @@ setup(name='rt1',
       packages=get_packages(),
       package_dir={'rt1': 'rt1'},
 
-      author="Alexander Loew",
-      author_email='alexander.loew@lmu.de',
-      maintainer='Alexander Loew',
-      maintainer_email='alexander.loew@lmu.de',
+      author="Raphael Quast",
+      author_email='raphael.quast@geo.tuwien.ac.at',
+      maintainer='Raphael Quast',
+      maintainer_email='raphael.quast@geo.tuwien.ac.at',
 
       #~ license='APACHE 2',
 
-      url='https://github.com/pygeo/rt1',
+      url='https://github.com/TUW-GEO/rt1',
 
       long_description='xxxx',
       install_requires=install_requires,
@@ -47,7 +47,7 @@ setup(name='rt1',
           # Pick your license as you wish (should match "license" above)
           #~ 'License :: OSI Approved :: MIT License',
 
-          'Programming Language :: Python :: 2.7'
+          'Programming Language :: Python :: 3.6'
       ],
 
       )
