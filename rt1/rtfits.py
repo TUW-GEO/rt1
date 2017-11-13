@@ -435,7 +435,7 @@ class Fits(Scatter):
     def monofit(self, V, SRF, dataset, param_dict,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn=None, _fnevals=None, int_Q=True,
-                lambda_backend='cse_symengine_sympy', **kwargs):
+                lambda_backend='cse', **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
