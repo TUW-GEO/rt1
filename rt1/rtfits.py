@@ -1011,7 +1011,7 @@ class Fits(Scatter):
         ax2 = fig.add_subplot(212)
         ax2.set_title('Estimated parameters')
 
-        ax2.set_ylim(0., np.max([*res_dict.values()]))
+        ax2.set_ylim(0., np.max(list(res_dict.values())))
 
         if truevals is not None:
 
