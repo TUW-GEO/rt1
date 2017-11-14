@@ -3,7 +3,6 @@ Class to perform least_squares fitting of given datasets.
 (wrapper for scipy.optimize.least_squares)
 """
 
-import sys
 import numpy as np
 import sympy as sp
 
@@ -678,12 +677,10 @@ class Fits(Scatter):
 
         # generate a dict containing only the parameters needed to evaluate
         # the fn-coefficients
-
-        if sys.version_info >= (3, 5):
-            param_R = dict(**param_dict, **fixed_dict)
-        else:
-            param_R = dict((k, v) for k, v in list(param_dict.items())
-                           + list(fixed_dict.items()))
+        # for python > 3.4
+        # param_R = dict(**param_dict, **fixed_dict)
+        param_R = dict((k, v) for k, v in list(param_dict.items())
+                       + list(fixed_dict.items()))
 
         param_R.pop('omega', None)
         param_R.pop('tau', None)
@@ -759,11 +756,10 @@ class Fits(Scatter):
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but possibly dynamic parameter-values)
 
-            if sys.version_info >= (3, 5):
-                newdict = dict(newdict, **fixed_dict)
-            else:
-                newdict = dict(list(newdict.items()) +
-                               list(fixed_dict.items()))
+            # for python > 3.4
+            # newdict = dict(newdict, **fixed_dict)
+            newdict = dict(list(newdict.items()) +
+                           list(fixed_dict.items()))
 
             # calculate the residuals
             errs = np.concatenate(self._calc_model(R, newdict)) - data
@@ -795,11 +791,10 @@ class Fits(Scatter):
 
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but possibly dynamic parameter-values)
-            if sys.version_info >= (3, 5):
-                newdict = dict(newdict, **fixed_dict)
-            else:
-                newdict = dict(list(newdict.items()) +
-                               list(fixed_dict.items()))
+            # for python > 3.4
+            # newdict = dict(newdict, **fixed_dict)
+            newdict = dict(list(newdict.items()) +
+                           list(fixed_dict.items()))
 
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
@@ -973,11 +968,10 @@ class Fits(Scatter):
         R.p_0 = np.zeros_like(incplot)
 
         # get parameter-values
-        if sys.version_info >= (3, 5):
-            calc_dict = dict(**res_dict, **fixed_dict)
-        else:
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
+        # for python > 3.4
+        # calc_dict = dict(**res_dict, **fixed_dict)
+        calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                         + list(fixed_dict.items()))
 
         # calculate results
         fitplot = self._calc_model(R, calc_dict)
@@ -1151,11 +1145,10 @@ class Fits(Scatter):
             R.t_0 = inc
             R.p_0 = np.zeros_like(inc)
 
-            if sys.version_info >= (3, 5):
-                calc_dict = dict(**res_dict, **fixed_dict)
-            else:
-                calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                                 + list(fixed_dict.items()))
+            # for python > 3.4
+            calc_dict = dict(**res_dict, **fixed_dict)
+            calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                             + list(fixed_dict.items()))
 
             estimates = self._calc_model(R, calc_dict)
             # calculate the residuals based on masked arrays
@@ -1282,7 +1275,6 @@ class Fits(Scatter):
         return figres
 
 
-
     def printscatter(self, fit, mima=None, pointsize=0.5,
                      regression=True, **kwargs):
         '''
@@ -1317,11 +1309,10 @@ class Fits(Scatter):
 
         mask = mask
 
-        if sys.version_info >= (3, 5):
-            calc_dict = dict(**res_dict, **fixed_dict)
-        else:
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
+        # for python > 3.4
+        # calc_dict = dict(**res_dict, **fixed_dict)
+        calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                         + list(fixed_dict.items()))
 
         estimates = self._calc_model(R, calc_dict)
 
@@ -1442,11 +1433,10 @@ class Fits(Scatter):
         R.t_0 = inc
         R.p_0 = np.zeros_like(inc)
 
-        if sys.version_info >= (3, 5):
-            calc_dict = dict(**res_dict, **fixed_dict)
-        else:
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
+        # for python > 3.4
+        # calc_dict = dict(**res_dict, **fixed_dict)
+        calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                         + list(fixed_dict.items()))
 
         estimates = self._calc_model(R, calc_dict)
 
@@ -1541,8 +1531,6 @@ class Fits(Scatter):
             ax.legend(title='# Date')
 
 
-
-
     def printseries(self, fit, index=None, legends=True, minmax=None):
         '''
         a function to quickly print the fit-results and the gained parameters
@@ -1577,11 +1565,10 @@ class Fits(Scatter):
         if minmax is None:
             minmax = [0, len(data)]
 
-        if sys.version_info >= (3, 5):
-            calc_dict = dict(**res_dict, **fixed_dict)
-        else:
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
+        # for python > 3.4
+        # calc_dict = dict(**res_dict, **fixed_dict)
+        calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                         + list(fixed_dict.items()))
 
         estimates = self._calc_model(R, calc_dict)
 
