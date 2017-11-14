@@ -155,8 +155,9 @@ class RT1(object):
 
         # check if all parameters have been provided (and also if no
         # unused parameter has been specified)
-        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                             *map(str, self.param_dict.keys()))))
+
+        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                            tuple(map(str, self.param_dict.keys()))))
 
         funcset = self.RV._func.free_symbols | self.SRF._func.free_symbols
 
@@ -207,8 +208,8 @@ class RT1(object):
             tic = timeit.default_timer()
 
             # define new lambda-functions for each fn-coefficient
-            variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                                *map(str, self.param_dict.keys())))
+            variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                               tuple(map(str, self.param_dict.keys())))
 
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
@@ -231,8 +232,8 @@ class RT1(object):
                         yield x[n]
                         n += 1
 
-                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                                    *map(str, self.param_dict.keys())))
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                                   tuple(map(str, self.param_dict.keys())))
 
                 tic = timeit.default_timer()
                 # convert the equations to sympy formulas
@@ -335,8 +336,8 @@ class RT1(object):
                 '''
 
                 print('use symengines cse and sympys lambdify with numpy')
-                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex',
-                                    *map(str, self.param_dict.keys())))
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                                   tuple(map(str, self.param_dict.keys())))
 
                 from symengine import cse as cse_seng
                 funs = self.fn
