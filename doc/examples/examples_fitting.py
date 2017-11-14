@@ -47,23 +47,28 @@ NOTICE: since the datasets are generated based on randomly generated
 # ----------------------------------------------------------------------------
 # ------------------ PARAMETERS FOR DATA-GENERATION --------------------------
 
-sig0 = True            # choose between intensity and sigma_0 datasets
-dB = False              # choose between linear and dB datasets
-
-Nmeasurements = 10      # number of measurements to be generated
-
-mininc = 25             # minimal incidence-angle in degree
-maxinc = 65             # maximal incidence-angle in degree
-
-minincnum = 20          # minimum number of incidence-angles
-maxincnum = 50         # maximum number of incidence-angles
-
-omin, omax = 0.35, 0.4     # minimal and maximal values for omega
-# since only a single omega-value is fitted, values should be kept close
-# to avoid convergence-issues within the fit-procedure
-taumin, taumax = 0.1, 1.25  # minimal and maximal values for tau
-rmin, rmax = 0.1, 0.5       # minimal and maximal values for NormBRDF
-tmin, tmax = 0.0001, 0.5    # minimal and maximal values for t
+# choose between intensity and sigma_0 datasets
+sig0 = True
+# choose between linear and dB datasets
+dB = False
+# number of measurements to be generated
+Nmeasurements = 30
+# minimal and maximal incidence-angle in degree
+mininc = 25
+maxinc = 65
+# minimum and maximum number of incidence-angles
+minincnum = 20
+maxincnum = 50
+# minimal and maximal values for omega
+omin, omax = 0.35, 0.4
+# since only a single omega-value is fitted, values should be kept
+# close to avoid convergence-issues within the fit-procedure
+# minimal and maximal values for tau
+taumin, taumax = 0.1, 1.25
+# minimal and maximal values for NormBRDF
+rmin, rmax = 0.1, 0.5
+# minimal and maximal values for t
+tmin, tmax = 0.0001, 0.5
 
 # ----------------------------------------------------------------------------
 # ------------------------- DATA-GENERATION ----------------------------------
@@ -102,13 +107,14 @@ for i in equal_tau_selects:
 # since they will be changed to randomly generated values!
 
 V_data = Rayleigh(tau=0.1, omega=0.1)
-SRF_data = HGsurface(ncoefs=10, t=sp.var('t_data'), a=[1., 1., 1.])
+SRF_data = HGsurface(ncoefs=15, t=sp.var('t_data'), a=[1., 1., 1.])
 
 # setup rt1-object
 # (since the fn-coefficients must still be calculated, one must
 #  specify the arrays for the parameters afterwards)
 R_data = RT1(1., 0., 0., 0., 0., RV=V_data, SRF=SRF_data,
-             fn=None, geometry='mono', param_dict={'t_data': .5})
+             fn=None, geometry='mono', param_dict={'t_data': .5},
+             lambda_backend='cse_symengine_sympy')
 
 # specify parameters and incidence-angles
 R_data.t_0 = inc
@@ -163,10 +169,10 @@ V = Rayleigh(omega=0.1, tau=0.1)
 # values for NormBRDF are set to known values (i.e. rdata)
 SRF = HGsurface(ncoefs=15, t=t1, NormBRDF=rdata, a=[1., 1., 1.])
 
-# select random numbers within the boundaries as sart-values
-ostart = (omax - omin) * np.random.random() + omin
-tstart = (tmax - tmin) * np.random.random() + tmin
-taustart = (taumax - taumin) * np.random.random() + taumin
+# select start numbers within the boundaries as sart-values
+ostart = np.mean([omin, omax])
+tstart = np.mean([tmin, tmax])
+taustart = np.mean([taumin, taumax])
 
 # define which parameter should be fitted
 param_dict = {'tau': [taustart] * (Nmeasurements - Neq),
@@ -202,7 +208,7 @@ truevals = {'tau': taudata,
             't1': tdata,
             }
 
-
+tic = timeit.default_timer()
 # perform fit
 fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
                       param_dict=param_dict,
@@ -212,9 +218,11 @@ fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
                       verbose=2,
                       ftol=1.e-8, xtol=1.e-8, gtol=1.e-8,
                       x_scale='jac',
+                      lambda_backend='cse_symengine_sympy'
                       # loss='cauchy'
                       )
-
+toc = timeit.default_timer()
+print('performing the fit took', round(toc-tic, 2), 'seconds')
 # %%
 
 # ----------------------------------------------------------------------------
