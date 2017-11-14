@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 
 """
 test examples given in paper by comparison against reference solution.
@@ -40,64 +40,45 @@ class TestExamples(unittest.TestCase):
 
         inc = self.inc1
 
-        # initialize output fields for faster processing
-        Itot = np.ones_like(inc) * np.nan
-        Isurf = np.ones_like(inc) * np.nan
-        Ivol = np.ones_like(inc) * np.nan
-        Iint = np.ones_like(inc) * np.nan
-
         # ---- evaluation of first example
         V = Rayleigh(tau=0.7, omega=0.3)
         # 11 instead of 10 coefficients used to assure 7 digit precision
         SRF = CosineLobe(ncoefs=11, i=5, NormBRDF=np.pi)
 
-        fn = None
-        for i in range(len(inc)):
-            # set geometries
-            t_0 = np.deg2rad(inc[i])
-            p_0 = np.ones_like(t_0) * 0.
-            p_ex = p_0 + np.pi
+        # evaluate _fnevals functions
+        _fnevals = RT1(1., 0, 0, 0, 0, RV=V, SRF=SRF,
+                fn=None, geometry='mono',
+                lambda_backend = 'cse',
+                _fnevals = None)._fnevals
 
-            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn,
-                    geometry='mono')
-            fn = R.fn  # store coefficients for faster itteration
-            Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
+        R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
+                np.zeros_like(inc), np.full_like(inc, np.pi),
+                RV=V, SRF=SRF, fn=0, geometry='mono',
+                lambda_backend = 'cse', _fnevals = _fnevals)
 
-        # for i in range(0,len(self.inc1)):
-            # self.assertAlmostEqual(self.int_num_1[i],Iint[i])
-            self.assertTrue(np.allclose(self.int_num_1[i], Iint[i]))
+        self.assertTrue(np.allclose(self.int_num_1, R.calc()[3]))
+
 
     def test_example_2_int(self):
         print('Testing Example 2 ...')
 
         inc = self.inc2
 
-        # initialize output fields for faster processing
-        Itot = np.ones_like(inc) * np.nan
-        Isurf = np.ones_like(inc) * np.nan
-        Ivol = np.ones_like(inc) * np.nan
-        Iint = np.ones_like(inc) * np.nan
-
         # ---- evaluation of second example
         V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
         SRF = CosineLobe(ncoefs=10, i=5, NormBRDF=np.pi)
 
-        fn = None
-        for i in range(len(inc)):
-            # set geometries
-            t_0 = np.array([np.deg2rad(inc[i])])
-            p_0 = np.ones_like(t_0) * 0.
-            p_ex = p_0 + np.pi
+        # evaluate _fnevals functions
+        _fnevals = RT1(1., 0, 0, 0, 0, RV=V, SRF=SRF,
+                fn=None, geometry='mono',
+                lambda_backend = 'sympy', _fnevals = None)._fnevals
 
-            R = RT1(1., t_0, t_0, p_0, p_ex, RV=V, SRF=SRF, fn=fn,
-                    geometry='mono')
-            fn = R.fn  # store coefficients for faster itteration
-            Itot[i], Isurf[i], Ivol[i], Iint[i] = R.calc()
+        R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
+                np.zeros_like(inc), np.full_like(inc, np.pi),
+                RV=V, SRF=SRF, fn=0, geometry='mono',
+                lambda_backend = 'sympy', _fnevals = _fnevals)
 
-        # for i in range(0,len(self.inc1)):
-            # test at 6-digit precision
-            self.assertAlmostEqual(self.int_num_2[i], Iint[i], 6)
-
+        self.assertTrue(np.allclose(self.int_num_2, R.calc()[3], atol = 1e-6))
 
 if __name__ == "__main__":
     unittest.main()
