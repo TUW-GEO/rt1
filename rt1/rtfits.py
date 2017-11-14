@@ -613,22 +613,16 @@ class Fits(Scatter):
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
             tausymb = V.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, V.tau[0], modules=['numpy'])
         except Exception:
             tausymb = set()
-            taufunc = None
         try:
             omegasymb = V.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, V.omega[0], modules=['numpy'])
         except Exception:
             omegasymb = set()
-            omegafunc = None
         try:
             Nsymb = SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, SRF.NormBRDF[0], modules=['numpy'])
         except Exception:
             Nsymb = set()
-            Nfunc = None
 
         toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
@@ -1274,7 +1268,6 @@ class Fits(Scatter):
 
         return figres
 
-
     def printscatter(self, fit, mima=None, pointsize=0.5,
                      regression=True, **kwargs):
         '''
@@ -1529,7 +1522,6 @@ class Fits(Scatter):
             # plt.setp(legend.get_title(),fontsize=8) # change fontsize
         else:
             ax.legend(title='# Date')
-
 
     def printseries(self, fit, index=None, legends=True, minmax=None):
         '''
