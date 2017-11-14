@@ -1057,8 +1057,10 @@ class RT1(object):
         phi_0 = sp.Symbol('phi_0')
         phi_ex = sp.Symbol('phi_ex')
 
-        dummyd = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
-                              *self.param_dict.keys()),
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
+            self.param_dict.keys())
+
+        dummyd = sp.lambdify(args,
                              sp.diff(self.SRF._func, sp.Symbol(key)),
                              modules=["numpy", "sympy"])
 
@@ -1078,8 +1080,10 @@ class RT1(object):
         phi_0 = sp.Symbol('phi_0')
         phi_ex = sp.Symbol('phi_ex')
 
-        dummyd = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
-                              *self.param_dict.keys()),
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
+            self.param_dict.keys())
+
+        dummyd = sp.lambdify(args,
                              sp.diff(self.RV._func, sp.Symbol(key)),
                              modules=["numpy", "sympy"])
 
