@@ -1146,7 +1146,7 @@ class Fits(Scatter):
             R.p_0 = np.zeros_like(inc)
 
             # for python > 3.4
-            calc_dict = dict(**res_dict, **fixed_dict)
+            # calc_dict = dict(**res_dict, **fixed_dict)
             calc_dict = dict((k, v) for k, v in list(res_dict.items())
                              + list(fixed_dict.items()))
 
