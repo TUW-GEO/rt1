@@ -897,7 +897,7 @@ class RT1(object):
                                        phi2, *self.param_dict.values())
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
-            fn = np.broadcast_arrays(*self._fnevals([*args]))
+            fn = np.broadcast_arrays(*self._fnevals(args))
         else:
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                        phi2, *self.param_dict.values())
