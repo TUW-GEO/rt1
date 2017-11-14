@@ -188,7 +188,7 @@ class Fits(Scatter):
             Nfunc = None
 
         # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(map(str, [*tausymb, *omegasymb, *Nsymb]))
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
@@ -303,7 +303,7 @@ class Fits(Scatter):
             Nsymb = set()
             Nfunc = None
 
-        toNlist = set(map(str, [*tausymb, *omegasymb, *Nsymb]))
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
@@ -339,7 +339,7 @@ class Fits(Scatter):
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
 
-        neworder = [*order]
+        neworder = [o for o in order]
 
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
@@ -601,8 +601,7 @@ class Fits(Scatter):
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
-        order = [*{k: v for k, v in param_dict.items() if v is not None}]
-
+        order = [i for i, v in param_dict.items() if v is not None]
         # preparation of data for fitting
         inc, data, weights, Nmeasurements, mask = self._preparedata(dataset)
 
@@ -631,7 +630,7 @@ class Fits(Scatter):
             Nsymb = set()
             Nfunc = None
 
-        toNlist = set(map(str, [*tausymb, *omegasymb, *Nsymb]))
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # check of general input-requirements
         #   check if all parameters have been provided
