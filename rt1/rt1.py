@@ -264,7 +264,7 @@ class RT1(object):
                         # use a deferred vector in lambdify to avoid exceeding
                         # allowed maximum number of arguments
                         defvec = sp.DeferredVector('defvec')
-                        symbs = list(variables) + [defvec]
+                        symbs = [defvec] + list(variables)
                         fn_funcs.append(sp.lambdify(symbs, ff[1],
                                                     modules='numpy'))
                         cse_variables.append(ff[0])
@@ -279,7 +279,7 @@ class RT1(object):
                     # use a deferred vector in lambdify to avoid exceeding
                     # allowed maximum number of arguments
                     defvec = sp.DeferredVector('defvec')
-                    symbs = list(variables) + [defvec]
+                    symbs = [defvec] + list(variables)
                     ifunc = sp.lambdify(symbs, fn_cse_funs[n],
                                         modules='numpy')
                     ifuncs = ifuncs + [ifunc]
@@ -292,11 +292,11 @@ class RT1(object):
                         i = 0
                         for f in fn_cse_repfuncs[n]:
                             # broadcast arrays to ensure correct shape
-                            xscalc = np.broadcast_arrays(f(*variables, xs),
+                            xscalc = np.broadcast_arrays(f(xs, *variables),
                                                          variables[0])[0]
                             xs = xs + [xscalc]
                             i = i + 1
-                        sol = sol + [ifuncs[n](*variables, xs)]
+                        sol = sol + [ifuncs[n](xs, *variables)]
                     return sol
 
                 self.__fnevals = fneval
@@ -359,7 +359,7 @@ class RT1(object):
                         # replace xn's with deferred vector elements
                         funcreplaced = sp.sympify(
                                 repl[1]).xreplace(defvec_subs)
-                        symbs = list(variables) + [defvec]
+                        symbs = [defvec] + list(variables)
                         fn_rfuncs[defvec[i]] = sp.lambdify(
                             symbs,
                             funcreplaced,
@@ -370,7 +370,7 @@ class RT1(object):
                     # generate lambda-functions for cse_functions
                     fn_csefun_defvec = sp.sympify(
                             fn_csefun[0]).xreplace(defvec_subs)
-                    funargs = list(variables) + [defvec]
+                    funargs = [defvec] + list(variables)
                     fn_cse_funs += [sp.lambdify(funargs,
                                                 fn_csefun_defvec,
                                                 modules=['numpy'])]
@@ -384,8 +384,8 @@ class RT1(object):
                         replvec = []
                         for key in fn_cse_repfuncs[n]:
                             replvec += [fn_cse_repfuncs[n][key](
-                                *variables, replvec)]
-                        sol += [fn_cse_fun(*variables, replvec)]
+                                replvec, *variables)]
+                        sol += [fn_cse_fun(replvec, *variables)]
                     return sol
 
                 self.__fnevals = fneval

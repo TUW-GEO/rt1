@@ -63,7 +63,10 @@ class Surface(Scatter):
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
-        brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex, *param_dict.keys()), self._func, modules=["numpy", "sympy"])
+        # for python >3.5 unpacking could be used, i.e.:
+        # brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex, *param_dict.keys()), self._func, modules=["numpy", "sympy"])
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
+        brdffunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
 
         # in case _func is a constant, lambdify will produce a function with scalar output which
         # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
@@ -417,3 +420,70 @@ class HenyeyGreenstein(Surface):
     def _set_legcoefficients(self):
         n = sp.Symbol('n')
         self.legcoefs = 1. * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
+
+
+
+
+
+
+class HG_nadirnorm(Surface):
+    """
+    Define a HenyeyGreenstein scattering function for use as BRDF approximation function.
+
+    Parameters
+    -----------
+    t : scalar(float)
+        Asymmetry parameter of the Henyey-Greenstein function
+
+    ncoefs : scalar(int)
+             Number of coefficients used within the Legendre-approximation
+
+    a : [ float , float , float ] , optional (default = [1.,1.,1.])
+        generalized scattering angle parameters used for defining the scat_angle() of the BRDF
+        (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
+
+    NormBRDF : float, optional (default = 1.)
+               Normalization-factor used to scale the BRDF, i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
+    """
+
+    def __init__(self, t=None, ncoefs=None, a=[1., 1., 1.], **kwargs):
+        assert t is not None, 't parameter needs to be provided!'
+        assert ncoefs is not None, 'Number of coefficients needs to be specified'
+        super(HG_nadirnorm, self).__init__(**kwargs)
+        self.t = t
+        self.ncoefs = ncoefs
+        assert self.ncoefs > 0
+
+        self.a = a
+        assert isinstance(self.a, list), 'Error: Generalization-parameter needs to be a list'
+        assert len(a) == 3, 'Error: Generalization-parameter list must contain 3 values'
+        self._set_function()
+        self._set_legcoefficients()
+
+    def _set_function(self):
+        """
+        define phase function as sympy object for later evaluation
+        """
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+
+        x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
+
+        nadir_hemreflect = 4*((1. - self.t**2.)*(1. - self.t * (-self.t + self.a[0])-sp.sqrt((1 + self.t**2 - 2*self.a[0]*self.t)*(1 + self.t**2)))/
+                (2. * self.a[0]**2. * self.t**2. * sp.sqrt(1. + self.t**2. - 2. * self.a[0] * self.t)))
+
+
+        self._func = (1./nadir_hemreflect) * (1. - self.t ** 2.) / ((sp.pi) * (1. + self.t ** 2. - 2. * self.t * x) ** 1.5)
+
+    def _set_legcoefficients(self):
+        nadir_hemreflect = 4*((1. - self.t**2.)*(1. - self.t * (-self.t + self.a[0])-sp.sqrt((1 + self.t**2 - 2*self.a[0]*self.t)*(1 + self.t**2)))/
+                (2. * self.a[0]**2. * self.t**2. * sp.sqrt(1. + self.t**2. - 2. * self.a[0] * self.t)))
+
+        n = sp.Symbol('n')
+        self.legcoefs = (1./nadir_hemreflect) * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
+
+
+
+

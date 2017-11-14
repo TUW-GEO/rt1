@@ -71,7 +71,10 @@ class Volume(Scatter):
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
-        pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex, *param_dict.keys()), self._func, modules=["numpy", "sympy"])
+        # for python > 3.5 unpacking could be used, i.e.:
+        # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex, *param_dict.keys()), self._func, modules=["numpy", "sympy"])
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
+        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
 
         # in case _func is a constant, lambdify will produce a function with scalar output which
         # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
