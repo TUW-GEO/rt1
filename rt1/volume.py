@@ -40,7 +40,7 @@ class Volume(Scatter):
 
     tau = property(_get_tau, _set_tau)
 
-    def p(self, t_0, t_ex, p_0, p_ex):
+    def p(self, t_0, t_ex, p_0, p_ex, param_dict = {}):
         """
         Calculate numerical value of the volume-scattering phase-function for chosen incidence- and exit angles.
 
@@ -71,15 +71,19 @@ class Volume(Scatter):
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
-        pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex), self._func, modules=["numpy", "sympy"])
+        # for python > 3.5 unpacking could be used, i.e.:
+        # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex, *param_dict.keys()), self._func, modules=["numpy", "sympy"])
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
+        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
 
         # in case _func is a constant, lambdify will produce a function with scalar output which
         # is not suitable for further processing (this happens e.g. for the Isotropic brdf).
         # Therefore the following query is implemented to ensure correct array-output:
-        if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1), np.ndarray):
+        # TODO this is not a proper test !
+        if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1, *[i[0] for i in param_dict.values()]), np.ndarray):
             pfunc = np.vectorize(pfunc)
 
-        return pfunc(t_0, t_ex, p_0, p_ex)
+        return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
@@ -267,7 +271,7 @@ class LinCombV(Volume):
                 self.legcoefs = 0.
 
         # test if the weighting-factors equate to 1.
-        np.testing.assert_almost_equal(desired=1., actual=np.sum([V[0] for V in self.Vchoices]), verbose=False, err_msg='The sum of the phase-function weighting-factors must equate to 1 !'),
+        # np.testing.assert_almost_equal(desired=1., actual=np.sum([V[0] for V in self.Vchoices]), verbose=False, err_msg='The sum of the phase-function weighting-factors must equate to 1 !'),
 
         # find phase functions with equal a parameters
         equals = [np.where((np.array([VV[1].a for VV in self.Vchoices]) == tuple(V[1].a)).all(axis=1))[0] for V in self.Vchoices]
@@ -385,7 +389,7 @@ class HenyeyGreenstein(Volume):
         self.a = a
         assert isinstance(self.a, list), 'Error: Generalization-parameter needs to be a list'
         assert len(a) == 3, 'Error: Generalization-parameter list must contain 3 values'
-        assert all(type(x) == float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
+        #assert all(type(x) == float for x in a), 'Error: Generalization-parameter array must contain only floating-point values!'
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self._set_function()

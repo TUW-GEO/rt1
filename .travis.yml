@@ -8,6 +8,14 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
+
+env:
+  # don't use gmpy in mpmath to avoid pickling errors caused by a bug
+  # that affects the rtfits-module
+  # see: https://github.com/sympy/sympy/issues/12895
+  # see: https://github.com/sympy/sympy/pull/13530
+  - MPMATH_NOGMPY=1
+
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
@@ -36,11 +44,11 @@ install:
   # with the versioned package on PyPi. Please note
   # that this is not necessarily the same code as in the current development
   # or master branches
-  - conda install pip
+  #- conda install pip
 
   # test installation from pip
-  - pip install rt1
-  - yes | pip uninstall rt1
+  #- pip install rt1
+  #- yes | pip uninstall rt1
 
   # test conda based installation (currently not activated as package still missing)
   # - conda install -c conda-forge rt1
@@ -48,4 +56,4 @@ install:
 
 
 script:
-  - nosetests # -s to see print-output from nosetests
+  - nosetests -v # -s to see print-output from nosetests

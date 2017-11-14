@@ -77,17 +77,11 @@ class TestRT1(unittest.TestCase):
         f0 = 3. / (16. * np.pi) * (3. - np.cos(t_0)**2.)
         f1 = 0.
         f2 = 3. / (16. * np.pi) * (3. * np.cos(t_0)**2. - 1.)
-        f3 = 0.
         # and all others are 0.
 
-        self.assertTrue(np.allclose(f0, RT._get_fn(0, RT.t_0, RT.p_0,
-                                                   RT.t_ex, RT.p_ex)))
-        self.assertTrue(np.allclose(f1, RT._get_fn(1, RT.t_0, RT.p_0,
-                                                   RT.t_ex, RT.p_ex)))
-        self.assertTrue(np.allclose(f2, RT._get_fn(2, RT.t_0, RT.p_0,
-                                                   RT.t_ex, RT.p_ex)))
-        self.assertTrue(np.allclose(f3, RT._get_fn(3, RT.t_0, RT.p_0,
-                                                   RT.t_ex, RT.p_ex)))
+        self.assertTrue(np.allclose([f0, f1, f2],
+                                    RT._fnevals(t_0, p_0,
+                                                t_ex, self.p_ex)))
 
     def test_fn_coefficients_RayCosine(self):
         # test if calculation of fn coefficients is correct
@@ -108,9 +102,7 @@ class TestRT1(unittest.TestCase):
         p_ex = 0.
 
         RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='vvvv')
-        # res = RT._get_fn(0, RT.theta_0, RT.phi_0)
-        res0 = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
-        res2 = RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
+        res = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
         # ncoefs = 1
         # analtytical solution for ncoefs = 1 --> n=0
@@ -126,18 +118,15 @@ class TestRT1(unittest.TestCase):
         ref0 = 1. / 4. * b0 * (8. * a0 - a2 - 3. * a2 * np.cos(2. * t_0))
         ref2 = 3. / 4. * a2 * b0 * (1. + 3. * np.cos(2. * t_0))
 
-        self.assertTrue(np.allclose(ref0, res0))
-        self.assertTrue(np.allclose(ref2, res2))
+        self.assertTrue(np.allclose([ref0, ref2], [res[0], res[2]]))
 
         # ncoefs = 2
-        # result should be the same as for ncoefs=1
+        # first and third coef should be the same as for ncoefs=1
         S = CosineLobe(ncoefs=2, i=5, NormBRDF=np.pi)
-        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff')
-        res00 = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
-        res22 = RT._get_fn(2, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff', lambda_backend = 'cse')
+        res2 = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
-        self.assertAlmostEqual(ref0, res00)
-        self.assertAlmostEqual(ref2, res22)
+        self.assertTrue(np.allclose([ref0, ref2], [res2[0], res2[2]]))
 
     def test_fn_coefficients_HGIso(self):
         # test if calculation of fn coefficients is correct
@@ -153,9 +142,9 @@ class TestRT1(unittest.TestCase):
 
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=1)
         RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff')
-        r = RT._get_fn(0, RT.t_0, RT.p_0, RT.t_ex, RT.p_ex)
+        r = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
-        self.assertTrue(np.allclose(r, 1. / (2. * np.pi)))
+        self.assertTrue(np.allclose(r[0], 1. / (2. * np.pi)))
 
         # V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=2)
         # RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
