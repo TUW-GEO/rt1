@@ -375,7 +375,7 @@ class Fits(Scatter):
 
         # evaluate jacobians of the functional representations of tau, omega
         # and NormBRDF and add them to newjacdict
-        for i in map(str, tausymb) & param_dyn_dict.keys():
+        for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau[0], i),
@@ -391,7 +391,7 @@ class Fits(Scatter):
             # calculate "outer" * "inner" derivative
             newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
-        for i in map(str, omegasymb) & param_dyn_dict.keys():
+        for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega[0], i),
@@ -407,7 +407,7 @@ class Fits(Scatter):
             # calculate "outer" * "inner" derivative
             newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
-        for i in map(str, Nsymb) & param_dyn_dict.keys():
+        for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF[0], i),
