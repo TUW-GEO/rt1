@@ -729,7 +729,6 @@ class Fits(Scatter):
         # set fn_input to any value except None to avoid re-calculation
         R.fn_input = 1
 
-
         # if param_dyn_dict is not set explicitly, use the number of
         # start-values provided in param_dict to assign the dynamics of
         # the parameters (i.e. either constant or varying for each measurement)

@@ -218,7 +218,8 @@ class RT1(object):
             self.__fn = self._extract_coefficients(expr_int)
             toc = timeit.default_timer()
             self.prv(2,
-                     'coefficients extracted, it took ' + str(toc-tic) + ' sec')
+                     'coefficients extracted, it took ' +
+                     str(toc - tic) + ' sec')
         else:
             self.prv(3, 'using provided fn-coefficients')
             self.__fn = fn
@@ -248,7 +249,7 @@ class RT1(object):
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
                 self.prv(1,
-                    'symengine -> currently only working with dev-version!!')
+                         'symengine currently only working with dev-version!!')
                 # set lambdify module
                 lambdify = lambdify_seng
 
