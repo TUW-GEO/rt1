@@ -160,21 +160,21 @@ class Fits(Scatter):
         '''
 
         # store original V and SRF
-        orig_V = copy.deepcopy(R.RV)
+        orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         # and generate a function to evaluate the symbolic representation
         try:
-            tausymb = R.RV.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, R.RV.tau[0],
+            tausymb = R.V.tau[0].free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau[0],
                                   modules=['numpy'])
         except Exception:
             tausymb = set()
             taufunc = None
         try:
-            omegasymb = R.RV.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.RV.omega[0],
+            omegasymb = R.V.omega[0].free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
                                     modules=['numpy'])
         except Exception:
             omegasymb = set()
@@ -193,13 +193,13 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.RV.omega = res_dict['omega']
+            R.V.omega = res_dict['omega']
         else:
-            R.RV.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
         if taufunc is None:
-            R.RV.tau = res_dict['tau']
+            R.V.tau = res_dict['tau']
         else:
-            R.RV.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
         if Nfunc is None:
             R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
@@ -207,9 +207,9 @@ class Fits(Scatter):
 
 #        # set omega, tau and NormBRDF-values to input
 #        if 'omega' in res_dict:
-#            R.RV.omega = res_dict['omega']
+#            R.V.omega = res_dict['omega']
 #        if 'tau' in res_dict:
-#            R.RV.tau = res_dict['tau']
+#            R.V.tau = res_dict['tau']
 #        if 'NormBRDF' in res_dict:
 #            R.SRF.NormBRDF = res_dict['NormBRDF']
 
@@ -244,7 +244,7 @@ class Fits(Scatter):
             model_calc = 10. * np.log10(model_calc)
 
         # restore V and SRF to original values
-        R.RV = orig_V
+        R.V = orig_V
         R.SRF = orig_SRF
 
         return model_calc
@@ -269,28 +269,28 @@ class Fits(Scatter):
               shape applicable to scipy's least_squres-function
         '''
         # store original V and SRF
-        orig_V = copy.deepcopy(R.RV)
+        orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
 
 #        # set omega, tau and NormBRDF-values to input
 #        if 'omega' in res_dict:
-#            R.RV.omega = res_dict['omega']
+#            R.V.omega = res_dict['omega']
 #        if 'tau' in res_dict:
-#            R.RV.tau = res_dict['tau']
+#            R.V.tau = res_dict['tau']
 #        if 'NormBRDF' in res_dict:
 #            R.SRF.NormBRDF = res_dict['NormBRDF']
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
-            tausymb = R.RV.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, R.RV.tau[0],
+            tausymb = R.V.tau[0].free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau[0],
                                   modules=['numpy'])
         except Exception:
             tausymb = set()
             taufunc = None
         try:
-            omegasymb = R.RV.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.RV.omega[0],
+            omegasymb = R.V.omega[0].free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
                                     modules=['numpy'])
         except Exception:
             omegasymb = set()
@@ -308,13 +308,13 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.RV.omega = res_dict['omega']
+            R.V.omega = res_dict['omega']
         else:
-            R.RV.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
         if taufunc is None:
-            R.RV.tau = res_dict['tau']
+            R.V.tau = res_dict['tau']
         else:
-            R.RV.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
         if Nfunc is None:
             R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
@@ -427,15 +427,15 @@ class Fits(Scatter):
         jac_lsq = np.concatenate([newjacdict[key] for key in order]).T
 
         # restore V and SRF to original values
-        R.RV = orig_V
+        R.V = orig_V
         R.SRF = orig_SRF
 
         return jac_lsq
 
     def monofit(self, V, SRF, dataset, param_dict,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
-                fn=None, _fnevals=None, int_Q=True,
-                lambda_backend='cse', **kwargs):
+                fn_input=None, _fnevals_input=None, int_Q=True,
+                lambda_backend='cse', verbosity=0, **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -554,12 +554,12 @@ class Fits(Scatter):
 
         Other Parameters:
         ------------------
-        fn : array-like
+        fn_input : array-like
              a slot for pre-calculated fn-coefficients.
              if the same model has to be fitted to multiple datasets, the
              fn-coefficients that are returned in the first fit can be used
              as input for the second fit to avoid repeated calculations.
-        _fnevals : callable
+        _fnevals_input : callable
              a slot for pre-compiled function to evaluate the fn-coefficients
              Note that once the _fnevals function is provided, the
              fn-coefficients are no longer needed and have no effect on the
@@ -570,6 +570,8 @@ class Fits(Scatter):
         lambda_backend : string (default = 'cse')
                          select method for generating _fnevals functions
                          if they are not provided explicitly
+        verbosity : int
+                  set verbosity level of rt1-module
         kwargs :
                  keyword arguments passed to scipy's least_squares function
 
@@ -684,37 +686,49 @@ class Fits(Scatter):
         for i in toNlist:
             param_R.pop(i)
 
-        if fn is None:
-            # define rt1-object
-            R = RT1(1., 0., 0., 0., 0.,
-                    RV=V, SRF=SRF, fn=None, geometry='mono',
-                    param_dict=param_R, int_Q=int_Q,
-                    lambda_backend=lambda_backend)
+#        if fn_input is None:
+#            # define rt1-object
+#            R = RT1(1., 0., 0., 0., 0.,
+#                    V=V, SRF=SRF, fn_input=None, geometry='mono',
+#                    param_dict=param_R, int_Q=int_Q,
+#                    lambda_backend=lambda_backend)
+#
+#            # set geometry
+#            R.t_0 = inc
+#            R.p_0 = np.zeros_like(inc)
+#            R.t_ex = inc
+#            R.p_ex = np.full_like(inc, np.pi)
+#
+#            fn = R.fn
+#            _fnevals = R._fnevals
+#        else:
+#            if _fnevals_input is None:
+#                # define rt1-object
+#                R = RT1(1., inc, inc, np.zeros_like(inc),
+#                        np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn,
+#                        geometry='mono', param_dict=param_R, int_Q=int_Q,
+#                        lambda_backend=lambda_backend)
+#
+#                _fnevals = R._fnevals
+#            else:
+#                # define rt1-object
+#                R = RT1(1., inc, inc, np.zeros_like(inc),
+#                        np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn,
+#                        _fnevals_input=_fnevals, geometry='mono',
+#                        param_dict=param_R, int_Q=int_Q,
+#                        lambda_backend=lambda_backend)
+        # define rt1-object
+        R = RT1(1., inc, inc, np.zeros_like(inc),
+                np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn_input,
+                _fnevals_input=_fnevals_input, geometry='mono',
+                param_dict=param_R, int_Q=int_Q,
+                lambda_backend=lambda_backend, verbosity=verbosity)
+        # store _fnevals functions in case they have not been provided
+        # as input-arguments explicitly to avoid recalculation for each step
+        R._fnevals_input = R._fnevals
+        # set fn_input to any value except None to avoid re-calculation
+        R.fn_input = 1
 
-            # set geometry
-            R.t_0 = inc
-            R.p_0 = np.zeros_like(inc)
-            R.t_ex = inc
-            R.p_ex = np.full_like(inc, np.pi)
-
-            fn = R.fn
-            _fnevals = R._fnevals
-        else:
-            if _fnevals is None:
-                # define rt1-object
-                R = RT1(1., inc, inc, np.zeros_like(inc),
-                        np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
-                        geometry='mono', param_dict=param_R, int_Q=int_Q,
-                        lambda_backend=lambda_backend)
-
-                _fnevals = R._fnevals
-            else:
-                # define rt1-object
-                R = RT1(1., inc, inc, np.zeros_like(inc),
-                        np.full_like(inc, np.pi), RV=V, SRF=SRF, fn=fn,
-                        _fnevals=_fnevals, geometry='mono',
-                        param_dict=param_R, int_Q=int_Q,
-                        lambda_backend=lambda_backend)
 
         # if param_dyn_dict is not set explicitly, use the number of
         # start-values provided in param_dict to assign the dynamics of

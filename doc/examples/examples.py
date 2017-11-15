@@ -159,18 +159,7 @@ elif example == 4:
 else:
     assert False, 'Choose an existing example or specify V and SRF explicitly'
 
-
-tic = timeit.default_timer()
-fn = None
-# IMPORTANT: fn-coefficients must be evaluated with single values for
-# incident- and exit angles !
-R = RT1(I0, 0., 0., 0., 0., RV=V, SRF=SRF, fn=fn, geometry='mono',
-        lambda_backend='cse')
-fn = R.fn  # store coefficients for faster iteration
-_fnevals = R._fnevals  # store coefficients for faster iteration
-
-toc = timeit.default_timer()
-print('time for coefficient evaluation: ' + str(toc - tic))
+#%%
 
 
 # specification of measurement-geometry
@@ -180,8 +169,13 @@ p_0 = np.ones_like(t_0) * 0.
 p_ex = np.ones_like(t_0) * 0. + np.pi
 
 tic = timeit.default_timer()
-R = RT1(I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=SRF, fn=fn, _fnevals=_fnevals,
-        geometry='mono', lambda_backend='cse')
+R = RT1(I0, t_0, t_ex, p_0, p_ex, V=V, SRF=SRF,
+        geometry='mono', lambda_backend='cse_symengine_sympy')
+
+fn = R.fn  # evaluate and store coefficients for faster iteration
+_fnevals = R._fnevals  # evaluate and  store coefficients for faster iteration
+
+
 Itot, Isurf, Ivol, Iint = R.calc()
 toc = timeit.default_timer()
 print('evaluating print-values took ' + str(toc - tic))
@@ -196,8 +190,8 @@ if len(Itot.shape) > 1:
             Ivolp = Ivol[Nres]
             Iintp = Iint[Nres]
             label = ('Backscattering Coefficient' + '\n $\\omega$ = ' +
-                     str(R.RV.omega[Nres][0]) + '$ \quad \\tau$ = ' +
-                     str(R.RV.tau[Nres][0]))
+                     str(R.V.omega[Nres][0]) + '$ \quad \\tau$ = ' +
+                     str(R.V.tau[Nres][0]))
             plot2 = Plots().logmono(incp, Itot=Itotp, Isurf=Isurfp,
                                     Ivol=Ivolp, Iint=Iintp,
                                     sig0=True, noint=True, label=label)
@@ -208,12 +202,12 @@ if len(Itot.shape) > 1:
         Ivolp = Ivol[Nres]
         Iintp = Iint[Nres]
         label = ('Backscattering Coefficient' + '\n $\\omega$ = ' +
-                 str(R.RV.omega[Nres][0]) + '$ \quad \\tau$ = ' +
-                 str(R.RV.tau[Nres][0]))
+                 str(R.V.omega[Nres][0]) + '$ \quad \\tau$ = ' +
+                 str(R.V.tau[Nres][0]))
 else:
     incp, Itotp, Isurfp, Ivolp, Iintp = inc, Itot, Isurf, Ivol, Iint
     label = ('Backscattering Coefficient' + '\n $\\omega$ = ' +
-             str(R.RV.omega) + '$ \quad \\tau$ = ' + str(R.RV.tau))
+             str(R.V.omega) + '$ \quad \\tau$ = ' + str(R.V.tau))
 
 # ---------------- EVALUATION OF HEMISPHERICAL REFLECTANCE ----------------
 
@@ -229,7 +223,7 @@ else:
 # Plots().polarplot(SRF = R.SRF)
 
 #       plot only p
-# Plots().polarplot(V = R.RV)
+# Plots().polarplot(V = R.V)
 
 #       plot more than one phase-function simultaneously
 #       example: henyey-greenstein phase function for various param. chocies
@@ -341,16 +335,21 @@ def Rad(theta, phi, thetainc, phiinc):
 
     print('start of 3d coefficient evaluation')
     tic = timeit.default_timer()
-    _fnevals = RT1(1., np.deg2rad(thetainc), np.deg2rad(45), phiinc,
-                   np.pi, RV=V, SRF=SRF, fn=None, geometry='fvfv',
-                   lambda_backend='cse_symengine_sympy')._fnevals
+    Rfn = RT1(1., np.deg2rad(thetainc), np.deg2rad(45), phiinc,
+              np.pi, V=V, SRF=SRF, geometry='fvfv',
+              lambda_backend='cse_symengine_sympy')
+
+    _fnevals = Rfn._fnevals
+    # store also fn-coefficients to avoid re-calculation
+    # (alternatively one can provide any value but None to avoid calculation)
+    fn = Rfn.fn
 
     toc = timeit.default_timer()
     print('evaluation of 3d coefficients took ' +
           str(round((toc - tic) / 60., 2)) + ' minutes')
 
-    R3d = RT1(1., tinc, theta, pinc, phi, RV=V, SRF=SRF,
-              _fnevals=_fnevals, fn=1, geometry='ffff')
+    R3d = RT1(1., tinc, theta, pinc, phi, V=V, SRF=SRF,
+              fn_input = fn, _fnevals_input=_fnevals, geometry='fvfv')
 
     tic = timeit.default_timer()
     Itot, Isurf, Ivol, Iint = R3d.calc()

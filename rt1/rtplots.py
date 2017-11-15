@@ -39,7 +39,7 @@ class Plots(Scatter):
         -----------
         R : RT1-class object
             If R is provided, SRF and V are taken from it
-            as V = R.RV and SRF = R.SRF
+            as V = R.V and SRF = R.SRF
         SRF : RT1.surface class object
               Alternative direct specification of the surface BRDF,
               e.g. SRF = CosineLobe(i=3, ncoefs=5)
@@ -122,7 +122,7 @@ class Plots(Scatter):
         # else use the provided functions
         if R is not None:
             SRF = R.SRF
-            V = R.RV
+            V = R.V
 
         # define functions for plotting that evaluate the used
         # approximations in terms of legendre-polynomials

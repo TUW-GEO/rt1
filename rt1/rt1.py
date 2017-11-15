@@ -6,7 +6,6 @@ References
 ----------
 Quast & Wagner (2016): doi:10.1364/AO.55.005379
 """
-
 import numpy as np
 from scipy.special import expi
 from scipy.special import expn
@@ -22,7 +21,7 @@ try:
     from symengine import Lambdify as lambdify_seng
 except ImportError:
     from sympy import expand
-    print('symengine could not be imported fn-function generation')
+    # print('symengine could not be imported fn-function generation')
 
 
 class RT1(object):
@@ -47,7 +46,7 @@ class RT1(object):
            array of exit azimuth-angles in radians
            (if geometry is 'mono', phi_ex is automatically set to p_0 + np.pi)
 
-    RV : rt1.volume
+    V : rt1.volume
          random object from rt1.volume class
 
     SRF : surface
@@ -106,12 +105,18 @@ class RT1(object):
                            sympy.cse to generate a fast evaluation-function
     int_Q : bool (default = True)
             indicator whether the interaction-term should be calculated or not
+    verbosity : int
+            select the verbosity level of the module to get status-reports
+                - 0 : print nothing
+                - 1 : print some infos during runtime
+                - 2 : print more
+                - >=3 : print all
     """
 
     def __init__(self, I0, t_0, t_ex, p_0, p_ex,
-                 RV=None, SRF=None, fn=None, _fnevals=None,
+                 V=None, SRF=None, fn_input=None, _fnevals_input=None,
                  geometry='vvvv', param_dict={},
-                 lambda_backend='cse', int_Q=True):
+                 lambda_backend='cse', int_Q=True, verbosity = 1):
 
         self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -123,32 +128,38 @@ class RT1(object):
         self.lambda_backend = lambda_backend
         self.int_Q = int_Q
 
-        assert RV is not None, 'ERROR: needs to provide volume information'
-        self.RV = RV
+        assert V is not None, 'ERROR: needs to provide volume information'
+        self.V = V
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
+
+        self.fn_input = fn_input
+        self._fnevals_input = _fnevals_input
 
         self._set_t_0(t_0)
         self._set_t_ex(t_ex)
         self._set_p_0(p_0)
         self._set_p_ex(p_ex)
 
-        self._set_fn(fn)
-        self._set_fnevals(_fnevals)
+        self.verbosity = verbosity
+
+        # self._set_fn(fn)
+        # self._set_fnevals(_fnevals)
+
         # the asserts for omega & tau are performed inside the RT1-class
         # rather than the Volume-class to allow calling Volume-elements without
         # providing omega & tau which is needed to generate linear-combinations
         # of Volume-elements with unambiguous tau- & omega-specifications
 
-        assert self.RV.omega is not None, ('Single scattering albedo ' +
-                                           'needs to be provided')
-        assert self.RV.tau is not None, 'Optical depth needs to be provided'
+        assert self.V.omega is not None, ('Single scattering albedo ' +
+                                          'needs to be provided')
+        assert self.V.tau is not None, 'Optical depth needs to be provided'
 # TODO  fix asserts to allow symbolic parameters
-#        assert np.any(self.RV.omega >= 0.), ('Single scattering albedo ' +
+#        assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
 #                                             'must be greater than 0')
-#        assert np.any(self.RV.omega <= 1.), ('Single scattering albedo ' +
+#        assert np.any(self.V.omega <= 1.), ('Single scattering albedo ' +
 #                                             'must be smaller than 1')
-#        assert np.any(self.RV.tau >= 0.), 'Optical depth must be > 0'
+#        assert np.any(self.V.tau >= 0.), 'Optical depth must be > 0'
 #
 #        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
 #                                                 'be greater than 0')
@@ -159,7 +170,7 @@ class RT1(object):
         refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                             tuple(map(str, self.param_dict.keys()))))
 
-        funcset = self.RV._func.free_symbols | self.SRF._func.free_symbols
+        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
 
         if refset <= funcset:
             errdict = ' in the definition of V and SRF'
@@ -175,35 +186,57 @@ class RT1(object):
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
+    def prv(self, v, msg):
+        if self.verbosity >= v:
+            print(msg)
+
     def _get_fn(self):
-        return self.__fn
+        try:
+            return self.__fn
+        except AttributeError:
+            self._set_fn(self.fn_input)
+            return self.__fn
 
     def _set_fn(self, fn):
         # set the fn-coefficients and generate lambdified versions
         # of the fn-coefficients for evaluation
-        if fn is None and self.int_Q is True:
+        # only evaluate fn-coefficients if _fnevals funcions are not
+        # already available!
+        if fn is None:
+            self.prv(1, 'evaluating fn-coefficients...')
+
             import timeit
             tic = timeit.default_timer()
             # precalculate the expansiion coefficients for the interaction term
             expr_int = self._calc_interaction_expansion()
             toc = timeit.default_timer()
-            print('expansion calculated, it took ' + str(toc-tic) + ' sec')
+            self.prv(2,
+                     'expansion calculated, it took ' + str(toc-tic) + ' sec')
 
             # extract the expansion coefficients
             tic = timeit.default_timer()
             self.__fn = self._extract_coefficients(expr_int)
             toc = timeit.default_timer()
-            print('coefficients extracted, it took ' + str(toc-tic) + ' sec')
+            self.prv(2,
+                     'coefficients extracted, it took ' + str(toc-tic) + ' sec')
         else:
+            self.prv(3, 'using provided fn-coefficients')
             self.__fn = fn
 
     fn = property(_get_fn, _set_fn)
 
     def _get_fnevals(self):
+        try:
+            return self.__fnevals
+        except AttributeError:
+            self._set_fnevals(self._fnevals_input)
+            return self.__fnevals
+
         return self.__fnevals
 
     def _set_fnevals(self, _fnevals):
-        if _fnevals is None and self.int_Q is True:
+        if _fnevals is None:
+            self.prv(1, 'generation of _fnevals functions...')
             import timeit
             tic = timeit.default_timer()
 
@@ -214,7 +247,8 @@ class RT1(object):
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
-                print('symengine -> currently only working with dev-version!!')
+                self.prv(1,
+                    'symengine -> currently only working with dev-version!!')
                 # set lambdify module
                 lambdify = lambdify_seng
 
@@ -222,7 +256,7 @@ class RT1(object):
                                           self.fn, order='F')
 
             elif self.lambda_backend == 'cse':
-                print('cse - sympy')
+                self.prv(1, 'cse - sympy')
 
                 # define a generator function to use deferred vectors for cse
                 def defgen(name='defvec'):
@@ -240,7 +274,7 @@ class RT1(object):
                 # (needed if symengine has been used to expand the products)
                 funs = list(map(sp.sympify, self.fn))
                 toc = timeit.default_timer()
-                print('sympifying took ' + str(toc-tic))
+                self.prv(2, 'sympifying took ' + str(toc-tic))
 
                 # initialize arrasy that store the cse-functions and variables
                 fn_cse_funs = []
@@ -255,7 +289,8 @@ class RT1(object):
                     # evaluate cse functions and variables for the i'th coef.
                     fn_repl, fn_csefun = sp.cse(fncoef, symbols=defvecgen,
                                                 order='none')
-                    print('fn_repl has ' + str(len(fn_repl)) + ' elements')
+                    self.prv(2,
+                             'fn_repl has ' + str(len(fn_repl)) + ' elements')
                     # store for later use
                     fn_cse_funs = fn_cse_funs + [fn_csefun[0]]
 
@@ -272,7 +307,7 @@ class RT1(object):
 
                     fn_cse_repfuncs = fn_cse_repfuncs + [fn_funcs]
                     fn_cse_vars = fn_cse_vars + [cse_variables]
-                    print('cse of coefficient ' + str(nf) + '/' +
+                    self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
                           str(len(funs)) + ' finished')
 
                 ifuncs = []
@@ -303,7 +338,7 @@ class RT1(object):
                 self.__fnevals = fneval
 
             elif self.lambda_backend == 'sympy':
-                print('sympy')
+                self.prv(1, 'sympy')
                 # set lambdify module
                 lambdify = sp.lambdify
 
@@ -335,7 +370,8 @@ class RT1(object):
                 currently available Lambdify function.
                 '''
 
-                print('use symengines cse and sympys lambdify with numpy')
+                self.prv(1,
+                         'use symengines cse and sympys lambdify with numpy')
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                                    tuple(map(str, self.param_dict.keys())))
 
@@ -349,7 +385,8 @@ class RT1(object):
                     # evaluate cse functions and variables for the i'th coef.
                     fn_repl, fn_csefun = cse_seng([fncoef])
 
-                    print('fn_repl has ' + str(len(fn_repl)) + ' elements')
+                    self.prv(2,
+                             'fn_repl has ' + str(len(fn_repl)) + ' elements')
 
                     # generate lambda-functions for replacements
                     fn_rfuncs = {}
@@ -376,7 +413,7 @@ class RT1(object):
                                                 fn_csefun_defvec,
                                                 modules=['numpy'])]
 
-                    print('cse of coefficient ' + str(nf) + '/' +
+                    self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
                           str(len(funs)) + ' finished')
 
                 def fneval(*variables):
@@ -392,13 +429,16 @@ class RT1(object):
                 self.__fnevals = fneval
 
             else:
-                print('lambda_backend "' + self.lambda_backend +
+                self.prv(1, 'lambda_backend "' + self.lambda_backend +
                       '" is not available')
 
             toc = timeit.default_timer()
-            print('lambdification finished, it took ' + str(toc-tic) + ' sec')
+            self.prv(2,
+                     'lambdification finished, it took ' +
+                     str(toc - tic) + ' sec')
 
         else:
+            self.prv(3, 'using provided _fnevals-functions')
             self.__fnevals = _fnevals
 
     _fnevals = property(_get_fnevals, _set_fnevals)
@@ -493,7 +533,7 @@ class RT1(object):
 
         theta_s = sp.Symbol('theta_s')
 
-        N_fn = self.SRF.ncoefs + self.RV.ncoefs - 1
+        N_fn = self.SRF.ncoefs + self.V.ncoefs - 1
 
         fn = []
 
@@ -521,7 +561,7 @@ class RT1(object):
 #        #  in the list of fn-coefficients
 #
 #        fn = [expr_sort.get(sp.cos(theta_s) ** n, 0.)
-#              for n in range(self.SRF.ncoefs + self.RV.ncoefs - 1)]
+#              for n in range(self.SRF.ncoefs + self.V.ncoefs - 1)]
 
         return fn
 
@@ -552,7 +592,7 @@ class RT1(object):
         # preevaluate expansions for volume and surface phase functions
         # this returns symbolic code to be then further used
 
-        volexp = self.RV.legexpansion(self.t_0, self.t_ex,
+        volexp = self.V.legexpansion(self.t_0, self.t_ex,
                                       self.p_0, self.p_ex,
                                       self.geometry).doit()
 
@@ -573,7 +613,7 @@ class RT1(object):
         replacements = [(sp.sin(theta_s) ** i,
                          expand((1. - sp.cos(theta_s) ** 2)
                                 ** sp.Rational(i, 2)))
-                        for i in range(1, self.SRF.ncoefs + self.RV.ncoefs - 1)
+                        for i in range(1, self.SRF.ncoefs + self.V.ncoefs - 1)
                         if i % 2 == 0]
 
         res = expand(expr.xreplace(dict(replacements)))
@@ -583,7 +623,7 @@ class RT1(object):
     def _cosintegral(self, i):
         """
         Analytical solution to the integral of cos(x)**i
-        in the interval 0 ... 2*pi
+        in the inteVal 0 ... 2*pi
 
         Parameters
         ----------
@@ -594,7 +634,7 @@ class RT1(object):
         -------
         - : float
               Numerical value of the integral of cos(x)^i
-              in the interval 0 ... 2*pi
+              in the inteVal 0 ... 2*pi
         """
 
         if i % 2 == 0:
@@ -607,7 +647,7 @@ class RT1(object):
         """
         Perforn symbolic integration of a pre-expanded power-series
         in sin(phi_s) and cos(phi_s) over the variable phi_s
-        in the interval 0 ... 2*pi
+        in the inteVal 0 ... 2*pi
 
         The approach is as follows:
 
@@ -622,13 +662,13 @@ class RT1(object):
         ----------
         expr : sympy expression
                pre-expanded product of the legendre-expansions of
-               RV.legexpansion() and SRF.legexpansion()
+               V.legexpansion() and SRF.legexpansion()
 
         Returns
         -------
         res : sympy expression
               resulting symbolic expression that results from integrating
-              expr over the variable phi_s in the interval 0 ... 2*pi
+              expr over the variable phi_s in the inteVal 0 ... 2*pi
         """
 
         phi_s = sp.Symbol('phi_s')
@@ -637,7 +677,7 @@ class RT1(object):
         # all zero for the integral
         replacements1 = [(sp.sin(phi_s) ** i, 0.)
                          for i in range(1, self.SRF.ncoefs +
-                                        self.RV.ncoefs + 1) if i % 2 == 1]
+                                        self.V.ncoefs + 1) if i % 2 == 1]
 
         # then substitute the sine**2 by 1-cos**2
         replacements1 = (replacements1 +
@@ -645,7 +685,7 @@ class RT1(object):
                            expand((1. -
                                    sp.cos(phi_s) ** 2) ** sp.Rational(i, 2)))
                           for i in range(2, self.SRF.ncoefs +
-                                         self.RV.ncoefs + 1) if i % 2 == 0])
+                                         self.V.ncoefs + 1) if i % 2 == 0])
 
         res = expand(expr.xreplace(dict(replacements1)))
 
@@ -655,7 +695,7 @@ class RT1(object):
         # integrate the cosine terms
         replacements3 = [(sp.cos(phi_s) ** i, self._cosintegral(i))
                          for i in range(1, self.SRF.ncoefs +
-                                        self.RV.ncoefs + 1)]
+                                        self.V.ncoefs + 1)]
 
         res = expand(res.xreplace(dict(replacements3)))
         return res
@@ -731,10 +771,10 @@ class RT1(object):
         # are only calculated if tau > 0.
         # (to avoid nan-values from invalid function-evaluations)
 
-        if self.RV.tau.shape == (1,):
+        if self.V.tau.shape == (1,):
             Isurf = self.surface()
             # differentiation for non-existing canopy, as otherwise NAN values
-            if self.RV.tau > 0.:
+            if self.V.tau > 0.:
                 Ivol = self.volume()
                 if self.int_Q is True:
                     Iint = self.interaction()
@@ -753,8 +793,8 @@ class RT1(object):
             old_t_ex = self.t_ex
             old_p_ex = self.p_ex
 
-            old_tau = self.RV._get_tau()
-            old_omega = self.RV._get_omega()
+            old_tau = self.V._get_tau()
+            old_omega = self.V._get_omega()
             old_NN = self.SRF._get_NormBRDF()
 
             # set mask for tau > 0.
@@ -770,8 +810,8 @@ class RT1(object):
 
             # squeezing the arrays is necessary since the setter-function for
             # tau, omega and NormBRDF automatically adds an axis to the arrays!
-            self.RV.tau = np.squeeze(old_tau[valid_index[0]])
-            self.RV.omega = np.squeeze(old_omega[valid_index[0]])
+            self.V.tau = np.squeeze(old_tau[valid_index[0]])
+            self.V.omega = np.squeeze(old_omega[valid_index[0]])
             self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
 
             # calculate volume and interaction term where tau-values are valid
@@ -789,8 +829,8 @@ class RT1(object):
 
             # squeezing the arrays is necessary since the setter-function for
             # tau, omega and NormBRDF automatically add an axis to the arrays!
-            self.RV.tau = np.squeeze(old_tau)
-            self.RV.omega = np.squeeze(old_omega)
+            self.V.tau = np.squeeze(old_tau)
+            self.V.omega = np.squeeze(old_omega)
             self.SRF.NormBRDF = np.squeeze(old_NN)
 
             # combine calculated volume-contributions for valid tau-values
@@ -822,8 +862,8 @@ class RT1(object):
             given set of parameters
         """
 
-        Isurf = (self.I0 * np.exp(-(self.RV.tau / self._mu_0) -
-                                  (self.RV.tau / self._mu_ex)) * self._mu_0
+        Isurf = (self.I0 * np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex)) * self._mu_0
                  * self.SRF.brdf(self.t_0, self.t_ex,
                                  self.p_0, self.p_ex,
                                  param_dict=self.param_dict))
@@ -841,11 +881,11 @@ class RT1(object):
             Numerical value of the volume-contribution for the
             given set of parameters
         """
-        return ((self.I0 * self.RV.omega *
+        return ((self.I0 * self.V.omega *
                  self._mu_0 / (self._mu_0 + self._mu_ex))
-                * (1. - np.exp(-(self.RV.tau / self._mu_0) -
-                               (self.RV.tau / self._mu_ex)))
-                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                * (1. - np.exp(-(self.V.tau / self._mu_0) -
+                               (self.V.tau / self._mu_ex)))
+                * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             param_dict=self.param_dict))
 
     def interaction(self):
@@ -859,12 +899,13 @@ class RT1(object):
             Numerical value of the interaction-contribution for
             the given set of parameters
         """
+
         Fint1 = self._calc_Fint(self._mu_0, self._mu_ex, self.p_0, self.p_ex)
         Fint2 = self._calc_Fint(self._mu_ex, self._mu_0, self.p_ex, self.p_0)
 
-        Iint = (self.I0 * self._mu_0 * self.RV.omega *
-                (np.exp(-self.RV.tau / self._mu_ex) * Fint1 +
-                 np.exp(-self.RV.tau / self._mu_0) * Fint2))
+        Iint = (self.I0 * self._mu_0 * self.V.omega *
+                (np.exp(-self.V.tau / self._mu_ex) * Fint1 +
+                 np.exp(-self.V.tau / self._mu_0) * Fint2))
 
         return self.SRF.NormBRDF * Iint
 
@@ -907,12 +948,12 @@ class RT1(object):
 
         nmax = len(fn)
 
-        hlp1 = (np.exp(-self.RV.tau / mu1) * np.log(mu1 / (1. - mu1))
-                - expi(-self.RV.tau) + np.exp(-self.RV.tau / mu1)
-                * expi(self.RV.tau / mu1 - self.RV.tau))
+        hlp1 = (np.exp(-self.V.tau / mu1) * np.log(mu1 / (1. - mu1))
+                - expi(-self.V.tau) + np.exp(-self.V.tau / mu1)
+                * expi(self.V.tau / mu1 - self.V.tau))
 
-        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.RV.tau) -
-                                             np.exp(-self.RV.tau / mu1) / k)
+        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.V.tau) -
+                                             np.exp(-self.V.tau / mu1) / k)
                               for k in range(1, (n + 1) + 1))
                        for n in range(nmax)])
 
@@ -936,12 +977,12 @@ class RT1(object):
                Numerical value of dIvol/dtau for the given set of parameters
         """
 
-        dvdt = (self.I0 * self.RV.omega
+        dvdt = (self.I0 * self.V.omega
                 * (self._mu_0 / (self._mu_0 + self._mu_ex))
                 * ((1. / self._mu_0 + 1. / self._mu_ex**(-1))
-                   * np.exp(- self.RV.tau / self._mu_0 -
-                            self.RV.tau / self._mu_ex))
-                * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                   * np.exp(- self.V.tau / self._mu_0 -
+                            self.V.tau / self._mu_ex))
+                * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             self.param_dict))
 
         return dvdt
@@ -958,9 +999,9 @@ class RT1(object):
 
         dvdo = ((self.I0 * self._mu_0 / (self._mu_0 + self._mu_ex)) *
                 (
-                1. - np.exp(-(self.RV.tau / self._mu_0) -
-                            (self.RV.tau / self._mu_ex))
-                ) * self.RV.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                1. - np.exp(-(self.V.tau / self._mu_0) -
+                            (self.V.tau / self._mu_ex))
+                ) * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                               self.param_dict))
 
         return dvdo
@@ -991,8 +1032,8 @@ class RT1(object):
 
         dsdt = (self.I0
                 * (- 1. / self._mu_0 - 1. / self._mu_ex)
-                * np.exp(- self.RV.tau / self._mu_0
-                         - self.RV.tau / self._mu_ex)
+                * np.exp(- self.V.tau / self._mu_0
+                         - self.V.tau / self._mu_ex)
                 * self._mu_0
                 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
                                 self.param_dict))
@@ -1027,8 +1068,8 @@ class RT1(object):
         """
 
         dsdr = (self.I0
-                * np.exp(-(self.RV.tau / self._mu_0)
-                         - (self.RV.tau / self._mu_ex))
+                * np.exp(-(self.V.tau / self._mu_0)
+                         - (self.V.tau / self._mu_ex))
                 * self._mu_0
                 * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
                                 self.param_dict))
@@ -1065,8 +1106,8 @@ class RT1(object):
                              modules=["numpy", "sympy"])
 
         dIsurf = (self.I0 *
-                  np.exp(-(self.RV.tau / self._mu_0) -
-                         (self.RV.tau / self._mu_ex))
+                  np.exp(-(self.V.tau / self._mu_0) -
+                         (self.V.tau / self._mu_ex))
                   * self._mu_0
                   * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
                            **self.param_dict)
@@ -1084,13 +1125,13 @@ class RT1(object):
             self.param_dict.keys())
 
         dummyd = sp.lambdify(args,
-                             sp.diff(self.RV._func, sp.Symbol(key)),
+                             sp.diff(self.V._func, sp.Symbol(key)),
                              modules=["numpy", "sympy"])
 
-        dIvol = (self.I0 * self.RV.omega
+        dIvol = (self.I0 * self.V.omega
                  * self._mu_0 / (self._mu_0 + self._mu_ex)
-                 * (1. - np.exp(-(self.RV.tau / self._mu_0) -
-                                (self.RV.tau / self._mu_ex)))
+                 * (1. - np.exp(-(self.V.tau / self._mu_0) -
+                                (self.V.tau / self._mu_ex)))
                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
                           **self.param_dict))
         return dIvol
