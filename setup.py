@@ -47,7 +47,7 @@ setup(name='rt1',
           # Pick your license as you wish (should match "license" above)
           #~ 'License :: OSI Approved :: MIT License',
 
-          'Programming Language :: Python :: 3.6'
+          'Programming Language :: Python :: 2.7'
       ],
 
       )
