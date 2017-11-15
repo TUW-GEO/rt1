@@ -29,7 +29,11 @@ def setup(app):
     app.add_stylesheet('my_theme.css')
 
 
-MOCK_MODULES = ['numpy', 'scipy', 'scipy.special', 'sympy', 'symengine', 'matplotlib', 'matplotlib.pyplot', 'matplotlib.lines', 'mpl_toolkits', 'mpl_toolkits.mplot3d']
+MOCK_MODULES = [
+'numpy', 'scipy', 'scipy.special', 'scipy.optimize', 'scipy.linalg',
+'sympy', 'symengine', 'matplotlib', 'matplotlib.pyplot',
+'matplotlib.lines', 'mpl_toolkits', 'mpl_toolkits.mplot3d',
+]
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
