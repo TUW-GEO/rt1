@@ -163,36 +163,52 @@ class Volume(Scatter):
 
         # define sympy variables based on chosen geometry
         if geometry == 'mono':
+
+            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
+                'single unique value for monostatic geometry'
+
             theta_0 = sp.Symbol('theta_0')
             theta_ex = theta_0
-            phi_0 = p_0
-            phi_ex = p_0 + sp.pi
+            phi_0 = np.unique(p_0)[0]
+            phi_ex = np.unique(p_0)[0] + sp.pi
         else:
             if geometry[0] == 'v':
                 theta_0 = sp.Symbol('theta_0')
             elif geometry[0] == 'f':
-                theta_0 = t_0
+                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
+                    'single unique value for geometry[0] == f'
+
+                theta_0 = np.unique(t_0)[0]
             else:
                 raise AssertionError('wrong choice of theta_i geometry')
 
             if geometry[1] == 'v':
                 theta_ex = sp.Symbol('theta_ex')
             elif geometry[1] == 'f':
-                theta_ex = t_ex
+                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
+                    ' a single unique value for geometry[1] == f'
+
+                theta_ex = np.unique(t_ex)[0]
             else:
                 raise AssertionError('wrong choice of theta_ex geometry')
 
             if geometry[2] == 'v':
                 phi_0 = sp.Symbol('phi_0')
             elif geometry[2] == 'f':
-                phi_0 = p_0
+                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
+                    ' a single unique value for geometry[2] == f'
+
+                phi_0 = np.unique(p_0)[0]
             else:
                 raise AssertionError('wrong choice of phi_i geometry')
 
             if geometry[3] == 'v':
                 phi_ex = sp.Symbol('phi_ex')
             elif geometry[3] == 'f':
-                phi_ex = p_ex
+                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
+                    ' a single unique value for geometry[3] == f'
+
+                phi_ex = np.unique(p_ex)[0]
             else:
                 raise AssertionError('wrong choice of phi_ex geometry')
 

@@ -99,15 +99,15 @@ class TestRTfits(unittest.TestCase):
         # setup rt1-object
         # (since the fn-coefficients must still be calculated, one must
         #  specify the arrays for the parameters afterwards)
-        R_data = RT1(1., 0., 0., 0., 0., RV=V_data, SRF=SRF_data,
-                     fn=None, geometry='mono', param_dict={'t_data': .5})
+        R_data = RT1(1., 0., 0., 0., 0., V=V_data, SRF=SRF_data,
+                     geometry='mono', param_dict={'t_data': .5})
 
         # specify parameters and incidence-angles
         R_data.t_0 = inc
         R_data.p_0 = np.zeros_like(inc)
 
-        R_data.RV.omega = omegadata
-        R_data.RV.tau = taudata
+        R_data.V.omega = omegadata
+        R_data.V.tau = taudata
         R_data.SRF.NormBRDF = rdata
         R_data.param_dict = {'t_data': tdata[:, np.newaxis]}
 

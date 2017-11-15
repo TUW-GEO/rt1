@@ -45,19 +45,11 @@ class TestExamples(unittest.TestCase):
         # 11 instead of 10 coefficients used to assure 7 digit precision
         SRF = CosineLobe(ncoefs=11, i=5, NormBRDF=np.pi)
 
-        # evaluate _fnevals functions
-        _fnevals = RT1(1., 0, 0, 0, 0, RV=V, SRF=SRF,
-                fn=None, geometry='mono',
-                lambda_backend = 'cse',
-                _fnevals = None)._fnevals
-
         R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
                 np.zeros_like(inc), np.full_like(inc, np.pi),
-                RV=V, SRF=SRF, fn=0, geometry='mono',
-                lambda_backend = 'cse', _fnevals = _fnevals)
+                V=V, SRF=SRF, geometry='mono')
 
         self.assertTrue(np.allclose(self.int_num_1, R.calc()[3]))
-
 
     def test_example_2_int(self):
         print('Testing Example 2 ...')
@@ -68,17 +60,12 @@ class TestExamples(unittest.TestCase):
         V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
         SRF = CosineLobe(ncoefs=10, i=5, NormBRDF=np.pi)
 
-        # evaluate _fnevals functions
-        _fnevals = RT1(1., 0, 0, 0, 0, RV=V, SRF=SRF,
-                fn=None, geometry='mono',
-                lambda_backend = 'sympy', _fnevals = None)._fnevals
-
         R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
                 np.zeros_like(inc), np.full_like(inc, np.pi),
-                RV=V, SRF=SRF, fn=0, geometry='mono',
-                lambda_backend = 'sympy', _fnevals = _fnevals)
+                V=V, SRF=SRF, geometry='mono')
 
-        self.assertTrue(np.allclose(self.int_num_2, R.calc()[3], atol = 1e-6))
+        self.assertTrue(np.allclose(self.int_num_2, R.calc()[3], atol=1e-6))
+
 
 if __name__ == "__main__":
     unittest.main()

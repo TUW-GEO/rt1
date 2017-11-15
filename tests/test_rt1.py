@@ -27,19 +27,19 @@ class TestRT1(unittest.TestCase):
 
     def test_init(self):
         RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex,
-                 RV=self.V, SRF=self.S)
+                 V=self.V, SRF=self.S)
         self.assertTrue(RT.t_0 == self.t_0)
 
     def test_calc(self):
         # just try to get it running simply without further testing
         RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex,
-                 RV=self.V, SRF=self.S)
+                 V=self.V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertTrue(np.allclose(Itot, Isurf + Ivol + Iint))
 
         V = Rayleigh(tau=0., omega=0.)
         RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex,
-                 RV=V, SRF=self.S)
+                 V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
         self.assertEqual(Iint, 0.)  # todo gives nan
@@ -49,7 +49,7 @@ class TestRT1(unittest.TestCase):
     def test_surface(self):
         V = Rayleigh(tau=0., omega=0.)
         t_0 = np.deg2rad(60.)
-        RT = RT1(4., t_0, self.t_ex, self.p_0, self.p_ex, RV=V, SRF=self.S)
+        RT = RT1(4., t_0, self.t_ex, self.p_0, self.p_ex, V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertTrue(np.allclose(Isurf, 2. / np.pi, 15))
 
@@ -57,7 +57,7 @@ class TestRT1(unittest.TestCase):
         t_0 = np.deg2rad(60.)
         t_ex = np.deg2rad(60.)
         V = Rayleigh(tau=0., omega=0.0)
-        RT = RT1(self.I0, t_0, t_ex, self.p_0, self.p_ex, RV=V, SRF=self.S)
+        RT = RT1(self.I0, t_0, t_ex, self.p_0, self.p_ex, V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
 
@@ -71,7 +71,7 @@ class TestRT1(unittest.TestCase):
         t_0 = np.deg2rad(60.)
         t_ex = np.deg2rad(60.)
         p_0 = 0.
-        RT = RT1(self.I0, t_0, t_ex, p_0, self.p_ex, RV=V, SRF=S)
+        RT = RT1(self.I0, t_0, t_ex, p_0, self.p_ex, V=V, SRF=S)
 
         # the reference solutions should be (see rayleighisocoefficients.pdf)
         f0 = 3. / (16. * np.pi) * (3. - np.cos(t_0)**2.)
@@ -101,7 +101,7 @@ class TestRT1(unittest.TestCase):
         p_0 = np.pi / 2.
         p_ex = 0.
 
-        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='vvvv')
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, V=V, SRF=S, geometry='vvvv')
         res = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
         # ncoefs = 1
@@ -123,7 +123,7 @@ class TestRT1(unittest.TestCase):
         # ncoefs = 2
         # first and third coef should be the same as for ncoefs=1
         S = CosineLobe(ncoefs=2, i=5, NormBRDF=np.pi)
-        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff', lambda_backend = 'cse')
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, V=V, SRF=S, geometry='ffff')
         res2 = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
         self.assertTrue(np.allclose([ref0, ref2], [res2[0], res2[2]]))
@@ -141,13 +141,13 @@ class TestRT1(unittest.TestCase):
         p_ex = np.pi
 
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=1)
-        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, RV=V, SRF=S, geometry='ffff')
+        RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, V=V, SRF=S, geometry='ffff')
         r = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
         self.assertTrue(np.allclose(r[0], 1. / (2. * np.pi)))
 
         # V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=2)
-        # RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, RV=V, SRF=S)
+        # RT = RT1(self.I0, mu_0, mu_ex, phi_0, phi_ex, V=V, SRF=S)
         # r = RT._get_fn(0, RT.theta_0, RT.phi_0)
         # self.assertEqual(r,1./(2.*np.pi))
 

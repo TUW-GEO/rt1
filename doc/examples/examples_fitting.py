@@ -112,16 +112,18 @@ SRF_data = HGsurface(ncoefs=15, t=sp.var('t_data'), a=[1., 1., 1.])
 # setup rt1-object
 # (since the fn-coefficients must still be calculated, one must
 #  specify the arrays for the parameters afterwards)
-R_data = RT1(1., 0., 0., 0., 0., RV=V_data, SRF=SRF_data,
-             fn=None, geometry='mono', param_dict={'t_data': .5},
-             lambda_backend='cse_symengine_sympy')
+R_data = RT1(1.,
+             t_0=inc,
+             p_0=np.zeros_like(inc),
+             t_ex=None,
+             p_ex=None,
+             V=V_data, SRF=SRF_data,
+             geometry='mono', param_dict={'t_data': .5},
+             lambda_backend='cse_symengine_sympy',
+             verbosity=0)
 
-# specify parameters and incidence-angles
-R_data.t_0 = inc
-R_data.p_0 = np.zeros_like(inc)
-
-R_data.RV.omega = omegadata
-R_data.RV.tau = taudata
+R_data.V.omega = omegadata
+R_data.V.tau = taudata
 R_data.SRF.NormBRDF = rdata
 R_data.param_dict = {'t_data': tdata[:, np.newaxis]}
 
@@ -180,6 +182,7 @@ param_dict = {'tau': [taustart] * (Nmeasurements - Neq),
               't1': [tstart] * (Nmeasurements)}
 
 
+
 # optionally define fixed parameters
 fixed_dict = {'NormBRDF': rdata}
 
@@ -215,10 +218,11 @@ fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
                       bounds_dict=bounds_dict,
                       fixed_dict=fixed_dict,
                       param_dyn_dict=param_dyn_dict,
-                      verbose=2,
+                      verbose=2,  # verbose level of scipy's least_squares
                       ftol=1.e-8, xtol=1.e-8, gtol=1.e-8,
                       x_scale='jac',
-                      lambda_backend='cse_symengine_sympy'
+                      lambda_backend='cse_symengine_sympy',
+                      verbosity=1  # verbose-level of rt1
                       # loss='cauchy'
                       )
 toc = timeit.default_timer()
