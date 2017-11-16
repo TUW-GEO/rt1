@@ -9,7 +9,7 @@ For COPYING and LICENSE details, please refer to the LICENSE file
 from setuptools import setup
 from setuptools import find_packages
 
-install_requires = ["numpy", "sympy", "symengine"]
+install_requires = ["numpy", "sympy", "symengine", "matplotlib"]
 
 def get_packages():
     find_packages(exclude=['contrib', 'docs', 'tests*']),
@@ -18,7 +18,7 @@ def get_packages():
 
 setup(name='rt1',
 
-      version='0.1.2',
+      version='v0.0.1',
 
       description='rt1 - bistatic single scattering radiative transfer model',
 
