@@ -1,9 +1,9 @@
-include Makefile
-global-include *.md
 global-include LICENSE
-global-include *.rst
-global-include INSTALL*
+global-include NOTICE
+global-include AUTHORS
+global-include COPYRIGHT
 global-include *.py
+global-include *.md
 global-include setup.cfg
-graft doc
-prune _build
+prune doc
+prune tests
