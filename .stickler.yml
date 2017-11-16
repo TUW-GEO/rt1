@@ -1,8 +1,13 @@
 # stickler-ci configuration
 linters:
-    flake8:
-      max-line-length: 255
+#    flake8:
+#       ignore: 'E501'
+#       max-line-length: 255
     pep8:
       ignore: 'E501'
 files:
     ignore: []
+    
+    
+    
+

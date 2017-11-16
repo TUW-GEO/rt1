@@ -2,14 +2,14 @@
 
 """
 This file is part of RT1.
-(c) 2016- Alexander Loew
+(c) 2016- Raphael Quast
 For COPYING and LICENSE details, please refer to the LICENSE file
 """
 
 from setuptools import setup
-from setuptools import find_packages  
+from setuptools import find_packages
 
-install_requires = ["numpy", "sympy"]  
+install_requires = ["numpy", "sympy", "symengine", "matplotlib"]
 
 def get_packages():
     find_packages(exclude=['contrib', 'docs', 'tests*']),
@@ -18,21 +18,21 @@ def get_packages():
 
 setup(name='rt1',
 
-      version='0.1.2',
+      version='v0.0.1',
 
       description='rt1 - bistatic single scattering radiative transfer model',
 
       packages=get_packages(),
       package_dir={'rt1': 'rt1'},
 
-      author="Alexander Loew",
-      author_email='alexander.loew@lmu.de',
-      maintainer='Alexander Loew',
-      maintainer_email='alexander.loew@lmu.de',
+      author="Raphael Quast",
+      author_email='raphael.quast@geo.tuwien.ac.at',
+      maintainer='Raphael Quast',
+      maintainer_email='raphael.quast@geo.tuwien.ac.at',
 
       #~ license='APACHE 2',
 
-      url='https://github.com/pygeo/rt1',
+      url='https://github.com/TUW-GEO/rt1',
 
       long_description='xxxx',
       install_requires=install_requires,
