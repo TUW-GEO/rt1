@@ -776,6 +776,9 @@ class Plots(Scatter):
         sol = []
 
         # ---- evaluation of Integral
+        # adapted from
+        # (http://stackoverflow.com/questions/20668689/integrating-2d-samples-on-a-rectangular-grid-using-scipy)
+
         for theta_0 in np.deg2rad(incnum):
             # define the function that has to be integrated
             # (i.e. Eq.20 in the paper)
