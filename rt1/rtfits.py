@@ -1366,7 +1366,8 @@ class Fits(Scatter):
         return fig, r_value**2
 
     def printsingle(self, fit, measurements=None, datelist=None,
-                    dates=None, hexbinQ=True, hexbinargs={}):
+                    dates=None, hexbinQ=True, hexbinargs={},
+                    convertTodB=False):
         '''
         a function to investigate the quality of the individual fits
 
@@ -1408,6 +1409,8 @@ class Fits(Scatter):
 
         hexbinargs : dict
                      a dict containing arguments to customize the hexbin-plot
+        convertTodB : bool (default=False)
+                      if set to true, the datasets will be converted to dB
         '''
 
         from matplotlib.colors import LinearSegmentedColormap
@@ -1472,7 +1475,12 @@ class Fits(Scatter):
         ax = fig.add_subplot(111)
 
         for m_i, m in enumerate(measurements):
-            y = estimates[m][~mask[m]]
+
+            if convertTodB is True:
+                y = 10.*np.log10(estimates[m][~mask[m]])
+            else:
+                y = estimates[m][~mask[m]]
+
             # plot data
             if datelist is None:
                 label = m + 1
@@ -1488,7 +1496,11 @@ class Fits(Scatter):
                          str(np.concatenate(datelist[1])[m]))
 
             xdata = np.rad2deg(inc[m][~mask[m]])
-            ydata = data[m][~mask[m]]
+
+            if convertTodB is True:
+                ydata = 10.*np.log10(data[m][~mask[m]])
+            else:
+                ydata = data[m][~mask[m]]
 
             # get color that will be applied to the next line drawn
             dummy, = ax.plot(xdata[0], ydata[0], '.', alpha=0.)
@@ -1535,6 +1547,8 @@ class Fits(Scatter):
             # plt.setp(legend.get_title(),fontsize=8) # change fontsize
         else:
             ax.legend(title='# Date')
+
+        return fig
 
     def printseries(self, fit, index=None, legends=True, minmax=None):
         '''
