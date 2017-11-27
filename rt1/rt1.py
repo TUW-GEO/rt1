@@ -7,6 +7,7 @@ References
 Quast & Wagner (2016): doi:10.1364/AO.55.005379
 """
 import numpy as np
+
 from scipy.special import expi
 from scipy.special import expn
 
@@ -415,7 +416,89 @@ class RT1(object):
                                                 modules=['numpy'])]
 
                     self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
-                          str(len(funs)) + ' finished')
+                             str(len(funs)) + ' finished')
+
+                def fneval(*variables):
+                    sol = []
+                    for n, fn_cse_fun in enumerate(fn_cse_funs):
+                        replvec = []
+                        for key in fn_cse_repfuncs[n]:
+                            replvec += [fn_cse_repfuncs[n][key](
+                                replvec, *variables)]
+                        sol += [fn_cse_fun(replvec, *variables)]
+                    return sol
+
+                self.__fnevals = fneval
+
+            elif self.lambda_backend == 'cse_seng_sp_newlambdify':
+                '''
+                sympy's cse functionality is used to avoid sympifying the whole
+                fn-coefficient array.
+
+                a customly defined lambdify-function is used since the
+                functions generated with sympy's lambdify with the option
+                modules = ['numpy'] are not pickleable.
+                (necessary for multiprocessing purposes)
+                '''
+
+                # define a function for lambdification
+                def newlambdify(args, funs):
+                    from sympy.printing.lambdarepr import NumPyPrinter
+                    from sympy.utilities.lambdify import lambdastr
+                    funcstr = lambdastr(args, funs, printer=NumPyPrinter)
+
+                    funcstr = funcstr.replace(
+                            'pi', 'np.pi').replace(
+                            'sin', 'np.sin').replace(
+                            'cos', 'np.cos').replace(
+                            'sqrt', 'np.sqrt')
+
+                    return eval(funcstr)
+
+                self.prv(1,
+                         'use symengines cse and sympys lambdify with ' +
+                         'manually defined lambdify function')
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                                   tuple(map(str, self.param_dict.keys())))
+
+                from symengine import cse as cse_seng
+                funs = self.fn
+
+                # initialize array that store the cse-functions and variables
+                fn_cse_funs = []  # resulting cse-function for each coefficient
+                fn_cse_repfuncs = []  # replacement functions for each coef.
+                for nf, fncoef in enumerate(funs):
+                    # evaluate cse functions and variables for the i'th coef.
+                    fn_repl, fn_csefun = cse_seng([fncoef])
+
+                    self.prv(2,
+                             'fn_repl has ' + str(len(fn_repl)) + ' elements')
+
+                    # generate lambda-functions for replacements
+                    fn_rfuncs = {}
+                    defvec_subs = {}
+                    for i, repl in enumerate(fn_repl):
+                        defvec = sp.DeferredVector('defvec')
+                        defvec_subs[sp.sympify(repl[0])] = defvec[i]
+                        # replace xn's with deferred vector elements
+                        funcreplaced = sp.sympify(
+                                repl[1]).xreplace(defvec_subs)
+                        symbs = [defvec] + list(variables)
+                        fn_rfuncs[defvec[i]] = newlambdify(
+                            symbs,
+                            funcreplaced)
+
+                    fn_cse_repfuncs += [fn_rfuncs]
+
+                    # generate lambda-functions for cse_functions
+                    fn_csefun_defvec = sp.sympify(
+                            fn_csefun[0]).xreplace(defvec_subs)
+                    funargs = [defvec] + list(variables)
+                    fn_cse_funs += [newlambdify(funargs,
+                                                fn_csefun_defvec)]
+
+                    self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
+                             str(len(funs)) + ' finished')
 
                 def fneval(*variables):
                     sol = []
@@ -431,7 +514,7 @@ class RT1(object):
 
             else:
                 self.prv(1, 'lambda_backend "' + self.lambda_backend +
-                      '" is not available')
+                         '" is not available')
 
             toc = timeit.default_timer()
             self.prv(2,
