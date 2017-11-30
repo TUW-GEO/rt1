@@ -8,6 +8,8 @@ import sympy as sp
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+
 from scipy.optimize import least_squares
 
 from scipy.stats import linregress
@@ -1103,7 +1105,7 @@ class Fits(Scatter):
 
         return fig
 
-    def printerr(self, fit, datelist=None, newcalc=False):
+    def printerr(self, fit, datelist=None, newcalc=False, relative=False):
         '''
         a function to quickly print residuals for each measurement
         and for each incidence-angle value
@@ -1133,6 +1135,9 @@ class Fits(Scatter):
                   False:
                       the residuals are taken from the output of
                       res_lsq from the fit-argument
+        relative : bool (default = False)
+                   indicator if relative (True) or absolute (False) residuals
+                   shall be plotted
         '''
 
         (res_lsq, R, data, inc, mask, weights,
@@ -1143,8 +1148,12 @@ class Fits(Scatter):
         if newcalc is False:
             # get residuals from fit into desired shape for plotting
             # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(
-                    np.abs(res_lsq.fun/weights), data.shape), mask)
+            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
+
+            if relative is True:
+                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
+            else:
+                res = np.ma.abs(res)
         else:
             # Alternative way of calculating the residuals
             # (based on R, inc and res_dict)
@@ -1164,17 +1173,26 @@ class Fits(Scatter):
 
             res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
-        # apply mask to data and incidence-angles
-        inc = np.ma.masked_array(inc, mask=mask)
+            if relative is True:
+                res = res / masked_estimates
+
+        # apply mask to data and incidence-angles (and convert to degree)
+        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
         data = np.ma.masked_array(data, mask=mask)
 
         # make new figure
         figres = plt.figure(figsize=(14, 10))
         axres = figres.add_subplot(212)
-        axres.set_title('Mean residual per measurement')
+        if relative is True:
+            axres.set_title('Mean relative residual per measurement')
+        else:
+            axres.set_title('Mean absolute residual per measurement')
 
         axres2 = figres.add_subplot(211)
-        axres2.set_title('Residuals per incidence-angle')
+        if relative is True:
+            axres2.set_title('Relative residuals per incidence-angle')
+        else:
+            axres2.set_title('Residuals per incidence-angle')
 
         # the use of masked arrays might cause python 2 compatibility issues!
         axres.plot(np.arange(len(res)) + 1, res, '.', alpha=0.5)
@@ -1183,9 +1201,9 @@ class Fits(Scatter):
         axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
                    'k', linewidth=3, marker='o', fillstyle='none')
 
-        # plot mean residual
+        # plot total mean of mean residuals per measurement
         axres.plot(np.arange(1, Nmeasurements + 1),
-                   [np.ma.mean(res)] * Nmeasurements, 'k--')
+                   [np.ma.mean(np.ma.mean(res, axis=1))] * Nmeasurements, 'k--')
 
         # add some legends
         res_h = mlines.Line2D(
@@ -1209,7 +1227,24 @@ class Fits(Scatter):
 
         if datelist is None:
             axres.set_xticks(np.arange(1, Nmeasurements + 1))
+            axres.set_xticklabels(np.arange(1, Nmeasurements + 1))
             axres.set_xlabel('# Measurement')
+
+            majortickinterval = np.ceil(Nmeasurements/50)
+            axres.set_xlim(-majortickinterval//2,
+                           Nmeasurements + majortickinterval//2)
+
+            majorLocator = MultipleLocator(majortickinterval)
+            majorFormatter = FormatStrFormatter('%d')
+            minorLocator = MultipleLocator(2)
+
+            axres.xaxis.set_major_locator(majorLocator)
+            axres.xaxis.set_major_formatter(majorFormatter)
+            axres.xaxis.set_minor_locator(minorLocator)
+
+            if majortickinterval > 1:
+                axres.xaxis.set_tick_params(rotation=45)
+
         else:
             axres.set_xticks(np.arange(1, Nmeasurements + 1))
             axres.set_xticklabels(np.concatenate(datelist[1]))
@@ -1264,18 +1299,17 @@ class Fits(Scatter):
         axres2.set_xlabel('$\\theta_0$ [deg]')
         axres2.set_ylabel('Residual')
 
-        # set incidence-angle ticks
-        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
-        if mintic < 0.:
-            mintic = 0.
-        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
-        if maxtic > 360.:
-            maxtic = 360.
+        # find minimum and maximum incidence angle
+        maxinc = np.max(inc)
+        mininc = np.min(inc)
 
-        ticks = np.arange(np.rad2deg(np.min(inc)),
-                          np.rad2deg(np.max(inc)) + 1.,
-                          (maxtic - mintic) / 10.)
-        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
+        axres2.set_xlim(np.floor(mininc) - 1,
+                        np.ceil(maxinc) + 1)
+
+        # set major and minor ticks
+        axres2.xaxis.set_major_locator(MultipleLocator(1))
+        axres2.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+        axres2.xaxis.set_minor_locator(MultipleLocator(.1))
 
         figres.tight_layout()
 
@@ -1646,5 +1680,180 @@ class Fits(Scatter):
 
         if legends is True:
             plt.legend()
+
+        return fig
+
+    def printviolin(self, inputs, param, together=True,
+                    func=np.mean, print_mean=False,
+                    bw_method=None, funcargs={}, **kwargs):
+        '''
+        plot a violin-plot of defined fit-result parameters
+
+        Parameters:
+        ------------
+        inputs : dict
+                 a dictionary containing the plotlabels(keys) and a list of
+                 results of the monofit-function (values) that are intended
+                 to be compared, e.g.:
+                     inputs = {'name1' : [monofit1, monofit2, ...],
+                               'name2' : [monofit3, monofit4, ...]'}
+        param : str
+                the name of the parameter to be plotted (the corresponding key
+                of the results dictionary returned by the monofit function)
+        together : bool
+                   indicator whether or not a combined violin shall be plotted
+        func : function-call signature (default = np.mean)
+               the call-signature of a function that will be applied to the
+               list of fitted-values for the chosen parameter
+        print_mean : bool
+                     indicator whether or not dotted lines for the mean-values
+                     shall be plotted
+        bw_method : str, int or None
+                    selector for the chosen method for estimating the bandwidth
+                    in the generation of the violinplot
+                    (parameter of matplotlib.pyplot.violin)
+        **kwargs : kwargs
+                   keyword-arguments forwraded to matplotlib.pyplot.figure()
+
+        Returns:
+        ---------
+        fig : matplotlib.figure
+        '''
+
+        fig = plt.figure(**kwargs)
+        ax = fig.add_subplot(111)
+        resval = {}
+
+        colors = ['r', 'g', 'b', 'c', 'm', 'y']
+
+        for reskey in inputs:
+            inp = inputs[reskey]
+            # evaluate sortpattern to sort results based on coverage
+            # p, c = sfc.printfracs(inp)
+            # plt.close(p)
+            # sortpa[reskey] = np.argsort(np.sum(c, axis=0))
+
+            val = []
+
+            if param == 'residual':
+                # estimate and print rel. residuals of the test_i measurement
+                rel_residual = []
+                for test_i in np.array(inp):
+                    # get results of i'th measurement of fit-result inp
+                    (res_lsq, _, data, _, mask, weights,
+                     _, _, _) = test_i[0]
+
+                    # get the residuals and apply mask
+                    residuals = np.reshape(res_lsq.fun, data.shape)
+                    residuals = np.ma.masked_array(residuals, mask)
+                    # prepare measurements
+                    measures = np.ma.masked_array(data, mask)
+                    # calculate estimates
+                    estimates = residuals + measures
+                    # calculate relative absolute residuals
+                    rel_residual = np.ma.abs(residuals/estimates)
+                    # calculate mean relative residual over incidence-angles
+                    mean_rel_residual = np.ma.mean(rel_residual, axis=1)
+                    # convert result to ordinary list
+                    mean_rel_residual = list(mean_rel_residual)
+
+                    # apply function
+                    addval = func(mean_rel_residual, **funcargs)
+                    if np.isscalar(addval):
+                        addval = [addval]
+                    else:
+                        addval = list(addval)
+                    val += addval
+            else:
+                # extract res_dict from given result
+                params = [i[6] for i in np.array(inp)[:, 0]]
+
+                for i in params:
+                    addval = func(i[param], **funcargs)
+                    if np.isscalar(addval):
+                        addval = [addval]
+                    else:
+                        addval = list(addval)
+                    val += addval
+
+            resval[reskey] = np.array(val)
+
+        # print each result as an individual violin plot
+        vio_ind = ax.violinplot(resval.values(),
+                                showmeans=True,
+                                showextrema=True,
+                                bw_method=bw_method)
+        # now change colors
+        i = 0
+        for pc in vio_ind['bodies']:
+            pc.set_facecolor(colors[i % len(colors)])
+            pc.set_edgecolor(colors[i % len(colors)])
+            pc.set_alpha(.8)
+            i = i + 1
+
+        for i in ['cmeans', 'cmins', 'cmaxes', 'cbars']:
+            vio_ind[i].set_color('k')
+            vio_ind[i].set_alpha(0.5)
+
+        # set labels
+        labels = [*resval.keys()]
+        nticks = len(vio_ind['bodies']) + 1
+
+        if together is True:
+            # print the violinplots together
+            # (with only the outer line being plotted)
+            i = 0
+            for key in resval:
+                vio = ax.violinplot(resval[key],
+                                    positions=[len(vio_ind['bodies']) + 1],
+                                    showmeans=False,
+                                    showextrema=False,
+                                    bw_method=bw_method)
+                # now change colors
+                for pc in vio['bodies']:
+                    pc.set_facecolor('None')
+                    pc.set_edgecolor(colors[i % len(colors)])
+                    pc.set_alpha(1.)
+                    pc.set_linewidth(1.)
+                i = i + 1
+
+            # print a shading for the violinplots
+            i = 0
+            for key in resval:
+                vio = ax.violinplot(resval[key],
+                                    positions=[len(vio_ind['bodies']) + 1],
+                                    showmeans=False,
+                                    showextrema=False,
+                                    bw_method=bw_method)
+                # now change colors
+                for pc in vio['bodies']:
+                    pc.set_facecolor(colors[i % len(colors)])
+                    pc.set_edgecolor('None')
+                    pc.set_alpha(.2)
+                i = i + 1
+
+            labels += ['all']
+            nticks += 1
+
+        ax.set_xticks(np.arange(1, nticks))
+        ax.set_xticklabels(labels)
+
+        if print_mean is True:
+            i = 0
+            for key in resval:
+                ax.plot([0.5, nticks - 0.5],
+                        [np.mean(resval[key])] * 2,
+                        linestyle='--',
+                        color=colors[i % len(colors)],
+                        alpha=0.5,
+                        linewidth=0.5)
+                i += 1
+
+        if param == 'residual':
+            ax.set_title('Parameter: relative residual')
+            ax.set_ylabel('relative residual')
+        else:
+            ax.set_title('Parameter: ' + str(param))
+            ax.set_ylabel(str(param))
 
         return fig
