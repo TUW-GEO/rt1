@@ -1821,7 +1821,7 @@ class Fits(Scatter):
             vio_ind[i].set_alpha(0.5)
 
         # set labels
-        labels = [*resval.keys()]
+        labels = [i for i in resval.keys()]
         nticks = len(vio_ind['bodies']) + 1
 
         if together is True:
