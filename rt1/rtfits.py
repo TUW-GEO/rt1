@@ -360,20 +360,42 @@ class Fits(Scatter):
         # calculate the jacobian based on neworder
         # (evaluating only "outer" derivatives with respect to omega,
         # tau and NormBRDF)
+
         jac = R.jacobian(sig0=self.sig0, dB=self.dB,
                          param_list=neworder)
 
-        # remove unwanted columns from the jacobian
-        splitjac = np.split(np.concatenate(jac), len(order))
         newjacdict = {}
         for i, key in enumerate(order):
-            newjacdict[key] = np.zeros_like(
-                    splitjac[i][:len(np.unique(param_dyn_dict[key]))])
-            col = 0
-            for n in np.unique(param_dyn_dict[key]):
-                rule = (param_dyn_dict[key] == n)
-                newjacdict[key][col] = np.sum(splitjac[i][rule], axis=0)
-                col = col + 1
+            uniques = np.unique(param_dyn_dict[key])
+
+            if len(uniques) == 1:
+                newjacdict[key] = [np.concatenate(jac[i], axis=0)]
+            else:
+                newjacdict[key] = []
+                for n in uniques:
+                    rule = (param_dyn_dict[key] == n)
+                    jacentry = np.concatenate(
+                        jac[i] * np.array(rule,
+                                          dtype=int)[:, np.newaxis])
+                    newjacdict[key] += [jacentry]
+                newjacdict[key] = np.array(newjacdict[key])
+
+        # ----- this is removed due to memory-overflow issues for large arrays
+        # (it is the method used for the old R.jacobian() function)
+        # jac = R.jacobian(sig0=self.sig0, dB=self.dB,
+        #                  param_list=neworder)
+        #
+        # # remove unwanted columns from the jacobian
+        # newjacdict = {}
+        # for i, key in enumerate(order):
+        #     newjacdict[key] = np.zeros_like(
+        #         jac[i][:len(np.unique(param_dyn_dict[key]))])
+        #
+        #     col = 0
+        #     for n in np.unique(param_dyn_dict[key]):
+        #         rule = (param_dyn_dict[key] == n)
+        #         newjacdict[key][col] = np.sum(jac[i][rule], axis=0)
+        #         col = col + 1
 
         # evaluate jacobians of the functional representations of tau, omega
         # and NormBRDF and add them to newjacdict

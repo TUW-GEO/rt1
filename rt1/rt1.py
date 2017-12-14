@@ -1265,7 +1265,6 @@ class RT1(object):
               The jacobian of the total backscatter with respect to
               omega, tau and NormBRDF
         '''
-        from scipy.linalg import block_diag
 
         jacdict = {}
         if 'omega' in param_list:
@@ -1292,12 +1291,17 @@ class RT1(object):
         else:
             norm = 1.
 
-        jac = []
-        for key in param_list:
-            if len(self.surface().shape) == 1:
-                jac = [jacdict[str(key)] * norm for key in param_list]
-            else:
-                jac = [block_diag(*(jacdict[str(key)] * norm))
-                       for key in param_list]
+        # transform jacobian to the desired shape
+        jac = [jacdict[str(key)] * norm for key in param_list]
 
-        return np.array(jac)
+        # ----- this is removed due to memory-overflow issues for large arrays
+        # (converting them to a block_diag matrix yields too large arrays)
+        # from scipy.linalg import block_diag
+        # transform jacobian to the desired shape
+        # if len(self.surface().shape) == 1:
+        #     jac = [jacdict[str(key)] * norm for key in param_list]
+        # else:
+        #     jac = [block_diag(*(jacdict[str(key)] * norm))
+        #            for key in param_list]
+
+        return jac
