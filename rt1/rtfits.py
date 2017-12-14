@@ -1228,7 +1228,8 @@ class Fits(Scatter):
 
         # plot total mean of mean residuals per measurement
         axres.plot(np.arange(1, Nmeasurements + 1),
-                   [np.ma.mean(np.ma.mean(res, axis=1))] * Nmeasurements, 'k--')
+                   [np.ma.mean(np.ma.mean(res, axis=1))] * Nmeasurements,
+                   'k--')
 
         # add some legends
         res_h = mlines.Line2D(
@@ -1341,7 +1342,7 @@ class Fits(Scatter):
         return figres
 
     def printscatter(self, fit, mima=None, pointsize=0.5,
-                     regression=True, **kwargs):
+                     regression=True, newcalc=False,  **kwargs):
         '''
         geerate a scatterplot to investigate the quality of the fit
 
@@ -1372,18 +1373,27 @@ class Fits(Scatter):
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        mask = mask
+        if newcalc is True:
 
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
+            # for python > 3.4
+            # calc_dict = dict(**res_dict, **fixed_dict)
+            calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                             + list(fixed_dict.items()))
 
-        estimates = self._calc_model(R, calc_dict)
+            estimates = self._calc_model(R, calc_dict)
 
-        # apply mask
-        estimates = estimates[~mask]
-        measures = data[~mask]
+            # apply mask
+            estimates = estimates[~mask]
+            measures = data[~mask]
+
+        else:
+            # get the residuals and apply mask
+            residuals = np.reshape(res_lsq.fun, data.shape)
+            residuals = np.ma.masked_array(residuals, mask)
+            # prepare measurements
+            measures = data[~mask]
+            # calculate estimates
+            estimates = residuals[~mask] + measures
 
         if mima is None:
             mi = np.min((measures, estimates))
@@ -1609,7 +1619,8 @@ class Fits(Scatter):
 
         return fig
 
-    def printseries(self, fit, index=None, legends=True, minmax=None):
+    def printseries(self, fit, index=None, legends=True, minmax=None,
+                    newcalc=False, convertTodB=False):
         '''
         a function to quickly print the fit-results and the gained parameters
 
@@ -1643,12 +1654,22 @@ class Fits(Scatter):
         if minmax is None:
             minmax = [0, len(data)]
 
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
+        if newcalc is True:
 
-        estimates = self._calc_model(R, calc_dict)
+            # for python > 3.4
+            # calc_dict = dict(**res_dict, **fixed_dict)
+            calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                             + list(fixed_dict.items()))
+
+            estimates = self._calc_model(R, calc_dict)
+        else:
+            # get the residuals and apply mask
+            residuals = np.reshape(res_lsq.fun, data.shape)
+            residuals = np.ma.masked_array(residuals, mask)
+            # prepare measurements
+            measures = np.ma.masked_array(data, mask)
+            # calculate estimates
+            estimates = residuals + measures
 
         maskedestimates = np.ma.masked_array(estimates,
                                              mask)[minmax[0]:minmax[1]]
@@ -1662,6 +1683,10 @@ class Fits(Scatter):
         maskedestimates = np.concatenate(maskedestimates)
         maskeddata = np.ma.concatenate(
                 np.ma.masked_array(data, mask)[minmax[0]:minmax[1]])
+
+        if convertTodB is True:
+            maskedestimates = 10.*np.ma.log10(maskedestimates)
+            maskeddata = 10.*np.ma.log10(maskeddata)
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
