@@ -195,15 +195,20 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.V.omega = res_dict['omega']
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
         else:
             R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
         if taufunc is None:
-            R.V.tau = res_dict['tau']
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
         else:
             R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
         if Nfunc is None:
-            R.SRF.NormBRDF = res_dict['NormBRDF']
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
@@ -217,13 +222,21 @@ class Fits(Scatter):
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF"
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
         # and the symbols used to define them must be removed)
+
+        # symbols used to define the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
         param_fn = res_dict.copy()
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
-        for i in toNlist:
+        # vsymb and srfsymb must be subtracted in case the same symbol is used
+        # for omega, tau or NormBRDF definition and in the function definiton
+        for i in set(toNlist - vsymb - srfsymb):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings and not sympy-symbols
@@ -326,11 +339,17 @@ class Fits(Scatter):
         # of the fn-coefficients from res_dict to generate a dict that
         # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF"
         # and the symbols used to define them must be removed)
+
+        # symbols used in the definitions of the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
         param_fn = res_dict.copy()
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
-        for i in toNlist:
+        for i in set(toNlist - vsymb - srfsymb):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings
@@ -670,6 +689,7 @@ class Fits(Scatter):
             str((vsymb | srfsymb) - paramset) +
             ' must be provided in param_dict')
 
+
 # TODO fix asserts
 #        if omega is not None and not np.isscalar(omega):
 #            assert len(omega) == Nmeasurements, ('len. of omega-array must' +
@@ -697,7 +717,6 @@ class Fits(Scatter):
 #                      ' NormBRDF-array provided in the definition of SRF' +
 #                      ' must be equal to the length of the dataset')
 #
-
         # generate a dict containing only the parameters needed to evaluate
         # the fn-coefficients
         # for python > 3.4
@@ -710,7 +729,7 @@ class Fits(Scatter):
         param_R.pop('NormBRDF', None)
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
-        for i in toNlist:
+        for i in set(toNlist - vsymb - srfsymb):
             param_R.pop(i)
 
 #        if fn_input is None:
