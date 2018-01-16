@@ -48,7 +48,7 @@ class RT1(object):
            (if geometry is 'mono', phi_ex is automatically set to p_0 + np.pi)
 
     V : rt1.volume
-         random object from rt1.volume class
+        random object from rt1.volume class
 
     SRF : surface
           random object from rt1.surface class
@@ -96,7 +96,7 @@ class RT1(object):
                      to compile a function for numerical evaluation of the
                      fn-coefficients.
 
-                     possible values are:
+                     TODO(update this) possible values are:
                          - 'sympy' :  sympy.lambdify is used to compile
                            the _fnevals function
                          - 'symengine' : symengine.LambdifyCSE is used to
@@ -119,10 +119,11 @@ class RT1(object):
                  geometry='vvvv', param_dict={},
                  lambda_backend='cse', int_Q=True, verbosity = 1):
 
-        self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
                                            'a 4-character string')
-        assert len(self.geometry) == 4
+        assert len(geometry) == 4, ('ERROR: geometry must be ' +
+                                           'a 4-character string')
+        self.geometry = geometry
 
         self.I0 = I0
         self.param_dict = param_dict
@@ -131,6 +132,7 @@ class RT1(object):
 
         assert V is not None, 'ERROR: needs to provide volume information'
         self.V = V
+        
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
@@ -188,6 +190,14 @@ class RT1(object):
         self.SRF = SRF
 
     def prv(self, v, msg):
+        '''
+        function to set print output based on verbosity level v.
+        possible values for v:
+            - 0 : print nothing
+            - 1 : print some infos during runtime
+            - 2 : print more
+            - >=3 : print all
+        '''
         if self.verbosity >= v:
             print(msg)
 
@@ -203,7 +213,7 @@ class RT1(object):
         # of the fn-coefficients for evaluation
         # only evaluate fn-coefficients if _fnevals funcions are not
         # already available!
-        if fn is None:
+        if fn is None and self.int_Q is True:
             self.prv(1, 'evaluating fn-coefficients...')
 
             import timeit
@@ -237,7 +247,7 @@ class RT1(object):
         return self.__fnevals
 
     def _set_fnevals(self, _fnevals):
-        if _fnevals is None:
+        if _fnevals is None and self.int_Q is True:
             self.prv(1, 'generation of _fnevals functions...')
             import timeit
             tic = timeit.default_timer()
@@ -784,49 +794,6 @@ class RT1(object):
         res = expand(res.xreplace(dict(replacements3)))
         return res
 
-#    def _eval_fn(self, n, t_0, p_0, t_ex, p_ex):
-#        """
-#        Function to numerically evaluate the fn-coefficients as
-#        function of incident geometry.
-#
-#        Parameters
-#        ----------
-#        n : scalar(int)
-#            Number of fn-coefficient to be evaluated (starting with 0)
-#
-#        t_0 : array_like(float)
-#              array of incident zenith-angles in radians
-#
-#        p_0 : array_like(float)
-#              array of incident azimuth-angles in radians
-#
-#        t_ex : array_like(float)
-#               array of exit zenith-angles in radians
-#
-#        p_ex : array_like(float)
-#               array of exit azimuth-angles in radians
-#
-#        Returns
-#        -------
-#        array_like(float)
-#              Numerical value of the n^th fn-coefficient evaluated
-#              at the given angles.
-#        """
-#
-#        # the destinction between zero and nonzero fn-coefficients is
-#        # necessary because sympy treats symbols multiplied by 0 as 0, which
-#        # results in a function that returns 0 instead of an array of zeroes!
-#        # -> see  https://github.com/sympy/sympy/issues/3935
-#
-#        if n > len(self.fn):
-#            return np.zeros_like(t_0)
-#        else:
-#            new_fn = self._fnfuncs[n](t_0, p_0, t_ex, p_ex,
-#                                      *self.param_dict.values())
-#            if np.isscalar(new_fn):
-#                new_fn = np.full_like(t_0, new_fn)
-#            return new_fn
-
     def calc(self):
         """
         Perform actual calculation of bistatic scattering at top of the
@@ -849,7 +816,6 @@ class RT1(object):
         Iint : array_like(float)
                Interaction contribution
         """
-        # (16)
 
         # the following if query ensures that volume- and interaction-terms
         # are only calculated if tau > 0.
@@ -1040,10 +1006,6 @@ class RT1(object):
                                              np.exp(-self.V.tau / mu1) / k)
                               for k in range(1, (n + 1) + 1))
                        for n in range(nmax)])
-
-#        fn = (np.array([self._eval_fn(n, np.arccos(mu1),
-#                                      phi1, np.arccos(mu2), phi2)
-#                        for n in range(nmax)]))
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
 
