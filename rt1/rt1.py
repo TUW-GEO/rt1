@@ -164,13 +164,13 @@ class RT1(object):
         # to distinguish if the input was given as a sympy equation. For
         # details see: http://docs.sympy.org/latest/guide.html#basics
         if not isinstance(self.V.omega[0], sp.Basic):
-            assert np.any(self.V.omega > 0.), ('Single scattering albedo ' +
+            assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
                                                  'must be greater than 0')
         if not isinstance(self.V.tau[0], sp.Basic):
-            assert np.any(self.V.tau > 0.), ('Optical depth ' +
+            assert np.any(self.V.tau >= 0.), ('Optical depth ' +
                                                  'must be greater than 0')
         if not isinstance(self.SRF.NormBRDF[0], sp.Basic):
-            assert np.any(self.SRF.NormBRDF > 0.), ('NormBRDF ' +
+            assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
                                                  'must be greater than 0')
 
 # TODO  fix asserts to allow symbolic parameters
