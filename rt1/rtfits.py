@@ -323,17 +323,24 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.V.omega = res_dict['omega']
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
         else:
             R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
         if taufunc is None:
-            R.V.tau = res_dict['tau']
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
         else:
             R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
         if Nfunc is None:
-            R.SRF.NormBRDF = res_dict['NormBRDF']
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+
+
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -839,7 +846,7 @@ class Fits(Scatter):
                 inverse = inverse + count
                 # select the fitted values for the corresponding parameter
                 newdict[key] = np.array(params)[inverse]
-                # increase counter
+                # increase counter by number of unique parameters of key
                 count = count + len(np.unique(param_dyn_dict[key]))
 
             # incorporate values provided in fixed_dict
