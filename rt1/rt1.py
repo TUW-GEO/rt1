@@ -132,7 +132,7 @@ class RT1(object):
 
         assert V is not None, 'ERROR: needs to provide volume information'
         self.V = V
-        
+
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
@@ -157,37 +157,41 @@ class RT1(object):
         assert self.V.omega is not None, ('Single scattering albedo ' +
                                           'needs to be provided')
         assert self.V.tau is not None, 'Optical depth needs to be provided'
-# TODO  fix asserts to allow symbolic parameters
-#        assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
-#                                             'must be greater than 0')
-#        assert np.any(self.V.omega <= 1.), ('Single scattering albedo ' +
-#                                             'must be smaller than 1')
-#        assert np.any(self.V.tau >= 0.), 'Optical depth must be > 0'
-#
-#        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
-#                                                 'be greater than 0')
 
+        # self.V.omega[0] must be used instead of self.V.omega since the
+        # setter functions for omega, tau and NormBRDF add an additional
+        # axis to the given input. Checking for sp.Basic is sufficient
+        # to distinguish if the input was given as a sympy equation. For
+        # details see: http://docs.sympy.org/latest/guide.html#basics
+        if not isinstance(self.V.omega[0], sp.Basic):
+            assert np.any(self.V.omega > 0.), ('Single scattering albedo ' +
+                                                 'must be greater than 0')
+        if not isinstance(self.V.tau[0], sp.Basic):
+            assert np.any(self.V.tau > 0.), ('Optical depth ' +
+                                                 'must be greater than 0')
+        if not isinstance(self.SRF.NormBRDF[0], sp.Basic):
+            assert np.any(self.SRF.NormBRDF > 0.), ('NormBRDF ' +
+                                                 'must be greater than 0')
+
+# TODO  fix asserts to allow symbolic parameters
         # check if all parameters have been provided (and also if no
         # unused parameter has been specified)
 
-        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
-                            tuple(map(str, self.param_dict.keys()))))
-
-        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
-
-        if refset <= funcset:
-            errdict = ' in the definition of V and SRF'
-        elif refset >= funcset:
-            errdict = ' in the definition of param_dict'
-        else:
-            errdict = ' in the definition of V, SRF and param_dict'
-
-        assert (funcset == refset), ('false parameter-specification, please ' +
-                                     'check assignment of the parameters '
-                                     + str(refset ^ funcset) + errdict)
-
-        assert SRF is not None, 'ERROR: needs to provide surface information'
-        self.SRF = SRF
+#        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+#                            tuple(map(str, self.param_dict.keys()))))
+#
+#        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
+#
+#        if refset <= funcset:
+#            errdict = ' in the definition of V and SRF'
+#        elif refset >= funcset:
+#            errdict = ' in the definition of param_dict'
+#        else:
+#            errdict = ' in the definition of V, SRF and param_dict'
+#
+#        assert (funcset == refset), ('false parameter-specification, please ' +
+#                                     'check assignment of the parameters '
+#                                     + str(refset ^ funcset) + errdict)
 
     def prv(self, v, msg):
         '''
@@ -861,8 +865,10 @@ class RT1(object):
             # squeezing the arrays is necessary since the setter-function for
             # tau, omega and NormBRDF automatically adds an axis to the arrays!
             self.V.tau = np.squeeze(old_tau[valid_index[0]])
-            self.V.omega = np.squeeze(old_omega[valid_index[0]])
-            self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
+            if np.array(self.V.omega).size != 1:
+                self.V.omega = np.squeeze(old_omega[valid_index[0]])
+            if np.array(self.SRF.NormBRDF).size != 1:
+                self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
 
             # calculate volume and interaction term where tau-values are valid
             _Ivol = self.volume()
