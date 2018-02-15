@@ -12,6 +12,8 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 from scipy.optimize import least_squares
 from scipy.stats import linregress
+from scipy.sparse import vstack
+from scipy.sparse import csc_matrix
 
 from .scatter import Scatter
 from .rt1 import RT1
@@ -389,38 +391,36 @@ class Fits(Scatter):
         jac = R.jacobian(sig0=self.sig0, dB=self.dB,
                          param_list=neworder)
 
+        # generate a scipy.sparse matrix that represents the jacobian for all
+        # the individual parameters according to jac_dyn_dict
+        # (this is needed to avoid memory overflows for very large jacobians)
         newjacdict = {}
         for i, key in enumerate(order):
             uniques = np.unique(param_dyn_dict[key])
 
             if len(uniques) == 1:
-                newjacdict[key] = [np.concatenate(jac[i], axis=0)]
+                newjacdict[key] = csc_matrix([np.concatenate(jac[i], axis=0)])
             else:
-                newjacdict[key] = []
-                for n in uniques:
-                    rule = (param_dyn_dict[key] == n)
-                    jacentry = np.concatenate(
-                        jac[i] * np.array(rule,
-                                          dtype=int)[:, np.newaxis])
-                    newjacdict[key] += [jacentry]
-                newjacdict[key] = np.array(newjacdict[key])
+                data = np.concatenate(jac[i])
 
-        # ----- this is removed due to memory-overflow issues for large arrays
-        # (it is the method used for the old R.jacobian() function)
-        # jac = R.jacobian(sig0=self.sig0, dB=self.dB,
-        #                  param_list=neworder)
-        #
-        # # remove unwanted columns from the jacobian
-        # newjacdict = {}
-        # for i, key in enumerate(order):
-        #     newjacdict[key] = np.zeros_like(
-        #         jac[i][:len(np.unique(param_dyn_dict[key]))])
-        #
-        #     col = 0
-        #     for n in np.unique(param_dyn_dict[key]):
-        #         rule = (param_dyn_dict[key] == n)
-        #         newjacdict[key][col] = np.sum(jac[i][rule], axis=0)
-        #         col = col + 1
+                row_ind = []  # row-indices where jac is nonzero
+                col_ind = []  # col-indices where jac is nonzero
+                for n_uni, uni in enumerate(uniques):
+                    rule = (param_dyn_dict[key] == uni)
+                    where_n = np.where(
+                            np.concatenate(
+                                    np.broadcast_arrays(
+                                            rule[:,np.newaxis], jac[0])[0]))[0]
+
+                    col_ind += list(where_n)
+                    row_ind += list(np.full_like(where_n, n_uni))
+
+                    # generate a sparse matrix
+                m = csc_matrix((data, (row_ind, col_ind)),
+                               shape=(max(row_ind) + 1,
+                                      max(col_ind) + 1))
+                newjacdict[key] = m
+
 
         # evaluate jacobians of the functional representations of tau, omega
         # and NormBRDF and add them to newjacdict
@@ -433,13 +433,17 @@ class Fits(Scatter):
             # evaluate the inner derivative
             dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
             # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
+            # In case the parameter is varying temporally, it must be
+            # multiplied by the number of incidence-angles in order
+            # to have correct array-processing (it is assumed that no parameter
+            # is incidence-angle dependent itself)
             if not np.isscalar(dtau_dx):
-                dtau_dx = np.concatenate(
-                    [dtau_dx] * len(np.atleast_2d(R.t_0)[0]))
+                dtau_dx = np.concatenate(np.vstack(
+                                [dtau_dx]*len(np.atleast_2d(R.t_0)[0])
+                                ))
 
             # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
+            newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
 
         for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
@@ -450,13 +454,17 @@ class Fits(Scatter):
             # evaluate the inner derivative
             domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
             # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
+            # In case the parameter is varying temporally, it must be
+            # multiplied by the number of incidence-angles in order
+            # to have correct array-processing (it is assumed that no parameter
+            # is incidence-angle dependent itself)
             if not np.isscalar(domega_dx):
-                domega_dx = np.concatenate(
-                        [domega_dx]*len(np.atleast_2d(R.t_0)[0]))
+                domega_dx = np.concatenate(np.vstack(
+                                [domega_dx]*len(np.atleast_2d(R.t_0)[0])
+                                ))
 
             # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
+            newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
 
         for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
@@ -466,17 +474,20 @@ class Fits(Scatter):
                                   modules=['numpy'])
             # evaluate the inner derivative
             dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
-            # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
+            # calculate the derivative with respect to the parameters.
+            # In case the parameter is varying temporally, it must be
+            # multiplied by the number of incidence-angles in order
+            # to have correct array-processing (it is assumed that no parameter
+            # is incidence-angle dependent itself)
             if not np.isscalar(dN_dx):
-                dN_dx = np.concatenate(
-                        [dN_dx]*len(np.atleast_2d(R.t_0)[0]))
-
+                dN_dx = np.concatenate(np.vstack(
+                                [dN_dx]*len(np.atleast_2d(R.t_0)[0])
+                                ))
             # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+            newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
 
         # return the transposed jacobian as needed by scipy's least_squares
-        jac_lsq = np.concatenate([newjacdict[key] for key in order]).T
+        jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
 
         # restore V and SRF to original values
         R.V = orig_V
