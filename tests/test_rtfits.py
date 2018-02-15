@@ -247,12 +247,12 @@ class TestRTfits(unittest.TestCase):
 
         # set mean-error values for the derived parameters
         if sig0 is True and dB is False:
-            errdict = {'tau': 0.02,
+            errdict = {'tau': 0.03,
                        'omega': 0.008,
                        't1': 0.05}
 
         if sig0 is False and dB is False:
-            errdict = {'tau': 0.02,
+            errdict = {'tau': 0.03,
                        'omega': 0.01,
                        't1': 0.08}
 
@@ -267,10 +267,10 @@ class TestRTfits(unittest.TestCase):
                        't1': 0.09}
 
         for key in truevals:
+            err = abs(fit[6][key] - truevals[key]).mean()
             self.assertTrue(
-                abs(fit[6][key] - truevals[key]).mean()
-                < errdict[key],
-                msg='derived parameter error too high for ' + str(key))
+                err < errdict[key],
+                msg='derived error' + str(err) + 'too high for ' + str(key))
 
         return truevals, fit, r2
 
@@ -349,7 +349,6 @@ class TestRTfits(unittest.TestCase):
             tmin=0.0001,
             tmax=0.5,
         )
-
 
 if __name__ == "__main__":
     unittest.main()
