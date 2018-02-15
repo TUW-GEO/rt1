@@ -11,7 +11,6 @@ import matplotlib.lines as mlines
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 from scipy.optimize import least_squares
-
 from scipy.stats import linregress
 
 from .scatter import Scatter
@@ -142,7 +141,7 @@ class Fits(Scatter):
 
         return inc, data, weights, N, mask
 
-    def _calc_model(self, R, res_dict):
+    def _calc_model(self, R, res_dict, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -154,6 +153,10 @@ class Fits(Scatter):
         res_dict : dict
                    a dictionary containing all parameter-values that should
                    be updated before calling R.calc()
+        return_components : bool (default=False)
+                            indicator if the individual components or only
+                            the total backscattered radiation are returned
+                            (useful for quick evaluation of a model)
         Returns:
         ----------
         model_calc : the output of R.calc() (as intensity or sigma_0)
@@ -212,13 +215,6 @@ class Fits(Scatter):
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
-#        # set omega, tau and NormBRDF-values to input
-#        if 'omega' in res_dict:
-#            R.V.omega = res_dict['omega']
-#        if 'tau' in res_dict:
-#            R.V.tau = res_dict['tau']
-#        if 'NormBRDF' in res_dict:
-#            R.SRF.NormBRDF = res_dict['NormBRDF']
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -247,7 +243,10 @@ class Fits(Scatter):
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
         # calculate total backscatter-values
-        model_calc = R.calc()[0]
+        if return_components is True:
+            model_calc = R.calc()
+        else:
+            model_calc = R.calc()[0]
 
         if self.sig0 is True:
             # convert the calculated results to sigma_0
