@@ -433,18 +433,17 @@ class Fits(Scatter):
                     rule = (param_dyn_dict[key] == uni)
                     where_n = np.where(
                             np.concatenate(
-                                    np.broadcast_arrays(
-                                            rule[:,np.newaxis], jac[0])[0]))[0]
+                                    np.broadcast_to(
+                                            rule[:,np.newaxis], jac[i].shape)))[0]
 
                     col_ind += list(where_n)
                     row_ind += list(np.full_like(where_n, n_uni))
 
-                    # generate a sparse matrix
-                m = csc_matrix((data, (row_ind, col_ind)),
+                # generate a sparse matrix
+                m = csr_matrix((data, (row_ind, col_ind)),
                                shape=(max(row_ind) + 1,
                                       max(col_ind) + 1))
                 newjacdict[key] = m
-
 
         # evaluate jacobians of the functional representations of tau
         # and add them to newjacdict
