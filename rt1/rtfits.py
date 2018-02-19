@@ -13,7 +13,7 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from scipy.optimize import least_squares
 from scipy.stats import linregress
 from scipy.sparse import vstack
-from scipy.sparse import csc_matrix
+from scipy.sparse import csr_matrix, isspmatrix
 
 from .scatter import Scatter
 from .rt1 import RT1
@@ -399,8 +399,32 @@ class Fits(Scatter):
             uniques = np.unique(param_dyn_dict[key])
 
             if len(uniques) == 1:
-                newjacdict[key] = csc_matrix([np.concatenate(jac[i], axis=0)])
+                newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
+# TODO is it faster to use numpy directly for small arrays ?
+#            elif len(uniques) < 50:
+#                data = np.concatenate(jac[i])
+#                row_ind = []  # row-indices where jac is nonzero
+#                col_ind = []  # col-indices where jac is nonzero
+#                for n_uni, uni in enumerate(uniques):
+#                    rule = (param_dyn_dict[key] == uni)
+#                    where_n = np.where(
+#                            np.concatenate(
+#                                    np.broadcast_arrays(
+#                                            rule[:,np.newaxis], jac[0])[0]))[0]
+#
+#                    col_ind += list(where_n)
+#                    row_ind += list(np.full_like(where_n, n_uni))
+#                # generate a sparse matrix
+#                m = np.full((max(row_ind) + 1,
+#                                      max(col_ind) + 1), 0.)
+#                # fill matrix with values
+#                m[row_ind, col_ind] = data
+#                newjacdict[key] = m
             else:
+                # if too many unique values occur, use scipy sparse matrix
+                # to avoid memory-overflow due to the large number of zeroes...
+                # (this will reduce speed since scipy.sparse does not fully
+                # supprot BLAS and so no proper parallelization is performed)
                 data = np.concatenate(jac[i])
 
                 row_ind = []  # row-indices where jac is nonzero
@@ -422,8 +446,8 @@ class Fits(Scatter):
                 newjacdict[key] = m
 
 
-        # evaluate jacobians of the functional representations of tau, omega
-        # and NormBRDF and add them to newjacdict
+        # evaluate jacobians of the functional representations of tau
+        # and add them to newjacdict
         for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
@@ -433,61 +457,57 @@ class Fits(Scatter):
             # evaluate the inner derivative
             dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
             # calculate the derivative with respect to the parameters
-            # In case the parameter is varying temporally, it must be
-            # multiplied by the number of incidence-angles in order
-            # to have correct array-processing (it is assumed that no parameter
-            # is incidence-angle dependent itself)
-            if not np.isscalar(dtau_dx):
-                dtau_dx = np.concatenate(np.vstack(
-                                [dtau_dx]*len(np.atleast_2d(R.t_0)[0])
-                                ))
+            if np.isscalar(dtau_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                # In case the parameter is varying temporally, it must be
+                # repeated by the number of incidence-angles in order
+                # to have correct array-processing (it is assumed that no parameter
+                # is incidence-angle dependent itself)
+                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
+                # calculate "outer" * "inner" derivative for sparse matrices
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
+            else:
+                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
+                # calculate "outer" * "inner" derivative for numpy arrays
+                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
-
+        # same for omega
         for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
-            # generate a function that evaluates the 'inner' derivative, i.e.:
-            # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega[0],
                                                      sp.Symbol(i)),
                                   modules=['numpy'])
-            # evaluate the inner derivative
             domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
-            # calculate the derivative with respect to the parameters
-            # In case the parameter is varying temporally, it must be
-            # multiplied by the number of incidence-angles in order
-            # to have correct array-processing (it is assumed that no parameter
-            # is incidence-angle dependent itself)
-            if not np.isscalar(domega_dx):
-                domega_dx = np.concatenate(np.vstack(
-                                [domega_dx]*len(np.atleast_2d(R.t_0)[0])
-                                ))
+            if np.isscalar(domega_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
+            else:
+                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
-
+        # same for NormBRDF
         for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
-            # generate a function that evaluates the 'inner' derivative, i.e.:
-            # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF[0],
                                                  sp.Symbol(i)),
                                   modules=['numpy'])
-            # evaluate the inner derivative
             dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
-            # calculate the derivative with respect to the parameters.
-            # In case the parameter is varying temporally, it must be
-            # multiplied by the number of incidence-angles in order
-            # to have correct array-processing (it is assumed that no parameter
-            # is incidence-angle dependent itself)
-            if not np.isscalar(dN_dx):
-                dN_dx = np.concatenate(np.vstack(
-                                [dN_dx]*len(np.atleast_2d(R.t_0)[0])
-                                ))
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
+            if np.isscalar(dN_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
+            else:
+                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
 
         # return the transposed jacobian as needed by scipy's least_squares
-        jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
+        if np.any([isspmatrix(newjacdict[key]) for key in order]):
+            # in case sparse matrices have been used, use scipy to vstack them
+            jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
+        else:
+            jac_lsq = np.vstack([newjacdict[key] for key in order]).transpose()
 
         # restore V and SRF to original values
         R.V = orig_V
