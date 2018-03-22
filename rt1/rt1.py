@@ -1253,7 +1253,7 @@ class RT1(object):
 
         if sig0 is True and dB is False:
             norm = 4. * np.pi * np.cos(self.t_0)
-        if dB is True:
+        elif dB is True:
             norm = 10. / (np.log(10.) * (self.surface()
                                          + self.volume()))
         else:
