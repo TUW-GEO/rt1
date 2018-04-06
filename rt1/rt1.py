@@ -53,13 +53,13 @@ class RT1(object):
     SRF : surface
           random object from rt1.surface class
 
-    fn : array_like(sympy expression), optional (default = None)
+    fn_input : array_like(sympy expression), optional (default = None)
          optional input of pre-calculated array of sympy-expressions
          to speedup calculations where the same fn-coefficients can be used.
          if None, the coefficients will be calculated automatically at the
          initialization of the RT1-object
 
-    _fnevals : callable, optional (default = None)
+    _fnevals_input : callable, optional (default = None)
                optional input of pre-compiled function to numerically evaluate
                the fn_coefficients. if None, the function will be compiled
                using the fn-coefficients provided.
