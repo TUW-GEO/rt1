@@ -217,6 +217,8 @@ class Fits(Scatter):
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -232,6 +234,7 @@ class Fits(Scatter):
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
+        param_fn.pop('bsf', None)
         # vsymb and srfsymb must be subtracted in case the same symbol is used
         # for omega, tau or NormBRDF definition and in the function definiton
         for i in set(toNlist - vsymb - srfsymb):
@@ -341,7 +344,8 @@ class Fits(Scatter):
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
-
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -357,6 +361,8 @@ class Fits(Scatter):
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
+        param_fn.pop('bsf', None)
+
         for i in set(toNlist - vsymb - srfsymb):
             param_fn.pop(str(i), None)
 
@@ -514,7 +520,12 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    def monofit(self, V, SRF, dataset, param_dict,
+
+
+
+
+
+    def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend='cse', verbosity=0, **kwargs):
@@ -763,6 +774,8 @@ class Fits(Scatter):
         param_R.pop('omega', None)
         param_R.pop('tau', None)
         param_R.pop('NormBRDF', None)
+        param_R.pop('bsf', None)
+
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
         for i in set(toNlist - vsymb - srfsymb):
@@ -800,10 +813,9 @@ class Fits(Scatter):
 #                        param_dict=param_R, int_Q=int_Q,
 #                        lambda_backend=lambda_backend)
         # define rt1-object
-        R = RT1(1., inc, inc, np.zeros_like(inc),
-                np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn_input,
-                _fnevals_input=_fnevals_input, geometry='mono',
-                param_dict=param_R, int_Q=int_Q,
+        R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
+                V=V, SRF=SRF, fn_input=fn_input, _fnevals_input=_fnevals_input,
+                geometry='mono', bsf = bsf, param_dict=param_R, int_Q=int_Q,
                 lambda_backend=lambda_backend, verbosity=verbosity)
         # store _fnevals functions in case they have not been provided
         # as input-arguments explicitly to avoid recalculation for each step
@@ -948,8 +960,8 @@ class Fits(Scatter):
                     startvals = startvals + list(param_dict[key])
 
         # perform actual fitting
-        res_lsq = least_squares(fun, startvals, bounds=bounds, jac=dfun,
-                                **kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
         count = 0

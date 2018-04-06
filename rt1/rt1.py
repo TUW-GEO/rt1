@@ -88,6 +88,10 @@ class RT1(object):
         geometry-parameter, please have a look at the "Evaluation Geometries"
         section of the documentation:
         (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
+    bsf : float (default = 0.)
+          fraction of bare-soil contribution (no attenuation due to vegetation)
+
     param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
@@ -114,9 +118,9 @@ class RT1(object):
                 - >=3 : print all
     """
 
-    def __init__(self, I0, t_0, t_ex, p_0, p_ex,
-                 V=None, SRF=None, fn_input=None, _fnevals_input=None,
-                 geometry='vvvv', param_dict={},
+    def __init__(self, I0, t_0, t_ex, p_0, p_ex, V=None, SRF=None,
+                 fn_input=None, _fnevals_input=None, geometry='vvvv',
+                 bsf=0., param_dict={},
                  lambda_backend='cse', int_Q=True, verbosity = 1):
 
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
@@ -145,6 +149,7 @@ class RT1(object):
         self._set_p_ex(p_ex)
 
         self.verbosity = verbosity
+        self.bsf = bsf
 
         # self._set_fn(fn)
         # self._set_fnevals(_fnevals)
@@ -606,6 +611,18 @@ class RT1(object):
         return np.cos(self.t_ex)
     _mu_ex = property(_get_mu_ex)
 
+    def _get_bsf(self):
+        return self.__bsf
+
+    def _set_bsf(self, bsf):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        bsf = np.array(bsf)
+        bsf.shape = bsf.shape + (1,)
+        self.__bsf = bsf
+    bsf = property(_get_bsf, _set_bsf)
+
+
     def _extract_coefficients(self, expr):
         """
         extract Fn coefficients from given forumula.
@@ -917,14 +934,17 @@ class RT1(object):
             Numerical value of the surface-contribution for the
             given set of parameters
         """
-
-        Isurf = (self.I0 * np.exp(-(self.V.tau / self._mu_0) -
-                                  (self.V.tau / self._mu_ex)) * self._mu_0
+        # bare soil contribution
+        I_bs = (self.I0 * self._mu_0
                  * self.SRF.brdf(self.t_0, self.t_ex,
                                  self.p_0, self.p_ex,
                                  param_dict=self.param_dict))
 
-        return self.SRF.NormBRDF * Isurf
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                        (self.V.tau / self._mu_ex))) * I_bs
+
+        return self.SRF.NormBRDF * ((1. - self.bsf) * Isurf + self.bsf * I_bs)
 
     def volume(self):
         """
@@ -937,12 +957,14 @@ class RT1(object):
             Numerical value of the volume-contribution for the
             given set of parameters
         """
-        return ((self.I0 * self.V.omega *
+        vol = ((self.I0 * self.V.omega *
                  self._mu_0 / (self._mu_0 + self._mu_ex))
                 * (1. - np.exp(-(self.V.tau / self._mu_0) -
                                (self.V.tau / self._mu_ex)))
                 * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             param_dict=self.param_dict))
+
+        return (1. - self.bsf) * vol
 
     def interaction(self):
         """
@@ -963,7 +985,7 @@ class RT1(object):
                 (np.exp(-self.V.tau / self._mu_ex) * Fint1 +
                  np.exp(-self.V.tau / self._mu_0) * Fint2))
 
-        return self.SRF.NormBRDF * Iint
+        return self.SRF.NormBRDF * (1. - self.bsf) * Iint
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
@@ -1037,7 +1059,7 @@ class RT1(object):
                 * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             self.param_dict))
 
-        return dvdt
+        return (1. - self.bsf) * dvdt
 
     def _dvolume_domega(self):
         """
@@ -1056,7 +1078,27 @@ class RT1(object):
                 ) * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                               self.param_dict))
 
-        return dvdo
+        return (1. - self.bsf) * dvdo
+
+    def _dvolume_dbsf(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to omega
+        Returns
+        --------
+        dvdo : array_like(float)
+               Numerical value of dIvol/domega for the given set of parameters
+        """
+
+        vol = ((self.I0 * self.V.omega *
+                 self._mu_0 / (self._mu_0 + self._mu_ex))
+                * (1. - np.exp(-(self.V.tau / self._mu_0) -
+                               (self.V.tau / self._mu_ex)))
+                * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                            param_dict=self.param_dict))
+
+        return  - vol
+
 
     def _dvolume_dR(self):
         """
@@ -1091,7 +1133,7 @@ class RT1(object):
                                 self.param_dict))
 
         # Incorporate BRDF-normalization factor
-        dsdt = self.SRF.NormBRDF * dsdt
+        dsdt = self.SRF.NormBRDF * (1. - self.bsf) * dsdt
 
         return dsdt
 
@@ -1119,14 +1161,42 @@ class RT1(object):
                Numerical value of dIsurf/dR for the given set of parameters
         """
 
-        dsdr = (self.I0
-                * np.exp(-(self.V.tau / self._mu_0)
-                         - (self.V.tau / self._mu_ex))
-                * self._mu_0
-                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
-                                self.param_dict))
+        I_bs = (self.I0 * self._mu_0
+                 * self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict))
 
-        return dsdr
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))
+                 ) * I_bs
+
+        return ((1. - self.bsf) * Isurf + self.bsf * I_bs)
+
+    def _dsurface_dbsf(self):
+        """
+        Numerical evaluation of the surface-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#surface_contribution)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the surface-contribution for the
+            given set of parameters
+        """
+        # bare soil contribution
+        I_bs = (self.I0 * self._mu_0
+                 * self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict))
+
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))
+                 ) * I_bs * np.ones_like(self.t_0)
+
+        return self.SRF.NormBRDF * (I_bs - Isurf)
+
 
     # define functions that evaluate the derivatives with
     # respect to the defined parameters
@@ -1157,15 +1227,16 @@ class RT1(object):
                              sp.diff(self.SRF._func, sp.Symbol(key)),
                              modules=["numpy", "sympy"])
 
-        dIsurf = (self.I0 *
-                  np.exp(-(self.V.tau / self._mu_0) -
-                         (self.V.tau / self._mu_ex))
-                  * self._mu_0
-                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
-                           **self.param_dict)
-                  )
+        dI_bs = (self.I0 * self._mu_0
+                 * dummyd(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 **self.param_dict))
 
-        return self.SRF.NormBRDF * dIsurf
+
+        dI_s = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))) * dI_bs
+
+        return self.SRF.NormBRDF * ((1. - self.bsf) * dI_s + self.bsf * dI_bs)
 
     def _d_volume_ddummy(self, key):
         theta_0 = sp.Symbol('theta_0')
@@ -1186,7 +1257,7 @@ class RT1(object):
                                 (self.V.tau / self._mu_ex)))
                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
                           **self.param_dict))
-        return dIvol
+        return (1. - self.bsf) * dIvol
 
     def jacobian(self, dB=False, sig0=False,
                  param_list=['omega', 'tau', 'NormBRDF']):
@@ -1234,22 +1305,6 @@ class RT1(object):
               omega, tau and NormBRDF
         '''
 
-        jacdict = {}
-        if 'omega' in param_list:
-            jacdict['omega'] = (self._dsurface_domega() +
-                                self._dvolume_domega())
-        if 'tau' in param_list:
-            jacdict['tau'] = (self._dsurface_dtau() +
-                              self._dvolume_dtau())
-
-        if 'NormBRDF' in param_list:
-            jacdict['NormBRDF'] = (self._dsurface_dR() +
-                                   self._dvolume_dR())
-
-        for key in self.param_dict:
-            if key in param_list:
-                jacdict[key] = (self._d_surface_ddummy(key) +
-                                self._d_volume_ddummy(key))
 
         if sig0 is True and dB is False:
             norm = 4. * np.pi * np.cos(self.t_0)
@@ -1259,17 +1314,28 @@ class RT1(object):
         else:
             norm = 1.
 
-        # transform jacobian to the desired shape
-        jac = [jacdict[str(key)] * norm for key in param_list]
+        jac = []
+        for key in param_list:
 
-        # ----- this is removed due to memory-overflow issues for large arrays
-        # (converting them to a block_diag matrix yields too large arrays)
-        # from scipy.linalg import block_diag
-        # transform jacobian to the desired shape
-        # if len(self.surface().shape) == 1:
-        #     jac = [jacdict[str(key)] * norm for key in param_list]
-        # else:
-        #     jac = [block_diag(*(jacdict[str(key)] * norm))
-        #            for key in param_list]
+            if key == 'omega':
+                jac += [(self._dsurface_domega() +
+                                    self._dvolume_domega()) * norm]
+
+            if key == 'tau':
+                jac += [(self._dsurface_dtau() +
+                                  self._dvolume_dtau()) * norm]
+
+            if key == 'NormBRDF':
+                jac += [(self._dsurface_dR() +
+                                       self._dvolume_dR()) * norm]
+
+            if key == 'bsf':
+                jac += [(self._dsurface_dbsf() +
+                             self._dvolume_dbsf()) * norm]
+
+            for key_x in self.param_dict:
+                if key == key_x:
+                    jac += [(self._d_surface_ddummy(key) +
+                                    self._d_volume_ddummy(key) * norm)]
 
         return jac
