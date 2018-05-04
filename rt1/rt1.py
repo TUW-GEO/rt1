@@ -1336,6 +1336,6 @@ class RT1(object):
             for key_x in self.param_dict:
                 if key == key_x:
                     jac += [(self._d_surface_ddummy(key) +
-                                    self._d_volume_ddummy(key) * norm)]
+                                    self._d_volume_ddummy(key)) * norm]
 
         return jac
