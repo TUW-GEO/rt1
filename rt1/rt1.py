@@ -1305,7 +1305,6 @@ class RT1(object):
               omega, tau and NormBRDF
         '''
 
-
         if sig0 is True and dB is False:
             norm = 4. * np.pi * np.cos(self.t_0)
         elif dB is True:
@@ -1320,22 +1319,20 @@ class RT1(object):
             if key == 'omega':
                 jac += [(self._dsurface_domega() +
                                     self._dvolume_domega()) * norm]
-
-            if key == 'tau':
+            elif key == 'tau':
                 jac += [(self._dsurface_dtau() +
                                   self._dvolume_dtau()) * norm]
-
-            if key == 'NormBRDF':
+            elif key == 'NormBRDF':
                 jac += [(self._dsurface_dR() +
                                        self._dvolume_dR()) * norm]
-
-            if key == 'bsf':
+            elif key == 'bsf':
                 jac += [(self._dsurface_dbsf() +
                              self._dvolume_dbsf()) * norm]
-
-            for key_x in self.param_dict:
-                if key == key_x:
-                    jac += [(self._d_surface_ddummy(key) +
-                                    self._d_volume_ddummy(key)) * norm]
+            elif key in self.param_dict:
+                jac += [(self._d_surface_ddummy(key) +
+                             self._d_volume_ddummy(key)) * norm]
+            else:
+                assert False, 'error in jacobian calculation... ' + str(key) \
+                              + ' is not in param_dict'
 
         return jac
