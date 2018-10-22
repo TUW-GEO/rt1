@@ -349,8 +349,8 @@ class Fits(Scatter):
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF"
-        # and the symbols used to define them must be removed)
+        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF",
+        # "bsf" and the symbols used to define them must be removed)
 
         # symbols used in the definitions of the functions
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
@@ -402,7 +402,11 @@ class Fits(Scatter):
         # (this is needed to avoid memory overflows for very large jacobians)
         newjacdict = {}
         for i, key in enumerate(order):
-            uniques = np.unique(param_dyn_dict[key])
+            uniques, inds = np.unique(param_dyn_dict[key],
+                                      return_index = True)
+            # provide unique values based on original occurence
+            # (np.unique sorts the result!!)
+            uniques = uniques[np.argsort(inds)]
 
             if len(uniques) == 1:
                 newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
@@ -522,7 +526,134 @@ class Fits(Scatter):
 
 
 
+    def _calc_slope_curv(self, R, res_dict, return_components=False):
+        '''
+        function to calculate the monostatic slope and curvature
+        of the model
 
+        Parameters:
+        ------------
+        R : RT1-object
+            the rt1-object for which the results shall be calculated
+        res_dict : dict
+                   a dictionary containing all parameter-values that should
+                   be updated before calling R.calc()
+        return_components : bool (default=False)
+                            indicator if the individual components or only
+                            the total backscattered radiation are returned
+                            (useful for quick evaluation of a model)
+        Returns:
+        ----------
+        model_calc : the output of R.calc() (as intensity or sigma_0)
+                     in linear-units or dB corresponding to the specifications
+                     defined in the rtfits-class.
+        '''
+
+        # store original V and SRF
+        orig_V = copy.deepcopy(R.V)
+        orig_SRF = copy.deepcopy(R.SRF)
+
+        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
+        # and generate a function to evaluate the symbolic representation
+        try:
+            tausymb = R.V.tau[0].free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau[0],
+                                  modules=['numpy'])
+        except Exception:
+            tausymb = set()
+            taufunc = None
+        try:
+            omegasymb = R.V.omega[0].free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
+                                    modules=['numpy'])
+        except Exception:
+            omegasymb = set()
+            omegafunc = None
+        try:
+            Nsymb = R.SRF.NormBRDF[0].free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+                                modules=['numpy'])
+        except Exception:
+            Nsymb = set()
+            Nfunc = None
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
+
+        # update the numeric representations of omega, tau and NormBRDF
+        # based on the values for the used symbols provided in res_dict
+        if omegafunc is None:
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
+        else:
+            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
+        if taufunc is None:
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
+        else:
+            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
+        if Nfunc is None:
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
+        else:
+            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
+
+        # remove all unwanted symbols that are NOT needed for evaluation
+        # of the fn-coefficients from res_dict to generate a dict that
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
+        # and the symbols used to define them must be removed)
+
+        # symbols used to define the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
+        param_fn = res_dict.copy()
+        param_fn.pop('omega', None)
+        param_fn.pop('tau', None)
+        param_fn.pop('NormBRDF', None)
+        param_fn.pop('bsf', None)
+        # vsymb and srfsymb must be subtracted in case the same symbol is used
+        # for omega, tau or NormBRDF definition and in the function definiton
+        for i in set(toNlist - vsymb - srfsymb):
+            param_fn.pop(str(i), None)
+
+        # ensure that the keys of the dict are strings and not sympy-symbols
+        strparam_fn = dict([[str(key),
+                             np.expand_dims(param_fn[key], 1)]
+                            for i, key in enumerate(param_fn.keys())])
+
+        # set the param-dict to the newly generated dict
+        R.param_dict = strparam_fn
+
+        # calculate slope-values
+        if return_components is True:
+            model_slope = [R.tot_slope(sig0=self.sig0, dB=self.dB),
+                          R.surface_slope(sig0=self.sig0, dB=self.dB),
+                          R.volume_slope(sig0=self.sig0, dB=self.dB)]
+        else:
+            model_slope = R.tot_slope(sig0=self.sig0, dB=self.dB)
+
+        # calculate curvature-values
+        if return_components is True:
+            model_curv = [R.tot_curv(sig0=self.sig0, dB=self.dB),
+                          R.surface_curv(sig0=self.sig0, dB=self.dB),
+                          R.volume_curv(sig0=self.sig0, dB=self.dB)]
+        else:
+            model_curv = R.tot_curv(sig0=self.sig0, dB=self.dB)
+
+
+        # restore V and SRF to original values
+        R.V = orig_V
+        R.SRF = orig_SRF
+
+        return {'slope' : model_slope,
+                'curv' : model_curv}
 
 
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,

@@ -946,6 +946,143 @@ class RT1(object):
 
         return self.SRF.NormBRDF * ((1. - self.bsf) * Isurf + self.bsf * I_bs)
 
+
+    def surface_slope(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the slope (dI_s/dt_0) of the
+        (!monostatic!) surface-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            surface-contribution
+            """
+        # evaluate the slope of the used brdf
+        brdf_slope = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=1)
+        # evaluate the used brdf
+        brdf_val = self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        # vegetated soil contribution
+        I_vegs_slope = (self.I0
+                        * np.exp(-(2*self.V.tau / self._mu_0))
+                        * (self._mu_0 * brdf_slope
+                           - (2 * self.V.tau / self._mu_0 + 1)
+                           * np.sin(self.t_0) * brdf_val))
+
+        # bare soil contribution
+        I_bs_slope = self.I0 * (self._mu_0 * brdf_slope
+                                - np.sin(self.t_0) * brdf_val)
+
+        I_slope = self.SRF.NormBRDF * (
+                (1. - self.bsf) * I_vegs_slope
+                + self.bsf *  I_bs_slope)
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = self.surface()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def surface_curv(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the curvature (d^2I_s/dt_0^2)
+        of the (!monostatic!) surface-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            surface-contribution
+        """
+
+        # evaluate the slope of the used brdf
+        brdf_curv = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=2)
+        # evaluate the slope of the used brdf
+        brdf_slope = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=1)
+        # evaluate the used brdf
+        brdf_val = self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        # vegetated soil contribution
+        I_vegs_curv = (self.I0
+                       * np.exp(-(2. * self.V.tau / self._mu_0)) * (
+                self._mu_0 * brdf_curv -
+                2. * np.sin(self.t_0) * brdf_slope * (
+                        2. * self.V.tau / self._mu_0 + 1.)
+                + (4. * self.V.tau**2 / self._mu_0**3
+                   * np.sin(self.t_0)**2
+                   - 2. * self.V.tau - self._mu_0) * brdf_val ))
+
+        # bare soil contribution
+        I_bs_curv = self.I0 * ( self._mu_0 * brdf_curv
+                                - 2. * np.sin(self.t_0) * brdf_slope
+                                - self._mu_0 * brdf_val )
+
+        I_curv = self.SRF.NormBRDF * (
+                (1. - self.bsf) * I_vegs_curv
+                + self.bsf *  I_bs_curv)
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = self.surface_slope(dB=False, sig0=False)
+            I_val = self.surface()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
+
     def volume(self):
         """
         Numerical evaluation of the volume-contribution
@@ -965,6 +1102,231 @@ class RT1(object):
                             param_dict=self.param_dict))
 
         return (1. - self.bsf) * vol
+
+    def volume_slope(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the slope (dI_v/dt_0) of the
+        (!monostatic!) volume-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            volume-contribution
+        """
+
+        # evaluate the slope of the used phase-function
+        p_slope = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                 p_0=self.p_0, p_ex=self.p_ex,
+                                 geometry = 'mono',
+                                 param_dict=self.param_dict,
+                                 return_symbolic=False,
+                                 n=1)
+
+        # evaluate the used phase function
+        p_val = self.V.p(self.t_0, self.t_ex,
+                         self.p_0, self.p_ex,
+                         param_dict=self.param_dict)
+
+        # volume contribution
+        I_slope = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+                (np.exp(-(2 * self.V.tau / self._mu_0)) * 2 *
+                 self.V.tau * np.sin(self.t_0) / self._mu_0**2
+                 ) * p_val
+                 + (1. - np.exp(-(2*self.V.tau / self._mu_0))
+                 ) * p_slope )
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = self.volume()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def volume_curv(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the curvature (d^2I_s/dt_0^2)
+        of the (!monostatic!) volume-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            volume-contribution        """
+        # evaluate the slope of the used brdf
+        p_curv = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                     p_0=self.p_0, p_ex=self.p_ex,
+                                     geometry = 'mono',
+                                     param_dict=self.param_dict,
+                                     return_symbolic=False,
+                                     n=2)
+        # evaluate the slope of the used brdf
+        p_slope = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                      p_0=self.p_0, p_ex=self.p_ex,
+                                      geometry = 'mono',
+                                      param_dict=self.param_dict,
+                                      return_symbolic=False,
+                                      n=1)
+        # evaluate the used brdf
+        p_val = self.V.p(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+                np.exp(-(2 * self.V.tau / self._mu_0)) * (
+                        2 * self.V.tau / self._mu_0**3) * (
+                                np.sin(self.t_0)**2 + 1.
+                                - 2. * self.V.tau / self._mu_0
+                                * np.sin(self.t_0)**2) * p_val
+                        + (np.exp(-(2 * self.V.tau / self._mu_0)) *
+                           4. * self.V.tau / self._mu_0**2
+                           * np.sin(self.t_0)) * p_slope
+                        + (1 -
+                           np.exp(-(2 * self.V.tau / self._mu_0))
+                           ) * p_curv )
+
+
+
+#
+#        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+#                np.exp(-(2 * self.V.tau / self._mu_0)) * (
+#                        4. * self.V.tau * np.sin(self.t_0) / self._mu_0**2 * p_slope
+#                        +
+#                        (1. + 2. * np.sin(self.t_0)**2 / self._mu_0**2
+#                         - 2. * self.V.tau * np.sin(self.t_0)**2 / self._mu_0**3) *
+#                         2. * self.V.tau / self._mu_0 * p_val
+#                        )
+#                + (1. - np.exp(-(2 * self.V.tau / self._mu_0))) * p_curv
+#                )
+
+
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = self.volume_slope(dB=False, sig0=False)
+            I_val = self.volume()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
+
+    def tot_slope(self, sig0=False, dB=False):
+        '''
+        numerical value of the (!monostatic!) slope of total
+        contribution (surface + volume)
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            total-contribution
+        '''
+
+        I_slope = (self.volume_slope(dB=False, sig0=False) +
+                   self.surface_slope(dB=False, sig0=False))
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = (self.volume() + self.surface())
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def tot_curv(self, sig0=False, dB=False):
+        '''
+        numerical value of the (!monostatic!) curvature of
+        total contribution (surface + volume)
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            total-contribution
+        '''
+
+        I_curv = (self.volume_curv(dB=False, sig0=False) +
+                  self.surface_curv(dB=False, sig0=False))
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = (self.volume_slope(dB=False, sig0=False) +
+                       self.surface_slope(dB=False, sig0=False))
+            I_val = (self.volume() + self.surface())
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
+
 
     def interaction(self):
         """
