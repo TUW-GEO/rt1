@@ -94,6 +94,150 @@ class Volume(Scatter):
 
         return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
 
+    def p_theta_diff(self, t_0, t_ex, p_0, p_ex, geometry,
+                param_dict={}, return_symbolic=False, n=1):
+        """
+        Calculation of the derivative of p with respect to
+        the scattering-angles t_ex
+
+        Parameters
+        ----------
+        t_0 : array_like(float)
+              array of incident zenith-angles in radians
+
+        p_0 : array_like(float)
+              array of incident azimuth-angles in radians
+
+        t_ex : array_like(float)
+               array of exit zenith-angles in radians
+
+        p_ex : array_like(float)
+               array of exit azimuth-angles in radians
+
+        geometry : str
+            4 character string specifying which components of the angles should
+            be fixed or variable. This is done to significantly speed up the
+            evaluation-process of the fn-coefficient generation
+
+            The 4 characters represent in order the properties of:
+            t_0, t_ex, p_0, p_ex
+
+            - 'f' indicates that the angle is treated 'fixed'
+              (i.e. as a numerical constant)
+            - 'v' indicates that the angle is treated 'variable'
+              (i.e. as a sympy-variable)
+            - Passing  geometry = 'mono'  indicates a monstatic geometry
+              (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
+              If monostatic geometry is used, the input-values of t_ex and p_ex
+              have no effect on the calculations!
+
+            For detailed information on the specification of the
+            geometry-parameter, please have a look at the
+            "Evaluation Geometries" section of the documentation
+            (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
+        return_symbolic : bool (default = False)
+                          indicator if symbolic result
+                          should be returned
+        n : int (default = 1)
+            order of derivatives (d^n / d_theta^n)
+
+        Returns
+        --------
+        sympy - expression
+            The derivative of the BRDF with espect to the excident angle
+            t_ex for the chosen geometry
+
+        """
+
+        # define sympy variables based on chosen geometry
+        if geometry == 'mono':
+            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
+                'single unique value for monostatic geometry'
+
+            theta_0 = sp.Symbol('theta_0')
+            theta_ex = theta_0
+            phi_0 = np.unique(p_0)[0]
+            phi_ex = np.unique(p_0)[0] + sp.pi
+
+            t_ex = t_0
+            p_ex = p_0 + np.pi
+        else:
+            if geometry[0] == 'v':
+                theta_0 = sp.Symbol('theta_0')
+            elif geometry[0] == 'f':
+                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
+                    'single unique value for geometry[0] == f'
+
+                theta_0 = np.unique(t_0)[0]
+            else:
+                raise AssertionError('wrong choice of theta_0 geometry')
+
+            if geometry[1] == 'v':
+                theta_ex = sp.Symbol('theta_ex')
+            elif geometry[1] == 'f':
+                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
+                    ' a single unique value for geometry[1] == f'
+
+                theta_ex = np.unique(t_ex)[0]
+            else:
+                raise AssertionError('wrong choice of theta_ex geometry')
+
+            if geometry[2] == 'v':
+                phi_0 = sp.Symbol('phi_0')
+            elif geometry[2] == 'f':
+                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
+                    ' a single unique value for geometry[2] == f'
+
+                phi_0 = np.unique(p_0)[0]
+            else:
+                raise AssertionError('wrong choice of phi_0 geometry')
+
+            if geometry[3] == 'v':
+                phi_ex = sp.Symbol('phi_ex')
+            elif geometry[3] == 'f':
+                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
+                    ' a single unique value for geometry[3] == f'
+
+                phi_ex = np.unique(p_ex)[0]
+            else:
+                raise AssertionError('wrong choice of phi_ex geometry')
+
+        if geometry[1] == 'f':
+            dfunc_dtheta_0 = 0.
+        else:
+            func = self._func.xreplace({sp.Symbol('theta_0') : theta_0,
+                                        sp.Symbol('theta_ex') : theta_ex,
+                                        sp.Symbol('phi_0') : phi_0,
+                                        sp.Symbol('phi_ex') : phi_ex,})
+
+            dfunc_dtheta_0 = sp.diff(func, theta_ex, n)
+
+        if return_symbolic is True:
+            return dfunc_dtheta_0
+        else:
+            args = (sp.Symbol('theta_0'),
+                    sp.Symbol('theta_ex'),
+                    sp.Symbol('phi_0'),
+                    sp.Symbol('phi_ex')) + tuple(param_dict.keys())
+
+
+            pfunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
+
+            # in case _func is a constant, lambdify will produce a function with
+            # scalar output which is not suitable for further processing
+            # (this happens e.g. for the Isotropic brdf).
+            # The following query is implemented to ensure correct array-output:
+            # TODO this is not a proper test !
+            if not isinstance(pfunc(np.array([.1, .2, .3]),
+                                       .1, .1, .1,
+                                       *[.345 for i in param_dict.values()]),
+                              np.ndarray):
+                pfunc = np.vectorize(pfunc)
+
+            return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+
+
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         assert self.ncoefs > 0
         """

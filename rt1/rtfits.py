@@ -8,9 +8,12 @@ import sympy as sp
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from scipy.optimize import least_squares
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
+from scipy.optimize import least_squares
 from scipy.stats import linregress
+from scipy.sparse import vstack
+from scipy.sparse import csr_matrix, isspmatrix
 
 from .scatter import Scatter
 from .rt1 import RT1
@@ -37,6 +40,67 @@ class Fits(Scatter):
     def __init__(self, sig0=False, dB=False, **kwargs):
         self.sig0 = sig0
         self.dB = dB
+
+
+
+    def generate_dyn_dict(self, param_keys, datetime_index,
+                          freq=None, freqkeys=[],
+                          ):
+        '''
+        Generate a dictionary to assign the temporal dynamics of the variables.
+        Any key in 'param_keys' that is not assigned in freqkeys will be
+        treated as a constant.
+
+        Parameter:
+        -------------
+        param_keys : an iterable of keys corresponding to the names
+                     of the parameters that are intended to be fitted
+        datetime_index : datetime-indexe list of the measurements
+        freq : list
+               a list of frequencies used for assigning the temporal
+               variability of the parameters ('D', 'M', '5D', etc.)
+        freqkeys : list
+               a list of parameter-names that will be assigned to the freq-list
+               (freqkeys = [['daily_p1', 'daily_p2'], ['monthly_p1']]
+                freq = ['D', 'M'])
+
+        Returns:
+        ---------
+        param_dyn_dict : dict
+                         a dictionary that can be used to assign the temporal
+                         dynamics to the parameters in the monofit function
+        '''
+
+        # TODO import pandas on top
+        # (currently it is only used inside this function so no 'real'
+        # dependency on pandas exists and an import in here seems meaningful...
+        import pandas as pd
+
+        param_dyn_dict = {}
+
+        # initialize all parameters as scalar parameters
+        for key in param_keys:
+            param_dyn_dict[key] = np.ones(len(datetime_index))
+
+        # TODO works only for unambiguous datetime-indexes !!!
+        # (repeated indexes will be grouped together)
+        if freq is not None:
+            for i, f in enumerate(freq):
+                for key in freqkeys[i]:
+                    df = pd.DataFrame(np.arange(1,
+                                                len(datetime_index) + 1),
+                                                index=datetime_index)
+                    dyn_list = []
+                    for k, arr in enumerate(df.resample(f).apply(len).values):
+                        dyn_list += list(np.full_like(range(arr[0]), k + 1))
+
+                    param_dyn_dict[key] = dyn_list
+
+        return param_dyn_dict
+
+
+
+
 
     def _preparedata(self, dataset):
         '''
@@ -140,7 +204,7 @@ class Fits(Scatter):
 
         return inc, data, weights, N, mask
 
-    def _calc_model(self, R, res_dict):
+    def _calc_model(self, R, res_dict, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -152,6 +216,10 @@ class Fits(Scatter):
         res_dict : dict
                    a dictionary containing all parameter-values that should
                    be updated before calling R.calc()
+        return_components : bool (default=False)
+                            indicator if the individual components or only
+                            the total backscattered radiation are returned
+                            (useful for quick evaluation of a model)
         Returns:
         ----------
         model_calc : the output of R.calc() (as intensity or sigma_0)
@@ -193,35 +261,44 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.V.omega = res_dict['omega']
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
         else:
             R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
         if taufunc is None:
-            R.V.tau = res_dict['tau']
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
         else:
             R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
         if Nfunc is None:
-            R.SRF.NormBRDF = res_dict['NormBRDF']
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
-#        # set omega, tau and NormBRDF-values to input
-#        if 'omega' in res_dict:
-#            R.V.omega = res_dict['omega']
-#        if 'tau' in res_dict:
-#            R.V.tau = res_dict['tau']
-#        if 'NormBRDF' in res_dict:
-#            R.SRF.NormBRDF = res_dict['NormBRDF']
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF"
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
         # and the symbols used to define them must be removed)
+
+        # symbols used to define the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
         param_fn = res_dict.copy()
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
-        for i in toNlist:
+        param_fn.pop('bsf', None)
+        # vsymb and srfsymb must be subtracted in case the same symbol is used
+        # for omega, tau or NormBRDF definition and in the function definiton
+        for i in set(toNlist - vsymb - srfsymb):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings and not sympy-symbols
@@ -232,7 +309,10 @@ class Fits(Scatter):
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
         # calculate total backscatter-values
-        model_calc = R.calc()[0]
+        if return_components is True:
+            model_calc = R.calc()
+        else:
+            model_calc = R.calc()[0]
 
         if self.sig0 is True:
             # convert the calculated results to sigma_0
@@ -268,6 +348,7 @@ class Fits(Scatter):
               the jacobian corresponding to the fit-parameters in the
               shape applicable to scipy's least_squres-function
         '''
+
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
@@ -308,27 +389,43 @@ class Fits(Scatter):
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
         if omegafunc is None:
-            R.V.omega = res_dict['omega']
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
         else:
             R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
         if taufunc is None:
-            R.V.tau = res_dict['tau']
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
         else:
             R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
         if Nfunc is None:
-            R.SRF.NormBRDF = res_dict['NormBRDF']
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
             R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
 
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
+
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF"
-        # and the symbols used to define them must be removed)
+        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF",
+        # "bsf" and the symbols used to define them must be removed)
+
+        # symbols used in the definitions of the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
         param_fn = res_dict.copy()
         param_fn.pop('omega', None)
         param_fn.pop('tau', None)
         param_fn.pop('NormBRDF', None)
-        for i in toNlist:
+        param_fn.pop('bsf', None)
+
+        for i in set(toNlist - vsymb - srfsymb):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings
@@ -358,73 +455,130 @@ class Fits(Scatter):
         # calculate the jacobian based on neworder
         # (evaluating only "outer" derivatives with respect to omega,
         # tau and NormBRDF)
+
         jac = R.jacobian(sig0=self.sig0, dB=self.dB,
                          param_list=neworder)
 
-        # remove unwanted columns from the jacobian
-        splitjac = np.split(np.concatenate(jac), len(order))
+        # generate a scipy.sparse matrix that represents the jacobian for all
+        # the individual parameters according to jac_dyn_dict
+        # (this is needed to avoid memory overflows for very large jacobians)
         newjacdict = {}
         for i, key in enumerate(order):
-            newjacdict[key] = np.zeros_like(
-                    splitjac[i][:len(np.unique(param_dyn_dict[key]))])
-            col = 0
-            for n in np.unique(param_dyn_dict[key]):
-                rule = (param_dyn_dict[key] == n)
-                newjacdict[key][col] = np.sum(splitjac[i][rule], axis=0)
-                col = col + 1
+            uniques, inds = np.unique(param_dyn_dict[key],
+                                      return_index = True)
+            # provide unique values based on original occurence
+            # (np.unique sorts the result!!)
+            uniques = uniques[np.argsort(inds)]
 
-        # evaluate jacobians of the functional representations of tau, omega
-        # and NormBRDF and add them to newjacdict
+            if len(uniques) == 1:
+                newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
+# TODO is it faster to use numpy directly for small arrays ?
+#            elif len(uniques) < 50:
+#                data = np.concatenate(jac[i])
+#                row_ind = []  # row-indices where jac is nonzero
+#                col_ind = []  # col-indices where jac is nonzero
+#                for n_uni, uni in enumerate(uniques):
+#                    rule = (param_dyn_dict[key] == uni)
+#                    where_n = np.where(
+#                            np.concatenate(
+#                                    np.broadcast_arrays(
+#                                            rule[:,np.newaxis], jac[0])[0]))[0]
+#
+#                    col_ind += list(where_n)
+#                    row_ind += list(np.full_like(where_n, n_uni))
+#                # generate a sparse matrix
+#                m = np.full((max(row_ind) + 1,
+#                                      max(col_ind) + 1), 0.)
+#                # fill matrix with values
+#                m[row_ind, col_ind] = data
+#                newjacdict[key] = m
+            else:
+                # if too many unique values occur, use scipy sparse matrix
+                # to avoid memory-overflow due to the large number of zeroes...
+                # (this will reduce speed since scipy.sparse does not fully
+                # supprot BLAS and so no proper parallelization is performed)
+                data = np.concatenate(jac[i])
+
+                row_ind = []  # row-indices where jac is nonzero
+                col_ind = []  # col-indices where jac is nonzero
+                for n_uni, uni in enumerate(uniques):
+                    rule = (param_dyn_dict[key] == uni)
+                    where_n = np.where(
+                            np.concatenate(
+                                    np.broadcast_to(
+                                            rule[:,np.newaxis], jac[i].shape)))[0]
+
+                    col_ind += list(where_n)
+                    row_ind += list(np.full_like(where_n, n_uni))
+
+                # generate a sparse matrix
+                m = csr_matrix((data, (row_ind, col_ind)),
+                               shape=(max(row_ind) + 1,
+                                      max(col_ind) + 1))
+                newjacdict[key] = m
+
+        # evaluate jacobians of the functional representations of tau
+        # and add them to newjacdict
         for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau[0], i),
+            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau[0],
+                                                   sp.Symbol(i)),
                                   modules=['numpy'])
             # evaluate the inner derivative
             dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
             # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
-            if not np.isscalar(dtau_dx):
-                dtau_dx = np.concatenate(
-                    [dtau_dx] * len(np.atleast_2d(R.t_0)[0]))
+            if np.isscalar(dtau_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                # In case the parameter is varying temporally, it must be
+                # repeated by the number of incidence-angles in order
+                # to have correct array-processing (it is assumed that no parameter
+                # is incidence-angle dependent itself)
+                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
+                # calculate "outer" * "inner" derivative for sparse matrices
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
+            else:
+                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
+                # calculate "outer" * "inner" derivative for numpy arrays
+                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
-
+        # same for omega
         for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
-            # generate a function that evaluates the 'inner' derivative, i.e.:
-            # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega[0], i),
+            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega[0],
+                                                     sp.Symbol(i)),
                                   modules=['numpy'])
-            # evaluate the inner derivative
             domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
-            # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
-            if not np.isscalar(domega_dx):
-                domega_dx = np.concatenate(
-                        [domega_dx]*len(np.atleast_2d(R.t_0)[0]))
+            if np.isscalar(domega_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
+            else:
+                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
-
+        # same for NormBRDF
         for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
-            # generate a function that evaluates the 'inner' derivative, i.e.:
-            # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF[0], i),
+            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF[0],
+                                                 sp.Symbol(i)),
                                   modules=['numpy'])
-            # evaluate the inner derivative
             dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
-            # calculate the derivative with respect to the parameters
-            # TODO this is a bit sloppy...
-            if not np.isscalar(dN_dx):
-                dN_dx = np.concatenate(
-                        [dN_dx]*len(np.atleast_2d(R.t_0)[0]))
-
-            # calculate "outer" * "inner" derivative
-            newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+            if np.isscalar(dN_dx):
+                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+            elif isspmatrix(newjacdict[str(i)]):
+                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
+            else:
+                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
+                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
 
         # return the transposed jacobian as needed by scipy's least_squares
-        jac_lsq = np.concatenate([newjacdict[key] for key in order]).T
+        if np.any([isspmatrix(newjacdict[key]) for key in order]):
+            # in case sparse matrices have been used, use scipy to vstack them
+            jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
+        else:
+            jac_lsq = np.vstack([newjacdict[key] for key in order]).transpose()
 
         # restore V and SRF to original values
         R.V = orig_V
@@ -432,7 +586,139 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    def monofit(self, V, SRF, dataset, param_dict,
+
+
+    def _calc_slope_curv(self, R, res_dict, return_components=False):
+        '''
+        function to calculate the monostatic slope and curvature
+        of the model
+
+        Parameters:
+        ------------
+        R : RT1-object
+            the rt1-object for which the results shall be calculated
+        res_dict : dict
+                   a dictionary containing all parameter-values that should
+                   be updated before calling R.calc()
+        return_components : bool (default=False)
+                            indicator if the individual components or only
+                            the total backscattered radiation are returned
+                            (useful for quick evaluation of a model)
+        Returns:
+        ----------
+        model_calc : the output of R.calc() (as intensity or sigma_0)
+                     in linear-units or dB corresponding to the specifications
+                     defined in the rtfits-class.
+        '''
+
+        # store original V and SRF
+        orig_V = copy.deepcopy(R.V)
+        orig_SRF = copy.deepcopy(R.SRF)
+
+        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
+        # and generate a function to evaluate the symbolic representation
+        try:
+            tausymb = R.V.tau[0].free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau[0],
+                                  modules=['numpy'])
+        except Exception:
+            tausymb = set()
+            taufunc = None
+        try:
+            omegasymb = R.V.omega[0].free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
+                                    modules=['numpy'])
+        except Exception:
+            omegasymb = set()
+            omegafunc = None
+        try:
+            Nsymb = R.SRF.NormBRDF[0].free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+                                modules=['numpy'])
+        except Exception:
+            Nsymb = set()
+            Nfunc = None
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
+
+        # update the numeric representations of omega, tau and NormBRDF
+        # based on the values for the used symbols provided in res_dict
+        if omegafunc is None:
+            if 'omega' in res_dict:
+                R.V.omega = res_dict['omega']
+        else:
+            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+
+        if taufunc is None:
+            if 'tau' in res_dict:
+                R.V.tau = res_dict['tau']
+        else:
+            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+
+        if Nfunc is None:
+            if 'NormBRDF' in res_dict:
+                R.SRF.NormBRDF = res_dict['NormBRDF']
+        else:
+            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+
+        if 'bsf' in res_dict:
+            R.bsf = res_dict['bsf']
+
+        # remove all unwanted symbols that are NOT needed for evaluation
+        # of the fn-coefficients from res_dict to generate a dict that
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
+        # and the symbols used to define them must be removed)
+
+        # symbols used to define the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, R.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
+        param_fn = res_dict.copy()
+        param_fn.pop('omega', None)
+        param_fn.pop('tau', None)
+        param_fn.pop('NormBRDF', None)
+        param_fn.pop('bsf', None)
+        # vsymb and srfsymb must be subtracted in case the same symbol is used
+        # for omega, tau or NormBRDF definition and in the function definiton
+        for i in set(toNlist - vsymb - srfsymb):
+            param_fn.pop(str(i), None)
+
+        # ensure that the keys of the dict are strings and not sympy-symbols
+        strparam_fn = dict([[str(key),
+                             np.expand_dims(param_fn[key], 1)]
+                            for i, key in enumerate(param_fn.keys())])
+
+        # set the param-dict to the newly generated dict
+        R.param_dict = strparam_fn
+
+        # calculate slope-values
+        if return_components is True:
+            model_slope = [R.tot_slope(sig0=self.sig0, dB=self.dB),
+                          R.surface_slope(sig0=self.sig0, dB=self.dB),
+                          R.volume_slope(sig0=self.sig0, dB=self.dB)]
+        else:
+            model_slope = R.tot_slope(sig0=self.sig0, dB=self.dB)
+
+        # calculate curvature-values
+        if return_components is True:
+            model_curv = [R.tot_curv(sig0=self.sig0, dB=self.dB),
+                          R.surface_curv(sig0=self.sig0, dB=self.dB),
+                          R.volume_curv(sig0=self.sig0, dB=self.dB)]
+        else:
+            model_curv = R.tot_curv(sig0=self.sig0, dB=self.dB)
+
+
+        # restore V and SRF to original values
+        R.V = orig_V
+        R.SRF = orig_SRF
+
+        return {'slope' : model_slope,
+                'curv' : model_curv}
+
+
+    def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend='cse', verbosity=0, **kwargs):
@@ -643,6 +929,7 @@ class Fits(Scatter):
             str((vsymb | srfsymb) - paramset) +
             ' must be provided in param_dict')
 
+
 # TODO fix asserts
 #        if omega is not None and not np.isscalar(omega):
 #            assert len(omega) == Nmeasurements, ('len. of omega-array must' +
@@ -670,7 +957,6 @@ class Fits(Scatter):
 #                      ' NormBRDF-array provided in the definition of SRF' +
 #                      ' must be equal to the length of the dataset')
 #
-
         # generate a dict containing only the parameters needed to evaluate
         # the fn-coefficients
         # for python > 3.4
@@ -681,9 +967,11 @@ class Fits(Scatter):
         param_R.pop('omega', None)
         param_R.pop('tau', None)
         param_R.pop('NormBRDF', None)
+        param_R.pop('bsf', None)
+
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
-        for i in toNlist:
+        for i in set(toNlist - vsymb - srfsymb):
             param_R.pop(i)
 
 #        if fn_input is None:
@@ -718,10 +1006,9 @@ class Fits(Scatter):
 #                        param_dict=param_R, int_Q=int_Q,
 #                        lambda_backend=lambda_backend)
         # define rt1-object
-        R = RT1(1., inc, inc, np.zeros_like(inc),
-                np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn_input,
-                _fnevals_input=_fnevals_input, geometry='mono',
-                param_dict=param_R, int_Q=int_Q,
+        R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
+                V=V, SRF=SRF, fn_input=fn_input, _fnevals_input=_fnevals_input,
+                geometry='mono', bsf = bsf, param_dict=param_R, int_Q=int_Q,
                 lambda_backend=lambda_backend, verbosity=verbosity)
         # store _fnevals functions in case they have not been provided
         # as input-arguments explicitly to avoid recalculation for each step
@@ -793,7 +1080,7 @@ class Fits(Scatter):
                 inverse = inverse + count
                 # select the fitted values for the corresponding parameter
                 newdict[key] = np.array(params)[inverse]
-                # increase counter
+                # increase counter by number of unique parameters of key
                 count = count + len(np.unique(param_dyn_dict[key]))
 
             # incorporate values provided in fixed_dict
@@ -866,8 +1153,8 @@ class Fits(Scatter):
                     startvals = startvals + list(param_dict[key])
 
         # perform actual fitting
-        res_lsq = least_squares(fun, startvals, bounds=bounds, jac=dfun,
-                                **kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
         count = 0
@@ -1103,7 +1390,7 @@ class Fits(Scatter):
 
         return fig
 
-    def printerr(self, fit, datelist=None, newcalc=False):
+    def printerr(self, fit, datelist=None, newcalc=False, relative=False):
         '''
         a function to quickly print residuals for each measurement
         and for each incidence-angle value
@@ -1133,6 +1420,9 @@ class Fits(Scatter):
                   False:
                       the residuals are taken from the output of
                       res_lsq from the fit-argument
+        relative : bool (default = False)
+                   indicator if relative (True) or absolute (False) residuals
+                   shall be plotted
         '''
 
         (res_lsq, R, data, inc, mask, weights,
@@ -1143,8 +1433,12 @@ class Fits(Scatter):
         if newcalc is False:
             # get residuals from fit into desired shape for plotting
             # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(
-                    np.abs(res_lsq.fun/weights), data.shape), mask)
+            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
+
+            if relative is True:
+                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
+            else:
+                res = np.ma.abs(res)
         else:
             # Alternative way of calculating the residuals
             # (based on R, inc and res_dict)
@@ -1164,17 +1458,26 @@ class Fits(Scatter):
 
             res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
-        # apply mask to data and incidence-angles
-        inc = np.ma.masked_array(inc, mask=mask)
+            if relative is True:
+                res = res / masked_estimates
+
+        # apply mask to data and incidence-angles (and convert to degree)
+        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
         data = np.ma.masked_array(data, mask=mask)
 
         # make new figure
         figres = plt.figure(figsize=(14, 10))
         axres = figres.add_subplot(212)
-        axres.set_title('Mean residual per measurement')
+        if relative is True:
+            axres.set_title('Mean relative residual per measurement')
+        else:
+            axres.set_title('Mean absolute residual per measurement')
 
         axres2 = figres.add_subplot(211)
-        axres2.set_title('Residuals per incidence-angle')
+        if relative is True:
+            axres2.set_title('Relative residuals per incidence-angle')
+        else:
+            axres2.set_title('Residuals per incidence-angle')
 
         # the use of masked arrays might cause python 2 compatibility issues!
         axres.plot(np.arange(len(res)) + 1, res, '.', alpha=0.5)
@@ -1183,9 +1486,10 @@ class Fits(Scatter):
         axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
                    'k', linewidth=3, marker='o', fillstyle='none')
 
-        # plot mean residual
+        # plot total mean of mean residuals per measurement
         axres.plot(np.arange(1, Nmeasurements + 1),
-                   [np.ma.mean(res)] * Nmeasurements, 'k--')
+                   [np.ma.mean(np.ma.mean(res, axis=1))] * Nmeasurements,
+                   'k--')
 
         # add some legends
         res_h = mlines.Line2D(
@@ -1209,7 +1513,24 @@ class Fits(Scatter):
 
         if datelist is None:
             axres.set_xticks(np.arange(1, Nmeasurements + 1))
+            axres.set_xticklabels(np.arange(1, Nmeasurements + 1))
             axres.set_xlabel('# Measurement')
+
+            majortickinterval = np.ceil(Nmeasurements/50)
+            axres.set_xlim(-majortickinterval//2,
+                           Nmeasurements + majortickinterval//2)
+
+            majorLocator = MultipleLocator(majortickinterval)
+            majorFormatter = FormatStrFormatter('%d')
+            minorLocator = MultipleLocator(2)
+
+            axres.xaxis.set_major_locator(majorLocator)
+            axres.xaxis.set_major_formatter(majorFormatter)
+            axres.xaxis.set_minor_locator(minorLocator)
+
+            if majortickinterval > 1:
+                axres.xaxis.set_tick_params(rotation=45)
+
         else:
             axres.set_xticks(np.arange(1, Nmeasurements + 1))
             axres.set_xticklabels(np.concatenate(datelist[1]))
@@ -1264,25 +1585,24 @@ class Fits(Scatter):
         axres2.set_xlabel('$\\theta_0$ [deg]')
         axres2.set_ylabel('Residual')
 
-        # set incidence-angle ticks
-        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
-        if mintic < 0.:
-            mintic = 0.
-        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
-        if maxtic > 360.:
-            maxtic = 360.
+        # find minimum and maximum incidence angle
+        maxinc = np.max(inc)
+        mininc = np.min(inc)
 
-        ticks = np.arange(np.rad2deg(np.min(inc)),
-                          np.rad2deg(np.max(inc)) + 1.,
-                          (maxtic - mintic) / 10.)
-        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
+        axres2.set_xlim(np.floor(mininc) - 1,
+                        np.ceil(maxinc) + 1)
+
+        # set major and minor ticks
+        axres2.xaxis.set_major_locator(MultipleLocator(1))
+        axres2.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+        axres2.xaxis.set_minor_locator(MultipleLocator(.1))
 
         figres.tight_layout()
 
         return figres
 
     def printscatter(self, fit, mima=None, pointsize=0.5,
-                     regression=True, **kwargs):
+                     regression=True, newcalc=False,  **kwargs):
         '''
         geerate a scatterplot to investigate the quality of the fit
 
@@ -1313,18 +1633,27 @@ class Fits(Scatter):
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        mask = mask
+        if newcalc is True:
 
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
+            # for python > 3.4
+            # calc_dict = dict(**res_dict, **fixed_dict)
+            calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                             + list(fixed_dict.items()))
 
-        estimates = self._calc_model(R, calc_dict)
+            estimates = self._calc_model(R, calc_dict)
 
-        # apply mask
-        estimates = estimates[~mask]
-        measures = data[~mask]
+            # apply mask
+            estimates = estimates[~mask]
+            measures = data[~mask]
+
+        else:
+            # get the residuals and apply mask
+            residuals = np.reshape(res_lsq.fun, data.shape)
+            residuals = np.ma.masked_array(residuals, mask)
+            # prepare measurements
+            measures = data[~mask]
+            # calculate estimates
+            estimates = residuals[~mask] + measures
 
         if mima is None:
             mi = np.min((measures, estimates))
@@ -1366,7 +1695,8 @@ class Fits(Scatter):
         return fig, r_value**2
 
     def printsingle(self, fit, measurements=None, datelist=None,
-                    dates=None, hexbinQ=True, hexbinargs={}):
+                    dates=None, hexbinQ=True, hexbinargs={},
+                    convertTodB=False):
         '''
         a function to investigate the quality of the individual fits
 
@@ -1408,6 +1738,8 @@ class Fits(Scatter):
 
         hexbinargs : dict
                      a dict containing arguments to customize the hexbin-plot
+        convertTodB : bool (default=False)
+                      if set to true, the datasets will be converted to dB
         '''
 
         from matplotlib.colors import LinearSegmentedColormap
@@ -1472,7 +1804,12 @@ class Fits(Scatter):
         ax = fig.add_subplot(111)
 
         for m_i, m in enumerate(measurements):
-            y = estimates[m][~mask[m]]
+
+            if convertTodB is True:
+                y = 10.*np.log10(estimates[m][~mask[m]])
+            else:
+                y = estimates[m][~mask[m]]
+
             # plot data
             if datelist is None:
                 label = m + 1
@@ -1488,7 +1825,11 @@ class Fits(Scatter):
                          str(np.concatenate(datelist[1])[m]))
 
             xdata = np.rad2deg(inc[m][~mask[m]])
-            ydata = data[m][~mask[m]]
+
+            if convertTodB is True:
+                ydata = 10.*np.log10(data[m][~mask[m]])
+            else:
+                ydata = data[m][~mask[m]]
 
             # get color that will be applied to the next line drawn
             dummy, = ax.plot(xdata[0], ydata[0], '.', alpha=0.)
@@ -1536,7 +1877,10 @@ class Fits(Scatter):
         else:
             ax.legend(title='# Date')
 
-    def printseries(self, fit, index=None, legends=True, minmax=None):
+        return fig
+
+    def printseries(self, fit, index=None, legends=True, minmax=None,
+                    newcalc=False, convertTodB=False):
         '''
         a function to quickly print the fit-results and the gained parameters
 
@@ -1570,12 +1914,22 @@ class Fits(Scatter):
         if minmax is None:
             minmax = [0, len(data)]
 
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
+        if newcalc is True:
 
-        estimates = self._calc_model(R, calc_dict)
+            # for python > 3.4
+            # calc_dict = dict(**res_dict, **fixed_dict)
+            calc_dict = dict((k, v) for k, v in list(res_dict.items())
+                             + list(fixed_dict.items()))
+
+            estimates = self._calc_model(R, calc_dict)
+        else:
+            # get the residuals and apply mask
+            residuals = np.reshape(res_lsq.fun, data.shape)
+            residuals = np.ma.masked_array(residuals, mask)
+            # prepare measurements
+            measures = np.ma.masked_array(data, mask)
+            # calculate estimates
+            estimates = residuals + measures
 
         maskedestimates = np.ma.masked_array(estimates,
                                              mask)[minmax[0]:minmax[1]]
@@ -1589,6 +1943,10 @@ class Fits(Scatter):
         maskedestimates = np.concatenate(maskedestimates)
         maskeddata = np.ma.concatenate(
                 np.ma.masked_array(data, mask)[minmax[0]:minmax[1]])
+
+        if convertTodB is True:
+            maskedestimates = 10.*np.ma.log10(maskedestimates)
+            maskeddata = 10.*np.ma.log10(maskeddata)
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1632,5 +1990,180 @@ class Fits(Scatter):
 
         if legends is True:
             plt.legend()
+
+        return fig
+
+    def printviolin(self, inputs, param, together=True,
+                    func=np.mean, print_mean=False,
+                    bw_method=None, funcargs={}, **kwargs):
+        '''
+        plot a violin-plot of defined fit-result parameters
+
+        Parameters:
+        ------------
+        inputs : dict
+                 a dictionary containing the plotlabels(keys) and a list of
+                 results of the monofit-function (values) that are intended
+                 to be compared, e.g.:
+                     inputs = {'name1' : [monofit1, monofit2, ...],
+                               'name2' : [monofit3, monofit4, ...]'}
+        param : str
+                the name of the parameter to be plotted (the corresponding key
+                of the results dictionary returned by the monofit function)
+        together : bool
+                   indicator whether or not a combined violin shall be plotted
+        func : function-call signature (default = np.mean)
+               the call-signature of a function that will be applied to the
+               list of fitted-values for the chosen parameter
+        print_mean : bool
+                     indicator whether or not dotted lines for the mean-values
+                     shall be plotted
+        bw_method : str, int or None
+                    selector for the chosen method for estimating the bandwidth
+                    in the generation of the violinplot
+                    (parameter of matplotlib.pyplot.violin)
+        **kwargs : kwargs
+                   keyword-arguments forwraded to matplotlib.pyplot.figure()
+
+        Returns:
+        ---------
+        fig : matplotlib.figure
+        '''
+
+        fig = plt.figure(**kwargs)
+        ax = fig.add_subplot(111)
+        resval = {}
+
+        colors = ['r', 'g', 'b', 'c', 'm', 'y']
+
+        for reskey in inputs:
+            inp = inputs[reskey]
+            # evaluate sortpattern to sort results based on coverage
+            # p, c = sfc.printfracs(inp)
+            # plt.close(p)
+            # sortpa[reskey] = np.argsort(np.sum(c, axis=0))
+
+            val = []
+
+            if param == 'residual':
+                # estimate and print rel. residuals of the test_i measurement
+                rel_residual = []
+                for test_i in np.array(inp):
+                    # get results of i'th measurement of fit-result inp
+                    (res_lsq, _, data, _, mask, weights,
+                     _, _, _) = test_i[0]
+
+                    # get the residuals and apply mask
+                    residuals = np.reshape(res_lsq.fun, data.shape)
+                    residuals = np.ma.masked_array(residuals, mask)
+                    # prepare measurements
+                    measures = np.ma.masked_array(data, mask)
+                    # calculate estimates
+                    estimates = residuals + measures
+                    # calculate relative absolute residuals
+                    rel_residual = np.ma.abs(residuals/estimates)
+                    # calculate mean relative residual over incidence-angles
+                    mean_rel_residual = np.ma.mean(rel_residual, axis=1)
+                    # convert result to ordinary list
+                    mean_rel_residual = list(mean_rel_residual)
+
+                    # apply function
+                    addval = func(mean_rel_residual, **funcargs)
+                    if np.isscalar(addval):
+                        addval = [addval]
+                    else:
+                        addval = list(addval)
+                    val += addval
+            else:
+                # extract res_dict from given result
+                params = [i[6] for i in np.array(inp)[:, 0]]
+
+                for i in params:
+                    addval = func(i[param], **funcargs)
+                    if np.isscalar(addval):
+                        addval = [addval]
+                    else:
+                        addval = list(addval)
+                    val += addval
+
+            resval[reskey] = np.array(val)
+
+        # print each result as an individual violin plot
+        vio_ind = ax.violinplot(resval.values(),
+                                showmeans=True,
+                                showextrema=True,
+                                bw_method=bw_method)
+        # now change colors
+        i = 0
+        for pc in vio_ind['bodies']:
+            pc.set_facecolor(colors[i % len(colors)])
+            pc.set_edgecolor(colors[i % len(colors)])
+            pc.set_alpha(.8)
+            i = i + 1
+
+        for i in ['cmeans', 'cmins', 'cmaxes', 'cbars']:
+            vio_ind[i].set_color('k')
+            vio_ind[i].set_alpha(0.5)
+
+        # set labels
+        labels = [i for i in resval.keys()]
+        nticks = len(vio_ind['bodies']) + 1
+
+        if together is True:
+            # print the violinplots together
+            # (with only the outer line being plotted)
+            i = 0
+            for key in resval:
+                vio = ax.violinplot(resval[key],
+                                    positions=[len(vio_ind['bodies']) + 1],
+                                    showmeans=False,
+                                    showextrema=False,
+                                    bw_method=bw_method)
+                # now change colors
+                for pc in vio['bodies']:
+                    pc.set_facecolor('None')
+                    pc.set_edgecolor(colors[i % len(colors)])
+                    pc.set_alpha(1.)
+                    pc.set_linewidth(1.)
+                i = i + 1
+
+            # print a shading for the violinplots
+            i = 0
+            for key in resval:
+                vio = ax.violinplot(resval[key],
+                                    positions=[len(vio_ind['bodies']) + 1],
+                                    showmeans=False,
+                                    showextrema=False,
+                                    bw_method=bw_method)
+                # now change colors
+                for pc in vio['bodies']:
+                    pc.set_facecolor(colors[i % len(colors)])
+                    pc.set_edgecolor('None')
+                    pc.set_alpha(.2)
+                i = i + 1
+
+            labels += ['all']
+            nticks += 1
+
+        ax.set_xticks(np.arange(1, nticks))
+        ax.set_xticklabels(labels)
+
+        if print_mean is True:
+            i = 0
+            for key in resval:
+                ax.plot([0.5, nticks - 0.5],
+                        [np.mean(resval[key])] * 2,
+                        linestyle='--',
+                        color=colors[i % len(colors)],
+                        alpha=0.5,
+                        linewidth=0.5)
+                i += 1
+
+        if param == 'residual':
+            ax.set_title('Parameter: relative residual')
+            ax.set_ylabel('relative residual')
+        else:
+            ax.set_title('Parameter: ' + str(param))
+            ax.set_ylabel(str(param))
 
         return fig

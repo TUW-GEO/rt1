@@ -7,6 +7,7 @@ References
 Quast & Wagner (2016): doi:10.1364/AO.55.005379
 """
 import numpy as np
+
 from scipy.special import expi
 from scipy.special import expn
 
@@ -47,18 +48,18 @@ class RT1(object):
            (if geometry is 'mono', phi_ex is automatically set to p_0 + np.pi)
 
     V : rt1.volume
-         random object from rt1.volume class
+        random object from rt1.volume class
 
     SRF : surface
           random object from rt1.surface class
 
-    fn : array_like(sympy expression), optional (default = None)
+    fn_input : array_like(sympy expression), optional (default = None)
          optional input of pre-calculated array of sympy-expressions
          to speedup calculations where the same fn-coefficients can be used.
          if None, the coefficients will be calculated automatically at the
          initialization of the RT1-object
 
-    _fnevals : callable, optional (default = None)
+    _fnevals_input : callable, optional (default = None)
                optional input of pre-compiled function to numerically evaluate
                the fn_coefficients. if None, the function will be compiled
                using the fn-coefficients provided.
@@ -87,6 +88,10 @@ class RT1(object):
         geometry-parameter, please have a look at the "Evaluation Geometries"
         section of the documentation:
         (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
+
+    bsf : float (default = 0.)
+          fraction of bare-soil contribution (no attenuation due to vegetation)
+
     param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
@@ -95,7 +100,7 @@ class RT1(object):
                      to compile a function for numerical evaluation of the
                      fn-coefficients.
 
-                     possible values are:
+                     TODO(update this) possible values are:
                          - 'sympy' :  sympy.lambdify is used to compile
                            the _fnevals function
                          - 'symengine' : symengine.LambdifyCSE is used to
@@ -113,15 +118,16 @@ class RT1(object):
                 - >=3 : print all
     """
 
-    def __init__(self, I0, t_0, t_ex, p_0, p_ex,
-                 V=None, SRF=None, fn_input=None, _fnevals_input=None,
-                 geometry='vvvv', param_dict={},
+    def __init__(self, I0, t_0, t_ex, p_0, p_ex, V=None, SRF=None,
+                 fn_input=None, _fnevals_input=None, geometry='vvvv',
+                 bsf=0., param_dict={},
                  lambda_backend='cse', int_Q=True, verbosity = 1):
 
-        self.geometry = geometry
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
                                            'a 4-character string')
-        assert len(self.geometry) == 4
+        assert len(geometry) == 4, ('ERROR: geometry must be ' +
+                                           'a 4-character string')
+        self.geometry = geometry
 
         self.I0 = I0
         self.param_dict = param_dict
@@ -130,6 +136,7 @@ class RT1(object):
 
         assert V is not None, 'ERROR: needs to provide volume information'
         self.V = V
+
         assert SRF is not None, 'ERROR: needs to provide surface information'
         self.SRF = SRF
 
@@ -142,6 +149,7 @@ class RT1(object):
         self._set_p_ex(p_ex)
 
         self.verbosity = verbosity
+        self.bsf = bsf
 
         # self._set_fn(fn)
         # self._set_fnevals(_fnevals)
@@ -154,39 +162,51 @@ class RT1(object):
         assert self.V.omega is not None, ('Single scattering albedo ' +
                                           'needs to be provided')
         assert self.V.tau is not None, 'Optical depth needs to be provided'
-# TODO  fix asserts to allow symbolic parameters
-#        assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
-#                                             'must be greater than 0')
-#        assert np.any(self.V.omega <= 1.), ('Single scattering albedo ' +
-#                                             'must be smaller than 1')
-#        assert np.any(self.V.tau >= 0.), 'Optical depth must be > 0'
-#
-#        assert np.any(self.SRF.NormBRDF >= 0.), ('Error: NormBRDF must ' +
-#                                                 'be greater than 0')
 
+        # self.V.omega[0] must be used instead of self.V.omega since the
+        # setter functions for omega, tau and NormBRDF add an additional
+        # axis to the given input. Checking for sp.Basic is sufficient
+        # to distinguish if the input was given as a sympy equation. For
+        # details see: http://docs.sympy.org/latest/guide.html#basics
+        if not isinstance(self.V.omega[0], sp.Basic):
+            assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
+                                                 'must be greater than 0')
+        if not isinstance(self.V.tau[0], sp.Basic):
+            assert np.any(self.V.tau >= 0.), ('Optical depth ' +
+                                                 'must be greater than 0')
+        if not isinstance(self.SRF.NormBRDF[0], sp.Basic):
+            assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
+                                                 'must be greater than 0')
+
+# TODO  fix asserts to allow symbolic parameters
         # check if all parameters have been provided (and also if no
         # unused parameter has been specified)
 
-        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
-                            tuple(map(str, self.param_dict.keys()))))
-
-        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
-
-        if refset <= funcset:
-            errdict = ' in the definition of V and SRF'
-        elif refset >= funcset:
-            errdict = ' in the definition of param_dict'
-        else:
-            errdict = ' in the definition of V, SRF and param_dict'
-
-        assert (funcset == refset), ('false parameter-specification, please ' +
-                                     'check assignment of the parameters '
-                                     + str(refset ^ funcset) + errdict)
-
-        assert SRF is not None, 'ERROR: needs to provide surface information'
-        self.SRF = SRF
+#        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+#                            tuple(map(str, self.param_dict.keys()))))
+#
+#        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
+#
+#        if refset <= funcset:
+#            errdict = ' in the definition of V and SRF'
+#        elif refset >= funcset:
+#            errdict = ' in the definition of param_dict'
+#        else:
+#            errdict = ' in the definition of V, SRF and param_dict'
+#
+#        assert (funcset == refset), ('false parameter-specification, please ' +
+#                                     'check assignment of the parameters '
+#                                     + str(refset ^ funcset) + errdict)
 
     def prv(self, v, msg):
+        '''
+        function to set print output based on verbosity level v.
+        possible values for v:
+            - 0 : print nothing
+            - 1 : print some infos during runtime
+            - 2 : print more
+            - >=3 : print all
+        '''
         if self.verbosity >= v:
             print(msg)
 
@@ -202,7 +222,7 @@ class RT1(object):
         # of the fn-coefficients for evaluation
         # only evaluate fn-coefficients if _fnevals funcions are not
         # already available!
-        if fn is None:
+        if fn is None and self.int_Q is True:
             self.prv(1, 'evaluating fn-coefficients...')
 
             import timeit
@@ -236,7 +256,7 @@ class RT1(object):
         return self.__fnevals
 
     def _set_fnevals(self, _fnevals):
-        if _fnevals is None:
+        if _fnevals is None and self.int_Q is True:
             self.prv(1, 'generation of _fnevals functions...')
             import timeit
             tic = timeit.default_timer()
@@ -415,7 +435,89 @@ class RT1(object):
                                                 modules=['numpy'])]
 
                     self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
-                          str(len(funs)) + ' finished')
+                             str(len(funs)) + ' finished')
+
+                def fneval(*variables):
+                    sol = []
+                    for n, fn_cse_fun in enumerate(fn_cse_funs):
+                        replvec = []
+                        for key in fn_cse_repfuncs[n]:
+                            replvec += [fn_cse_repfuncs[n][key](
+                                replvec, *variables)]
+                        sol += [fn_cse_fun(replvec, *variables)]
+                    return sol
+
+                self.__fnevals = fneval
+
+            elif self.lambda_backend == 'cse_seng_sp_newlambdify':
+                '''
+                sympy's cse functionality is used to avoid sympifying the whole
+                fn-coefficient array.
+
+                a customly defined lambdify-function is used since the
+                functions generated with sympy's lambdify with the option
+                modules = ['numpy'] are not pickleable.
+                (necessary for multiprocessing purposes)
+                '''
+
+                # define a function for lambdification
+                def newlambdify(args, funs):
+                    from sympy.printing.lambdarepr import NumPyPrinter
+                    from sympy.utilities.lambdify import lambdastr
+                    funcstr = lambdastr(args, funs, printer=NumPyPrinter)
+
+                    funcstr = funcstr.replace(
+                            'pi', 'np.pi').replace(
+                            'sin', 'np.sin').replace(
+                            'cos', 'np.cos').replace(
+                            'sqrt', 'np.sqrt')
+
+                    return eval(funcstr)
+
+                self.prv(1,
+                         'use symengines cse and sympys lambdify with ' +
+                         'manually defined lambdify function')
+                variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
+                                   tuple(map(str, self.param_dict.keys())))
+
+                from symengine import cse as cse_seng
+                funs = self.fn
+
+                # initialize array that store the cse-functions and variables
+                fn_cse_funs = []  # resulting cse-function for each coefficient
+                fn_cse_repfuncs = []  # replacement functions for each coef.
+                for nf, fncoef in enumerate(funs):
+                    # evaluate cse functions and variables for the i'th coef.
+                    fn_repl, fn_csefun = cse_seng([fncoef])
+
+                    self.prv(2,
+                             'fn_repl has ' + str(len(fn_repl)) + ' elements')
+
+                    # generate lambda-functions for replacements
+                    fn_rfuncs = {}
+                    defvec_subs = {}
+                    for i, repl in enumerate(fn_repl):
+                        defvec = sp.DeferredVector('defvec')
+                        defvec_subs[sp.sympify(repl[0])] = defvec[i]
+                        # replace xn's with deferred vector elements
+                        funcreplaced = sp.sympify(
+                                repl[1]).xreplace(defvec_subs)
+                        symbs = [defvec] + list(variables)
+                        fn_rfuncs[defvec[i]] = newlambdify(
+                            symbs,
+                            funcreplaced)
+
+                    fn_cse_repfuncs += [fn_rfuncs]
+
+                    # generate lambda-functions for cse_functions
+                    fn_csefun_defvec = sp.sympify(
+                            fn_csefun[0]).xreplace(defvec_subs)
+                    funargs = [defvec] + list(variables)
+                    fn_cse_funs += [newlambdify(funargs,
+                                                fn_csefun_defvec)]
+
+                    self.prv(2, 'cse of coefficient ' + str(nf) + '/' +
+                             str(len(funs)) + ' finished')
 
                 def fneval(*variables):
                     sol = []
@@ -431,7 +533,7 @@ class RT1(object):
 
             else:
                 self.prv(1, 'lambda_backend "' + self.lambda_backend +
-                      '" is not available')
+                         '" is not available')
 
             toc = timeit.default_timer()
             self.prv(2,
@@ -508,6 +610,18 @@ class RT1(object):
     def _get_mu_ex(self):
         return np.cos(self.t_ex)
     _mu_ex = property(_get_mu_ex)
+
+    def _get_bsf(self):
+        return self.__bsf
+
+    def _set_bsf(self, bsf):
+        # the setter-function adds an axis to the numpy-arrays of the
+        # parameters to provide the correct shape for array-processing
+        bsf = np.array(bsf)
+        bsf.shape = bsf.shape + (1,)
+        self.__bsf = bsf
+    bsf = property(_get_bsf, _set_bsf)
+
 
     def _extract_coefficients(self, expr):
         """
@@ -701,49 +815,6 @@ class RT1(object):
         res = expand(res.xreplace(dict(replacements3)))
         return res
 
-#    def _eval_fn(self, n, t_0, p_0, t_ex, p_ex):
-#        """
-#        Function to numerically evaluate the fn-coefficients as
-#        function of incident geometry.
-#
-#        Parameters
-#        ----------
-#        n : scalar(int)
-#            Number of fn-coefficient to be evaluated (starting with 0)
-#
-#        t_0 : array_like(float)
-#              array of incident zenith-angles in radians
-#
-#        p_0 : array_like(float)
-#              array of incident azimuth-angles in radians
-#
-#        t_ex : array_like(float)
-#               array of exit zenith-angles in radians
-#
-#        p_ex : array_like(float)
-#               array of exit azimuth-angles in radians
-#
-#        Returns
-#        -------
-#        array_like(float)
-#              Numerical value of the n^th fn-coefficient evaluated
-#              at the given angles.
-#        """
-#
-#        # the destinction between zero and nonzero fn-coefficients is
-#        # necessary because sympy treats symbols multiplied by 0 as 0, which
-#        # results in a function that returns 0 instead of an array of zeroes!
-#        # -> see  https://github.com/sympy/sympy/issues/3935
-#
-#        if n > len(self.fn):
-#            return np.zeros_like(t_0)
-#        else:
-#            new_fn = self._fnfuncs[n](t_0, p_0, t_ex, p_ex,
-#                                      *self.param_dict.values())
-#            if np.isscalar(new_fn):
-#                new_fn = np.full_like(t_0, new_fn)
-#            return new_fn
-
     def calc(self):
         """
         Perform actual calculation of bistatic scattering at top of the
@@ -766,7 +837,6 @@ class RT1(object):
         Iint : array_like(float)
                Interaction contribution
         """
-        # (16)
 
         # the following if query ensures that volume- and interaction-terms
         # are only calculated if tau > 0.
@@ -812,8 +882,10 @@ class RT1(object):
             # squeezing the arrays is necessary since the setter-function for
             # tau, omega and NormBRDF automatically adds an axis to the arrays!
             self.V.tau = np.squeeze(old_tau[valid_index[0]])
-            self.V.omega = np.squeeze(old_omega[valid_index[0]])
-            self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
+            if np.array(self.V.omega).size != 1:
+                self.V.omega = np.squeeze(old_omega[valid_index[0]])
+            if np.array(self.SRF.NormBRDF).size != 1:
+                self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
 
             # calculate volume and interaction term where tau-values are valid
             _Ivol = self.volume()
@@ -862,14 +934,154 @@ class RT1(object):
             Numerical value of the surface-contribution for the
             given set of parameters
         """
-
-        Isurf = (self.I0 * np.exp(-(self.V.tau / self._mu_0) -
-                                  (self.V.tau / self._mu_ex)) * self._mu_0
+        # bare soil contribution
+        I_bs = (self.I0 * self._mu_0
                  * self.SRF.brdf(self.t_0, self.t_ex,
                                  self.p_0, self.p_ex,
                                  param_dict=self.param_dict))
 
-        return self.SRF.NormBRDF * Isurf
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                        (self.V.tau / self._mu_ex))) * I_bs
+
+        return self.SRF.NormBRDF * ((1. - self.bsf) * Isurf + self.bsf * I_bs)
+
+
+    def surface_slope(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the slope (dI_s/dt_0) of the
+        (!monostatic!) surface-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            surface-contribution
+            """
+        # evaluate the slope of the used brdf
+        brdf_slope = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=1)
+        # evaluate the used brdf
+        brdf_val = self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        # vegetated soil contribution
+        I_vegs_slope = (self.I0
+                        * np.exp(-(2*self.V.tau / self._mu_0))
+                        * (self._mu_0 * brdf_slope
+                           - (2 * self.V.tau / self._mu_0 + 1)
+                           * np.sin(self.t_0) * brdf_val))
+
+        # bare soil contribution
+        I_bs_slope = self.I0 * (self._mu_0 * brdf_slope
+                                - np.sin(self.t_0) * brdf_val)
+
+        I_slope = self.SRF.NormBRDF * (
+                (1. - self.bsf) * I_vegs_slope
+                + self.bsf *  I_bs_slope)
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = self.surface()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def surface_curv(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the curvature (d^2I_s/dt_0^2)
+        of the (!monostatic!) surface-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            surface-contribution
+        """
+
+        # evaluate the slope of the used brdf
+        brdf_curv = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=2)
+        # evaluate the slope of the used brdf
+        brdf_slope = self.SRF.brdf_theta_diff(
+                t_0=self.t_0, t_ex=self.t_ex, p_0=self.p_0,
+                p_ex=self.p_ex, geometry = 'mono',
+                param_dict=self.param_dict, return_symbolic=False,
+                n=1)
+        # evaluate the used brdf
+        brdf_val = self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        # vegetated soil contribution
+        I_vegs_curv = (self.I0
+                       * np.exp(-(2. * self.V.tau / self._mu_0)) * (
+                self._mu_0 * brdf_curv -
+                2. * np.sin(self.t_0) * brdf_slope * (
+                        2. * self.V.tau / self._mu_0 + 1.)
+                + (4. * self.V.tau**2 / self._mu_0**3
+                   * np.sin(self.t_0)**2
+                   - 2. * self.V.tau - self._mu_0) * brdf_val ))
+
+        # bare soil contribution
+        I_bs_curv = self.I0 * ( self._mu_0 * brdf_curv
+                                - 2. * np.sin(self.t_0) * brdf_slope
+                                - self._mu_0 * brdf_val )
+
+        I_curv = self.SRF.NormBRDF * (
+                (1. - self.bsf) * I_vegs_curv
+                + self.bsf *  I_bs_curv)
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = self.surface_slope(dB=False, sig0=False)
+            I_val = self.surface()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
 
     def volume(self):
         """
@@ -882,12 +1094,239 @@ class RT1(object):
             Numerical value of the volume-contribution for the
             given set of parameters
         """
-        return ((self.I0 * self.V.omega *
+        vol = ((self.I0 * self.V.omega *
                  self._mu_0 / (self._mu_0 + self._mu_ex))
                 * (1. - np.exp(-(self.V.tau / self._mu_0) -
                                (self.V.tau / self._mu_ex)))
                 * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             param_dict=self.param_dict))
+
+        return (1. - self.bsf) * vol
+
+    def volume_slope(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the slope (dI_v/dt_0) of the
+        (!monostatic!) volume-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            volume-contribution
+        """
+
+        # evaluate the slope of the used phase-function
+        p_slope = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                 p_0=self.p_0, p_ex=self.p_ex,
+                                 geometry = 'mono',
+                                 param_dict=self.param_dict,
+                                 return_symbolic=False,
+                                 n=1)
+
+        # evaluate the used phase function
+        p_val = self.V.p(self.t_0, self.t_ex,
+                         self.p_0, self.p_ex,
+                         param_dict=self.param_dict)
+
+        # volume contribution
+        I_slope = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+                (np.exp(-(2 * self.V.tau / self._mu_0)) * 2 *
+                 self.V.tau * np.sin(self.t_0) / self._mu_0**2
+                 ) * p_val
+                 + (1. - np.exp(-(2*self.V.tau / self._mu_0))
+                 ) * p_slope )
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = self.volume()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def volume_curv(self, dB=False, sig0=False):
+        """
+        Numerical evaluation of the curvature (d^2I_s/dt_0^2)
+        of the (!monostatic!) volume-contribution
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            volume-contribution        """
+        # evaluate the slope of the used brdf
+        p_curv = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                     p_0=self.p_0, p_ex=self.p_ex,
+                                     geometry = 'mono',
+                                     param_dict=self.param_dict,
+                                     return_symbolic=False,
+                                     n=2)
+        # evaluate the slope of the used brdf
+        p_slope = self.V.p_theta_diff(t_0=self.t_0, t_ex=self.t_ex,
+                                      p_0=self.p_0, p_ex=self.p_ex,
+                                      geometry = 'mono',
+                                      param_dict=self.param_dict,
+                                      return_symbolic=False,
+                                      n=1)
+        # evaluate the used brdf
+        p_val = self.V.p(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict)
+
+        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+                np.exp(-(2 * self.V.tau / self._mu_0)) * (
+                        2 * self.V.tau / self._mu_0**3) * (
+                                np.sin(self.t_0)**2 + 1.
+                                - 2. * self.V.tau / self._mu_0
+                                * np.sin(self.t_0)**2) * p_val
+                        + (np.exp(-(2 * self.V.tau / self._mu_0)) *
+                           4. * self.V.tau / self._mu_0**2
+                           * np.sin(self.t_0)) * p_slope
+                        + (1 -
+                           np.exp(-(2 * self.V.tau / self._mu_0))
+                           ) * p_curv )
+
+
+
+#
+#        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
+#                np.exp(-(2 * self.V.tau / self._mu_0)) * (
+#                        4. * self.V.tau * np.sin(self.t_0) / self._mu_0**2 * p_slope
+#                        +
+#                        (1. + 2. * np.sin(self.t_0)**2 / self._mu_0**2
+#                         - 2. * self.V.tau * np.sin(self.t_0)**2 / self._mu_0**3) *
+#                         2. * self.V.tau / self._mu_0 * p_val
+#                        )
+#                + (1. - np.exp(-(2 * self.V.tau / self._mu_0))) * p_curv
+#                )
+
+
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = self.volume_slope(dB=False, sig0=False)
+            I_val = self.volume()
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
+
+    def tot_slope(self, sig0=False, dB=False):
+        '''
+        numerical value of the (!monostatic!) slope of total
+        contribution (surface + volume)
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic slope of the
+            total-contribution
+        '''
+
+        I_slope = (self.volume_slope(dB=False, sig0=False) +
+                   self.surface_slope(dB=False, sig0=False))
+
+        if sig0 is False and dB is False:
+            return I_slope
+        else:
+            I_val = (self.volume() + self.surface())
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_slope
+                                     - np.sin(self.t_0) * I_val)
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * I_slope / I_val
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_slope / I_val
+                                 - np.tan(self.t_0))
+
+    def tot_curv(self, sig0=False, dB=False):
+        '''
+        numerical value of the (!monostatic!) curvature of
+        total contribution (surface + volume)
+
+        Parameter
+        ----------
+        dB : bool (default = False)
+             indicator if the derivative is calculated for
+             the dB values or for the linear values
+        sig0 : bool (default = False)
+               indicator if the derivative is calculated for
+               the intensity (False) or for
+               sigma_0 = 4 * pi * cos(t_0) * intensity (True)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the monostatic curvature of the
+            total-contribution
+        '''
+
+        I_curv = (self.volume_curv(dB=False, sig0=False) +
+                  self.surface_curv(dB=False, sig0=False))
+
+        if sig0 is False and dB is False:
+            return I_curv
+        else:
+            I_slope = (self.volume_slope(dB=False, sig0=False) +
+                       self.surface_slope(dB=False, sig0=False))
+            I_val = (self.volume() + self.surface())
+            if sig0 is True and dB is False:
+                return 4. * np.pi * (self._mu_0 * I_curv
+                                     - 2. * np.sin(self.t_0)
+                                     * I_slope
+                                     - self._mu_0 * I_val )
+            elif sig0 is False and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2 )
+            elif sig0 is True and dB is True:
+                return 10./np.log(10) * (I_curv / I_val
+                                 - I_slope**2 / I_val**2
+                                 - self._mu_0**(-2))
+
 
     def interaction(self):
         """
@@ -908,7 +1347,7 @@ class RT1(object):
                 (np.exp(-self.V.tau / self._mu_ex) * Fint1 +
                  np.exp(-self.V.tau / self._mu_0) * Fint2))
 
-        return self.SRF.NormBRDF * Iint
+        return self.SRF.NormBRDF * (1. - self.bsf) * Iint
 
     def _calc_Fint(self, mu1, mu2, phi1, phi2):
         """
@@ -958,10 +1397,6 @@ class RT1(object):
                               for k in range(1, (n + 1) + 1))
                        for n in range(nmax)])
 
-#        fn = (np.array([self._eval_fn(n, np.arccos(mu1),
-#                                      phi1, np.arccos(mu2), phi2)
-#                        for n in range(nmax)]))
-
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
 
         S = np.sum(fn * mu * (S2 + hlp1), axis=0)
@@ -986,7 +1421,7 @@ class RT1(object):
                 * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                             self.param_dict))
 
-        return dvdt
+        return (1. - self.bsf) * dvdt
 
     def _dvolume_domega(self):
         """
@@ -1005,7 +1440,27 @@ class RT1(object):
                 ) * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
                               self.param_dict))
 
-        return dvdo
+        return (1. - self.bsf) * dvdo
+
+    def _dvolume_dbsf(self):
+        """
+        Numerical evaluation of the derivative of the
+        volume-contribution with respect to omega
+        Returns
+        --------
+        dvdo : array_like(float)
+               Numerical value of dIvol/domega for the given set of parameters
+        """
+
+        vol = ((self.I0 * self.V.omega *
+                 self._mu_0 / (self._mu_0 + self._mu_ex))
+                * (1. - np.exp(-(self.V.tau / self._mu_0) -
+                               (self.V.tau / self._mu_ex)))
+                * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                            param_dict=self.param_dict))
+
+        return  - vol
+
 
     def _dvolume_dR(self):
         """
@@ -1040,7 +1495,7 @@ class RT1(object):
                                 self.param_dict))
 
         # Incorporate BRDF-normalization factor
-        dsdt = self.SRF.NormBRDF * dsdt
+        dsdt = self.SRF.NormBRDF * (1. - self.bsf) * dsdt
 
         return dsdt
 
@@ -1068,14 +1523,42 @@ class RT1(object):
                Numerical value of dIsurf/dR for the given set of parameters
         """
 
-        dsdr = (self.I0
-                * np.exp(-(self.V.tau / self._mu_0)
-                         - (self.V.tau / self._mu_ex))
-                * self._mu_0
-                * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex,
-                                self.param_dict))
+        I_bs = (self.I0 * self._mu_0
+                 * self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict))
 
-        return dsdr
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))
+                 ) * I_bs
+
+        return ((1. - self.bsf) * Isurf + self.bsf * I_bs)
+
+    def _dsurface_dbsf(self):
+        """
+        Numerical evaluation of the surface-contribution
+        (http://rt1.readthedocs.io/en/latest/theory.html#surface_contribution)
+
+        Returns
+        --------
+        - : array_like(float)
+            Numerical value of the surface-contribution for the
+            given set of parameters
+        """
+        # bare soil contribution
+        I_bs = (self.I0 * self._mu_0
+                 * self.SRF.brdf(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 param_dict=self.param_dict))
+
+
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))
+                 ) * I_bs * np.ones_like(self.t_0)
+
+        return self.SRF.NormBRDF * (I_bs - Isurf)
+
 
     # define functions that evaluate the derivatives with
     # respect to the defined parameters
@@ -1106,15 +1589,16 @@ class RT1(object):
                              sp.diff(self.SRF._func, sp.Symbol(key)),
                              modules=["numpy", "sympy"])
 
-        dIsurf = (self.I0 *
-                  np.exp(-(self.V.tau / self._mu_0) -
-                         (self.V.tau / self._mu_ex))
-                  * self._mu_0
-                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
-                           **self.param_dict)
-                  )
+        dI_bs = (self.I0 * self._mu_0
+                 * dummyd(self.t_0, self.t_ex,
+                                 self.p_0, self.p_ex,
+                                 **self.param_dict))
 
-        return self.SRF.NormBRDF * dIsurf
+
+        dI_s = (np.exp(-(self.V.tau / self._mu_0) -
+                                  (self.V.tau / self._mu_ex))) * dI_bs
+
+        return self.SRF.NormBRDF * ((1. - self.bsf) * dI_s + self.bsf * dI_bs)
 
     def _d_volume_ddummy(self, key):
         theta_0 = sp.Symbol('theta_0')
@@ -1135,7 +1619,7 @@ class RT1(object):
                                 (self.V.tau / self._mu_ex)))
                  * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
                           **self.param_dict))
-        return dIvol
+        return (1. - self.bsf) * dIvol
 
     def jacobian(self, dB=False, sig0=False,
                  param_list=['omega', 'tau', 'NormBRDF']):
@@ -1182,28 +1666,10 @@ class RT1(object):
               The jacobian of the total backscatter with respect to
               omega, tau and NormBRDF
         '''
-        from scipy.linalg import block_diag
-
-        jacdict = {}
-        if 'omega' in param_list:
-            jacdict['omega'] = (self._dsurface_domega() +
-                                self._dvolume_domega())
-        if 'tau' in param_list:
-            jacdict['tau'] = (self._dsurface_dtau() +
-                              self._dvolume_dtau())
-
-        if 'NormBRDF' in param_list:
-            jacdict['NormBRDF'] = (self._dsurface_dR() +
-                                   self._dvolume_dR())
-
-        for key in self.param_dict:
-            if key in param_list:
-                jacdict[key] = (self._d_surface_ddummy(key) +
-                                self._d_volume_ddummy(key))
 
         if sig0 is True and dB is False:
             norm = 4. * np.pi * np.cos(self.t_0)
-        if dB is True:
+        elif dB is True:
             norm = 10. / (np.log(10.) * (self.surface()
                                          + self.volume()))
         else:
@@ -1211,10 +1677,24 @@ class RT1(object):
 
         jac = []
         for key in param_list:
-            if len(self.surface().shape) == 1:
-                jac = [jacdict[str(key)] * norm for key in param_list]
-            else:
-                jac = [block_diag(*(jacdict[str(key)] * norm))
-                       for key in param_list]
 
-        return np.array(jac)
+            if key == 'omega':
+                jac += [(self._dsurface_domega() +
+                                    self._dvolume_domega()) * norm]
+            elif key == 'tau':
+                jac += [(self._dsurface_dtau() +
+                                  self._dvolume_dtau()) * norm]
+            elif key == 'NormBRDF':
+                jac += [(self._dsurface_dR() +
+                                       self._dvolume_dR()) * norm]
+            elif key == 'bsf':
+                jac += [(self._dsurface_dbsf() +
+                             self._dvolume_dbsf()) * norm]
+            elif key in self.param_dict:
+                jac += [(self._d_surface_ddummy(key) +
+                             self._d_volume_ddummy(key)) * norm]
+            else:
+                assert False, 'error in jacobian calculation... ' + str(key) \
+                              + ' is not in param_dict'
+
+        return jac

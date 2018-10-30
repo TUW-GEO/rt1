@@ -142,6 +142,7 @@ class Plots(Scatter):
                 polarax = polarfig.add_subplot(121, projection='polar')
 
             # plot of volume-scattering phase-function's
+            pmax = 0
             for V in V:
                 # define a plotfunction of the legendre-approximation of p
                 if paprox is True:
@@ -159,7 +160,16 @@ class Plots(Scatter):
                           'c', 'm',
                           'y'] * int(round((len(plottis) / 7. + 1)))
 
-                pmax = pmultip * np.max(V.p(plottis, np.pi - plottis, 0., 0.))
+                #pmax = pmultip * np.max(V.p(plottis, np.pi - plottis, 0., 0.))
+                for i in plottis:
+                    ts = np.arange(0., 2. * np.pi, .01)
+                    pmax_i = pmultip * np.max(V.p(np.full_like(ts, i),
+                                                ts,
+                                                0.,
+                                                0.))
+                    if pmax_i > pmax:
+                        pmax = pmax_i
+
 
                 if plegend is True:
                     legend_lines = []
@@ -234,7 +244,9 @@ class Plots(Scatter):
 
             if BRDFlegend is True:
                 legend_lines = []
+
             # plot of BRDF
+            brdfmax = 0
             for SRF in SRF:
                 # define a plotfunction of the analytic form of the BRDF
                 if BRDFaprox is True:
@@ -251,8 +263,16 @@ class Plots(Scatter):
                           'c', 'm',
                           'y'] * int(round((len(plottis) / 7. + 1)))
 
-                brdfmax = BRDFmultip * np.max(SRF.brdf(plottis,
-                                                       plottis, 0., 0.))
+                #brdfmax = BRDFmultip * np.max(SRF.brdf(plottis,
+                #                                       plottis, 0., 0.))
+
+                for i in plottis:
+                    ts = np.arange(0., 2. * np.pi, .01)
+                    brdfmax_i = BRDFmultip * np.max(SRF.brdf(
+                            np.full_like(ts, i), ts, 0., 0.))
+                    if brdfmax_i > brdfmax:
+                        brdfmax = brdfmax_i
+
 
                 # set color-counter to 0
                 i = 0
