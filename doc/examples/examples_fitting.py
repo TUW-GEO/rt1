@@ -119,7 +119,7 @@ R_data = RT1(1.,
              p_ex=None,
              V=V_data, SRF=SRF_data,
              geometry='mono', param_dict={'t_data': .5},
-             lambda_backend='cse_symengine_sympy',
+             lambda_backend='cse_seng_sp_newlambdify',
              verbosity=0)
 
 R_data.V.omega = omegadata
@@ -221,7 +221,7 @@ fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
                       verbose=2,  # verbose level of scipy's least_squares
                       ftol=1.e-8, xtol=1.e-8, gtol=1.e-8,
                       x_scale='jac',
-                      lambda_backend='cse_symengine_sympy',
+                      lambda_backend='cse_seng_sp_newlambdify',
                       verbosity=1  # verbose-level of rt1
                       # loss='cauchy'
                       )
