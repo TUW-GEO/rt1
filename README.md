@@ -22,7 +22,7 @@ in order to get the full functionality of the symbolic computations,
 it is currently required to install a specific commit of symengine, i.e.:
 
     conda install -c symengine/label/dev python-symengine=0.3.0.84
-    pip install git+https://github.com/TUW-GEO/rt1.git@dev
+    pip install rt1
 
 ## References
 * Quast & Wagner (2016): [doi:10.1364/AO.55.005379](http://dx.doi.org/10.1364/AO.55.005379)
