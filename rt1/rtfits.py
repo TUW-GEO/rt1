@@ -41,6 +41,67 @@ class Fits(Scatter):
         self.sig0 = sig0
         self.dB = dB
 
+
+
+    def generate_dyn_dict(self, param_keys, datetime_index,
+                          freq=None, freqkeys=[],
+                          ):
+        '''
+        generate a dictionary to assign the temporal dynamics of the variables.
+        any key that is not explicitly provided in daykeys, weekkeys or
+        monthkeys is assumed to be constant.
+
+        Parameter:
+        -------------
+        param_keys : an iterable of keys corresponding to the names
+                     of the parameters that are intended to be fitted
+        datetime_index : datetime-indexe list of the measurements
+        freq : list
+               a list of frequencies used for assigning the temporal
+               variability of the parameters ('D', 'M', '5D', etc.)
+        freqkeys : list
+               a list of parameter-names that will be assigned to the freq-list
+               (freqkeys = [['daily_p1', 'daily_p2'], ['monthly_p1']]
+                freq = ['D', 'M'])
+
+        Returns:
+        ---------
+        param_dyn_dict : dict
+                         a dictionary that can be used to assign the temporal
+                         dynamics to the parameters in the monofit function
+        '''
+
+        # TODO import pandas on top
+        # (currently it is only used inside this function so no 'real'
+        # dependency on pandas exists and an import in here seems meaningful...
+        import pandas as pd
+
+        param_dyn_dict = {}
+
+        # initialize all parameters as scalar parameters
+        for key in param_keys:
+            param_dyn_dict[key] = np.ones(len(datetime_index))
+
+        # TODO works only for unambiguous datetime-indexes !!!
+        # (repeated indexes will be grouped together)
+        if freq is not None:
+            for i, f in enumerate(freq):
+                for key in freqkeys[i]:
+                    df = pd.DataFrame(np.arange(1,
+                                                len(datetime_index) + 1),
+                                                index=datetime_index)
+                    dyn_list = []
+                    for k, arr in enumerate(df.resample(f).apply(len).values):
+                        dyn_list += list(np.full_like(range(arr[0]), k + 1))
+
+                    param_dyn_dict[key] = dyn_list
+
+        return param_dyn_dict
+
+
+
+
+
     def _preparedata(self, dataset):
         '''
         prepare data such that it is applicable to least_squres fitting
