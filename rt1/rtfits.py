@@ -47,9 +47,9 @@ class Fits(Scatter):
                           freq=None, freqkeys=[],
                           ):
         '''
-        generate a dictionary to assign the temporal dynamics of the variables.
-        any key that is not explicitly provided in daykeys, weekkeys or
-        monthkeys is assumed to be constant.
+        Generate a dictionary to assign the temporal dynamics of the variables.
+        Any key in 'param_jeys' that is not assigned in freqkeys will be
+        treated as a constant.
 
         Parameter:
         -------------
@@ -348,6 +348,7 @@ class Fits(Scatter):
               the jacobian corresponding to the fit-parameters in the
               shape applicable to scipy's least_squres-function
         '''
+
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
