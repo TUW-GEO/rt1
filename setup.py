@@ -18,7 +18,7 @@ def get_packages():
 
 setup(name='rt1',
 
-      version='v0.0.1',
+      version='v0.0.2',
 
       description='rt1 - bistatic single scattering radiative transfer model',
 
@@ -47,7 +47,7 @@ setup(name='rt1',
           # Pick your license as you wish (should match "license" above)
           #~ 'License :: OSI Approved :: MIT License',
 
-          'Programming Language :: Python :: 2.7'
+          'Programming Language :: Python :: 3.7'
       ],
 
       )
