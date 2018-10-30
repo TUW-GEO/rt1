@@ -48,7 +48,7 @@ class Fits(Scatter):
                           ):
         '''
         Generate a dictionary to assign the temporal dynamics of the variables.
-        Any key in 'param_jeys' that is not assigned in freqkeys will be
+        Any key in 'param_keys' that is not assigned in freqkeys will be
         treated as a constant.
 
         Parameter:
