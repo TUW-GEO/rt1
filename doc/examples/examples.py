@@ -29,7 +29,7 @@ I0 = 1.
 # EVALUATION OF BISTATIC PLOTS
 # if set to true, 3dplots will be generated,
 # otherwise the code is stopped after monostatic evaluation
-bistaticplot = True
+bistaticplot = False
 
 '''
 possible choices for example = ?
@@ -170,7 +170,7 @@ p_ex = np.ones_like(t_0) * 0. + np.pi
 
 tic = timeit.default_timer()
 R = RT1(I0, t_0, t_ex, p_0, p_ex, V=V, SRF=SRF,
-        geometry='mono', lambda_backend='cse_symengine_sympy')
+        geometry='mono', lambda_backend='cse_seng_sp_newlambdify')
 
 fn = R.fn  # evaluate and store coefficients for faster iteration
 _fnevals = R._fnevals  # evaluate and  store coefficients for faster iteration
@@ -337,7 +337,7 @@ def Rad(theta, phi, thetainc, phiinc):
     tic = timeit.default_timer()
     Rfn = RT1(1., np.deg2rad(thetainc), np.deg2rad(45), phiinc,
               np.pi, V=V, SRF=SRF, geometry='fvfv',
-              lambda_backend='cse_symengine_sympy')
+              lambda_backend='cse_seng_sp_newlambdify')
 
     _fnevals = Rfn._fnevals
     # store also fn-coefficients to avoid re-calculation
