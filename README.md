@@ -15,6 +15,7 @@ Any usage of this code is subject to the following conditions
 
 ## Installation
 if you want to use the latest master, using the following should be fine:
+
     pip install rt1
 
 in order to get the full functionality of the dev-version,
