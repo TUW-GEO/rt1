@@ -7,7 +7,7 @@ import numpy as np
 import sympy as sp
 try:
     import pandas as pd
-except:
+except ModuleNotFoundError:
     print('pandas could not be found! ... performfit() and generate_dyn_dict()\
            will not work!')
 
