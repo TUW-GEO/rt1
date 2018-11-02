@@ -5,6 +5,11 @@ Class to perform least_squares fitting of given datasets.
 
 import numpy as np
 import sympy as sp
+try:
+    import pandas as pd
+except:
+    print('pandas could not be found! ... performfit() and generate_dyn_dict()\
+           will not work!')
 
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -1184,6 +1189,178 @@ class Fits(Scatter):
 
         return [res_lsq, R, data, inc, mask, weights,
                 res_dict, start_dict, fixed_dict]
+
+
+    def performfit(self, dataset, defdict, set_V_SRF,
+                   fn_input = None, _fnevals_input = None,
+                   int_Q = False, **kwargs):
+        '''
+        Parameters
+        -----------
+        dataset : pandas.DataFrame
+                  a pandas.DataFrame with a datetime-index and columns 'inc'
+                  and 'sig' that correspond to the incidence-angles in radians
+                  and the sigma_0 values in linear or dB units (depending on
+                  the predefined dB parameter).
+        defdict : dict
+                  a dictionary used to assign RT1 specifications with the all
+                  required keys to specify SRF and V assigned. The keys must
+                  coincide with the function-arguments of set_V_SRF()!
+        set_V_SRF : callable
+                    a function that returns the rt1.volume- and a rt1.surface
+                    objects intended to be used in the fit.
+
+                    For example:
+
+                    >>> def set_V_SRF(omega, tau, t, N):
+                    >>>    from rt1.volume import Rayleigh
+                    >>>    from rt1.surface import HenyeyGreenstein
+                    >>>
+                    >>>    V=Rayleigh(omega=omega, tau=tau)
+                    >>>    SRF=HenyeyGreenstein(t=t, NormBRDF=N)
+                    >>>
+                    >>>    return V, SRF
+        fn_input : list
+                   a list of pre-evaluated fn-coefficients
+        _fnevals_input : callable
+                         a pre-compiled function for evaluation of the
+                         fn-coefficients (for speedup in case V and SRF
+                         properties are used in multiple fits)
+        kwargs :
+                 keyword arguments passed to scipy.optimize.least_squares()
+
+        Returns:
+        -----------
+
+        return_inv : dict
+                     a dictionary with the following keys assigned:
+                         'fit' : the rtfits.monofit result,
+                         'dataset' : the dataset used in the fit,
+                         'fn_input' : resulting fn coefficients,
+                         '_fnevals_input' : resulting _fnevals functions}
+        '''
+
+        # generate input-dataset
+        def generatedataset(dataset):
+            '''
+            a function to group the dataset to daily arrays
+            '''
+            new_df = pd.DataFrame()
+            new_df['inc'] = dataset['inc'].resample('D'
+                  ).apply(list).apply(np.array)
+            new_df['sig'] = dataset['sig'].resample('D'
+                  ).apply(list).apply(np.array)
+
+            # remove days where no measurements have been done
+            new_df = new_df[new_df.inc.apply(len) != 0]
+            return new_df
+
+        dataset_used = generatedataset(dataset)
+
+        # generate RT1 specifications based on defdict
+        # initialize empty dicts
+        fixed_dict = {}
+        setdict = {}
+        startvaldict = {}
+        timescaledict = {}
+        boundsvaldict = {}
+
+        # set parameters
+        for key in defdict.keys():
+            # if parameter is intended to be fitted, assign a sympy-symbol
+            if defdict[key][0] is True:
+                # TODO see why this is actually necessary
+                if key != 'omega':  # omega must not be a sympy-symbol name
+                    setdict[key] = sp.var(key)
+                else:
+                    # a dummy value that will be replaced in rtfits.monofit
+                    setdict[key] = 100
+
+                # set start-values
+                startvaldict[key] = defdict[key][1]
+
+                # set temporal variability
+                if defdict[key][2] is not None:
+                    timescaledict[key] = defdict[key][2]
+
+                # set boundaries
+                boundsvaldict[key] = defdict[key][3]
+
+            elif defdict[key][0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if np.isscalar(defdict[key][1]):
+                    setdict[key] = defdict[key][1]
+                else:
+                    # if value is provided as array, add it to fixed_dict
+                    # TODO same as above ...why is this necessary?
+                    # TODO what about 'tau' and 'NormBRDF'
+                    if key != 'omega':  # omega must not be a sympy-symbol name
+                        setdict[key] = sp.var(key)
+                    else:
+                        # a dummy value that will be replaced by rtfits.monofit
+                        setdict[key] = 100
+                    fixed_dict[key] = defdict[key][1]
+
+        # set V and SRF based on setter-function
+        V, SRF = set_V_SRF(**setdict)
+
+        # set frequencies of fitted parameters
+        freq = []
+        freqkeys = []
+        for key in timescaledict:
+            freq += [timescaledict[key]]
+            freqkeys += [[key]]
+
+        # generate param_dyn_dict to assign temporal variability
+        param_dyn_dict = self.generate_dyn_dict(startvaldict.keys(),
+                                                dataset_used.index,
+                                                freq=freq,
+                                                freqkeys=freqkeys)
+
+        # re-shape param_dict and bounds_dict to fit needs
+        param_dict = {}
+        for key in startvaldict:
+            uniqueparams = len(pd.unique(param_dyn_dict[key]))
+            # adjust shape of startvalues
+            if uniqueparams >= 1 and np.isscalar(startvaldict[key]):
+                param_dict[key] = [startvaldict[key]]*uniqueparams
+            else:
+                param_dict[key] = startvaldict[key]
+
+        bounds_dict = {}
+        for key in boundsvaldict:
+            uniqueparams = len(pd.unique(param_dyn_dict[key]))
+            # adjust shape of boundary conditions
+            if uniqueparams >= 1 and len(boundsvaldict[key][0]) == 1:
+                bounds_dict[key] = (boundsvaldict[key][0]*uniqueparams,
+                                    boundsvaldict[key][1]*uniqueparams)
+            else:
+                bounds_dict[key] = (boundsvaldict[key])
+
+        # perform fit
+        fitresult = self.monofit(V=V, SRF=SRF,
+                                 dataset=dataset_used.values,
+                                 param_dict=param_dict,
+                                 bsf = setdict['bsf'],
+                                 bounds_dict=bounds_dict,
+                                 fixed_dict=fixed_dict,
+                                 param_dyn_dict=param_dyn_dict,
+                                 fn_input=fn_input,
+                                 _fnevals_input=_fnevals_input,
+                                 int_Q=int_Q,
+                                 lambda_backend = 'cse_symengine_sympy',
+                                 verbosity=2,
+                                 **kwargs)
+
+        return_inv = {'fit' : fitresult,
+                      'dataset' : dataset_used,
+                      'fn_input' : fitresult[1].fn,
+                      '_fnevals_input' : fitresult[1]._fnevals}
+
+        return return_inv
+
+
 
     def printresults(self, fit, truevals=None, startvals=False,
                      datelist=None, legends=True):
