@@ -4,8 +4,10 @@ Definition of BRDF functions
 
 import numpy as np
 import sympy as sp
-from .scatter import Scatter
+from functools import partial, update_wrapper
 
+from .scatter import Scatter
+from .rtplots import polarplot, hemreflect
 
 class Surface(Scatter):
     """
@@ -20,6 +22,13 @@ class Surface(Scatter):
         self.a = getattr(self, 'a', [1., 1., 1.])
 
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
+        #quick way for visualizing the functions as polarplot
+        self.polarplot = partial(polarplot, SRF=self)
+        update_wrapper(self.polarplot, polarplot)
+        #quick way for visualizing the associated hemispherical reflectance
+        self.hemreflect = partial(hemreflect, SRF=self)
+        update_wrapper(self.hemreflect, hemreflect)
+
 
     def _get_NormBRDF(self):
         return self.__NormBRDF

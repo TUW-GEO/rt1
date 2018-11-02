@@ -3,8 +3,10 @@ Definition of volume phase scattering functions
 """
 
 import numpy as np
-from .scatter import Scatter
 import sympy as sp
+from functools import partial, update_wrapper
+from .scatter import Scatter
+from .rtplots import polarplot
 
 
 class Volume(Scatter):
@@ -17,6 +19,10 @@ class Volume(Scatter):
         # forward-direction which is suitable for describing volume-scattering
         # phase-functions
         self.a = getattr(self, 'a', [-1., 1., 1.])
+
+        #add a quick way for visualizing the functions as polarplot
+        self.polarplot = partial(polarplot, V=self)
+        update_wrapper(self.polarplot, polarplot)
 
     def _get_omega(self):
         return self.__omega
@@ -712,3 +718,4 @@ class HGRayleigh(Volume):
               (n + 1.) ** 2. / (2. * n + 3.) * self.t ** n +
               (5. * n ** 2. - 1.) / (2. * n - 1.) * self.t ** n), True)
         )
+
