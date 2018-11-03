@@ -459,18 +459,20 @@ class RT1(object):
                 modules = ['numpy'] are not pickleable.
                 (necessary for multiprocessing purposes)
                 '''
-
+                print('WARNING "cse_seng_sp_newlambdify" is depreciated \
+                       and will be removed since for sympy > v1.3 \
+                       sympy.lambdify() works as expected!')
                 # define a function for lambdification
                 def newlambdify(args, funs):
                     from sympy.printing.lambdarepr import NumPyPrinter
                     from sympy.utilities.lambdify import lambdastr
                     funcstr = lambdastr(args, funs, printer=NumPyPrinter)
 
-                    funcstr = funcstr.replace(
-                            'pi', 'np.pi').replace(
-                            'sin', 'np.sin').replace(
-                            'cos', 'np.cos').replace(
-                            'sqrt', 'np.sqrt')
+                    funcstr = funcstr.replace('numpy', 'np')
+                             #'pi', 'np.pi').replace(
+                             #'sin', 'np.sin').replace(
+                             #'cos', 'np.cos').replace(
+                             #'sqrt', 'np.sqrt')
 
                     return eval(funcstr)
 
