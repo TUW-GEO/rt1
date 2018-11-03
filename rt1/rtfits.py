@@ -7,7 +7,7 @@ import numpy as np
 import sympy as sp
 try:
     import pandas as pd
-except ModuleNotFoundError:
+except ImportError:
     print('pandas could not be found! ... performfit() and generate_dyn_dict()\
            will not work!')
 
@@ -979,37 +979,6 @@ class Fits(Scatter):
         for i in set(toNlist - vsymb - srfsymb):
             param_R.pop(i)
 
-#        if fn_input is None:
-#            # define rt1-object
-#            R = RT1(1., 0., 0., 0., 0.,
-#                    V=V, SRF=SRF, fn_input=None, geometry='mono',
-#                    param_dict=param_R, int_Q=int_Q,
-#                    lambda_backend=lambda_backend)
-#
-#            # set geometry
-#            R.t_0 = inc
-#            R.p_0 = np.zeros_like(inc)
-#            R.t_ex = inc
-#            R.p_ex = np.full_like(inc, np.pi)
-#
-#            fn = R.fn
-#            _fnevals = R._fnevals
-#        else:
-#            if _fnevals_input is None:
-#                # define rt1-object
-#                R = RT1(1., inc, inc, np.zeros_like(inc),
-#                        np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn,
-#                        geometry='mono', param_dict=param_R, int_Q=int_Q,
-#                        lambda_backend=lambda_backend)
-#
-#                _fnevals = R._fnevals
-#            else:
-#                # define rt1-object
-#                R = RT1(1., inc, inc, np.zeros_like(inc),
-#                        np.full_like(inc, np.pi), V=V, SRF=SRF, fn_input=fn,
-#                        _fnevals_input=_fnevals, geometry='mono',
-#                        param_dict=param_R, int_Q=int_Q,
-#                        lambda_backend=lambda_backend)
         # define rt1-object
         R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
                 V=V, SRF=SRF, fn_input=fn_input, _fnevals_input=_fnevals_input,
