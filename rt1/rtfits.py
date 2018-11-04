@@ -23,6 +23,9 @@ from scipy.sparse import csr_matrix, isspmatrix
 from .scatter import Scatter
 from .rt1 import RT1
 
+from functools import partial, update_wrapper
+from .rtplots import printsig0timeseries
+
 import copy  # used to copy objects
 
 
@@ -42,11 +45,19 @@ class Fits(Scatter):
          The applied relation is:    x_dB = 10. * np.log10( x_linear )
     '''
 
-    def __init__(self, sig0=False, dB=False, **kwargs):
+    def __init__(self, sig0=False, dB=False,
+                 dataset=None, set_V_SRF=None, defdict=None,
+                 **kwargs):
         self.sig0 = sig0
         self.dB = dB
+        self.dataset = dataset
+        self.set_V_SRF = set_V_SRF
+        self.defdict = defdict
+        self.result = None
 
 
+        self.printsig0timeseries = partial(printsig0timeseries, fit = self)
+        update_wrapper(self.printsig0timeseries, printsig0timeseries)
 
     def generate_dyn_dict(self, param_keys, datetime_index,
                           freq=None, freqkeys=[],
@@ -1160,7 +1171,7 @@ class Fits(Scatter):
                 res_dict, start_dict, fixed_dict]
 
 
-    def performfit(self, dataset, defdict, set_V_SRF,
+    def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
                    fn_input = None, _fnevals_input = None,
                    int_Q = False, **kwargs):
         '''
@@ -1208,6 +1219,12 @@ class Fits(Scatter):
                          'fn_input' : resulting fn coefficients,
                          '_fnevals_input' : resulting _fnevals functions}
         '''
+
+        # TODO change to only using rtfits objects!
+        # (i.e. it is not necessary to manually specify defdict etc.)
+        if defdict is None: defdict = self.defdict
+        if set_V_SRF is None: set_V_SRF = self.set_V_SRF
+        if dataset is None: dataset = self.dataset
 
         # generate input-dataset
         def generatedataset(dataset):
@@ -1322,12 +1339,10 @@ class Fits(Scatter):
                                  verbosity=2,
                                  **kwargs)
 
-        return_inv = {'fit' : fitresult,
-                      'dataset' : dataset_used,
-                      'fn_input' : fitresult[1].fn,
-                      '_fnevals_input' : fitresult[1]._fnevals}
+        self.result = fitresult
+        self.index = dataset_used.index
 
-        return return_inv
+        #return return_inv
 
 
 

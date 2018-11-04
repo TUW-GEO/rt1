@@ -7,6 +7,13 @@ polarplot() ... plot p and the BRDF as polar-plot
 
 import sympy as sp
 import numpy as np
+try:
+    import pandas as pd
+except ImportError:
+    print('pandas could not be found! ... printsig0timeseries()\
+           will not work!')
+
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 # plot of 3d scattering distribution
@@ -837,3 +844,140 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         axnum.grid()
         plt.show()
         return fig
+
+def printsig0timeseries(fit,
+                        dB=True,
+                        sig0=True,
+                        params=None,
+                        printtot = True,
+                        printsurf = True,
+                        printvol = True,
+                        printint = True,
+                        printorig = True,
+                        months = None,
+                        years = None,
+                        ylim=None):
+    '''
+    Print individual contributions, resulting parameters and the
+    reference dataset of an rt1.rtfits object as timeseries.
+
+    Parameters:
+    -------------
+    fit : rtfits object
+          the rtfits-object containing the fit-results
+    dB : bool (default = True)
+         indicator if the plot is intended to be in dB or linear units
+    sig0 : bool (default = True)
+         indicator if the plot should display sigma_0 (sig0) or intensity (I)
+         The applied relation is: sig0 = 4.*pi*cos(theta) * I
+    params: list
+            a list of parameter-names that should be overprinted
+            (the names must coincide with the arguments of set_V_SRF())
+    printtot, printsurf, printvol, printint, printorig : bool
+            indicators if the corresponding components should be plotted
+    months : list (default = None)
+             a list of months to plot (if None, all will be plotted)
+    years : list (default = None)
+            a list of years to select (if None, all will be plotted)
+    ylim : tuple
+           a tuple of (ymin, ymax) that will be used as boundaries for the
+           y-axis
+    '''
+    # get mask
+    (_, _, _, _, mask, _, _, _, _) = fit.result
+    # get incidence-angles
+    inc = np.ma.masked_array(fit.result[1].t_0, mask).compressed()
+
+    def dBsig0convert(val):
+        # if results are provided in dB convert them to linear units
+        if fit.dB is True: val = 10**(val/10.)
+        # convert sig0 to intensity
+        if sig0 is False and fit.sig0 is True:
+            val = val/(4.*np.pi*np.cos(inc))
+        # convert intensity to sig0
+        if sig0 is True and fit.sig0 is False:
+            val = 4.*np.pi*np.cos(inc)*val
+        # if dB output is required, convert to dB
+        if dB is True: val = 10.*np.log10(val)
+        return val
+
+    # calculate individual contributions
+    contrib = fit._calc_model(R=fit.result[1],
+                              res_dict={**fit.result[6],
+                                        **fit.result[-1]},
+                              return_components=True)
+    # apply mask and convert to pandas dataframe
+    contrib = np.ma.masked_array(contrib, [mask]*4)
+    contrib = pd.DataFrame(dict(zip(['tot', 'surf', 'vol', 'inter'],
+                          [i.compressed() for i in contrib])),
+                 index = fit.dataset.index)
+
+    # drop unneeded columns
+    if fit.result[1].int_Q is False or printint is False:
+        contrib = contrib.drop('inter', axis=1)
+    if printtot is False: contrib = contrib.drop('tot', axis=1)
+    if printsurf is False: contrib = contrib.drop('surf', axis=1)
+    if printvol is False: contrib = contrib.drop('vol', axis=1)
+
+    # select years and months
+    if years is not None:
+        contrib = contrib.loc[contrib.index.year.isin(years)]
+    if months is not None:
+        contrib = contrib.loc[contrib.index.month.isin(months)]
+
+    # convert units
+    contrib = contrib.apply(dBsig0convert)
+
+    # add original dataset
+    if printorig is True:
+        orig = dBsig0convert(fit.dataset['sig']).copy()
+        orig.name = '$\\sigma_0$ dataset'
+        contrib = pd.concat([contrib, orig], axis=1)
+
+    f, ax = plt.subplots(figsize=(12,5))
+    for label, val in contrib.items():
+        color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
+        if printorig is True: color[orig.name] = 'k'
+        ax.plot(val, linewidth =.25, marker='.',
+                ms=2, label=label, color=color[label], alpha = 0.5)
+    # overprint parameters
+    if params != None:
+        paramdf = pd.DataFrame({**fit.result[6], **fit.result[-1]},
+                               index = fit.index)
+        if years is not None:
+            paramdf = paramdf.loc[paramdf.index.year.isin(years)]
+        if months is not None:
+            paramdf = paramdf.loc[paramdf.index.month.isin(months)]
+
+        pax = ax.twinx()
+        for k in params:
+            pax.plot(paramdf[k], lw=1, marker='.', ms=2)
+        pax.legend(loc='upper right', ncol=5)
+        pax.set_ylabel('parameter-values')
+
+    # format datetime index
+    ax.xaxis.set_minor_locator(mpl.dates.MonthLocator())
+    ax.xaxis.set_minor_formatter(mpl.dates.DateFormatter('%m'))
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('\n%Y'))
+
+    # set ylabels
+    if sig0 is True:
+        label = '$\\sigma_0$'
+    else:
+        label = 'Intensity'
+    if dB is True: label += ' [dB]'
+    ax.set_ylabel(label)
+
+    # generate legend
+    hand, lab = ax.get_legend_handles_labels()
+    lab, unique_ind = np.unique(lab, return_index=True)
+    ax.legend(handles = list(np.array(hand)[unique_ind]),
+              labels=list(lab), loc='upper left',
+              ncol=5)
+
+    if ylim is not None:
+        ax.set_ylim(ylim)
+
+
+
