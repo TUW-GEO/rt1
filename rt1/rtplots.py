@@ -884,9 +884,11 @@ def printsig0timeseries(fit,
            y-axis
     '''
     # get mask
-    (_, _, _, _, mask, _, _, _, _) = fit.result
+    (_, _, data, _, mask, _, _, _, _) = fit.result
     # get incidence-angles
     inc = np.ma.masked_array(fit.result[1].t_0, mask).compressed()
+    # get input dataset
+    data = np.ma.masked_array(data, mask)
 
     def dBsig0convert(val):
         # if results are provided in dB convert them to linear units
@@ -902,15 +904,22 @@ def printsig0timeseries(fit,
         return val
 
     # calculate individual contributions
-    contrib = fit._calc_model(R=fit.result[1],
-                              res_dict={**fit.result[6],
-                                        **fit.result[-1]},
-                              return_components=True)
+    contrib_array = fit._calc_model(R=fit.result[1],
+                                    res_dict={**fit.result[6],
+                                              **fit.result[-1]},
+                                    return_components=True)
     # apply mask and convert to pandas dataframe
-    contrib = np.ma.masked_array(contrib, [mask]*4)
-    contrib = pd.DataFrame(dict(zip(['tot', 'surf', 'vol', 'inter'],
-                          [i.compressed() for i in contrib])),
-                 index = fit.dataset.index)
+    contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
+    contrib_array += [data]
+
+    contrib = []
+    for i, cont in enumerate(contrib_array):
+        contrib += [pd.DataFrame(cont,
+                                 index = fit.index,
+                                 ).stack().reset_index().set_index('level_0'
+                                        ).drop('level_1', axis=1)[0]]
+    contrib = pd.concat(contrib, keys=['tot', 'surf', 'vol', 'inter',
+                                       '$\\sigma_0$ dataset'], axis=1)
 
     # drop unneeded columns
     if fit.result[1].int_Q is False or printint is False:
@@ -918,6 +927,8 @@ def printsig0timeseries(fit,
     if printtot is False: contrib = contrib.drop('tot', axis=1)
     if printsurf is False: contrib = contrib.drop('surf', axis=1)
     if printvol is False: contrib = contrib.drop('vol', axis=1)
+    if printorig is False:
+        contrib = contrib.drop('$\\sigma_0$ dataset', axis=1)
 
     # select years and months
     if years is not None:
@@ -928,16 +939,10 @@ def printsig0timeseries(fit,
     # convert units
     contrib = contrib.apply(dBsig0convert)
 
-    # add original dataset
-    if printorig is True:
-        orig = dBsig0convert(fit.dataset['sig']).copy()
-        orig.name = '$\\sigma_0$ dataset'
-        contrib = pd.concat([contrib, orig], axis=1)
-
     f, ax = plt.subplots(figsize=(12,5))
     for label, val in contrib.items():
         color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
-        if printorig is True: color[orig.name] = 'k'
+        if printorig is True: color['$\\sigma_0$ dataset'] = 'k'
         ax.plot(val, linewidth =.25, marker='.',
                 ms=2, label=label, color=color[label], alpha = 0.5)
     # overprint parameters
