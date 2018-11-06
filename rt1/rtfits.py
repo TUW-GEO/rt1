@@ -36,25 +36,64 @@ class Fits(Scatter):
     Parameters:
     ------------
     sig0 : boolean (default = False)
-           Indicator whether the data is given as sigma_0-values (sig_0) or as
+           Indicator whether dataset is given as sigma_0-values (sig_0) or as
            intensity-values (I). The applied relation is:
                sig_0 = 4. * np.pi * np.cos(inc) * I
            where inc is the corresponding incident zenith-angle.
     dB : boolean (default = False)
-         Indicator whether the data is given in linear units or in dB.
+         Indicator whether dataset is given in linear units or in dB.
          The applied relation is:    x_dB = 10. * np.log10( x_linear )
+    dataset : pandas.DataFrame (default = None)
+              a pandas.DataFrame with columns 'inc' and 'sig' defined
+              where 'inc' referrs to the incidence-angle in radians, and
+              'sig' referrs to the measurement value (corresponding to
+              the assigned sig0 and dB values)
+    defdict : dict (default = None)
+              a dictionary of the following structure:
+              (the dict will be copied internally using copy.deepcopy(dict))
+
+              >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
+              >>>            'key2' : [fitQ, val, freq, ([min], [max])],
+              >>>            ...}
+
+              where all keys required to call set_V_SRF must be defined
+              and the values are defined via:
+                  fitQ : bool
+                         indicator if the quantity should be fitted (True)
+                         or used as a constant during the fit (False)
+                  val : float or array
+                        if fitQ is True, val will be used as start-value
+                        if fitQ is False, val will be used as constant.
+                        Notice: if val is an array, symbolic evaluation
+                        of the corresponding parameter is necessary in order
+                        to generate a function that can handle array-inputs!
+                  freq : the frequency of the fit-parameter as a string
+                         (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
+                         (only needed if fitQ is True)
+                  min, max : float
+                             the boundary-conditions for the parameter
+                             (only needed if fitQ is True)
+    set_V_SRF : callable (default = None)
+                function with the following structure:
+
+                >>> def set_V_SRF(volume-keys, surface-keys):
+                >>>     from rt1.volume import 'Volume-function'
+                >>>     from rt1.surface import 'Surface function'
+                >>>
+                >>>     V = Volume-function(volume-keys)
+                >>>     SRF = Surface-function(surface-keys)
+                >>>
+                >>>     return V, SRF
     '''
 
-    def __init__(self, sig0=False, dB=False,
-                 dataset=None, set_V_SRF=None, defdict=None,
-                 **kwargs):
+    def __init__(self, sig0=False, dB=False, dataset=None,
+                 defdict=None, set_V_SRF=None, **kwargs):
         self.sig0 = sig0
         self.dB = dB
         self.dataset = dataset
         self.set_V_SRF = set_V_SRF
-        self.defdict = defdict
+        self.defdict = copy.deepcopy(defdict)
         self.result = None
-
 
         self.printsig0timeseries = partial(printsig0timeseries, fit = self)
         update_wrapper(self.printsig0timeseries, printsig0timeseries)
