@@ -908,16 +908,17 @@ def printsig0timeseries(fit,
                                     res_dict={**fit.result[6],
                                               **fit.result[-1]},
                                     return_components=True)
+
     # apply mask and convert to pandas dataframe
     contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
     contrib_array += [data]
 
     contrib = []
     for i, cont in enumerate(contrib_array):
-        contrib += [pd.DataFrame(cont,
-                                 index = fit.index,
-                                 ).stack().reset_index().set_index('level_0'
-                                        ).drop('level_1', axis=1)[0]]
+        contrib += [pd.concat([pd.DataFrame(i, index = fit.index) for i in cont.T])[0]]
+#        contrib += [pd.DataFrame(cont,
+#                                 index = fit.index).stack().reset_index().set_index('level_0'
+#                                        ).drop('level_1', axis=1)[0]]
     contrib = pd.concat(contrib, keys=['tot', 'surf', 'vol', 'inter',
                                        '$\\sigma_0$ dataset'], axis=1)
 
@@ -943,12 +944,12 @@ def printsig0timeseries(fit,
     for label, val in contrib.items():
         color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
         if printorig is True: color['$\\sigma_0$ dataset'] = 'k'
-        ax.plot(val, linewidth =.25, marker='.',
+        ax.plot(val.sort_index(), linewidth =.25, marker='.',
                 ms=2, label=label, color=color[label], alpha = 0.5)
     # overprint parameters
     if params != None:
         paramdf = pd.DataFrame({**fit.result[6], **fit.result[-1]},
-                               index = fit.index)
+                               index = fit.index).sort_index()
         if years is not None:
             paramdf = paramdf.loc[paramdf.index.year.isin(years)]
         if months is not None:
