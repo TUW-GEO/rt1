@@ -856,7 +856,8 @@ def printsig0timeseries(fit,
                         printorig = True,
                         months = None,
                         years = None,
-                        ylim=None):
+                        ylim=None,
+                        printinc = True):
     '''
     Print individual contributions, resulting parameters and the
     reference dataset of an rt1.rtfits object as timeseries.
@@ -882,11 +883,15 @@ def printsig0timeseries(fit,
     ylim : tuple
            a tuple of (ymin, ymax) that will be used as boundaries for the
            y-axis
+    printinc : bool (default = True)
+               indicator if the incidence-angle dependency should be plotted
+               (in a separate plot alongside the timeseries)
     '''
     # get mask
     (_, _, data, _, mask, _, _, _, _) = fit.result
     # get incidence-angles
-    inc = np.ma.masked_array(fit.result[1].t_0, mask).compressed()
+    inc_array = np.ma.masked_array(fit.result[1].t_0, mask)
+    inc = inc_array.compressed()
     # get input dataset
     data = np.ma.masked_array(data, mask)
 
@@ -911,16 +916,21 @@ def printsig0timeseries(fit,
 
     # apply mask and convert to pandas dataframe
     contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
-    contrib_array += [data]
+    contrib_array += [data, inc_array]
 
     contrib = []
     for i, cont in enumerate(contrib_array):
         contrib += [pd.concat([pd.DataFrame(i, index = fit.index) for i in cont.T])[0]]
-#        contrib += [pd.DataFrame(cont,
-#                                 index = fit.index).stack().reset_index().set_index('level_0'
-#                                        ).drop('level_1', axis=1)[0]]
-    contrib = pd.concat(contrib, keys=['tot', 'surf', 'vol', 'inter',
-                                       '$\\sigma_0$ dataset'], axis=1)
+
+    contrib = pd.concat(contrib,
+                        keys=['tot', 'surf', 'vol', 'inter',
+                              '$\\sigma_0$ dataset', 'inc'], axis=1).dropna()
+
+    # convert units
+    contrib[['tot', 'surf', 'vol', 'inter',
+             '$\\sigma_0$ dataset']] = contrib[[
+                     'tot', 'surf', 'vol', 'inter', '$\\sigma_0$ dataset'
+                     ]].apply(dBsig0convert)
 
     # drop unneeded columns
     if fit.result[1].int_Q is False or printint is False:
@@ -937,11 +947,34 @@ def printsig0timeseries(fit,
     if months is not None:
         contrib = contrib.loc[contrib.index.month.isin(months)]
 
-    # convert units
-    contrib = contrib.apply(dBsig0convert)
 
-    f, ax = plt.subplots(figsize=(12,5))
+    # print incidence-angle dependency
+    if printinc is True:
+        f, [ax, ax_inc] = plt.subplots(ncols=2, figsize=(15,5),
+                                       gridspec_kw={'width_ratios':[3,1]},
+                                       sharey=True)
+        f.subplots_adjust(left=0.05, right=0.98, top=0.98,
+                          bottom=0.1, wspace=0.1)
+
+        for label, val in contrib.items():
+            if label in ['inc']: continue
+            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y',
+                     '$\\sigma_0$ dataset':'k'}
+            for incs, sigs in zip(contrib['inc'].groupby(contrib.index
+                                  ).apply(np.array).values,
+                                  val.groupby(val.index).apply(np.array
+                                             ).values):
+                ax_inc.plot(np.rad2deg(incs), sigs,
+                            linewidth =.25, marker='.', ms=2, label=label,
+                            color=color[label], alpha = 0.5)
+        ax_inc.set_xlabel('$\\theta_0$')
+    else:
+        f, ax = plt.subplots(figsize=(12,5))
+        f.subplots_adjust(left=0.05, right=0.98, top=0.98,
+                          bottom=0.1, wspace=0.05)
+
     for label, val in contrib.items():
+        if label in ['inc']: continue
         color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
         if printorig is True: color['$\\sigma_0$ dataset'] = 'k'
         ax.plot(val.sort_index(), linewidth =.25, marker='.',
