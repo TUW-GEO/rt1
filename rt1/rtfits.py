@@ -1245,8 +1245,11 @@ class Fits(Scatter):
                          a pre-compiled function for evaluation of the
                          fn-coefficients (for speedup in case V and SRF
                          properties are used in multiple fits)
-        kwargs :
+        TODO... :
+        kwargs_least_squares : dict
                  keyword arguments passed to scipy.optimize.least_squares()
+        kwargs_monofit : dict
+                 keyword arguments passed to rtfits.monofit()
 
         Returns:
         -----------
@@ -1265,22 +1268,6 @@ class Fits(Scatter):
         if set_V_SRF is None: set_V_SRF = self.set_V_SRF
         if dataset is None: dataset = self.dataset
 
-        # generate input-dataset
-        def generatedataset(dataset):
-            '''
-            a function to group the dataset to daily arrays
-            '''
-            new_df = pd.DataFrame()
-            new_df['inc'] = dataset['inc'].resample('D'
-                  ).apply(list).apply(np.array)
-            new_df['sig'] = dataset['sig'].resample('D'
-                  ).apply(list).apply(np.array)
-
-            # remove days where no measurements have been done
-            new_df = new_df[new_df.inc.apply(len) != 0]
-            return new_df
-
-        dataset_used = generatedataset(dataset)
 
         # generate RT1 specifications based on defdict
         # initialize empty dicts
@@ -1289,7 +1276,7 @@ class Fits(Scatter):
         startvaldict = {}
         timescaledict = {}
         boundsvaldict = {}
-
+        manual_dyn_df = pd.DataFrame()
         # set parameters
         for key in defdict.keys():
             # if parameter is intended to be fitted, assign a sympy-symbol
@@ -1305,8 +1292,17 @@ class Fits(Scatter):
                 startvaldict[key] = defdict[key][1]
 
                 # set temporal variability
-                if defdict[key][2] is not None:
+                if defdict[key][2] == 'manual':
+                    manual_dyn_df = pd.concat([manual_dyn_df,
+                                               defdict[key][4]], axis=1)
+                elif defdict[key][2] is not None:
+
                     timescaledict[key] = defdict[key][2]
+                    try:
+                        manual_dyn_df = pd.concat([manual_dyn_df,
+                                                   defdict[key][4]], axis=1)
+                    except Exception:
+                        pass
 
                 # set boundaries
                 boundsvaldict[key] = defdict[key][3]
@@ -1330,6 +1326,8 @@ class Fits(Scatter):
         # set V and SRF based on setter-function
         V, SRF = set_V_SRF(**setdict)
 
+
+
         # set frequencies of fitted parameters
         freq = []
         freqkeys = []
@@ -1337,11 +1335,79 @@ class Fits(Scatter):
             freq += [timescaledict[key]]
             freqkeys += [[key]]
 
-        # generate param_dyn_dict to assign temporal variability
-        param_dyn_dict = self.generate_dyn_dict(startvaldict.keys(),
-                                                dataset_used.index,
-                                                freq=freq,
-                                                freqkeys=freqkeys)
+
+        def generatedataset(dataset, dyn_keys,
+                            freq=None, freqkeys=[],
+                            manual_dyn_df=None):
+            '''
+            a function to group the dataset to daily arrays
+            '''
+            dataset = copy.deepcopy(dataset)
+            # generate a unique number for each day
+            dataset['dynnr'] = dataset.index.strftime('%Y%m%d')
+            dataset['dynnr'] = dataset['dynnr'].astype(str)
+
+
+            # add manual dynamic dict assignments
+            if manual_dyn_df is not None:
+                for key in manual_dyn_df:
+                    dataset[key] = manual_dyn_df[key]
+                    dataset['dynnr'] += manual_dyn_df[key].astype(str)
+
+            # add an index-column for later use
+            dataset['index'] = dataset.index
+
+            # group by the dynnr
+            groupdf = dataset.groupby('dynnr')
+            index = groupdf['index'].apply(list).apply(np.take, indices=0)
+            sig = groupdf['sig'].apply(list).apply(np.array)
+            inc = groupdf['inc'].apply(list).apply(np.array)
+
+
+            manual_dyns = pd.concat([index] +
+                                    [groupdf[key].apply(list
+                                     ).apply(np.take, indices=0)
+                                     for key in manual_dyn_df], axis=1)
+
+            manual_dyns = manual_dyns.set_index('index')
+
+            new_df = pd.concat([index, inc, sig], axis=1)
+            new_df = new_df.set_index('index')
+
+
+
+            param_dyn_dict = {}
+            # initialize all parameters as scalar parameters
+            for key in dyn_keys:
+                param_dyn_dict[key] = np.ones(len(index))
+
+            # TODO works only for unambiguous datetime-indexes !!!
+            # (repeated indexes will be grouped together)
+            if freq is not None:
+                for i, f in enumerate(freq):
+                    for key in freqkeys[i]:
+                        df = pd.DataFrame(np.arange(1,
+                                                    len(index) + 1),
+                                                    index=index)
+                        dyn_list = []
+                        for k, arr in enumerate(df.resample(f).apply(len).values):
+                            dyn_list += list(np.full_like(range(arr[0]), k + 1))
+
+                        param_dyn_dict[key] = dyn_list
+
+            if manual_dyn_df is not None:
+                for key, val in manual_dyns.items():
+                    param_dyn_dict[key] += val.values.flatten()*100000
+
+            return new_df, param_dyn_dict, manual_dyns
+
+
+        dataset_used, param_dyn_dict, manual_dyns = generatedataset(
+                dataset=dataset, dyn_keys=startvaldict.keys(),
+                freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df)
+        self.manual_dyns = manual_dyns
+
+
 
         # re-shape param_dict and bounds_dict to fit needs
         param_dict = {}
