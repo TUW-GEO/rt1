@@ -840,10 +840,6 @@ class RT1(object):
                Interaction contribution
         """
 
-        # the following if query ensures that volume- and interaction-terms
-        # are only calculated if tau > 0.
-        # (to avoid nan-values from invalid function-evaluations)
-
         if self.V.tau.shape == (1,):
             Isurf = self.surface()
             # differentiation for non-existing canopy, as otherwise NAN values
@@ -857,69 +853,22 @@ class RT1(object):
                 Ivol = np.array([0.])
                 Iint = np.array([0.])
         else:
-            # calculate surface-term (valid for any tau-value)
             Isurf = self.surface()
-
-            # store initial parameter-values
-            old_t_0 = self.t_0
-            old_p_0 = self.p_0
-            old_t_ex = self.t_ex
-            old_p_ex = self.p_ex
-
-            old_tau = self.V._get_tau()
-            old_omega = self.V._get_omega()
-            old_NN = self.SRF._get_NormBRDF()
-
-            # set mask for tau > 0.
-            mask = old_tau > 0.
-            valid_index = np.where(mask)
-            inval_index = np.where(~mask)
-
-            # set parameter-values to valid values for calculation
-            self.t_0 = old_t_0[valid_index[0]]
-            self.p_0 = old_p_0[valid_index[0]]
-            self.t_ex = old_t_ex[valid_index[0]]
-            self.p_ex = old_p_ex[valid_index[0]]
-
-            # squeezing the arrays is necessary since the setter-function for
-            # tau, omega and NormBRDF automatically adds an axis to the arrays!
-            self.V.tau = np.squeeze(old_tau[valid_index[0]])
-            if np.array(self.V.omega).size != 1:
-                self.V.omega = np.squeeze(old_omega[valid_index[0]])
-            if np.array(self.SRF.NormBRDF).size != 1:
-                self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
-
-            # calculate volume and interaction term where tau-values are valid
-            _Ivol = self.volume()
+            Ivol = self.volume()
+            # TODO this should be fixed more properly
+            # (i.e. for tau=0, no interaction-term should be calculated)
             if self.int_Q is True:
-                _Iint = self.interaction()
-            else:
-                _Iint = np.full_like(self.t_0, 0.)
-
-            # reset parameter values to old values
-            self.t_0 = old_t_0
-            self.p_0 = old_p_0
-            self.t_ex = old_t_ex
-            self.p_ex = old_p_ex
-
-            # squeezing the arrays is necessary since the setter-function for
-            # tau, omega and NormBRDF automatically add an axis to the arrays!
-            self.V.tau = np.squeeze(old_tau)
-            self.V.omega = np.squeeze(old_omega)
-            self.SRF.NormBRDF = np.squeeze(old_NN)
-
-            # combine calculated volume-contributions for valid tau-values
-            # with zero-arrays for invalid tau-values
-            Ivol = np.ones_like(self.t_0)
-            Ivol[valid_index[0]] = _Ivol
-            Ivol[inval_index[0]] = np.ones_like(Ivol[inval_index[0]]) * 0.
-
-            # combine calculated interaction-contributions for valid tau-values
-            # with zero-arrays for invalid tau-values
-            if self.int_Q is True:
-                Iint = np.ones_like(self.t_0)
-                Iint[valid_index[0]] = _Iint
-                Iint[inval_index[0]] = np.ones_like(Iint[inval_index[0]]) * 0.
+                Iint = self.interaction()
+                # check if there are nan-values present that result from
+                # (self.V.tau = 0) and replace them with 0
+                wherenan = np.isnan(Iint)
+                if np.any(wherenan) and np.allclose(
+                        *np.broadcast_arrays(wherenan, self.V.tau==0.)):
+                    self.prv(3, 'Warning replacing nan-values caused by tau=0 \
+                             in the interaction-term with 0!')
+                    Iint[np.where(wherenan)] = 0.
+                else:
+                    pass
             else:
                 Iint = np.full_like(self.t_0, 0.)
 
