@@ -930,10 +930,15 @@ def printsig0timeseries(fit,
         if dB is True: val = 10.*np.log10(val)
         return val
 
+    res_dict = {}
+    # add fitted parameters
+    res_dict.update(fit.result[6])
+    # add constant values
+    res_dict.update(fit.result[-1])
+
     # calculate individual contributions
     contrib_array = fit._calc_model(R=fit.result[1],
-                                    res_dict={**fit.result[6],
-                                              **fit.result[-1]},
+                                    res_dict=res_dict,
                                     return_components=True)
 
     # apply mask and convert to pandas dataframe
@@ -1003,7 +1008,13 @@ def printsig0timeseries(fit,
                 ms=2, label=label, color=color[label], alpha = 0.5)
     # overprint parameters
     if params != None:
-        paramdf = pd.DataFrame({**fit.result[6], **fit.result[-1]},
+        paramdf_dict = {}
+        # add fitted parameters
+        paramdf_dict.update(fit.result[6])
+        # add constant values
+        paramdf_dict.update(fit.result[-1])
+
+        paramdf = pd.DataFrame(paramdf_dict,
                                index = fit.index).sort_index()
         if years is not None:
             paramdf = paramdf.loc[paramdf.index.year.isin(years)]
