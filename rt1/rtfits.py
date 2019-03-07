@@ -281,7 +281,6 @@ class Fits(Scatter):
                      in linear-units or dB corresponding to the specifications
                      defined in the rtfits-class.
         '''
-
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
@@ -628,6 +627,10 @@ class Fits(Scatter):
                 dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
                 newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
 
+        if hasattr(self, 'intermediate_results'):
+            self.intermediate_results['jacobian'] += [newjacdict]
+
+
         # return the transposed jacobian as needed by scipy's least_squares
         if np.any([isspmatrix(newjacdict[key]) for key in order]):
             # in case sparse matrices have been used, use scipy to vstack them
@@ -776,7 +779,9 @@ class Fits(Scatter):
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
-                lambda_backend='cse', verbosity=0, **kwargs):
+                lambda_backend='cse', verbosity=0,
+                intermediate_results=False,
+                **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -913,6 +918,23 @@ class Fits(Scatter):
                          if they are not provided explicitly
         verbosity : int
                   set verbosity level of rt1-module
+        intermediate_results : bool (default = False)
+                               indicator if intermediate results should be
+                               stored (for analysis purpose only). If True, a
+                               dictionary will be generated that contains
+                               detailed results for each iteration-step of the
+                               fit-procedure. It is structured as follows:
+
+                                   'jacobian' : a list of dicts with the
+                                                jacobians for each fitted
+                                                parameter
+
+                                   'errdict' : {'abserr' : list of RMSE,
+                                                'relerr' : list of RMSE/data}
+
+                                   'parameters' : list of parameter-result
+                                                  dictionaries for each step
+
         kwargs :
                  keyword arguments passed to scipy's least_squares function
 
@@ -940,6 +962,14 @@ class Fits(Scatter):
                    a dictionary containing the parameter-values that have been
                    used as constants during the fit
         '''
+        # set up the dictionary for storing intermediate results
+        if intermediate_results is True:
+            if not hasattr(self, 'intermediate_results'):
+                self.intermediate_results = {'parameters':[],
+                                             'residuals':[],
+                                             'jacobian':[]}
+
+
 
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
@@ -1084,6 +1114,14 @@ class Fits(Scatter):
             # incorporate weighting-matrix to ensure correct treatment
             # of artificially added values (see _preparedata()-fucntion)
             errs = weights * errs
+
+
+            if intermediate_results is True:
+                self.intermediate_results['parameters'] += [newdict]
+
+                errdict = {'abserr' : errs,
+                           'relerr' : errs/data}
+                self.intermediate_results['residuals'] += [errdict]
 
             return errs
 
@@ -1418,6 +1456,7 @@ class Fits(Scatter):
                 param_dict[key] = [startvaldict[key]]*uniqueparams
             else:
                 param_dict[key] = startvaldict[key]
+
 
         bounds_dict = {}
         for key in boundsvaldict:
