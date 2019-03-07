@@ -25,7 +25,9 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
               plabel='Volume-Scattering Phase Function',
               BRDFlabel='Surface-BRDF', paprox=True, BRDFaprox=True,
               plegend=True, plegpos=(0.75, 0.5), BRDFlegend=True,
-              BRDFlegpos=(0.285, 0.5), groundcolor="none"):
+              BRDFlegpos=(0.285, 0.5), groundcolor="none",
+              Vparam_dict = [{}],
+              BRDFparam_dict = [{}]):
     """
     Generation of polar-plots of the volume- and the surface scattering
     phase function as well as the used approximations in terms of
@@ -140,7 +142,7 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
 
         # plot of volume-scattering phase-function's
         pmax = 0
-        for V in V:
+        for n_V, V in enumerate(V):
             # define a plotfunction of the legendre-approximation of p
             if paprox is True:
                 phasefunktapprox = sp.lambdify((
@@ -163,7 +165,8 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 pmax_i = pmultip * np.max(V.p(np.full_like(ts, i),
                                             ts,
                                             0.,
-                                            0.))
+                                            0.,
+                                            param_dict=Vparam_dict[n_V]))
                 if pmax_i > pmax:
                     pmax = pmax_i
 
@@ -177,7 +180,7 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 color = colors[i]
                 i = i + 1
                 thetass = np.arange(0., 2. * np.pi, .01)
-                rad = V.p(ti, thetass, 0., 0.)
+                rad = V.p(ti, thetass, 0., 0., param_dict=Vparam_dict[n_V])
                 if paprox is True:
                     # the use of np.pi-ti stems from the definition
                     # of legexpansion() in volume.py
@@ -244,7 +247,7 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
 
         # plot of BRDF
         brdfmax = 0
-        for SRF in SRF:
+        for n_SRF, SRF in enumerate(SRF):
             # define a plotfunction of the analytic form of the BRDF
             if BRDFaprox is True:
                 brdffunktapprox = sp.lambdify(
@@ -266,7 +269,8 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
             for i in plottis:
                 ts = np.arange(0., 2. * np.pi, .01)
                 brdfmax_i = BRDFmultip * np.max(SRF.brdf(
-                        np.full_like(ts, i), ts, 0., 0.))
+                        np.full_like(ts, i), ts, 0., 0.,
+                        param_dict=BRDFparam_dict[n_SRF]))
                 if brdfmax_i > brdfmax:
                     brdfmax = brdfmax_i
 
@@ -277,7 +281,8 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 color = colors[i]
                 i = i + 1
                 thetass = np.arange(-np.pi / 2., np.pi / 2., .01)
-                rad = SRF.brdf(ti, thetass, 0., 0.)
+                rad = SRF.brdf(ti, thetass, 0., 0.,
+                               param_dict=BRDFparam_dict[n_SRF])
                 if BRDFaprox is True:
                     radapprox = brdffunktapprox(ti, thetass, 0., 0.)
                 # set theta direction to clockwise
@@ -725,7 +730,7 @@ def linplot3d(theta, phi, Itot=None, Isurf=None, Ivol=None,
 
 def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
                t_0_max=90., simps_N=1000, showpoints=True,
-               returnarray=False):
+               returnarray=False, param_dict={}):
     '''
     Numerical evaluation of the hemispherical reflectance of the given
     BRDF-function using scipy's implementation of the Simpson-rule
@@ -760,6 +765,9 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
               within the Simpson-rule
     showpoints : boolean
                  show or hide integration-points in the plot
+    param_dict : dict
+                 a dictionary containing the names and values of the symbolic
+                 parameters required to define the SRF function
 
     Returns
     --------
@@ -773,10 +781,23 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
     # choose BRDF function to be evaluated
     if R is not None:
         BRDF = R.SRF.brdf
-        NormBRDF = R.SRF.NormBRDF
+
+        try:
+            Nsymb = R.SRF.NormBRDF[0].free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+                                modules=['numpy'])
+            NormBRDF = Nfunc(*[param_dict[str(i)] for i in Nsymb])
+        except Exception:
+            NormBRDF = R.SRF.NormBRDF
     elif SRF is not None:
         BRDF = SRF.brdf
-        NormBRDF = SRF.NormBRDF
+        try:
+            Nsymb = SRF.NormBRDF[0].free_symbols
+            Nfunc = sp.lambdify(Nsymb, SRF.NormBRDF[0],
+                                modules=['numpy'])
+            NormBRDF = Nfunc(*[param_dict[str(i)] for i in Nsymb])
+        except Exception:
+            NormBRDF = SRF.NormBRDF
     else:
         assert False, 'Error: You must provide either R or SRF'
 
@@ -804,7 +825,8 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         def integfunkt(theta_s, phi_s):
             return np.sin(theta_s) * np.cos(theta_s) * BRDF(theta_0,
                                                             theta_s,
-                                                            phi_0, phi_s)
+                                                            phi_0, phi_s,
+                                                            param_dict=param_dict)
         # evaluate the integral using Simpson's Rule twice
         z = integfunkt(x[:, None], y)
         sol = sol + [simps(simps(z, y), x)]
