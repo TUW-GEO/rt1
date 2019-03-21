@@ -16,6 +16,9 @@ env:
   # see: https://github.com/sympy/sympy/pull/13530
   - MPMATH_NOGMPY=1
 
+before_install:
+- sudo rm -f /etc/apt/sources.list.d/cassandra*
+
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
