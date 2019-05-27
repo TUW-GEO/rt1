@@ -4,8 +4,8 @@
 language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
-  - "2.7"
-  - "3.4"
+  # - "2.7"
+  # - "3.4"
   - "3.5"
   - "3.6"
 
@@ -15,6 +15,10 @@ env:
   # see: https://github.com/sympy/sympy/issues/12895
   # see: https://github.com/sympy/sympy/pull/13530
   - MPMATH_NOGMPY=1
+
+#before_install:
+#- sudo rm -f /etc/apt/sources.list.d/cassandra*
+# this is a temporary fix of a travis-issue and should be removed once it's fixed on the travis side
 
 install:
   - sudo apt-get update
