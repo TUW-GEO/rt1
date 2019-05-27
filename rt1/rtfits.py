@@ -126,11 +126,6 @@ class Fits(Scatter):
                          dynamics to the parameters in the monofit function
         '''
 
-        # TODO import pandas on top
-        # (currently it is only used inside this function so no 'real'
-        # dependency on pandas exists and an import in here seems meaningful...
-        import pandas as pd
-
         param_dyn_dict = {}
 
         # initialize all parameters as scalar parameters
@@ -1085,20 +1080,22 @@ class Fits(Scatter):
             # generate a dictionary to assign values based on input
             count = 0
             newdict = {}
-            for i, key in enumerate(order):
+            for key in order:
                 # find unique parameter estimates and how often they occur
-                uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
-                                                           return_counts=True,
-                                                           return_index=True,
-                                                           return_inverse=True)
+                uniques, ind = np.unique(param_dyn_dict[key],
+                                         return_index=True)
+                uniques = uniques[np.argsort(ind)]
+                # shift index to next parameter (this is necessary since the
+                # result is provided as a concatenated array)
+                newdict[key] = np.full_like(param_dyn_dict[key], 999,
+                                            dtype=float)
+                for i, uniq in enumerate(uniques):
+                    value_i = np.array(params)[count:count + len(uniques)][i]
+                    where_i = np.where((param_dyn_dict[key]) == uniq)
+                    newdict[key][where_i] = value_i
 
-                # shift index to next parameter (this is necessary since params
-                # is provided as a concatenated array)
-                inverse = inverse + count
-                # select the fitted values for the corresponding parameter
-                newdict[key] = np.array(params)[inverse]
                 # increase counter
-                count = count + len(np.unique(param_dyn_dict[key]))
+                count = count + len(uniques)
 
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but possibly dynamic parameter-values)
@@ -1117,7 +1114,6 @@ class Fits(Scatter):
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
-
                 errdict = {'abserr' : errs,
                            'relerr' : errs/data}
                 self.intermediate_results['residuals'] += [errdict]
@@ -1129,20 +1125,23 @@ class Fits(Scatter):
             # generate a dictionary to assign values based on input
             count = 0
             newdict = {}
-            for i, key in enumerate(order):
+            for key in order:
                 # find unique parameter estimates and how often they occur
-                uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
-                                                           return_counts=True,
-                                                           return_index=True,
-                                                           return_inverse=True)
+                uniques, ind = np.unique(param_dyn_dict[key],
+                                         return_index=True)
+                uniques = uniques[np.argsort(ind)]
+                # shift index to next parameter (this is necessary since the
+                # result is provided as a concatenated array)
+                newdict[key] = np.full_like(param_dyn_dict[key], 999,
+                                            dtype=float)
+                for i, uniq in enumerate(uniques):
+                    value_i = np.array(params)[count:count + len(uniques)][i]
+                    where_i = np.where((param_dyn_dict[key]) == uniq)
+                    newdict[key][where_i] = value_i
 
-                # shift index to next parameter (this is necessary since params
-                # is provided as a concatenated array)
-                inverse = inverse + count
-                # select the fitted values for the corresponding parameter
-                newdict[key] = np.array(params)[inverse]
-                # increase counter by number of unique parameters of key
-                count = count + len(np.unique(param_dyn_dict[key]))
+                # increase counter
+                count = count + len(uniques)
+
 
             # incorporate values provided in fixed_dict
             # (i.e. incorporate fixed but possibly dynamic parameter-values)
@@ -1221,28 +1220,35 @@ class Fits(Scatter):
         count = 0
         res_dict = {}
         start_dict = {}
-        for i, key in enumerate(order):
+        for key in order:
             # find unique parameter estimates and how often they occur
-            uniques, index, inverse, Nuniq = np.unique(param_dyn_dict[key],
-                                                       return_counts=True,
-                                                       return_index=True,
-                                                       return_inverse=True)
-
+            uniques, ind = np.unique(param_dyn_dict[key], return_index=True)
+            uniques = uniques[np.argsort(ind)]
             # shift index to next parameter (this is necessary since the result
             # is provided as a concatenated array)
-            inverse = inverse + count
-            # select the fitted values for the corresponding parameter
-            res_dict[key] = np.array(res_lsq.x)[inverse]
-            start_dict[key] = np.array(startvals)[inverse]
+            res_dict[key] = np.full_like(param_dyn_dict[key], 999,
+                                            dtype=float)
+            for i, uniq in enumerate(uniques):
+                value_i = np.array(res_lsq.x)[count:count + len(uniques)][i]
+                where_i = np.where((param_dyn_dict[key]) == uniq)
+                res_dict[key][where_i] = value_i
+
+            start_dict[key] = np.full_like(param_dyn_dict[key], 999,
+                                            dtype=float)
+            for i, uniq in enumerate(uniques):
+                value_i = np.array(startvals)[count:count + len(uniques)][i]
+                where_i = np.where((param_dyn_dict[key]) == uniq)
+                start_dict[key][where_i] = value_i
+
             # increase counter
-            count = count + len(np.unique(param_dyn_dict[key]))
+            count = count + len(uniques)
+
 
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
 
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
-
         return [res_lsq, R, data, inc, mask, weights,
                 res_dict, start_dict, fixed_dict]
 
@@ -1313,7 +1319,7 @@ class Fits(Scatter):
         startvaldict = {}
         timescaledict = {}
         boundsvaldict = {}
-        manual_dyn_df = pd.DataFrame()
+        manual_dyn_df = None
         # set parameters
         for key in defdict.keys():
             # if parameter is intended to be fitted, assign a sympy-symbol
@@ -1330,6 +1336,7 @@ class Fits(Scatter):
 
                 # set temporal variability
                 if defdict[key][2] == 'manual':
+                    if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
                     manual_dyn_df = pd.concat([manual_dyn_df,
                                                defdict[key][4]], axis=1)
                 elif defdict[key][2] is not None:
@@ -1363,15 +1370,12 @@ class Fits(Scatter):
         # set V and SRF based on setter-function
         V, SRF = set_V_SRF(**setdict)
 
-
-
         # set frequencies of fitted parameters
         freq = []
         freqkeys = []
         for key in timescaledict:
             freq += [timescaledict[key]]
             freqkeys += [[key]]
-
 
         def generatedataset(dataset, dyn_keys,
                             freq=None, freqkeys=[],
@@ -1380,43 +1384,15 @@ class Fits(Scatter):
             a function to group the dataset to daily arrays
             '''
             dataset = copy.deepcopy(dataset)
-            # generate a unique number for each day
-            dataset['dynnr'] = dataset.index.strftime('%Y%m%d')
-            dataset['dynnr'] = dataset['dynnr'].astype(str)
-
-
-            # add manual dynamic dict assignments
             if manual_dyn_df is not None:
-                for key in manual_dyn_df:
-                    dataset[key] = manual_dyn_df[key]
-                    dataset['dynnr'] += manual_dyn_df[key].astype(str)
-
-            # add an index-column for later use
-            dataset['index'] = dataset.index
-
-            # group by the dynnr
-            groupdf = dataset.groupby('dynnr')
-            index = groupdf['index'].apply(list).apply(np.take, indices=0)
-            sig = groupdf['sig'].apply(list).apply(np.array)
-            inc = groupdf['inc'].apply(list).apply(np.array)
-
-
-            manual_dyns = pd.concat([index] +
-                                    [groupdf[key].apply(list
-                                     ).apply(np.take, indices=0)
-                                     for key in manual_dyn_df], axis=1)
-
-            manual_dyns = manual_dyns.set_index('index')
-
-            new_df = pd.concat([index, inc, sig], axis=1)
-            new_df = new_df.set_index('index')
-
-
+                manual_dyn_df = copy.deepcopy(manual_dyn_df)
+                # in case multiple measurements have been made on the same day
+                manual_dyn_df = manual_dyn_df.loc[dataset.index]
 
             param_dyn_dict = {}
             # initialize all parameters as scalar parameters
             for key in dyn_keys:
-                param_dyn_dict[key] = np.ones(len(index))
+                param_dyn_dict[key] = np.ones(len(dataset.index))
 
             # TODO works only for unambiguous datetime-indexes !!!
             # (repeated indexes will be grouped together)
@@ -1424,27 +1400,40 @@ class Fits(Scatter):
                 for i, f in enumerate(freq):
                     for key in freqkeys[i]:
                         df = pd.DataFrame(np.arange(1,
-                                                    len(index) + 1),
-                                                    index=index)
+                                                    len(dataset.index) + 1),
+                                                    index=dataset.index)
                         dyn_list = []
                         for k, arr in enumerate(df.resample(f).apply(len).values):
                             dyn_list += list(np.full_like(range(arr[0]), k + 1))
-
                         param_dyn_dict[key] = dyn_list
 
             if manual_dyn_df is not None:
-                for key, val in manual_dyns.items():
-                    param_dyn_dict[key] += val.values.flatten()*100000
+                for key, val in manual_dyn_df.items():
+                    param_dyn_dict[key] += val.values.flatten()
 
-            return new_df, param_dyn_dict, manual_dyns
+            dataset['index'] = dataset.index
 
+            groupdf = dataset.groupby('index')
+            index = groupdf['index'].apply(list).apply(np.take, indices=0)
+            sig = groupdf['sig'].apply(list).apply(np.array)
+            inc = groupdf['inc'].apply(list).apply(np.array)
 
-        dataset_used, param_dyn_dict, manual_dyns = generatedataset(
+            new_df = pd.concat([index, inc, sig], axis=1)
+            new_df = new_df.set_index('index')
+
+            param_dyn_df = pd.DataFrame(param_dyn_dict, index=dataset.index)
+            param_dyn_df['index'] = param_dyn_df.index
+            param_dyn_df = param_dyn_df.groupby('index').mean()
+
+            for key, val in param_dyn_df.items():
+                param_dyn_dict[key] = list(val.values)
+
+            self.param_dyn_dict = param_dyn_dict
+            return new_df, param_dyn_dict
+
+        dataset_used, param_dyn_dict = generatedataset(
                 dataset=dataset, dyn_keys=startvaldict.keys(),
                 freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df)
-        self.manual_dyns = manual_dyns
-
-
 
         # re-shape param_dict and bounds_dict to fit needs
         param_dict = {}
@@ -1455,7 +1444,6 @@ class Fits(Scatter):
                 param_dict[key] = [startvaldict[key]]*uniqueparams
             else:
                 param_dict[key] = startvaldict[key]
-
 
         bounds_dict = {}
         for key in boundsvaldict:
@@ -2211,7 +2199,6 @@ class Fits(Scatter):
         ---------
         fig : matplotlib.figure object
         '''
-        import pandas as pd
 
         (res_lsq, R, data, inc, mask, weights,
          res_dict, start_dict, fixed_dict) = fit
