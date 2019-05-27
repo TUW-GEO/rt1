@@ -25,4 +25,4 @@ it is currently required to install a specific commit of symengine, i.e.:
     pip install rt1
 
 ## References
-* Quast & Wagner (2016): [doi:10.1364/AO.55.005379](http://dx.doi.org/10.1364/AO.55.005379)
+* Quast & Wagner (2016): [doi:10.1364/AO.55.005379](https://doi.org/10.1364/AO.55.005379)
