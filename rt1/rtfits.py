@@ -976,11 +976,6 @@ class Fits(Scatter):
         # preparation of data for fitting
         inc, data, weights, Nmeasurements, mask = self._preparedata(dataset)
 
-        # get values for omega, tau and NormBRDF from parameter-dictionary
-#        omega = param_dict.get('omega', None)
-#        tau = param_dict.get('tau', None)
-#        NormBRDF = param_dict.get('NormBRDF', None)
-
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
             tausymb = V.tau[0].free_symbols
@@ -998,7 +993,7 @@ class Fits(Scatter):
         toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # check of general input-requirements
-        #   check if all parameters have been provided
+        # check if all parameters have been provided
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
         vsymb = set(map(str, V._func.free_symbols)) - angset
         srfsymb = set(map(str, SRF._func.free_symbols)) - angset
@@ -1311,9 +1306,9 @@ class Fits(Scatter):
 
         # TODO change to only using rtfits objects!
         # (i.e. it is not necessary to manually specify defdict etc.)
+        if dataset is None: dataset = self.dataset
         if defdict is None: defdict = self.defdict
         if set_V_SRF is None: set_V_SRF = self.set_V_SRF
-        if dataset is None: dataset = self.dataset
 
 
         # generate RT1 specifications based on defdict
@@ -1477,8 +1472,6 @@ class Fits(Scatter):
 
         self.result = fitresult
         self.index = dataset_used.index
-
-        #return return_inv
 
 
 
@@ -1645,9 +1638,6 @@ class Fits(Scatter):
             ax2.plot(np.arange(1, Nmeasurements + 1),
                      np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
                      alpha=1., label=key)
-#            ax2.plot(np.arange(1, Nmeasurements + 1),
-#                     np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
-#                     'k.', alpha=0.5)
         plt.gca().set_prop_cycle(None)
 
         h1 = mlines.Line2D([], [], color='black', label='estimates',
