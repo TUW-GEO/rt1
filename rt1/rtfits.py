@@ -958,6 +958,10 @@ class Fits(Scatter):
         '''
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
+            from .rtplots import plot_interres
+            self.plot_interres = partial(plot_interres, fit = self)
+            update_wrapper(self.plot_interres, plot_interres)
+
             if not hasattr(self, 'intermediate_results'):
                 self.intermediate_results = {'parameters':[],
                                              'residuals':[],

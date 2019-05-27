@@ -1060,3 +1060,120 @@ def printsig0timeseries(fit,
 
 
 
+def plot_interres(fit, dynparam = ['SM'],
+                  cmaps=['viridis_r', 'RdBu','inferno', 'magma_r']):
+    '''
+    a function to plot the intermediate-results
+    (the data is only available if rtfits.monofit has been called with
+    the argument intermediate_results=True)
+
+    Parameters:
+    -------------
+    fit : rtfits object
+          the rtfits-object containing the fit-results
+
+    dynparam : a list of parameter-names that are intended to be plotted
+               as timeseries.
+    '''
+    interparams = {}
+    for i, valdict in enumerate(fit.intermediate_results['parameters']):
+        for key, val in valdict.items():
+            if key in interparams:
+                interparams[key] += [[i, np.mean(val)]]
+            else:
+                interparams[key] = [[i, np.mean(val)]]
+    intererrs = {}
+    for i, valdict in enumerate(fit.intermediate_results['residuals']):
+        for key, val in valdict.items():
+            if key in intererrs:
+                intererrs[key] += [[i, np.mean(val)]]
+            else:
+                intererrs[key] = [[i, np.mean(val)]]
+    interjacs = {}
+    for i, valdict in enumerate(fit.intermediate_results['jacobian']):
+        for key, val in valdict.items():
+            if key in interjacs:
+                interjacs[key] += [[i, np.mean(val)]]
+            else:
+                interjacs[key] = [[i, np.mean(val)]]
+
+    for i in [interparams, intererrs, interjacs]:
+        for key, val in i.items():
+            i[key] = np.array(val).T
+
+    interres_params = {}
+    for key in dynparam:
+        interres_p = pd.concat([pd.DataFrame(valdict[key],
+                                             fit.index.drop_duplicates(),
+                                columns=[i])
+                                for i, valdict in enumerate(
+                                        fit.intermediate_results['parameters'])
+                                ], axis=1)
+        interres_params[key] = interres_p
+
+
+    f = plt.figure(figsize=(15,10))
+    f.subplots_adjust(top=0.98, left=0.05, right=0.95)
+    gs = mpl.gridspec.GridSpec(4, len(interjacs),
+                           #width_ratios=[1, 2],
+                           #height_ratios=[1, 2, 1]
+                           )
+    axsm = plt.subplot(gs[0,:])
+    axerr = plt.subplot(gs[1,:])
+    paramaxes, jacaxes = [], []
+    for i in range(len(interjacs)):
+        paramaxes += [plt.subplot(gs[2,i])]
+        jacaxes += [plt.subplot(gs[3,i])]
+
+    smhandles, smlabels = [],[]
+    for nparam, [parameter, paramdf] in enumerate(interres_params.items()):
+
+        cmap = plt.get_cmap(cmaps[nparam])
+
+        for key, val in paramdf.items():
+            axsm.plot(val,
+                      c=cmap((float(key)/len(paramdf.keys()))),
+                      lw=0.25, marker='.', ms=2)
+
+        # add colorbar
+        axcb = f.add_axes([axsm.get_position().x1-.01*(nparam+1),
+                           axsm.get_position().y0,
+                           .01,
+                           axsm.get_position().y1-axsm.get_position().y0])
+
+        cbbounds = [1] + list(np.arange(2, len(paramdf.keys()) + 1, 1))
+
+
+        cb = mpl.colorbar.ColorbarBase(axcb, cmap=cmap,
+                                 orientation = 'vertical',
+                                 boundaries = [0] + cbbounds + [cbbounds[-1]+1],
+                                 spacing='proportional',
+                                 norm=mpl.colors.BoundaryNorm(cbbounds, cmap.N)
+                                 )
+        if nparam > 0: cb.set_ticks([])
+
+        smhandles += [mpl.lines.Line2D([],[], color=cmap(0))]
+        smlabels += [parameter]
+    axsm.legend(handles=smhandles, labels=smlabels, loc='upper left')
+
+    axsmbounds = list(axsm.get_position().bounds)
+    axsmbounds[2] = axsmbounds[2] - 0.015*len(interres_params)
+    axsm.set_position(axsmbounds)
+
+    for [pax, jax, [key, val]] in zip(paramaxes, jacaxes, interparams.items()):
+        if key not in interjacs: continue
+        pax.plot(*val, label=key, marker='.', ms=3, lw=0.5)
+        pax.legend(loc='upper center')
+        jax.plot(interjacs[key][0], interjacs[key][1], label=key, marker='.', ms=3, lw=0.5)
+        jax.legend(loc='upper center')
+
+    for key, val in intererrs.items():
+        if key == 'abserr':
+            axerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.', ms=3, lw=0.5, c='r')
+            axerr.legend(ncol=5, loc='upper left')
+        if key == 'relerr':
+            axrelerr = axerr.twinx()
+            axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.', ms=3, lw=0.5, c='g')
+            axrelerr.legend(ncol=5, loc='upper right')
+
+
