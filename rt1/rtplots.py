@@ -974,7 +974,6 @@ def printsig0timeseries(fit,
     if months is not None:
         contrib = contrib.loc[contrib.index.month.isin(months)]
 
-
     # print incidence-angle dependency
     if printinc is True:
         f, [ax, ax_inc] = plt.subplots(ncols=2, figsize=(15,5),
@@ -983,18 +982,26 @@ def printsig0timeseries(fit,
         f.subplots_adjust(left=0.05, right=0.98, top=0.98,
                           bottom=0.1, wspace=0.1)
 
-        for label, val in contrib.items():
+        # -------------------
+        color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y',
+                 '$\\sigma_0$ dataset':'k'}
+
+        groupedcontrib = contrib.groupby(contrib.index)
+        #return contrib, groupedcontrib
+        for label in contrib.keys():
             if label in ['inc']: continue
-            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y',
-                     '$\\sigma_0$ dataset':'k'}
-            for incs, sigs in zip(contrib['inc'].groupby(contrib.index
-                                  ).apply(np.array).values,
-                                  val.groupby(val.index).apply(np.array
-                                             ).values):
-                ax_inc.plot(np.rad2deg(incs), sigs,
-                            linewidth =.25, marker='.', ms=2, label=label,
-                            color=color[label], alpha = 0.5)
+            a=np.rad2deg([x.values for _, x in groupedcontrib['inc']]).T
+            b=np.array([x.values for _, x in groupedcontrib[label]]).T
+            x = (np.array([a,b]).T)
+            l_col = mpl.collections.LineCollection(x,linewidth =.25, label='x',
+                                      color=color[label], alpha = 0.5)
+            ax_inc.add_collection(l_col)
+            ax_inc.scatter(a, b, color=color[label], s=1)
+            ax_inc.set_xlim(a.min(), a.max())
+            ax_inc.set_xlabel('$\\theta_0$')
         ax_inc.set_xlabel('$\\theta_0$')
+
+
     else:
         f, ax = plt.subplots(figsize=(12,5))
         f.subplots_adjust(left=0.05, right=0.98, top=0.98,
