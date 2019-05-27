@@ -558,9 +558,8 @@ class Fits(Scatter):
                 for n_uni, uni in enumerate(uniques):
                     rule = (param_dyn_dict[key] == uni)
                     where_n = np.where(
-                            np.concatenate(
-                                    np.broadcast_to(
-                                            rule[:,np.newaxis], jac[i].shape)))[0]
+                            np.concatenate(np.broadcast_to(rule[:,np.newaxis],
+                                                           jac[i].shape)))[0]
 
                     col_ind += list(where_n)
                     row_ind += list(np.full_like(where_n, n_uni))
@@ -587,8 +586,8 @@ class Fits(Scatter):
             elif isspmatrix(newjacdict[str(i)]):
                 # In case the parameter is varying temporally, it must be
                 # repeated by the number of incidence-angles in order
-                # to have correct array-processing (it is assumed that no parameter
-                # is incidence-angle dependent itself)
+                # to have correct array-processing (it is assumed that no
+                # parameter is incidence-angle dependent itself)
                 dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
                 # calculate "outer" * "inner" derivative for sparse matrices
                 newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
@@ -1112,7 +1111,7 @@ class Fits(Scatter):
             # calculate the residuals
             errs = np.concatenate(self._calc_model(R, newdict)) - data
             # incorporate weighting-matrix to ensure correct treatment
-            # of artificially added values (see _preparedata()-fucntion)
+            # of artificially added values (see _preparedata()-function)
             errs = weights * errs
 
 
@@ -1479,7 +1478,8 @@ class Fits(Scatter):
                                  fn_input=fn_input,
                                  _fnevals_input=_fnevals_input,
                                  int_Q=int_Q,
-                                 lambda_backend = 'cse_symengine_sympy',
+                                 #lambda_backend = 'cse_symengine_sympy',
+                                 lambda_backend = 'sympy',
                                  verbosity=2,
                                  **kwargs)
 
