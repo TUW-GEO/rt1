@@ -27,6 +27,32 @@ from functools import partial, update_wrapper
 from .rtplots import printsig0timeseries
 
 import copy  # used to copy objects
+import datetime
+
+
+def meandatetime(datetimes):
+    '''
+    calculate the average date from a given list of datetime-objects
+    (can be applied to a pandas-Series via Series.apply(meandatetime))
+
+    Parameters:
+    ------------
+    datetimes : list
+                a list of datetime-objects
+    Returns:
+    ---------
+    meandate : Timestamp
+               the center-date
+    '''
+
+    if np.count_nonzero(datetimes) == 1:
+        return datetimes
+
+    x = pd.to_datetime(datetimes)
+    deltas = x[0] - x[1:]
+    meandelta = sum(deltas, datetime.timedelta(0))/len(x)
+    meandate = x[0] - meandelta
+    return meandate
 
 
 class Fits(Scatter):
@@ -98,6 +124,7 @@ class Fits(Scatter):
         self.printsig0timeseries = partial(printsig0timeseries, fit = self)
         update_wrapper(self.printsig0timeseries, printsig0timeseries)
 
+
     def generate_dyn_dict(self, param_keys, datetime_index,
                           freq=None, freqkeys=[],
                           ):
@@ -147,9 +174,6 @@ class Fits(Scatter):
                     param_dyn_dict[key] = dyn_list
 
         return param_dyn_dict
-
-
-
 
 
     def _preparedata(self, dataset):
@@ -254,6 +278,7 @@ class Fits(Scatter):
 
         return inc, data, weights, N, mask
 
+
     def _calc_model(self, R, res_dict, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
@@ -357,6 +382,7 @@ class Fits(Scatter):
 
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
+
         # calculate total backscatter-values
         if return_components is True:
             model_calc = R.calc()
@@ -378,7 +404,7 @@ class Fits(Scatter):
 
         return model_calc
 
-    # function to evaluate the jacobian
+
     def _calc_jac(self, R, res_dict, param_dyn_dict, order):
         '''
         function to evaluate the jacobian in the shape as required
@@ -637,7 +663,6 @@ class Fits(Scatter):
         R.SRF = orig_SRF
 
         return jac_lsq
-
 
 
     def _calc_slope_curv(self, R, res_dict, return_components=False):
