@@ -176,10 +176,7 @@ class TestRTfits(unittest.TestCase):
                 'tr_solver': 'lsmr',
                 'x_scale': 'jac',
                 'intermediate_results':False,
-                'setindex' : 'mean'}
-
-        # initialize fit-class
-        testfit = Fits(sig0=sig0, dB=dB)
+                'setindex' : 'original'}
 
 
 
@@ -205,13 +202,12 @@ class TestRTfits(unittest.TestCase):
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
                     }
+        # initialize fit-class
+        testfit = Fits(sig0=sig0, dB=dB,
+                       dataset=dataset, defdict=defdict,
+                       set_V_SRF=set_V_SRF,)
 
-        testfit.performfit(dataset=dataset,
-                           defdict=defdict,
-                           set_V_SRF=set_V_SRF,
-                           fn_input = None, _fnevals_input = None,
-                           int_Q = True, setindex = 'original',
-                           )
+        testfit.performfit(**fitset)
 
 
         # provide true-values for comparison of fitted results
