@@ -24,7 +24,7 @@ from .scatter import Scatter
 from .rt1 import RT1
 
 from functools import partial, update_wrapper
-from .rtplots import printsig0timeseries, printresults
+from .rtplots import printsig0timeseries, printresults, printerr
 
 import copy  # used to copy objects
 import datetime
@@ -121,10 +121,13 @@ class Fits(Scatter):
         self.defdict = copy.deepcopy(defdict)
         self.result = None
 
+        # add plotfunctions
         self.printsig0timeseries = partial(printsig0timeseries, fit = self)
         update_wrapper(self.printsig0timeseries, printsig0timeseries)
         self.printresults = partial(printresults, fit = self)
         update_wrapper(self.printresults, printresults)
+        self.printerr = partial(printerr, fit = self)
+        update_wrapper(self.printerr, printerr)
 
 
     def generate_dyn_dict(self, param_keys, datetime_index,
@@ -1562,218 +1565,6 @@ class Fits(Scatter):
         self.dataset_used = dataset_used
 
 
-
-    def printerr(self, fit, datelist=None, newcalc=False, relative=False):
-        '''
-        a function to quickly print residuals for each measurement
-        and for each incidence-angle value
-
-        Parametsrs:
-        ------------
-        fit : list
-            output of monofit()-function
-        datelist : list
-           a list used to label the x-axis
-           the shape must be [ groups, indicators ]
-           where groups is a list of G values that are used to
-           group the measurements, and
-           indicators is a list containing N elements grouped into
-           G groups, where N is the number of measurements.
-
-           e.g. if you had a measurement in January and February
-           for the years 2014 and 2015, you have:
-               datelist = [[2014, 2015], [ [1,2],[1,2]] ]
-        newcalc : bool (default = False)
-                  indicator whether the residuals shall be re-calculated
-                  or not.
-
-                  True:
-                      the residuals are calculated using R, inc, mask,
-                      res_dict and fixed_dict from the fit-argument
-                  False:
-                      the residuals are taken from the output of
-                      res_lsq from the fit-argument
-        relative : bool (default = False)
-                   indicator if relative (True) or absolute (False) residuals
-                   shall be plotted
-        '''
-
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit
-
-        Nmeasurements = len(inc)
-
-        if newcalc is False:
-            # get residuals from fit into desired shape for plotting
-            # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
-
-            if relative is True:
-                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
-            else:
-                res = np.ma.abs(res)
-        else:
-            # Alternative way of calculating the residuals
-            # (based on R, inc and res_dict)
-
-            R.t_0 = inc
-            R.p_0 = np.zeros_like(inc)
-
-            # for python > 3.4
-            # calc_dict = dict(**res_dict, **fixed_dict)
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
-
-            estimates = self._calc_model(R, calc_dict)
-            # calculate the residuals based on masked arrays
-            masked_estimates = np.ma.masked_array(estimates, mask=mask)
-            masked_data = np.ma.masked_array(data, mask=mask)
-
-            res = np.ma.sqrt((masked_estimates - masked_data)**2)
-
-            if relative is True:
-                res = res / masked_estimates
-
-        # apply mask to data and incidence-angles (and convert to degree)
-        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
-        data = np.ma.masked_array(data, mask=mask)
-
-        # make new figure
-        figres = plt.figure(figsize=(14, 10))
-        axres = figres.add_subplot(212)
-        if relative is True:
-            axres.set_title('Mean relative residual per measurement')
-        else:
-            axres.set_title('Mean absolute residual per measurement')
-
-        axres2 = figres.add_subplot(211)
-        if relative is True:
-            axres2.set_title('Relative residuals per incidence-angle')
-        else:
-            axres2.set_title('Residuals per incidence-angle')
-
-        # the use of masked arrays might cause python 2 compatibility issues!
-        axres.plot(np.arange(len(res)) + 1, res, '.', alpha=0.5)
-
-        # plot mean residual for each measurement
-        axres.plot(np.arange(1, Nmeasurements + 1), np.ma.mean(res, axis=1),
-                   'k', linewidth=3, marker='o', fillstyle='none')
-
-        # plot total mean of mean residuals per measurement
-        axres.plot(np.arange(1, Nmeasurements + 1),
-                   [np.ma.mean(np.ma.mean(res, axis=1))] * Nmeasurements,
-                   'k--')
-
-        # add some legends
-        res_h = mlines.Line2D(
-            [], [], color='black', label='Mean res.  per measurement',
-            linestyle='-', linewidth=3, marker='o', fillstyle='none')
-        res_h_dash = mlines.Line2D(
-            [], [], color='black', linestyle='--', label='Average mean res.',
-            linewidth=1, fillstyle='none')
-
-        res_h_dots = mlines.Line2D(
-            [], [], color='black', label='Residuals',
-            linestyle='-', linewidth=0, marker='.', alpha=0.5)
-
-        handles, labels = axres.get_legend_handles_labels()
-        axres.legend(handles=handles + [res_h_dots] + [res_h] + [res_h_dash],
-                     loc=1)
-
-        axres.set_ylabel('Residual')
-
-        # set ticks
-
-        if datelist is None:
-            axres.set_xticks(np.arange(1, Nmeasurements + 1))
-            axres.set_xticklabels(np.arange(1, Nmeasurements + 1))
-            axres.set_xlabel('# Measurement')
-
-            majortickinterval = np.ceil(Nmeasurements/50)
-            axres.set_xlim(-majortickinterval//2,
-                           Nmeasurements + majortickinterval//2)
-
-            majorLocator = MultipleLocator(majortickinterval)
-            majorFormatter = FormatStrFormatter('%d')
-            minorLocator = MultipleLocator(2)
-
-            axres.xaxis.set_major_locator(majorLocator)
-            axres.xaxis.set_major_formatter(majorFormatter)
-            axres.xaxis.set_minor_locator(minorLocator)
-
-            if majortickinterval > 1:
-                axres.xaxis.set_tick_params(rotation=45)
-
-        else:
-            axres.set_xticks(np.arange(1, Nmeasurements + 1))
-            axres.set_xticklabels(np.concatenate(datelist[1]))
-
-            locs = [len(i)/2 for i in datelist[1]]
-            locmax = [len(i) for i in datelist[1]]
-            locs = [locs[i] + np.sum(locmax[:i]) for i in range(len(locs))]
-
-            for i, y in enumerate(datelist[0]):
-                axres.annotate(s=str(y), xy=(locs[i], 0),
-                               xytext=(0, -32), xycoords='data',
-                               textcoords='offset points', va='top')
-
-            axres.set_xlabel('# dates', labelpad=20)
-
-
-#        # evaluate mean residuals per incidence-angle
-        meanincs = np.unique(np.concatenate(inc))
-        mean = np.full_like(meanincs, 0.)
-
-        for a, incval in enumerate(meanincs):
-            select = np.where(inc == incval)
-            res_selected = res[select[0][:, np.newaxis],
-                               select[1][:, np.newaxis]]
-            mean[a] = np.mean(res_selected)
-
-        sortpattern = np.argsort(meanincs)
-        meanincs = meanincs[sortpattern]
-        mean = mean[sortpattern]
-
-        # plot residuals per incidence-angle for each measurement
-        for i, resval in enumerate(res):
-            sortpattern = np.argsort(inc[i])
-            axres2.plot(inc[i][sortpattern], res[i][sortpattern],
-                        ':', alpha=0.5, marker='.')
-
-        # plot mean residual per incidence-angle
-        axres2.plot(meanincs, mean,
-                    'k', linewidth=3, marker='o', fillstyle='none')
-
-        # add some legends
-        res_h2 = mlines.Line2D(
-            [], [], color='black', label='Mean res.  per inc-angle',
-            linestyle='-', linewidth=3, marker='o', fillstyle='none')
-        res_h_lines = mlines.Line2D(
-            [], [], color='black', label='Residuals',
-            linestyle=':', alpha=0.5)
-
-        handles2, labels2 = axres2.get_legend_handles_labels()
-        axres2.legend(handles=handles2 + [res_h_lines] + [res_h2], loc=1)
-
-        axres2.set_xlabel('$\\theta_0$ [deg]')
-        axres2.set_ylabel('Residual')
-
-        # find minimum and maximum incidence angle
-        maxinc = np.max(inc)
-        mininc = np.min(inc)
-
-        axres2.set_xlim(np.floor(mininc) - 1,
-                        np.ceil(maxinc) + 1)
-
-        # set major and minor ticks
-        axres2.xaxis.set_major_locator(MultipleLocator(1))
-        axres2.xaxis.set_major_formatter(FormatStrFormatter('%d'))
-        axres2.xaxis.set_minor_locator(MultipleLocator(.1))
-
-        figres.tight_layout()
-
-        return figres
-
     def printscatter(self, fit, mima=None, pointsize=0.5,
                      regression=True, newcalc=False,  **kwargs):
         '''
@@ -1866,6 +1657,7 @@ class Fits(Scatter):
                     transform=ax.transAxes)
 
         return fig, r_value**2
+
 
     def printsingle(self, fit, measurements=None, datelist=None,
                     dates=None, hexbinQ=True, hexbinargs={},
