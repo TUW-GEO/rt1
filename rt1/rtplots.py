@@ -1229,7 +1229,10 @@ def printresults(fit, truevals=None, startvals=False,
                 plotted as black lines
     legends : bool (default = True)
               indicator if legends should be plotted
-
+    result_selection : list-like or 'all'
+                       a list of the measurement-numbers that should be
+                       plotted (indexed starting from 0) or 'all' in case
+                       all measurements should be plotted
     Returns:
     ---------
     fig : matplotlib.figure object
