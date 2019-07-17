@@ -1363,7 +1363,7 @@ class Fits(Scatter):
             # if parameter is intended to be fitted, assign a sympy-symbol
             if defdict[key][0] is True:
                 # TODO see why this is actually necessary
-                if key != 'omega':  # omega must not be a sympy-symbol name
+                if key not in ['omega', 'tau']:  # omega must not be a sympy-symbol name
                     setdict[key] = sp.var(key)
                 else:
                     # a dummy value that will be replaced in rtfits.monofit
@@ -1398,7 +1398,7 @@ class Fits(Scatter):
                     # if value is provided as array, add it to fixed_dict
                     # TODO same as above ...why is this necessary?
                     # TODO what about 'tau' and 'NormBRDF'
-                    if key != 'omega':  # omega must not be a sympy-symbol name
+                    if key not in ['omega', 'tau']:  # omega must not be a sympy-symbol name
                         setdict[key] = sp.var(key)
                     else:
                         # a dummy value that will be replaced by rtfits.monofit
