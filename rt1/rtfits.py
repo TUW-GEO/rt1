@@ -24,7 +24,7 @@ from .scatter import Scatter
 from .rt1 import RT1
 
 from functools import partial, update_wrapper
-from .rtplots import printsig0timeseries
+from .rtplots import printsig0timeseries, printresults
 
 import copy  # used to copy objects
 import datetime
@@ -123,6 +123,8 @@ class Fits(Scatter):
 
         self.printsig0timeseries = partial(printsig0timeseries, fit = self)
         update_wrapper(self.printsig0timeseries, printsig0timeseries)
+        self.printresults = partial(printresults, fit = self)
+        update_wrapper(self.printresults, printresults)
 
 
     def generate_dyn_dict(self, param_keys, datetime_index,
@@ -1560,207 +1562,6 @@ class Fits(Scatter):
         self.dataset_used = dataset_used
 
 
-    def printresults(self, fit, truevals=None, startvals=False,
-                     datelist=None, legends=True):
-        '''
-        a function to quickly print the fit-results and the gained parameters
-
-        Parametsrs:
-        ------------
-        fit : list
-              output of monofit_all()-function
-
-        truevals : dict (default = None)
-                   dictionary of the expected parameter-values (must be of the
-                   same shape as the parameter-values gained from the fit).
-                   if provided, the difference between the expected- and
-                   fitted values is plotted
-        startvals : bool (default = False)
-                    if True, the model-results using the start-values are
-                    plotted as black lines
-        datelist : list
-                   a list used to label the x-axis
-                   the shape must be [ groups, indicators ]
-                   where groups is a list of G values that are used to
-                   group the measurements, and
-                   indicators is a list containing N elements grouped into
-                   G groups, where N is the number of measurements.
-
-                   e.g. if you had a measurement in January and February
-                   for the years 2014 and 2015, you have:
-                       datelist = [[2014, 2015], [[1,2],[1,2]] ]
-        legends : bool (default = True)
-                  indicator if legends should be plotted
-
-        Returns:
-        ---------
-        fig : matplotlib.figure object
-        '''
-
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit
-
-        # reset incidence-angles in case they have been altered beforehand
-        R.t_0 = inc
-        R.p_0 = np.zeros_like(inc)
-
-        # evaluate number of measurements
-        Nmeasurements = len(inc)
-
-        if truevals is not None:
-            truevals = copy.copy(truevals)
-
-            # generate a dictionary to assign values based on input
-            for key in truevals:
-                if np.isscalar(truevals[key]):
-                    truevals[key] = np.array([truevals[key]] * Nmeasurements)
-                else:
-                    truevals[key] = truevals[key]
-
-        # generate figure
-        fig = plt.figure(figsize=(14, 10))
-        ax = fig.add_subplot(211)
-        ax.set_title('Fit-results')
-
-        # plot datapoints
-        for i, j in enumerate(np.ma.masked_array(data, mask)):
-            ax.plot(inc[i], j, '.')
-
-        # reset color-cycle
-        plt.gca().set_prop_cycle(None)
-
-        # define incidence-angle range for plotting
-        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
-                           * Nmeasurements)
-        # set new incidence-angles
-        R.t_0 = incplot
-        R.p_0 = np.zeros_like(incplot)
-
-        # get parameter-values
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
-
-        # calculate results
-        fitplot = self._calc_model(R, calc_dict)
-
-        # generate a mask that hides all measurements where no data has
-        # been provided (i.e. whose parameter-results are still the startvals)
-        newmask = np.ones_like(incplot) * np.all(mask, axis=1)[:, np.newaxis]
-        fitplot = np.ma.masked_array(fitplot, newmask)
-
-        for i, val in enumerate(fitplot):
-            ax.plot(incplot[i], val, alpha=0.4, label=i + 1)
-
-        # ----------- plot start-values ------------
-        if startvals is True:
-            startplot = self._calc_model(R, start_dict)
-            for i, val in enumerate(startplot):
-                ax.plot(incplot[i], val, 'k--', linewidth=1,
-                        alpha=0.5, label='fitstart')
-
-        if legends is True:
-            plt.legend(loc=1)
-
-        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
-        if mintic < 0.:
-            mintic = 0.
-        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
-        if maxtic > 360.:
-            maxtic = 360.
-
-        ticks = np.arange(np.rad2deg(np.min(inc)),
-                          np.rad2deg(np.max(inc)) + 1.,
-                          (maxtic - mintic) / 10.)
-        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
-        plt.xlabel('$\\theta_0$ [deg]')
-        plt.ylabel('$I_{tot}$')
-
-        ax2 = fig.add_subplot(212)
-        ax2.set_title('Estimated parameters')
-
-        ax2.set_ylim(0., np.max(list(res_dict.values())))
-
-        if truevals is not None:
-
-            # plot actual values
-            plt.gca().set_prop_cycle(None)
-            for key in truevals:
-                ax2.plot(np.arange(1, Nmeasurements + 1), truevals[key],
-                         '--', alpha=0.75)
-            plt.gca().set_prop_cycle(None)
-            for key in truevals:
-                ax2.plot(np.arange(1, Nmeasurements + 1), truevals[key], 'o')
-
-            param_errs = {}
-            param_errs_min = 0.
-            for key in truevals:
-                param_errs[key] = res_dict[key] - truevals[key]
-                # find minumum value of errors
-                param_errs_min = np.min([param_errs_min,
-                                         np.min(param_errs[key])])
-
-            plt.gca().set_prop_cycle(None)
-            for key in truevals:
-                ax2.plot(np.arange(1, Nmeasurements + 1), param_errs[key],
-                         ':', alpha=.25)
-            plt.gca().set_prop_cycle(None)
-            for key in truevals:
-                ax2.plot(np.arange(1, Nmeasurements + 1), param_errs[key],
-                         '.', alpha=.25)
-
-            ax2.set_ylim(param_errs_min, 1.)
-
-            h2 = mlines.Line2D([], [], color='black', label='data',
-                               linestyle='--', alpha=0.75, marker='o')
-            h3 = mlines.Line2D([], [], color='black', label='errors',
-                               linestyle=':', alpha=0.5, marker='.')
-
-        # plot fitted values
-        plt.gca().set_prop_cycle(None)
-        for key in res_dict:
-            ax2.plot(np.arange(1, Nmeasurements + 1),
-                     np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
-                     alpha=1., label=key)
-        plt.gca().set_prop_cycle(None)
-
-        h1 = mlines.Line2D([], [], color='black', label='estimates',
-                           linestyle='-', alpha=0.75, marker='.')
-
-        handles, labels = ax2.get_legend_handles_labels()
-        if truevals is None:
-            plt.legend(handles=handles + [h1], loc=1)
-        else:
-            plt.legend(handles=handles + [h1, h2, h3], loc=1)
-
-        # set ticks
-        if datelist is None:
-            ax2.set_xticks(np.arange(1, Nmeasurements + 1))
-            plt.xlabel('# Measurement')
-        else:
-            ax2.set_xticks(np.arange(1, Nmeasurements + 1))
-            ax2.set_xticklabels(np.concatenate(datelist[1]))
-
-            locs = [len(i)/2 for i in datelist[1]]
-            locmax = [len(i) for i in datelist[1]]
-            locs = [locs[i] + np.sum(locmax[:i]) for i in range(len(locs))]
-
-            for i, y in enumerate(datelist[0]):
-                plt.annotate(s=str(y), xy=(locs[i], 0), xytext=(0, -20),
-                             xycoords='data', textcoords='offset points',
-                             va='top')
-
-            plt.xlabel('# dates', labelpad=20)
-
-        if truevals is None:
-            plt.ylabel('Parameters')
-        else:
-            plt.ylabel('Parameters / Errors')
-
-        fig.tight_layout()
-
-        return fig
 
     def printerr(self, fit, datelist=None, newcalc=False, relative=False):
         '''

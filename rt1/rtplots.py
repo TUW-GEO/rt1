@@ -7,6 +7,7 @@ polarplot() ... plot p and the BRDF as polar-plot
 
 import sympy as sp
 import numpy as np
+import datetime
 try:
     import pandas as pd
 except ImportError:
@@ -1205,4 +1206,189 @@ def plot_interres(fit, dynparam = ['SM'],
             axrelerr = axerr.twinx()
             axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.', ms=3, lw=0.5, c='g')
             axrelerr.legend(ncol=5, loc='upper right')
+
+
+
+def printresults(fit, truevals=None, startvals=False,
+                 legends=True, result_selection='all'):
+    '''
+    a function to quickly print the fit-results and the gained parameters
+
+    Parametsrs:
+    ------------
+    fit : list
+          output of monofit_all()-function
+
+    truevals : dict (default = None)
+               dictionary of the expected parameter-values (must be of the
+               same shape as the parameter-values gained from the fit).
+               if provided, the difference between the expected- and
+               fitted values is plotted
+    startvals : bool (default = False)
+                if True, the model-results using the start-values are
+                plotted as black lines
+    legends : bool (default = True)
+              indicator if legends should be plotted
+
+    Returns:
+    ---------
+    fig : matplotlib.figure object
+    '''
+    # this is done to allow the usage of monofit-outputs as well
+    (res_lsq, R, data, inc, mask, weights,
+     res_dict, start_dict, fixed_dict) = fit.result
+
+    if result_selection == 'all':
+        result_selection = range(len(data))
+
+    # assign colors
+    colordict = {key:f'C{i%10}' for i, key in enumerate(res_dict.keys())}
+
+    # reset incidence-angles in case they have been altered beforehand
+    R.t_0 = inc
+    R.p_0 = np.zeros_like(inc)
+
+    # evaluate number of measurements
+    Nmeasurements = len(inc)
+
+    if truevals is not None:
+        truevals = {**truevals}
+
+        # generate a dictionary to assign values based on input
+        for key in truevals:
+            if np.isscalar(truevals[key]):
+                truevals[key] = np.array([truevals[key]] * Nmeasurements)
+            else:
+                truevals[key] = truevals[key]
+
+    # generate figure
+    fig = plt.figure(figsize=(14, 10))
+    ax = fig.add_subplot(211)
+    ax.set_title('Fit-results')
+
+    # plot datapoints
+    for i, j in enumerate(np.ma.masked_array(data, mask)[result_selection]):
+        ax.plot(inc[result_selection[i]], j, '.')
+
+    # reset color-cycle
+    plt.gca().set_prop_cycle(None)
+
+    # define incidence-angle range for plotting
+    incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
+                       * Nmeasurements)
+    # set new incidence-angles
+    R.t_0 = incplot
+    R.p_0 = np.zeros_like(incplot)
+
+    # get parameter-values
+    # for python > 3.4
+    # calc_dict = dict(**res_dict, **fixed_dict)
+    calc_dict = {**res_dict, **fixed_dict}
+
+    # calculate results
+    fitplot = fit._calc_model(R, calc_dict)
+
+    # generate a mask that hides all measurements where no data has
+    # been provided (i.e. whose parameter-results are still the startvals)
+    newmask = np.ones_like(incplot) * np.all(mask, axis=1)[:, np.newaxis]
+    fitplot = np.ma.masked_array(fitplot, newmask)
+
+    for i, val in enumerate(fitplot[result_selection]):
+        ax.plot(incplot[i], val, alpha=0.4, label=result_selection[i])
+
+    # ----------- plot start-values ------------
+    if startvals is True:
+        startplot = fit._calc_model(R, {**start_dict, **fixed_dict})
+        for i, val in enumerate(startplot[result_selection]):
+            if i == 0:
+                label = 'fitstart'
+            else:
+                label = ''
+            ax.plot(incplot[result_selection[i]], val, 'k--', linewidth=1,
+                    alpha=0.5, label=label)
+
+    if legends is True:
+        ax.legend(loc=1)
+
+    mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
+    if mintic < 0.:
+        mintic = 0.
+    maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
+    if maxtic > 360.:
+        maxtic = 360.
+
+    ticks = np.arange(np.rad2deg(np.min(inc)),
+                      np.rad2deg(np.max(inc)) + 1.,
+                      (maxtic - mintic) / 10.)
+    plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
+    plt.xlabel('$\\theta_0$ [deg]')
+    plt.ylabel('$I_{tot}$')
+
+    ax2 = fig.add_subplot(212)
+    ax2.set_title('Estimated parameters')
+
+
+    if truevals is not None:
+
+        # plot actual values
+        for key in truevals:
+            ax2.plot(fit.index, truevals[key],
+                     '--', alpha=0.75, color=colordict[key])
+        for key in truevals:
+            ax2.plot(fit.index, truevals[key], 'o',
+                     color=colordict[key])
+
+        param_errs = {}
+        for key in truevals:
+            param_errs[key] = res_dict[key] - truevals[key]
+
+        for key in truevals:
+            ax2.plot(fit.index, param_errs[key],
+                     ':', alpha=.25, color=colordict[key])
+        for key in truevals:
+            ax2.plot(fit.index, param_errs[key],
+                     '.', alpha=.25, color=colordict[key])
+
+        h2 = mlines.Line2D([], [], color='black', label='data',
+                           linestyle='--', alpha=0.75, marker='o')
+        h3 = mlines.Line2D([], [], color='black', label='errors',
+                           linestyle=':', alpha=0.5, marker='.')
+
+
+    # plot fitted values
+    for key in res_dict:
+        ax2.plot(fit.index,
+                 np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
+                 alpha=1., label=key, color=colordict[key])
+
+    if len(result_selection) < len(data):
+        for i, resid in enumerate(result_selection):
+            ax2.text(fit.index[resid],
+                     ax2.get_ylim()[1]*.9,
+                     resid,
+                     bbox=dict(facecolor=f'C{i}', alpha=0.5))
+
+
+
+    h1 = mlines.Line2D([], [], color='black', label='estimates',
+                       linestyle='-', alpha=0.75, marker='.')
+
+    handles, labels = ax2.get_legend_handles_labels()
+    if truevals is None:
+        plt.legend(handles=handles + [h1], loc=1)
+    else:
+        plt.legend(handles=handles + [h1, h2, h3], loc=1)
+
+    # set ticks
+    if isinstance(fit.index[0], datetime.datetime):
+        fig.autofmt_xdate()
+
+    if truevals is None:
+        plt.ylabel('Parameters')
+    else:
+        plt.ylabel('Parameters / Errors')
+
+    fig.tight_layout()
+
+    return fig
 
