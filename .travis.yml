@@ -8,6 +8,7 @@ python:
   # - "3.4"
   - "3.5"
   - "3.6"
+  - "3.7"
 
 env:
   # don't use gmpy in mpmath to avoid pickling errors caused by a bug
