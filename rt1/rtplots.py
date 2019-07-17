@@ -20,6 +20,34 @@ import matplotlib.lines as mlines
 #import mpl_toolkits.mplot3d as plt3d
 
 
+def rectangularize(array):
+    '''
+    return a rectangularized (masked array) version of the input-array by
+    appending masked values to obtain the smallest possible rectangular shape.
+
+        input-array = [[1,2,3], [1], [1,2]]
+        output-array = [[1,2,3], [1,--,--], [1,2,--]]
+
+    Parameters:
+    ------------
+    array : array-like
+            the input-data that is intended to be rectangularized
+
+    Returns:
+    ----------
+    new_array: np.ma.masked_array
+               a rectangularized (masked-array) version of the input-array
+    '''
+    dim  = len(max(array, key=len))
+    newarray = []
+    for s in array:
+        adddim = dim - len(s)
+        if adddim > 0:
+            s = np.append(s, np.full(adddim, np.nan))
+        newarray +=[s]
+    return np.ma.masked_array(newarray, mask=np.isnan(newarray))
+
+
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
               incBRDF=[15., 35., 55., 75.], pmultip=2., BRDFmultip=1.,
               plabel='Volume-Scattering Phase Function',
@@ -987,12 +1015,14 @@ def printsig0timeseries(fit,
                  '$\\sigma_0$ dataset':'k'}
 
         groupedcontrib = contrib.groupby(contrib.index)
+
         #return contrib, groupedcontrib
         for label in contrib.keys():
             if label in ['inc']: continue
-            a=np.rad2deg([x.values for _, x in groupedcontrib['inc']]).T
-            b=np.array([x.values for _, x in groupedcontrib[label]]).T
+            a=np.rad2deg(rectangularize([x.values for _, x in groupedcontrib['inc']])).T
+            b=np.array(rectangularize([x.values for _, x in groupedcontrib[label]])).T
             x = (np.array([a,b]).T)
+
             l_col = mpl.collections.LineCollection(x,linewidth =.25, label='x',
                                       color=color[label], alpha = 0.5)
             ax_inc.add_collection(l_col)
@@ -1175,5 +1205,4 @@ def plot_interres(fit, dynparam = ['SM'],
             axrelerr = axerr.twinx()
             axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.', ms=3, lw=0.5, c='g')
             axrelerr.legend(ncol=5, loc='upper right')
-
 
