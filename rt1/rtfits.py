@@ -11,19 +11,12 @@ except ImportError:
     print('pandas could not be found! ... performfit() and generate_dyn_dict()\
            will not work!')
 
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
-
 from scipy.optimize import least_squares
-from scipy.stats import linregress
 from scipy.sparse import vstack
 from scipy.sparse import csr_matrix, isspmatrix
 
 from .scatter import Scatter
 from .rt1 import RT1
-
-from functools import partial, update_wrapper
 from .rtplots import plot as rt1_plots
 
 import copy  # used to copy objects
@@ -1545,16 +1538,16 @@ class Fits(Scatter):
                                  **kwargs)
 
         # generate a datetime-index from the given groups
-        if setindex is 'first':
+        if setindex == 'first':
             self.index = pd.to_datetime(
                     dataset_used.orig_index.apply(np.take,indices=0).values)
-        elif setindex is 'last':
+        elif setindex == 'last':
             self.index = pd.to_datetime(
                     dataset_used.orig_index.apply(np.take,indices=-1).values)
-        elif setindex is 'mean':
+        elif setindex == 'mean':
             self.index = pd.to_datetime(
                     dataset_used.orig_index.apply(meandatetime).values)
-        elif setindex is 'original':
+        elif setindex == 'original':
             self.index = dataset_used.index
 
         self.result = fitresult
