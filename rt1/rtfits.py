@@ -24,7 +24,7 @@ from .scatter import Scatter
 from .rt1 import RT1
 
 from functools import partial, update_wrapper
-from .rtplots import plots
+from .rtplots import plot as rt1_plots
 
 import copy  # used to copy objects
 import datetime
@@ -129,7 +129,7 @@ class Fits(Scatter):
         # self.printerr = partial(printerr, fit = self)
         # update_wrapper(self.printerr, printerr)
 
-        self.plots = plots(self)
+        self.plot = rt1_plots(self)
 
     def generate_dyn_dict(self, param_keys, datetime_index,
                           freq=None, freqkeys=[],

@@ -669,7 +669,7 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         return fig
 
 
-class plots:
+class plot:
     '''
     Generation of plots to visualize rtfits results
 
