@@ -176,7 +176,7 @@ class TestRTfits(unittest.TestCase):
                 'tr_solver': 'lsmr',
                 'x_scale': 'jac',
                 'intermediate_results':False,
-                'setindex' : 'original'}
+                'setindex' : 'mean'}
 
 
 
@@ -451,3 +451,21 @@ if __name__ == "__main__":
 # abs(fit4[6]['omega'] - truevals4['omega']).mean(),
 # abs(fit4[6]['t1'] - truevals4['t1']).mean())
 # 0.0202776696237 0.00849788787843 0.080153724151
+
+
+
+# sig0=False
+# dB=True
+# Nmeasurements=10
+# mininc=25
+# maxinc=65
+# minincnum=20
+# maxincnum=50
+# omin=0.35
+# omax=0.4
+# taumin=0.1
+# taumax=1.25
+# rmin=0.1
+# rmax=0.5
+# tmin=0.0001
+# tmax=0.5
