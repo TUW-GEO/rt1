@@ -16,13 +16,11 @@ import sympy as sp
 
 try:
     # if symengine is available, use it to perform series-expansions
-    # this try-exept is necessary since symengine does currently not
-    # build correctly with conda using a python 2.7 environment
-    from symengine import expand
-    from symengine import Lambdify as lambdify_seng
+    from symengine import expand, cse, LambdifyCSE
+    _init_lambda_backend='symengine'
 except ImportError:
     from sympy import expand
-    # print('symengine could not be imported fn-function generation')
+    _init_lambda_backend = 'cse'
 
 
 class RT1(object):
@@ -119,9 +117,9 @@ class RT1(object):
     """
 
     def __init__(self, I0, t_0, t_ex, p_0, p_ex, V=None, SRF=None,
-                 fn_input=None, _fnevals_input=None, geometry='vvvv',
-                 bsf=0., param_dict={},
-                 lambda_backend='cse', int_Q=True, verbosity = 1):
+                 fn_input=None, _fnevals_input=None, geometry='mono',
+                 bsf=0., param_dict={}, lambda_backend=_init_lambda_backend,
+                 int_Q=True, verbosity = 1):
 
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
                                            'a 4-character string')
@@ -268,16 +266,40 @@ class RT1(object):
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
-                self.prv(1,
-                         'symengine currently only working with dev-version!!')
-                # set lambdify module
-                lambdify = lambdify_seng
+                self.prv(1, 'symengine')
+                # using symengines own "common subexpression elimination"
+                # routine to perform lambdification
+                self.__fnevals = LambdifyCSE(list(variables),
+                                             self.fn, order='F')
 
-                self.__fnevals = lambdify(list(variables),
-                                          self.fn, order='F')
+            elif self.lambda_backend == 'sympy':
+                # using sympy's lambdify without "common subexpression
+                # elimination" to perform lambdification
+
+                self.prv(1, 'sympy')
+
+                sympy_fn = list(map(sp.sympify, self.fn))
+
+                self.__fnevals = sp.lambdify((variables),
+                                          sp.sympify(sympy_fn),
+                                          modules=["numpy", "sympy"],
+                                          dummify=False)
+
+                self.__fnevals.__doc__ = ('''
+                                    A function to numerically evaluate the
+                                    fn-coefficients a for given set of
+                                    incidence angles and parameter-values
+                                    as defined in the param_dict dict.
+
+                                    The call-signature is:
+                                        RT1-object._fnevals(theta_0, phi_0, \
+                                        theta_ex, phi_ex, *param_dict.values())
+                                    ''')
 
             elif self.lambda_backend == 'cse':
                 self.prv(1, 'cse - sympy')
+                # using sympy's lambdify with "common subexpression elimination
+                # to perform lambdification
 
                 # define a generator function to use deferred vectors for cse
                 def defgen(name='defvec'):
@@ -358,29 +380,6 @@ class RT1(object):
 
                 self.__fnevals = fneval
 
-            elif self.lambda_backend == 'sympy':
-                self.prv(1, 'sympy')
-                # set lambdify module
-                lambdify = sp.lambdify
-
-                sympy_fn = list(map(sp.sympify, self.fn))
-
-                self.__fnevals = lambdify((variables),
-                                          sp.sympify(sympy_fn),
-                                          modules=["numpy", "sympy"],
-                                          dummify=False)
-
-                self.__fnevals.__doc__ = ('''
-                                    A function to numerically evaluate the
-                                    fn-coefficients a for given set of
-                                    incidence angles and parameter-values
-                                    as defined in the param_dict dict.
-
-                                    The call-signature is:
-                                        RT1-object._fnevals(theta_0, phi_0, \
-                                        theta_ex, phi_ex, *param_dict.values())
-                                    ''')
-
             elif self.lambda_backend == 'cse_symengine_sympy':
                 '''
                 sympy's cse functionality is used to avoid sympifying the whole
@@ -396,7 +395,6 @@ class RT1(object):
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                                    tuple(map(str, self.param_dict.keys())))
 
-                from symengine import cse as cse_seng
                 funs = self.fn
 
                 # initialize array that store the cse-functions and variables
@@ -404,7 +402,7 @@ class RT1(object):
                 fn_cse_repfuncs = []  # replacement functions for each coef.
                 for nf, fncoef in enumerate(funs):
                     # evaluate cse functions and variables for the i'th coef.
-                    fn_repl, fn_csefun = cse_seng([fncoef])
+                    fn_repl, fn_csefun = cse([fncoef])
 
                     self.prv(2,
                              'fn_repl has ' + str(len(fn_repl)) + ' elements')
@@ -482,7 +480,6 @@ class RT1(object):
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                                    tuple(map(str, self.param_dict.keys())))
 
-                from symengine import cse as cse_seng
                 funs = self.fn
 
                 # initialize array that store the cse-functions and variables
@@ -490,7 +487,7 @@ class RT1(object):
                 fn_cse_repfuncs = []  # replacement functions for each coef.
                 for nf, fncoef in enumerate(funs):
                     # evaluate cse functions and variables for the i'th coef.
-                    fn_repl, fn_csefun = cse_seng([fncoef])
+                    fn_repl, fn_csefun = cse([fncoef])
 
                     self.prv(2,
                              'fn_repl has ' + str(len(fn_repl)) + ' elements')

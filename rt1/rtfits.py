@@ -16,7 +16,7 @@ from scipy.sparse import vstack
 from scipy.sparse import csr_matrix, isspmatrix
 
 from .scatter import Scatter
-from .rt1 import RT1
+from .rt1 import RT1, _init_lambda_backend
 from .rtplots import plot as rt1_plots
 
 import copy  # used to copy objects
@@ -797,7 +797,7 @@ class Fits(Scatter):
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
-                lambda_backend='cse', verbosity=0,
+                lambda_backend=_init_lambda_backend, verbosity=0,
                 intermediate_results=False,
                 **kwargs):
         '''
@@ -931,9 +931,11 @@ class Fits(Scatter):
         int_Q : bool (default = True)
                 indicator if interaction-terms should be included
                 (note: they are always ommitted when calculating the jacobian!)
-        lambda_backend : string (default = 'cse')
-                         select method for generating _fnevals functions
-                         if they are not provided explicitly
+        lambda_backend : string
+                         select method for generating the _fnevals functions
+                         if they are not provided explicitly.
+                         The default is 'cse_symengine_sympy' if symengine is
+                         installed and 'cse' otherwise.
         verbosity : int
                   set verbosity level of rt1-module
         intermediate_results : bool (default = False)
@@ -1532,8 +1534,6 @@ class Fits(Scatter):
                                  fn_input=fn_input,
                                  _fnevals_input=_fnevals_input,
                                  int_Q=int_Q,
-                                 #lambda_backend = 'cse_symengine_sympy',
-                                 lambda_backend = 'sympy',
                                  verbosity=2,
                                  **kwargs)
 
