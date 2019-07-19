@@ -17,10 +17,6 @@ env:
   # see: https://github.com/sympy/sympy/pull/13530
   - MPMATH_NOGMPY=1
 
-#before_install:
-#- sudo rm -f /etc/apt/sources.list.d/cassandra*
-# this is a temporary fix of a travis-issue and should be removed once it's fixed on the travis side
-
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
