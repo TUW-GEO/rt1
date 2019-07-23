@@ -1321,10 +1321,11 @@ class plot:
         if fit is None:
             fit = self.fit
 
+
         # get mask
-        (_, _, data, _, mask, _, _, _, _) = fit.result
+        (_, _, data, inc, mask, _, _, _, _) = fit.result
         # get incidence-angles
-        inc_array = np.ma.masked_array(fit.result[1].t_0, mask)
+        inc_array = np.ma.masked_array(inc, mask)
         inc = inc_array.compressed()
         # get input dataset
         data = np.ma.masked_array(data, mask)
