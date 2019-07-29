@@ -39,7 +39,7 @@ def meandatetime(datetimes):
     '''
 
     if np.count_nonzero(datetimes) == 1:
-        return datetimes
+        return datetimes[0]
 
     x = pd.to_datetime(datetimes)
     deltas = x[0] - x[1:]
