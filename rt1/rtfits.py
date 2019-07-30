@@ -42,8 +42,8 @@ def meandatetime(datetimes):
         return datetimes[0]
 
     x = pd.to_datetime(datetimes)
-    deltas = x[0] - x[1:]
-    meandelta = sum(deltas, datetime.timedelta(0))/len(x)
+    deltas = (x[0] - x[1:])/len(x)
+    meandelta = sum(deltas, datetime.timedelta(0))
     meandate = x[0] - meandelta
     return meandate
 
