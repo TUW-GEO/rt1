@@ -41,9 +41,9 @@ class TestExamples(unittest.TestCase):
         inc = self.inc1
 
         # ---- evaluation of first example
-        V = Rayleigh(tau=0.7, omega=0.3)
+        V = Rayleigh(tau=np.array([0.7]), omega=np.array([0.3]))
         # 11 instead of 10 coefficients used to assure 7 digit precision
-        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF=np.pi)
+        SRF = CosineLobe(ncoefs=11, i=5, NormBRDF=np.array([np.pi]))
 
         R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
                 np.zeros_like(inc), np.full_like(inc, np.pi),
@@ -57,8 +57,9 @@ class TestExamples(unittest.TestCase):
         inc = self.inc2
 
         # ---- evaluation of second example
-        V = HenyeyGreenstein(tau=0.7, omega=0.3, t=0.7, ncoefs=20)
-        SRF = CosineLobe(ncoefs=10, i=5, NormBRDF=np.pi)
+        V = HenyeyGreenstein(tau=np.array([0.7]), omega=np.array([0.3]),
+                             t=0.7, ncoefs=20)
+        SRF = CosineLobe(ncoefs=10, i=5, NormBRDF=np.array([np.pi]))
 
         R = RT1(1., np.deg2rad(inc), np.deg2rad(inc),
                 np.zeros_like(inc), np.full_like(inc, np.pi),
