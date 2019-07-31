@@ -30,18 +30,6 @@ class Surface(Scatter):
         update_wrapper(self.hemreflect, hemreflect)
 
 
-    def _get_NormBRDF(self):
-        return self.__NormBRDF
-
-    def _set_NormBRDF(self, NormBRDF):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        NormBRDF = np.array(NormBRDF)
-        NormBRDF.shape = NormBRDF.shape + (1,)
-        self.__NormBRDF = NormBRDF
-
-    NormBRDF = property(_get_NormBRDF, _set_NormBRDF)
-
     def brdf(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
         Calculate numerical value of the BRDF for chosen

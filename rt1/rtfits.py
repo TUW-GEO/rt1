@@ -22,6 +22,57 @@ from .rtplots import plot as rt1_plots
 import copy  # used to copy objects
 import datetime
 
+def rectangularize(array, weights_and_mask=False):
+    '''
+    return a rectangularized version of the input-array by repeating the
+    last value to obtain the smallest possible rectangular shape.
+
+        input-array = [[1,2,3], [1], [1,2]]
+        output-array = [[1,2,3], [1,1,1], [1,2,2]]
+
+    Parameters:
+    ------------
+    array : array-like
+            the input-data that is intended to be rectangularized
+    weights_and_mask : bool (default = False)
+                     indicator if weights and mask should be evaluated or not
+    Returns:
+    ----------
+    new_array: array-like
+        a rectangularized version of the input-array
+    weights : array-like (only returned if 'weights_and_mask' is set to True)
+        a weighting-matrix whose entries are 1/sqrt(number of repetitions)
+        (the square-root is used since this weighting will be applied to
+        a sum of squares)
+    mask : array-like (only returned if 'weights_and_mask' is set to True)
+           a mask indicating the added values
+
+    '''
+    dim  = len(max(array, key=len))
+    if weights_and_mask is True:
+        newarray, weights, mask = [], [], []
+        for s in array:
+            adddim = dim - len(s)
+            w = np.full_like(s, 1)
+            m = np.full_like(s, False)
+            if adddim > 0:
+                s = np.append(s, np.full(adddim, s[-1]))
+                w = np.append(w, np.full(adddim, 1/np.sqrt(adddim)))
+                m = np.append(m, np.full(adddim, True))
+            newarray += [s]
+            weights  += [w]
+            mask     += [m]
+        return np.array(newarray), np.array(weights), np.array(mask, dtype=bool)
+    else:
+        newarray = []
+        for s in array:
+            adddim = dim - len(s)
+            if adddim > 0:
+                s = np.append(s, np.full(adddim, s[-1]))
+            newarray +=[s]
+        return np.array(newarray)
+
+
 
 def meandatetime(datetimes):
     '''
@@ -215,32 +266,7 @@ class Fits(Scatter):
         N : int
             number of measurements that have been provided within the dataset
         '''
-        # save number of datasets
-        N = len(dataset)
 
-        # get incidence-angles and data-values into separate lists
-        inc, data = [], []
-        for i, val in enumerate(dataset):
-            inc = inc + [val[0]]
-            data = data + [val[1]]
-
-        # rectangularize numpy array by adding nan-values
-        # (necessary because numpy can only deal with rectangular arrays)
-        maxLen = np.max(np.array([len(j) for i, j in enumerate(inc)]))
-        for i, j in enumerate(inc):
-            if len(j) < maxLen:
-                inc[i] = np.append(inc[i],
-                                   np.tile(np.nan, maxLen - len(inc[i])))
-                data[i] = np.append(data[i],
-                                    np.tile(np.nan, maxLen - len(data[i])))
-
-        # generate a mask to be able to re-create the initial datset
-        mask = np.isnan(data)
-
-        # concatenate data-matrix to 1d-array
-        # (necessary since least_squares can only deal with 1d arrays)
-        data = np.concatenate(data)
-        inc = np.concatenate(inc)
 
         # prepare data to avoid nan-values
         #      since numpy only supports rectangular arrays, and least_squares
@@ -255,30 +281,30 @@ class Fits(Scatter):
         #      weighting-matrix is provided that can be used to correct for
         #      the unwanted duplicates.
 
-        weights = np.ones_like(data)
-        i = 0
+        # this is here for backward-support
+        if isinstance(dataset, list):
+            N = len(dataset)
+            inc, weights, mask = rectangularize([i[0] for i in dataset],
+                                                weights_and_mask = True)
+            data = rectangularize([i[1] for i in dataset])
+            new_fixed_dict = dict()
 
-        while i < len(data):
-            if np.isnan(data[i]):
-                j = 0
-                while np.isnan(data[i + j]):
-                    data[i + j] = data[i + j - 1]
-                    inc[i + j] = inc[i + j - 1]
-                    j = j + 1
-                    if i + j >= len(data):
-                        break
-                # the weights are calculated as one over the square-root of
-                # the number of repetitions in order to cancel out the
-                # repeated measurements in the sum of SQUARED residuals.
-                weights[i - 1: i + j] = 1. / np.sqrt(float(j + 1))
-            i = i + 1
+        elif isinstance(dataset, pd.DataFrame):
+            # save number of datasets
+            N = len(dataset)
+            inc, weights, mask = rectangularize(dataset.inc.values,
+                                                weights_and_mask = True)
+            data = rectangularize(dataset.sig.values)
 
-        inc = np.array(np.split(inc, N))
+            new_fixed_dict = dict()
+            for key in dataset:
+                if key not in ['inc', 'sig', 'orig_index']:
+                    new_fixed_dict[key] = rectangularize(dataset[key])
 
-        return inc, data, weights, N, mask
+        return inc, np.concatenate(data), np.concatenate(weights), N, mask, new_fixed_dict
 
 
-    def _calc_model(self, R, res_dict, return_components=False):
+    def _calc_model(self, R, res_dict, fixed_dict, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -300,29 +326,35 @@ class Fits(Scatter):
                      in linear-units or dB corresponding to the specifications
                      defined in the rtfits-class.
         '''
+
+        # ensure correct array-processing
+        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for key, val in res_dict.items()}
+        res_dict.update(fixed_dict)
+
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
-
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         # and generate a function to evaluate the symbolic representation
         try:
-            tausymb = R.V.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau[0],
+            tausymb = R.V.tau.free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau,
                                   modules=['numpy'])
         except Exception:
             tausymb = set()
             taufunc = None
+
         try:
-            omegasymb = R.V.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
+            omegasymb = R.V.omega.free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega,
                                     modules=['numpy'])
         except Exception:
             omegasymb = set()
             omegafunc = None
+
         try:
-            Nsymb = R.SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+            Nsymb = R.SRF.NormBRDF.free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
                                 modules=['numpy'])
         except Exception:
             Nsymb = set()
@@ -375,8 +407,7 @@ class Fits(Scatter):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings and not sympy-symbols
-        strparam_fn = dict([[str(key),
-                             np.expand_dims(param_fn[key], 1)]
+        strparam_fn = dict([[str(key), param_fn[key]]
                             for i, key in enumerate(param_fn.keys())])
 
         # set the param-dict to the newly generated dict
@@ -404,7 +435,7 @@ class Fits(Scatter):
         return model_calc
 
 
-    def _calc_jac(self, R, res_dict, param_dyn_dict, order):
+    def _calc_jac(self, R, res_dict, fixed_dict, param_dyn_dict, order):
         '''
         function to evaluate the jacobian in the shape as required
         by scipy's least_squares function
@@ -422,37 +453,33 @@ class Fits(Scatter):
               the jacobian corresponding to the fit-parameters in the
               shape applicable to scipy's least_squres-function
         '''
+        # ensure correct array-processing
+        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for key, val in res_dict.items()}
+        res_dict.update(fixed_dict)
 
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
         orig_SRF = copy.deepcopy(R.SRF)
 
-#        # set omega, tau and NormBRDF-values to input
-#        if 'omega' in res_dict:
-#            R.V.omega = res_dict['omega']
-#        if 'tau' in res_dict:
-#            R.V.tau = res_dict['tau']
-#        if 'NormBRDF' in res_dict:
-#            R.SRF.NormBRDF = res_dict['NormBRDF']
-
+        # set omega, tau and NormBRDF-values to input
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
-            tausymb = R.V.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau[0],
+            tausymb = R.V.tau.free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau,
                                   modules=['numpy'])
         except Exception:
             tausymb = set()
             taufunc = None
         try:
-            omegasymb = R.V.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
+            omegasymb = R.V.omega.free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega,
                                     modules=['numpy'])
         except Exception:
             omegasymb = set()
             omegafunc = None
         try:
-            Nsymb = R.SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+            Nsymb = R.SRF.NormBRDF.free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
                                 modules=['numpy'])
         except Exception:
             Nsymb = set()
@@ -503,8 +530,7 @@ class Fits(Scatter):
             param_fn.pop(str(i), None)
 
         # ensure that the keys of the dict are strings
-        strparam_fn = dict([[str(key),
-                             np.expand_dims(param_fn[key], 1)]
+        strparam_fn = dict([[str(key), param_fn[key]]
                             for i, key in enumerate(param_fn.keys())])
 
         # set the param-dict to the newly generated dict
@@ -529,9 +555,7 @@ class Fits(Scatter):
         # calculate the jacobian based on neworder
         # (evaluating only "outer" derivatives with respect to omega,
         # tau and NormBRDF)
-
-        jac = R.jacobian(sig0=self.sig0, dB=self.dB,
-                         param_list=neworder)
+        jac = R.jacobian(sig0=self.sig0, dB=self.dB, param_list=neworder)
 
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
@@ -589,18 +613,23 @@ class Fits(Scatter):
                                shape=(max(row_ind) + 1,
                                       max(col_ind) + 1))
                 newjacdict[key] = m
-
         # evaluate jacobians of the functional representations of tau
         # and add them to newjacdict
         for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau[0],
+            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau,
                                                    sp.Symbol(i)),
                                   modules=['numpy'])
             # evaluate the inner derivative
             dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
             # calculate the derivative with respect to the parameters
+
+            # average over all obtained values in case a
+            # fixed-dict with higher temporal resolution has been provided
+            if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
+                dtau_dx = dtau_dx.mean(axis=1)
+
             if np.isscalar(dtau_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
             elif isspmatrix(newjacdict[str(i)]):
@@ -618,7 +647,7 @@ class Fits(Scatter):
 
         # same for omega
         for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega[0],
+            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega,
                                                      sp.Symbol(i)),
                                   modules=['numpy'])
             domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
@@ -633,7 +662,7 @@ class Fits(Scatter):
 
         # same for NormBRDF
         for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF[0],
+            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF,
                                                  sp.Symbol(i)),
                                   modules=['numpy'])
             dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
@@ -694,22 +723,22 @@ class Fits(Scatter):
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         # and generate a function to evaluate the symbolic representation
         try:
-            tausymb = R.V.tau[0].free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau[0],
+            tausymb = R.V.tau.free_symbols
+            taufunc = sp.lambdify(tausymb, R.V.tau,
                                   modules=['numpy'])
         except Exception:
             tausymb = set()
             taufunc = None
         try:
-            omegasymb = R.V.omega[0].free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega[0],
+            omegasymb = R.V.omega.free_symbols
+            omegafunc = sp.lambdify(omegasymb, R.V.omega,
                                     modules=['numpy'])
         except Exception:
             omegasymb = set()
             omegafunc = None
         try:
-            Nsymb = R.SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+            Nsymb = R.SRF.NormBRDF.free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
                                 modules=['numpy'])
         except Exception:
             Nsymb = set()
@@ -995,19 +1024,19 @@ class Fits(Scatter):
         # dictionarys do)
         order = [i for i, v in param_dict.items() if v is not None]
         # preparation of data for fitting
-        inc, data, weights, Nmeasurements, mask = self._preparedata(dataset)
+        inc, data, weights, Nmeasurements, mask, fixed_dict = self._preparedata(dataset)
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
-            tausymb = V.tau[0].free_symbols
+            tausymb = V.tau.free_symbols
         except Exception:
             tausymb = set()
         try:
-            omegasymb = V.omega[0].free_symbols
+            omegasymb = V.omega.free_symbols
         except Exception:
             omegasymb = set()
         try:
-            Nsymb = SRF.NormBRDF[0].free_symbols
+            Nsymb = SRF.NormBRDF.free_symbols
         except Exception:
             Nsymb = set()
 
@@ -1117,16 +1146,8 @@ class Fits(Scatter):
                 # increase counter
                 count = count + len(uniques)
 
-            # incorporate values provided in fixed_dict
-            # (i.e. incorporate fixed but possibly dynamic parameter-values)
-
-            # for python > 3.4
-            # newdict = dict(newdict, **fixed_dict)
-            newdict = dict(list(newdict.items()) +
-                           list(fixed_dict.items()))
-
             # calculate the residuals
-            errs = np.concatenate(self._calc_model(R, newdict)) - data
+            errs = self._calc_model(R, newdict, fixed_dict).flatten() - data
             # incorporate weighting-matrix to ensure correct treatment
             # of artificially added values (see _preparedata()-function)
             errs = weights * errs
@@ -1162,60 +1183,13 @@ class Fits(Scatter):
                 # increase counter
                 count = count + len(uniques)
 
-
-            # incorporate values provided in fixed_dict
-            # (i.e. incorporate fixed but possibly dynamic parameter-values)
-            # for python > 3.4
-            # newdict = dict(newdict, **fixed_dict)
-            newdict = dict(list(newdict.items()) +
-                           list(fixed_dict.items()))
-
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
             # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R, newdict, param_dyn_dict, order)
+            jac = self._calc_jac(R, newdict, fixed_dict, param_dyn_dict, order)
 
             return jac
 
-        # TODO define boundaries for omega, tau and NormBRDF if none have been
-        # provided explicitly
-#        omega_bounds = bounds_dict.get('omega', None)
-#        tau_bounds = bounds_dict.get('tau', None)
-#        NormBRDF_bounds = bounds_dict.get('NormBRDF', None)
-#
-#        if omega is not None:
-#            if omega_bounds is None:
-#                if np.isscalar(omega):
-#                    omega_bounds = ([0.], [1.])
-#                else:
-#                    omega_bounds = ([0.] * Nmeasurements,
-#                                    [1.] * Nmeasurements)
-#        else:
-#            omega_bounds = ([], [])
-#
-#        if tau is not None:
-#            if tau_bounds is None:
-#                if np.isscalar(tau):
-#                    tau_bounds = ([0.], [1.])
-#                else:
-#                    tau_bounds = ([0.] * Nmeasurements,
-#                                  [1.] * Nmeasurements)
-#        else:
-#            tau_bounds = ([], [])
-#
-#        if NormBRDF is not None:
-#            if NormBRDF_bounds is None:
-#                if np.isscalar(NormBRDF):
-#                    NormBRDF_bounds = ([0.], [1.])
-#                else:
-#                    NormBRDF_bounds = ([0.] * Nmeasurements,
-#                                       [1.] * Nmeasurements)
-#        else:
-#            NormBRDF_bounds = ([], [])
-#
-#        bounds_dict['omega'] = omega_bounds
-#        bounds_dict['tau'] = tau_bounds
-#        bounds_dict['NormBRDF'] = NormBRDF_bounds
 
         # generate list of boundary conditions as needed for the fit
         bounds = [[], []]
@@ -1233,8 +1207,7 @@ class Fits(Scatter):
                     startvals = startvals + list(param_dict[key])
 
         # perform actual fitting
-        res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                jac=dfun, **kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds, jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
         count = 0
@@ -1262,7 +1235,6 @@ class Fits(Scatter):
 
             # increase counter
             count = count + len(uniques)
-
 
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
@@ -1414,12 +1386,15 @@ class Fits(Scatter):
 
         def generatedataset(dataset, dyn_keys,
                             freq=None, freqkeys=[],
-                            manual_dyn_df=None):
+                            manual_dyn_df=None,
+                            fixed_dict=dict()):
             '''
             a function to group the dataset to arrays based
             on the provided frequency-keys
             '''
+
             dataset = copy.deepcopy(dataset)
+            dataset = pd.concat([dataset] + [val for key, val in fixed_dict.items()], axis=1)
             if manual_dyn_df is not None:
                 manual_dyn_df = copy.deepcopy(manual_dyn_df)
                 # in case multiple measurements have been made on the same day
@@ -1500,7 +1475,8 @@ class Fits(Scatter):
 
         dataset_used, param_dyn_dict = generatedataset(
                 dataset=dataset, dyn_keys=startvaldict.keys(),
-                freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df)
+                freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
+                fixed_dict=fixed_dict)
 
 
         # re-shape param_dict and bounds_dict to fit needs
@@ -1523,9 +1499,10 @@ class Fits(Scatter):
             else:
                 bounds_dict[key] = (boundsvaldict[key])
 
+        self.fixed_dict_input = fixed_dict
         # perform fit
         fitresult = self.monofit(V=V, SRF=SRF,
-                                 dataset=dataset_used[['inc', 'sig']].values,
+                                 dataset=dataset_used,
                                  param_dict=param_dict,
                                  bsf = setdict['bsf'],
                                  bounds_dict=bounds_dict,
@@ -1536,6 +1513,7 @@ class Fits(Scatter):
                                  int_Q=int_Q,
                                  verbosity=2,
                                  **kwargs)
+
 
         # generate a datetime-index from the given groups
         if setindex == 'first':

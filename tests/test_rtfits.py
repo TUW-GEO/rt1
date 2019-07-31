@@ -106,9 +106,9 @@ class TestRTfits(unittest.TestCase):
         R_data.t_0 = inc
         R_data.p_0 = np.zeros_like(inc)
 
-        R_data.V.omega = omegadata
-        R_data.V.tau = taudata
-        R_data.SRF.NormBRDF = rdata
+        R_data.V.omega = omegadata[:, np.newaxis]
+        R_data.V.tau = taudata[:, np.newaxis]
+        R_data.SRF.NormBRDF = rdata[:, np.newaxis]
         R_data.param_dict = {'t_data': tdata[:, np.newaxis]}
 
         # calculate the data and add some random noise
@@ -158,7 +158,7 @@ class TestRTfits(unittest.TestCase):
 
         V = Rayleigh(omega=0.1, tau=0.1)
         # values for NormBRDF are set to known values (i.e. rdata)
-        SRF = HGsurface(ncoefs=10, t=t1, NormBRDF=rdata, a=[1., 1., 1.])
+        SRF = HGsurface(ncoefs=10, t=t1, NormBRDF=rdata[:,np.newaxis], a=[1., 1., 1.])
 
         # select random numbers within the boundaries as sart-values
         np.random.seed(0)  # reset seed to have a reproducible test
@@ -170,11 +170,11 @@ class TestRTfits(unittest.TestCase):
 
         # define which parameter should be fitted
         param_dict = {'tau': [taustart] * (Nmeasurements - Neq),
-                      'omega': ostart,
+                      'omega': [ostart],
                       't1': [tstart] * (Nmeasurements)}
 
         # optionally define fixed parameters
-        fixed_dict = {'NormBRDF': rdata}
+        fixed_dict = {'NormBRDF': rdata[:,np.newaxis]}
 
         # define boundary-conditions
         bounds_dict = {'t1': ([tmin] * (Nmeasurements),

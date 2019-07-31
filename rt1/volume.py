@@ -24,29 +24,6 @@ class Volume(Scatter):
         self.polarplot = partial(polarplot, V=self)
         update_wrapper(self.polarplot, polarplot)
 
-    def _get_omega(self):
-        return self.__omega
-
-    def _set_omega(self, omega):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        omega = np.array(omega)
-        omega.shape = omega.shape + (1,)
-        self.__omega = omega
-
-    omega = property(_get_omega, _set_omega)
-
-    def _get_tau(self):
-        return self.__tau
-
-    def _set_tau(self, tau):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        tau = np.array(tau)
-        tau.shape = tau.shape + (1,)
-        self.__tau = tau
-
-    tau = property(_get_tau, _set_tau)
 
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """

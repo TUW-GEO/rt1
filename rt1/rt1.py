@@ -166,13 +166,13 @@ class RT1(object):
         # axis to the given input. Checking for sp.Basic is sufficient
         # to distinguish if the input was given as a sympy equation. For
         # details see: http://docs.sympy.org/latest/guide.html#basics
-        if not isinstance(self.V.omega[0], sp.Basic):
+        if not isinstance(self.V.omega, sp.Basic):
             assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
                                                  'must be greater than 0')
-        if not isinstance(self.V.tau[0], sp.Basic):
+        if not isinstance(self.V.tau, sp.Basic):
             assert np.any(self.V.tau >= 0.), ('Optical depth ' +
                                                  'must be greater than 0')
-        if not isinstance(self.SRF.NormBRDF[0], sp.Basic):
+        if not isinstance(self.SRF.NormBRDF, sp.Basic):
             assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
                                                  'must be greater than 0')
 
@@ -609,17 +609,6 @@ class RT1(object):
     def _get_mu_ex(self):
         return np.cos(self.t_ex)
     _mu_ex = property(_get_mu_ex)
-
-    def _get_bsf(self):
-        return self.__bsf
-
-    def _set_bsf(self, bsf):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        bsf = np.array(bsf)
-        bsf.shape = bsf.shape + (1,)
-        self.__bsf = bsf
-    bsf = property(_get_bsf, _set_bsf)
 
 
     def _extract_coefficients(self, expr):
@@ -1324,6 +1313,7 @@ class RT1(object):
         if self.lambda_backend == 'symengine':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                        phi2, *self.param_dict.values())
+
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(args))

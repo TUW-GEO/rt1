@@ -719,12 +719,7 @@ class plot:
 
         if newcalc is True:
 
-            # for python > 3.4
-            # calc_dict = dict(**res_dict, **fixed_dict)
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
-
-            estimates = fit._calc_model(R, calc_dict)
+            estimates = fit._calc_model(R, res_dict, fixed_dict)
 
             # apply mask
             estimates = estimates[~mask]
@@ -851,19 +846,15 @@ class plot:
         plt.gca().set_prop_cycle(None)
 
         # define incidence-angle range for plotting
-        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
-                           * Nmeasurements)
+#        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
+#                           * Nmeasurements)
+        incplot = inc
         # set new incidence-angles
         R.t_0 = incplot
         R.p_0 = np.zeros_like(incplot)
 
-        # get parameter-values
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = {**res_dict, **fixed_dict}
-
         # calculate results
-        fitplot = fit._calc_model(R, calc_dict)
+        fitplot = fit._calc_model(R, res_dict, fixed_dict)
 
         # generate a mask that hides all measurements where no data has
         # been provided (i.e. whose parameter-results are still the startvals)
@@ -875,7 +866,7 @@ class plot:
 
         # ----------- plot start-values ------------
         if startvals is True:
-            startplot = fit._calc_model(R, {**start_dict, **fixed_dict})
+            startplot = fit._calc_model(R, start_dict, fixed_dict)
             for i, val in enumerate(startplot[result_selection]):
                 if i == 0:
                     label = 'fitstart'
@@ -1020,12 +1011,7 @@ class plot:
             R.t_0 = inc
             R.p_0 = np.zeros_like(inc)
 
-            # for python > 3.4
-            # calc_dict = dict(**res_dict, **fixed_dict)
-            calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                             + list(fixed_dict.items()))
-
-            estimates = fit._calc_model(R, calc_dict)
+            estimates = fit._calc_model(R, res_dict, fixed_dict)
             # calculate the residuals based on masked arrays
             masked_estimates = np.ma.masked_array(estimates, mask=mask)
             masked_data = np.ma.masked_array(data, mask=mask)
@@ -1343,15 +1329,10 @@ class plot:
             if dB is True: val = 10.*np.log10(val)
             return val
 
-        res_dict = {}
-        # add fitted parameters
-        res_dict.update(fit.result[6])
-        # add constant values
-        res_dict.update(fit.result[-1])
-
         # calculate individual contributions
         contrib_array = fit._calc_model(R=fit.result[1],
-                                        res_dict=res_dict,
+                                        res_dict=fit.result[6],
+                                        fixed_dict=fit.result[-1],
                                         return_components=True)
 
         # apply mask and convert to pandas dataframe
@@ -1536,12 +1517,8 @@ class plot:
         (res_lsq, R, data, inc, mask, weights,
          res_dict, start_dict, fixed_dict) = fit.result
 
-        # for python > 3.4
-        # calc_dict = dict(**res_dict, **fixed_dict)
-        calc_dict = dict((k, v) for k, v in list(res_dict.items())
-                         + list(fixed_dict.items()))
 
-        estimates = fit._calc_model(R, calc_dict)
+        estimates = fit._calc_model(R, res_dict, fixed_dict)
 
 
         fig = plt.figure()

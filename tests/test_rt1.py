@@ -21,7 +21,7 @@ class TestRT1(unittest.TestCase):
         self.t_ex = np.deg2rad(60.)
         self.p_0 = np.ones_like(self.t_0) * 0.
         self.p_ex = np.ones_like(self.t_0) * 0.
-        self.V = Rayleigh(tau=0.7, omega=0.3)
+        self.V = Rayleigh(tau=np.array([0.7]), omega=np.array([0.3]))
         self.S = Isotropic()
         # self.C = RayleighIsotropic()
 
@@ -37,7 +37,7 @@ class TestRT1(unittest.TestCase):
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertTrue(np.allclose(Itot, Isurf + Ivol + Iint))
 
-        V = Rayleigh(tau=0., omega=0.)
+        V = Rayleigh(tau=np.array([0.]), omega=np.array([0.]))
         RT = RT1(self.I0, self.t_0, self.t_ex, self.p_0, self.p_ex,
                  V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
@@ -47,7 +47,7 @@ class TestRT1(unittest.TestCase):
         self.assertTrue(Isurf > 0.)
 
     def test_surface(self):
-        V = Rayleigh(tau=0., omega=0.)
+        V = Rayleigh(tau=np.array([0.]), omega=np.array([0.]))
         t_0 = np.deg2rad(60.)
         RT = RT1(4., t_0, self.t_ex, self.p_0, self.p_ex, V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
@@ -56,7 +56,7 @@ class TestRT1(unittest.TestCase):
     def test_volume(self):
         t_0 = np.deg2rad(60.)
         t_ex = np.deg2rad(60.)
-        V = Rayleigh(tau=0., omega=0.0)
+        V = Rayleigh(tau=np.array([0.]), omega=np.array([0.]))
         RT = RT1(self.I0, t_0, t_ex, self.p_0, self.p_ex, V=V, SRF=self.S)
         Itot, Isurf, Ivol, Iint = RT.calc()
         self.assertEqual(Ivol, 0.)
@@ -67,7 +67,7 @@ class TestRT1(unittest.TestCase):
         # against the analytical solution using a Rayleigh volume
         # and isotropic surface scattering phase function
         S = Isotropic()
-        V = Rayleigh(tau=0.7, omega=0.3)
+        V = Rayleigh(tau=np.array([0.7]), omega=np.array([0.3]))
         t_0 = np.deg2rad(60.)
         t_ex = np.deg2rad(60.)
         p_0 = 0.
@@ -90,7 +90,7 @@ class TestRT1(unittest.TestCase):
         # against the analytical solution using a Rayleigh volume
         # and isotropic surface scattering phase function
         S = CosineLobe(ncoefs=1, i=5)
-        V = Rayleigh(tau=0.7, omega=0.3)
+        V = Rayleigh(tau=np.array([0.7]), omega=np.array([0.3]))
         # --> cosTHETA = 0.
 
         # tests are using full Volume phase function, but only
@@ -122,7 +122,7 @@ class TestRT1(unittest.TestCase):
 
         # ncoefs = 2
         # first and third coef should be the same as for ncoefs=1
-        S = CosineLobe(ncoefs=2, i=5, NormBRDF=np.pi)
+        S = CosineLobe(ncoefs=2, i=5, NormBRDF=np.array([np.pi]))
         RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, V=V, SRF=S, geometry='ffff')
         res2 = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
@@ -140,8 +140,13 @@ class TestRT1(unittest.TestCase):
         p_0 = 0.
         p_ex = np.pi
 
-        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=1)
+        V = HenyeyGreenstein(omega=np.array([0.2]),
+                             tau=np.array([1.7]),
+                             t=0.7, ncoefs=1)
+
+
         RT = RT1(self.I0, t_0, t_ex, p_0, p_ex, V=V, SRF=S, geometry='ffff')
+
         r = RT._fnevals(t_0, p_0, t_ex, p_ex)
 
         self.assertTrue(np.allclose(r[0], 1. / (2. * np.pi)))

@@ -111,11 +111,10 @@ class TestRTfits(unittest.TestCase):
         R_data.t_0 = inc
         R_data.p_0 = np.zeros_like(inc)
 
-        R_data.V.omega = omegadata
-        R_data.V.tau = taudata
-        R_data.SRF.NormBRDF = rdata
+        R_data.V.omega = omegadata[:, np.newaxis]
+        R_data.V.tau = taudata[:, np.newaxis]
+        R_data.SRF.NormBRDF = rdata[:, np.newaxis]
         R_data.param_dict = {'t_data': tdata[:, np.newaxis]}
-
         # calculate the data and add some random noise
         data = R_data.calc()[0]
 
@@ -197,7 +196,7 @@ class TestRTfits(unittest.TestCase):
         # specify the treatment of the parameters in the retrieval procedure
         defdict = {
                     't1': [True, tstart, 'D', ([tmin], [tmax])],
-                    'N': [False, rdata],
+                    'N': [False, pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]],
                     'tau': [True, taustart, 'manual', ([taumin], [taumax]), manual_tau_dyn],
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
@@ -452,8 +451,8 @@ if __name__ == "__main__":
 # abs(fit4[6]['t1'] - truevals4['t1']).mean())
 # 0.0202776696237 0.00849788787843 0.080153724151
 
-
-
+#
+#
 # sig0=False
 # dB=True
 # Nmeasurements=10
