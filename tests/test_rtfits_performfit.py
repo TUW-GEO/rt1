@@ -218,19 +218,17 @@ class TestRTfits(unittest.TestCase):
 
         # ----------- calculate R^2 values and errors of parameters -----------
 
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = testfit.result
 
         # sicne fit[0].fun gives the residuals weighted with respect to
         # weights, the model calculation can be gained via
         # estimates = fit[0].fun/weights + measurements
 
         estimates = np.reshape(
-                    res_lsq.fun/weights, data.shape)
+                    testfit.fit_output.fun/testfit.weights, data.shape)
 
         # apply mask
-        measures = data[~mask]
-        estimates = estimates[~mask] + measures
+        measures = testfit.data[~testfit.mask]
+        estimates = estimates[~testfit.mask] + measures
 
         # evaluate linear regression to get r-value etc.
         slope, intercept, r_value, p_value, std_err = linregress(estimates,
@@ -263,12 +261,12 @@ class TestRTfits(unittest.TestCase):
                        't1': 0.09}
 
         for key in truevals:
-            err = abs(res_dict[key] - truevals[key]).mean()
+            err = abs(testfit.res_dict[key] - truevals[key]).mean()
             self.assertTrue(
                 err < errdict[key],
                 msg='derived error' + str(err) + 'too high for ' + str(key))
 
-        return truevals, testfit.result, r2
+        return truevals, r2
 
     def test_sig0_linear(self):
         self.performfit(
