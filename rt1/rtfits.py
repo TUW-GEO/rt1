@@ -5,11 +5,7 @@ Class to perform least_squares fitting of given datasets.
 
 import numpy as np
 import sympy as sp
-try:
-    import pandas as pd
-except ImportError:
-    print('pandas could not be found! ... performfit() and generate_dyn_dict()\
-           will not work!')
+import pandas as pd
 
 from scipy.optimize import least_squares
 from scipy.sparse import vstack
@@ -174,55 +170,125 @@ class Fits(Scatter):
 
         self.plot = rt1_plots(self)
 
-    def generate_dyn_dict(self, param_keys, datetime_index,
-                          freq=None, freqkeys=[],
-                          ):
-        '''
-        Generate a dictionary to assign the temporal dynamics of the variables.
-        Any key in 'param_keys' that is not assigned in freqkeys will be
-        treated as a constant.
 
-        Parameter:
-        -------------
-        param_keys : an iterable of keys corresponding to the names
-                     of the parameters that are intended to be fitted
-        datetime_index : datetime-indexe list of the measurements
+    def _generatedataset(self, dataset, dyn_keys,
+                         freq=None, freqkeys=[],
+                         manual_dyn_df=None,
+                         fixed_dict=dict()):
+        '''
+        a function to group the dataset to arrays based
+        on the provided frequency-keys
+
+        Parameters:
+        -----------
+        dataset : pandas.DataFrame
+                  A pandas-DataFrame with columns inc and sig that
+                  correspond to the incidence-angle- and backscatter
+                  values
+        dyn_keys : list of strings
+                   a list of the names of the parameters that are intended
+                   ot be fitted
         freq : list
-               a list of frequencies used for assigning the temporal
-               variability of the parameters ('D', 'M', '5D', etc.)
-        freqkeys : list
-               a list of parameter-names that will be assigned to the freq-list
-               (freqkeys = [['daily_p1', 'daily_p2'], ['monthly_p1']]
-                freq = ['D', 'M'])
+               a list of frequencies that will be assigned to the
+               parameters. For more details check the pandas "DateOffset"
+               https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
 
-        Returns:
-        ---------
-        param_dyn_dict : dict
-                         a dictionary that can be used to assign the temporal
-                         dynamics to the parameters in the monofit function
+        freqkeys : list
+                   a list of parameter-names to which the corresponding
+                   frequency will be assigned.
+
+                   e.g. if freq is ['D', 'M'] then freqkeys might look
+                   like [['dayparam1', 'dayparam2'], ['monthparam1']]
+
+        manual_dyn_df : pandas.DataFrame
+                        a pandas-DataFrame with column-names corresponding
+                        to the keys whose temporal grouping will be
+                        assigned based on the values.
+
+        fixed_dict : pandas.DataFrame
+                     a pandas-DataFrame with timeseries of parameters
+                     that are intended to be used as auxiliary datasets
+                     -> the index must match with the index of dataset!
         '''
+
+        dataset = pd.concat([dataset] + [val for key, val in fixed_dict.items()], axis=1)
+        if manual_dyn_df is not None:
+            manual_dyn_df = copy.deepcopy(manual_dyn_df)
+            # in case multiple measurements have been made on the same day
+            #manual_dyn_df = manual_dyn_df.loc[dataset.index]
 
         param_dyn_dict = {}
-
         # initialize all parameters as scalar parameters
-        for key in param_keys:
-            param_dyn_dict[key] = np.ones(len(datetime_index))
+        for key in dyn_keys:
+            param_dyn_dict[key] = np.ones(len(dataset.index), dtype=int)
 
-        # TODO works only for unambiguous datetime-indexes !!!
-        # (repeated indexes will be grouped together)
         if freq is not None:
             for i, f in enumerate(freq):
                 for key in freqkeys[i]:
-                    df = pd.DataFrame(np.arange(1,
-                                                len(datetime_index) + 1),
-                                                index=datetime_index)
-                    dyn_list = []
-                    for k, arr in enumerate(df.resample(f).apply(len).values):
-                        dyn_list += list(np.full_like(range(arr[0]), k + 1))
 
-                    param_dyn_dict[key] = dyn_list
+                    df = pd.concat([
+                                pd.DataFrame({key:[nval]}, val.index)
+                                for nval, [_, val] in enumerate(
+                                        dataset.groupby(
+                                                pd.Grouper(freq=f)))])
 
-        return param_dyn_dict
+                    param_dyn_dict[key] = np.array(df[key].values,
+                                                   dtype=int).flatten()
+
+        if manual_dyn_df is not None:
+            for key, val in manual_dyn_df.items():
+                # param_dyn_dict values as strings (zfilled to N digits)
+                dd1 = np.char.zfill(np.array(param_dyn_dict[key],
+                                            dtype='str'),
+                              len(max(np.array(param_dyn_dict[key],
+                                               dtype='str'), key=len)))
+                # manual_dyn_df values as strings (zfilled to N digits)
+                dd2 = np.char.zfill(np.array(val, dtype='str'),
+                              len(max(np.array(val, dtype='str'),
+                                      key=len)))
+                # generate a combined (unique) integer
+                param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
+                                               dtype=int)
+
+        param_dyn_df = pd.DataFrame(param_dyn_dict, index=dataset.index)
+        # get name of parameter with the maximum amount of unique values
+
+        # get final group-indexes
+        groupindex = None
+        for key, val in param_dyn_df.items():
+            dd = np.char.zfill(np.array(val, dtype='str'),
+                               len(max(np.array(val, dtype='str'),
+                                       key=len)))
+            if groupindex is None:
+                groupindex = dd
+            else:
+                groupindex = np.char.add(groupindex, dd)
+
+        dataset['orig_index'] = dataset.index
+        dataset = dataset.set_index(groupindex)
+        groupdf = dataset.groupby(level=0)
+
+        # generate new data-frame based on groups
+        new_df_cols = []
+        for key in dataset.keys():
+            new_df_cols += [groupdf[key].apply(list).apply(np.array)]
+        new_df = pd.concat(new_df_cols, axis=1)
+
+
+        param_dyn_df['orig_index'] = param_dyn_df.index
+        param_dyn_df = param_dyn_df.set_index(groupindex)
+        param_dyn_groupdf = param_dyn_df.groupby(level=0)
+
+        index = param_dyn_groupdf['orig_index'].apply(list).apply(np.array)
+        vals = [param_dyn_groupdf[key].apply(list).apply(np.take, indices=0)
+                for key in param_dyn_df]
+        param_dyn_df = pd.concat([index, *vals], axis=1)
+
+        for key, val in param_dyn_df.items():
+            param_dyn_dict[key] = list(val.values)
+
+        return new_df, param_dyn_dict
+
 
 
     def _preparedata(self, dataset):
@@ -235,9 +301,14 @@ class Fits(Scatter):
 
         Parameters:
         ------------
-        dataset: array-like
+        dataset: pandas.DataFrame or list
+                 input-dataset as pandas-DataFrame with columns
+                 ['inc', 'sig'] and any number of additional columns that
+                 represent auxiliary datasets
+
                  input-dataset as list of the shape:
                      [[inc_0, data_0], [inc_1, data_2], ...]
+
 
         Returns:
         ---------
@@ -264,6 +335,14 @@ class Fits(Scatter):
                   to have a rectangular array) will have no effect on the fit.
         N : int
             number of measurements that have been provided within the dataset
+
+        mask : array-like
+               a mask that indicates the artificially added values
+
+        new_fixed_dict : dict
+                         a dictionary with the values of the auxiliary-datasets
+                         grouped such that they can be used within the
+                         fitting procedure
         '''
 
 
@@ -303,7 +382,8 @@ class Fits(Scatter):
         return inc, np.concatenate(data), np.concatenate(weights), N, mask, new_fixed_dict
 
 
-    def _calc_model(self, R, res_dict, fixed_dict, return_components=False):
+    def _calc_model(self, R=None, res_dict=None, fixed_dict=None, return_components=False,
+                    **kwargs):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -1240,6 +1320,13 @@ class Fits(Scatter):
 
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
+
+        self.testdict = dict(zip(
+                ['res_lsq', 'R', 'data', 'inc', 'mask', 'weights',
+                'res_dict', 'start_dict', 'fixed_dict'],
+                [res_lsq, R, data, inc, mask, weights,
+                res_dict, start_dict, fixed_dict]))
+
         return [res_lsq, R, data, inc, mask, weights,
                 res_dict, start_dict, fixed_dict]
 
@@ -1306,6 +1393,7 @@ class Fits(Scatter):
                          'fn_input' : resulting fn coefficients,
                          '_fnevals_input' : resulting _fnevals functions}
         '''
+
         assert setindex in ['mean','first',
                             'last', 'original'], 'setindex must be either' \
                             + " 'mean', 'first', 'last' or 'original'"
@@ -1383,96 +1471,7 @@ class Fits(Scatter):
             freqkeys += [[key]]
 
 
-        def generatedataset(dataset, dyn_keys,
-                            freq=None, freqkeys=[],
-                            manual_dyn_df=None,
-                            fixed_dict=dict()):
-            '''
-            a function to group the dataset to arrays based
-            on the provided frequency-keys
-            '''
-
-            dataset = copy.deepcopy(dataset)
-            dataset = pd.concat([dataset] + [val for key, val in fixed_dict.items()], axis=1)
-            if manual_dyn_df is not None:
-                manual_dyn_df = copy.deepcopy(manual_dyn_df)
-                # in case multiple measurements have been made on the same day
-                #manual_dyn_df = manual_dyn_df.loc[dataset.index]
-
-            param_dyn_dict = {}
-            # initialize all parameters as scalar parameters
-            for key in dyn_keys:
-                param_dyn_dict[key] = np.ones(len(dataset.index), dtype=int)
-
-            if freq is not None:
-                for i, f in enumerate(freq):
-                    for key in freqkeys[i]:
-
-                        df = pd.concat([
-                                    pd.DataFrame({key:[nval]}, val.index)
-                                    for nval, [_, val] in enumerate(
-                                            dataset.groupby(
-                                                    pd.Grouper(freq=f)))])
-
-                        param_dyn_dict[key] = np.array(df[key].values,
-                                                       dtype=int).flatten()
-
-            if manual_dyn_df is not None:
-                for key, val in manual_dyn_df.items():
-                    # param_dyn_dict values as strings (zfilled to N digits)
-                    dd1 = np.char.zfill(np.array(param_dyn_dict[key],
-                                                dtype='str'),
-                                  len(max(np.array(param_dyn_dict[key],
-                                                   dtype='str'), key=len)))
-                    # manual_dyn_df values as strings (zfilled to N digits)
-                    dd2 = np.char.zfill(np.array(val, dtype='str'),
-                                  len(max(np.array(val, dtype='str'),
-                                          key=len)))
-                    # generate a combined (unique) integer
-                    param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
-                                                   dtype=int)
-
-            param_dyn_df = pd.DataFrame(param_dyn_dict, index=dataset.index)
-            # get name of parameter with the maximum amount of unique values
-
-            # get final group-indexes
-            groupindex = None
-            for key, val in param_dyn_df.items():
-                dd = np.char.zfill(np.array(val, dtype='str'),
-                                   len(max(np.array(val, dtype='str'),
-                                           key=len)))
-                if groupindex is None:
-                    groupindex = dd
-                else:
-                    groupindex = np.char.add(groupindex, dd)
-
-            dataset['orig_index'] = dataset.index
-            dataset = dataset.set_index(groupindex)
-            groupdf = dataset.groupby(level=0)
-
-            # generate new data-frame based on groups
-            new_df_cols = []
-            for key in dataset.keys():
-                new_df_cols += [groupdf[key].apply(list).apply(np.array)]
-            new_df = pd.concat(new_df_cols, axis=1)
-
-
-            param_dyn_df['orig_index'] = param_dyn_df.index
-            param_dyn_df = param_dyn_df.set_index(groupindex)
-            param_dyn_groupdf = param_dyn_df.groupby(level=0)
-
-            index = param_dyn_groupdf['orig_index'].apply(list).apply(np.array)
-            vals = [param_dyn_groupdf[key].apply(list).apply(np.take, indices=0)
-                    for key in param_dyn_df]
-            param_dyn_df = pd.concat([index, *vals], axis=1)
-
-            for key, val in param_dyn_df.items():
-                param_dyn_dict[key] = list(val.values)
-
-            #self.param_dyn_dict = param_dyn_dict
-            return new_df, param_dyn_dict
-
-        dataset_used, param_dyn_dict = generatedataset(
+        dataset_used, param_dyn_dict = self._generatedataset(
                 dataset=dataset, dyn_keys=startvaldict.keys(),
                 freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
                 fixed_dict=fixed_dict)
@@ -1515,17 +1514,22 @@ class Fits(Scatter):
 
 
         # generate a datetime-index from the given groups
-        if setindex == 'first':
-            self.index = pd.to_datetime(
-                    dataset_used.orig_index.apply(np.take,indices=0).values)
-        elif setindex == 'last':
-            self.index = pd.to_datetime(
-                    dataset_used.orig_index.apply(np.take,indices=-1).values)
-        elif setindex == 'mean':
-            self.index = pd.to_datetime(
-                    dataset_used.orig_index.apply(meandatetime).values)
-        elif setindex == 'original':
+        try:
+            if setindex == 'first':
+                self.index = pd.to_datetime(
+                        dataset_used.orig_index.apply(np.take,indices=0).values)
+            elif setindex == 'last':
+                self.index = pd.to_datetime(
+                        dataset_used.orig_index.apply(np.take,indices=-1).values)
+            elif setindex == 'mean':
+                self.index = pd.to_datetime(
+                        dataset_used.orig_index.apply(meandatetime).values)
+            elif setindex == 'original':
+                self.index = dataset_used.index
+        except:
+            print('index could not be combined... use original index instead')
             self.index = dataset_used.index
+
 
         self.result = fitresult
         self.dataset_used = dataset_used
