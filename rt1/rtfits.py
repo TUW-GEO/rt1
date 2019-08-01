@@ -173,6 +173,30 @@ class Fits(Scatter):
         self.plot = rt1_plots(self)
 
 
+    def __update__(self):
+        '''
+        needed for downward compatibility
+        '''
+        if (not hasattr(self, 'R') and
+            hasattr(self, 'result') and len(self.result) == 9):
+            print('... updating attributes')
+            self.fit_output = self.result[0]
+            self.R = self.result[1]
+            self.data = self.result[2]
+            self.inc = self.result[3]
+            self.mask = self.result[4]
+            self.weights = self.result[5]
+            self.res_dict = self.result[6]
+            self.start_dict = self.result[7]
+            self.fixed_dict = self.result[8]
+
+
+    def __setstate__(self, d):
+        # this is done to support downward-compatibility with pickled results
+        self.__dict__ = d
+        self.__update__()
+
+
     def _generatedataset(self, dataset, dyn_keys,
                          freq=None, freqkeys=[],
                          manual_dyn_df=None,
@@ -411,6 +435,23 @@ class Fits(Scatter):
                      in linear-units or dB corresponding to the specifications
                      defined in the rtfits-class.
         '''
+
+        if R is None:
+            try:
+                R = self.R
+            except AttributeError:
+                assert False, 'R is not available and must be provided'
+        if res_dict is None:
+            try:
+                res_dict = self.res_dict
+            except AttributeError:
+                assert False, 'res_dict is not available and must be provided'
+        if fixed_dict is None:
+            try:
+                fixed_dict = self.fixed_dict
+            except AttributeError:
+                assert False, 'fixed_dict is not available and must be provided'
+
 
         # ensure correct array-processing
         res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
@@ -780,7 +821,8 @@ class Fits(Scatter):
         return jac_lsq
 
 
-    def _calc_slope_curv(self, R, res_dict, return_components=False):
+    def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
+                         return_components=False):
         '''
         function to calculate the monostatic slope and curvature
         of the model
@@ -802,6 +844,28 @@ class Fits(Scatter):
                      in linear-units or dB corresponding to the specifications
                      defined in the rtfits-class.
         '''
+
+        if R is None:
+            try:
+                R = self.R
+            except AttributeError:
+                assert False, 'R is not available and must be provided'
+        if res_dict is None:
+            try:
+                res_dict = self.res_dict
+            except AttributeError:
+                assert False, 'res_dict is not available and must be provided'
+        if fixed_dict is None:
+            try:
+                fixed_dict = self.fixed_dict
+            except AttributeError:
+                assert False, 'fixed_dict is not available and must be provided'
+
+
+        # ensure correct array-processing
+        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
+                    key, val in res_dict.items()}
+        res_dict.update(fixed_dict)
 
         # store original V and SRF
         orig_V = copy.deepcopy(R.V)
@@ -1331,14 +1395,20 @@ class Fits(Scatter):
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
 
-        self.testdict = dict(zip(
-                ['res_lsq', 'R', 'data', 'inc', 'mask', 'weights',
-                'res_dict', 'start_dict', 'fixed_dict'],
-                [res_lsq, R, data, inc, mask, weights,
-                res_dict, start_dict, fixed_dict]))
+        self.fit_output = res_lsq
+        self.R = R
+        self.data = data
+        self.inc = inc
+        self.mask = mask
+        self.weights = weights
+        self.res_dict = res_dict
+        self.start_dict = start_dict
+        self.fixed_dict = fixed_dict
 
-        return [res_lsq, R, data, inc, mask, weights,
-                res_dict, start_dict, fixed_dict]
+        # for downward compatibility
+        return [self.fit_output, self.R, self.data, self.inc, self.mask,
+                self.weights, self.res_dict, self.start_dict,
+                self.fixed_dict]
 
 
     def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
@@ -1511,18 +1581,18 @@ class Fits(Scatter):
 
         self.fixed_dict_input = fixed_dict
         # perform fit
-        fitresult = self.monofit(V=V, SRF=SRF,
-                                 dataset=dataset_used,
-                                 param_dict=param_dict,
-                                 bsf = setdict['bsf'],
-                                 bounds_dict=bounds_dict,
-                                 fixed_dict=fixed_dict,
-                                 param_dyn_dict=param_dyn_dict,
-                                 fn_input=fn_input,
-                                 _fnevals_input=_fnevals_input,
-                                 int_Q=int_Q,
-                                 verbosity=2,
-                                 **kwargs)
+        self.monofit(V=V, SRF=SRF,
+                     dataset=dataset_used,
+                     param_dict=param_dict,
+                     bsf = setdict['bsf'],
+                     bounds_dict=bounds_dict,
+                     fixed_dict=fixed_dict,
+                     param_dyn_dict=param_dyn_dict,
+                     fn_input=fn_input,
+                     _fnevals_input=_fnevals_input,
+                     int_Q=int_Q,
+                     verbosity=2,
+                     **kwargs)
 
 
         # generate a datetime-index from the given groups
@@ -1544,7 +1614,5 @@ class Fits(Scatter):
             print('index could not be combined... use original index instead')
             self.index = dataset_used.index
 
-
-        self.result = fitresult
         self.dataset_used = dataset_used
 

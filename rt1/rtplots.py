@@ -726,32 +726,29 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit.result
-
         # reset incidence-angles in case they have been altered beforehand
-        R.t_0 = inc
-        R.p_0 = np.zeros_like(inc)
+        fit.R.t_0 = fit.inc
+        fit.R.p_0 = np.zeros_like(fit.inc)
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
         if newcalc is True:
 
-            estimates = fit._calc_model(R, res_dict, fixed_dict)
+            estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
 
             # apply mask
-            estimates = estimates[~mask]
-            measures = data[~mask]
+            estimates = estimates[~fit.mask]
+            measures = fit.data[~fit.mask]
 
         else:
             # get the residuals and apply mask
-            residuals = np.reshape(res_lsq.fun, data.shape)
-            residuals = np.ma.masked_array(residuals, mask)
+            residuals = np.reshape(fit.fit_output.fun, fit.data.shape)
+            residuals = np.ma.masked_array(residuals, fit.mask)
             # prepare measurements
-            measures = data[~mask]
+            measures = fit.data[~fit.mask]
             # calculate estimates
-            estimates = residuals[~mask] + measures
+            estimates = residuals[~fit.mask] + measures
 
         if mima is None:
             mi = np.min((measures, estimates))
@@ -833,13 +830,11 @@ class plot:
             fit = self.fit
 
 
-        # get mask
-        (_, _, data, inc, mask, _, _, _, _) = fit.result
         # get incidence-angles
-        inc_array = np.ma.masked_array(inc, mask)
+        inc_array = np.ma.masked_array(fit.inc, fit.mask)
         inc = inc_array.compressed()
         # get input dataset
-        data = np.ma.masked_array(data, mask)
+        data = np.ma.masked_array(fit.data, fit.mask)
 
         def dBsig0convert(val):
             # if results are provided in dB convert them to linear units
@@ -855,13 +850,13 @@ class plot:
             return val
 
         # calculate individual contributions
-        contrib_array = fit._calc_model(R=fit.result[1],
-                                        res_dict=fit.result[6],
-                                        fixed_dict=fit.result[-1],
+        contrib_array = fit._calc_model(R=fit.R,
+                                        res_dict=fit.res_dict,
+                                        fixed_dict=fit.fixed_dict,
                                         return_components=True)
 
         # apply mask and convert to pandas dataframe
-        contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
+        contrib_array = [np.ma.masked_array(con, fit.mask) for con in contrib_array]
         contrib_array += [data, inc_array]
 
         contrib = []
@@ -879,7 +874,7 @@ class plot:
                          ]].apply(dBsig0convert)
 
         # drop unneeded columns
-        if fit.result[1].int_Q is False or printint is False:
+        if fit.R.int_Q is False or printint is False:
             contrib = contrib.drop('inter', axis=1)
         if printtot is False: contrib = contrib.drop('tot', axis=1)
         if printsurf is False: contrib = contrib.drop('surf', axis=1)
@@ -938,9 +933,9 @@ class plot:
         if params != None:
             paramdf_dict = {}
             # add fitted parameters
-            paramdf_dict.update(fit.result[6])
+            paramdf_dict.update(fit.res_dict)
             # add constant values
-            paramdf_dict.update(fit.result[-1])
+            paramdf_dict.update(fit.fixed_dict)
 
             paramdf = pd.DataFrame(paramdf_dict,
                                    index = fit.index).sort_index()
@@ -1010,32 +1005,31 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit.result
-
         if result_selection == 'all':
-            result_selection = range(len(data))
+            result_selection = range(len(fit.data))
 
         if newcalc is False:
             # get residuals from fit into desired shape for plotting
             # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
+            res = np.ma.masked_array(np.reshape(fit.fit_output.fun,
+                                                fit.data.shape), fit.mask)
 
             if relative is True:
-                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
+                res = np.ma.abs(res / (res + np.ma.masked_array(fit.data,
+                                                                fit.mask)))
             else:
                 res = np.ma.abs(res)
         else:
             # Alternative way of calculating the residuals
             # (based on R, inc and res_dict)
 
-            R.t_0 = inc
-            R.p_0 = np.zeros_like(inc)
+            fit.R.t_0 = fit.inc
+            fit.R.p_0 = np.zeros_like(fit.inc)
 
-            estimates = fit._calc_model(R, res_dict, fixed_dict)
+            estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
             # calculate the residuals based on masked arrays
-            masked_estimates = np.ma.masked_array(estimates, mask=mask)
-            masked_data = np.ma.masked_array(data, mask=mask)
+            masked_estimates = np.ma.masked_array(estimates, mask=fit.mask)
+            masked_data = np.ma.masked_array(fit.data, mask=fit.mask)
 
             res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
@@ -1043,8 +1037,7 @@ class plot:
                 res = res / masked_estimates
 
         # apply mask to data and incidence-angles (and convert to degree)
-        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
-        data = np.ma.masked_array(data, mask=mask)
+        inc = np.ma.masked_array(np.rad2deg(fit.inc), mask=fit.mask)
 
         # make new figure
         fig = plt.figure(figsize=(14, 10))
@@ -1181,21 +1174,20 @@ class plot:
             fit = self.fit
 
         # this is done to allow the usage of monofit-outputs as well
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit.result
 
         if result_selection == 'all':
-            result_selection = range(len(data))
+            result_selection = range(len(fit.data))
 
         # assign colors
-        colordict = {key:f'C{i%10}' for i, key in enumerate(res_dict.keys())}
+        colordict = {key:f'C{i%10}' for
+                     i, key in enumerate(fit.fit_output.keys())}
 
         # reset incidence-angles in case they have been altered beforehand
-        R.t_0 = inc
-        R.p_0 = np.zeros_like(inc)
+        fit.R.t_0 = fit.inc
+        fit.R.p_0 = np.zeros_like(fit.inc)
 
         # evaluate number of measurements
-        Nmeasurements = len(inc)
+        Nmeasurements = len(fit.inc)
 
         if truevals is not None:
             truevals = {**truevals}
@@ -1213,8 +1205,9 @@ class plot:
         ax.set_title('Fit-results')
 
         # plot datapoints
-        for i, j in enumerate(np.ma.masked_array(data, mask)[result_selection]):
-            ax.plot(inc[result_selection[i]], j, '.')
+        for i, j in enumerate(np.ma.masked_array(fit.data,
+                                                 fit.mask)[result_selection]):
+            ax.plot(fit.inc[result_selection[i]], j, '.')
 
         # reset color-cycle
         plt.gca().set_prop_cycle(None)
@@ -1222,17 +1215,17 @@ class plot:
         # define incidence-angle range for plotting
 #        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
 #                           * Nmeasurements)
-        incplot = inc
+        incplot = fit.inc
         # set new incidence-angles
-        R.t_0 = incplot
-        R.p_0 = np.zeros_like(incplot)
+        fit.R.t_0 = incplot
+        fit.R.p_0 = np.zeros_like(incplot)
 
         # calculate results
-        fitplot = fit._calc_model(R, res_dict, fixed_dict)
+        fitplot = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
 
         # generate a mask that hides all measurements where no data has
         # been provided (i.e. whose parameter-results are still the startvals)
-        newmask = np.ones_like(incplot) * np.all(mask, axis=1)[:, np.newaxis]
+        newmask = np.ones_like(incplot) * np.all(fit.mask, axis=1)[:, np.newaxis]
         fitplot = np.ma.masked_array(fitplot, newmask)
 
         for i, val in enumerate(fitplot[result_selection]):
@@ -1240,7 +1233,7 @@ class plot:
 
         # ----------- plot start-values ------------
         if startvals is True:
-            startplot = fit._calc_model(R, start_dict, fixed_dict)
+            startplot = fit._calc_model(fit.R, fit.start_dict, fit.fixed_dict)
             for i, val in enumerate(startplot[result_selection]):
                 if i == 0:
                     label = 'fitstart'
@@ -1252,15 +1245,15 @@ class plot:
         if legends is True:
             ax.legend(loc=1)
 
-        mintic = np.round(np.rad2deg(np.min(inc)) + 4.9, -1)
+        mintic = np.round(np.rad2deg(np.min(fit.inc)) + 4.9, -1)
         if mintic < 0.:
             mintic = 0.
-        maxtic = np.round(np.rad2deg(np.max(inc)) + 4.9, -1)
+        maxtic = np.round(np.rad2deg(np.max(fit.inc)) + 4.9, -1)
         if maxtic > 360.:
             maxtic = 360.
 
-        ticks = np.arange(np.rad2deg(np.min(inc)),
-                          np.rad2deg(np.max(inc)) + 1.,
+        ticks = np.arange(np.rad2deg(np.min(fit.inc)),
+                          np.rad2deg(np.max(fit.inc)) + 1.,
                           (maxtic - mintic) / 10.)
         plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
         plt.xlabel('$\\theta_0$ [deg]')
@@ -1282,7 +1275,7 @@ class plot:
 
             param_errs = {}
             for key in truevals:
-                param_errs[key] = res_dict[key] - truevals[key]
+                param_errs[key] = fit.res_dict[key] - truevals[key]
 
             for key in truevals:
                 ax2.plot(fit.index, param_errs[key],
@@ -1298,12 +1291,13 @@ class plot:
 
 
         # plot fitted values
-        for key in res_dict:
+        for key in fit.res_dict:
             ax2.plot(fit.index,
-                     np.ma.masked_array(res_dict[key], np.all(mask, axis=1)),
+                     np.ma.masked_array(fit.res_dict[key],
+                                        np.all(fit.mask, axis=1)),
                      alpha=1., label=key, color=colordict[key])
 
-        if len(result_selection) < len(data):
+        if len(result_selection) < len(fit.data):
             for i, resid in enumerate(result_selection):
                 ax2.text(fit.index[resid],
                          ax2.get_ylim()[1]*.9,
@@ -1392,12 +1386,7 @@ class plot:
             cmap = LinearSegmentedColormap('custom_cmap', cdict)
             return cmap
 
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit.result
-
-
-        estimates = fit._calc_model(R, res_dict, fixed_dict)
-
+        estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1405,19 +1394,19 @@ class plot:
         for m_i, m in enumerate(fit_numbers):
 
             if convertTodB is True:
-                y = 10.*np.log10(estimates[m][~mask[m]])
+                y = 10.*np.log10(estimates[m][~fit.mask[m]])
             else:
-                y = estimates[m][~mask[m]]
+                y = estimates[m][~fit.mask[m]]
 
             # plot data
             label = fit.index[m]
 
-            xdata = np.rad2deg(inc[m][~mask[m]])
+            xdata = np.rad2deg(fit.inc[m][~fit.mask[m]])
 
             if convertTodB is True:
-                ydata = 10.*np.log10(data[m][~mask[m]])
+                ydata = 10.*np.log10(fit.data[m][~fit.mask[m]])
             else:
-                ydata = data[m][~mask[m]]
+                ydata = fit.data[m][~fit.mask[m]]
 
             # get color that will be applied to the next line drawn
             dummy, = ax.plot(xdata[0], ydata[0], '.', alpha=0.)
@@ -1449,7 +1438,7 @@ class plot:
                             label=label, markersize=10)
 
             # plot results
-            iii = inc[m][~mask[m]]
+            iii = fit.inc[m][~fit.mask[m]]
             ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
                     '-', color='w', linewidth=3)
 
@@ -1492,7 +1481,7 @@ class plot:
                            ' monofit() with intermediate_results=True flag!')
 
         if params is None:
-            params = fit.result[6].keys()
+            params = fit.res_dict.keys()
 
 
         if cmaps is None:
