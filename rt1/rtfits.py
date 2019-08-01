@@ -58,7 +58,9 @@ def rectangularize(array, weights_and_mask=False):
             newarray += [s]
             weights  += [w]
             mask     += [m]
-        return np.array(newarray), np.array(weights), np.array(mask, dtype=bool)
+        return [np.array(newarray),
+                np.array(weights),
+                np.array(mask, dtype=bool)]
     else:
         newarray = []
         for s in array:
@@ -211,7 +213,9 @@ class Fits(Scatter):
                      -> the index must match with the index of dataset!
         '''
 
-        dataset = pd.concat([dataset] + [val for key, val in fixed_dict.items()], axis=1)
+        dataset = pd.concat([dataset] +
+                            [val for key, val in fixed_dict.items()], axis=1)
+
         if manual_dyn_df is not None:
             manual_dyn_df = copy.deepcopy(manual_dyn_df)
             # in case multiple measurements have been made on the same day
@@ -379,10 +383,12 @@ class Fits(Scatter):
                 if key not in ['inc', 'sig', 'orig_index']:
                     new_fixed_dict[key] = rectangularize(dataset[key])
 
-        return inc, np.concatenate(data), np.concatenate(weights), N, mask, new_fixed_dict
+        return [inc, np.concatenate(data), np.concatenate(weights),
+                N, mask, new_fixed_dict]
 
 
-    def _calc_model(self, R=None, res_dict=None, fixed_dict=None, return_components=False,
+    def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
+                    return_components=False,
                     **kwargs):
         '''
         function to calculate the model-results (intensity or sigma_0) based
@@ -407,7 +413,8 @@ class Fits(Scatter):
         '''
 
         # ensure correct array-processing
-        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for key, val in res_dict.items()}
+        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
+                    key, val in res_dict.items()}
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -533,7 +540,8 @@ class Fits(Scatter):
               shape applicable to scipy's least_squres-function
         '''
         # ensure correct array-processing
-        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for key, val in res_dict.items()}
+        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
+                    key, val in res_dict.items()}
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -1103,7 +1111,8 @@ class Fits(Scatter):
         # dictionarys do)
         order = [i for i, v in param_dict.items() if v is not None]
         # preparation of data for fitting
-        inc, data, weights, Nmeasurements, mask, fixed_dict = self._preparedata(dataset)
+        [inc, data, weights, Nmeasurements,
+         mask, fixed_dict] = self._preparedata(dataset)
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
@@ -1286,7 +1295,8 @@ class Fits(Scatter):
                     startvals = startvals + list(param_dict[key])
 
         # perform actual fitting
-        res_lsq = least_squares(fun, startvals, bounds=bounds, jac=dfun, **kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
         count = 0
@@ -1418,7 +1428,8 @@ class Fits(Scatter):
             # if parameter is intended to be fitted, assign a sympy-symbol
             if defdict[key][0] is True:
                 # TODO see why this is actually necessary
-                if key not in ['omega', 'tau']:  # omega must not be a sympy-symbol name
+                # omega and tau must not be a sympy-symbol name
+                if key not in ['omega', 'tau']:
                     setdict[key] = sp.var(key)
                 else:
                     # a dummy value that will be replaced in rtfits.monofit
@@ -1453,7 +1464,8 @@ class Fits(Scatter):
                     # if value is provided as array, add it to fixed_dict
                     # TODO same as above ...why is this necessary?
                     # TODO what about 'tau' and 'NormBRDF'
-                    if key not in ['omega', 'tau']:  # omega must not be a sympy-symbol name
+                    # omega and tau must not be a sympy-symbol name
+                    if key not in ['omega', 'tau']:
                         setdict[key] = sp.var(key)
                     else:
                         # a dummy value that will be replaced by rtfits.monofit
@@ -1517,10 +1529,12 @@ class Fits(Scatter):
         try:
             if setindex == 'first':
                 self.index = pd.to_datetime(
-                        dataset_used.orig_index.apply(np.take,indices=0).values)
+                        dataset_used.orig_index.apply(np.take,
+                                                      indices=0).values)
             elif setindex == 'last':
                 self.index = pd.to_datetime(
-                        dataset_used.orig_index.apply(np.take,indices=-1).values)
+                        dataset_used.orig_index.apply(np.take,
+                                                      indices=-1).values)
             elif setindex == 'mean':
                 self.index = pd.to_datetime(
                         dataset_used.orig_index.apply(meandatetime).values)
