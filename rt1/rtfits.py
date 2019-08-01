@@ -73,7 +73,6 @@ def rectangularize(array, weights_and_mask=False):
         return np.array(newarray)
 
 
-
 def meandatetime(datetimes):
     '''
     calculate the average date from a given list of datetime-objects

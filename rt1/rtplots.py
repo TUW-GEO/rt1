@@ -1,8 +1,5 @@
 """
 Class for quick visualization of results and used phasefunctions
-
-polarplot() ... plot p and the BRDF as polar-plot
-
 """
 
 import sympy as sp
@@ -673,18 +670,40 @@ class plot:
     '''
     Generation of plots to visualize rtfits results
 
-    - printscatter
-        scatterplot of measured vs. modelled data
+    - scatter
+        generate a scatterplot of measured vs. modelled data
 
-    - printresults
+    - fit_timeseries
+        generate a plot showing the temporal and incidence-angle dependency
+        of measured vs. modelled data.
+
+    - fit_errors
+        generate a plot showing the temporal and incidence-angle dependency
+        of the residuals of measured vs. modelled data.
+
+    - results
+        generate a plot showing the fitted curves and the obtained parameter
+        timeseries
+
+    - single_results
+        plot the data and the fitted curves for individual measurement-groups
+        as defined by the frequencies of the fitted parameters
+
+    - intermediate_results
+        !!! only available if *performfit* has been called with
+        *intermediate_results = True*
+
+        generate a plot showing the development of the fitted parameters
+        and the residuals for each fit-iteration
+
 
     '''
 
     def __init__(self, fit=None, **kwargs):
         self.fit = fit
 
-    def printscatter(self, fit=None, mima=None, pointsize=0.5,
-                     regression=True, newcalc=False,  **kwargs):
+    def scatter(self, fit=None, mima=None, pointsize=0.5,
+                regression=True, newcalc=False,  **kwargs):
         '''
         geerate a scatterplot of modelled vs. original backscatter data
 
@@ -775,7 +794,362 @@ class plot:
         return fig
 
 
-    def printresults(self, fit=None, truevals=None, startvals=False,
+    def fit_timeseries(self, fit=None, dB=True, sig0=True, params=None,
+                       printtot = True, printsurf = True,
+                       printvol = True, printint = True,
+                       printorig = True, months = None, years = None,
+                       ylim=None, printinc = True):
+        '''
+        Print individual contributions, resulting parameters and the
+        reference dataset of an rt1.rtfits object as timeseries.
+
+        Parameters:
+        -------------
+        fit : rtfits object
+              the rtfits-object containing the fit-results
+        dB : bool (default = True)
+             indicator if the plot is intended to be in dB or linear units
+        sig0 : bool (default = True)
+             indicator if the plot should display sigma_0 (sig0) or intensity (I)
+             The applied relation is: sig0 = 4.*pi*cos(theta) * I
+        params: list
+                a list of parameter-names that should be overprinted
+                (the names must coincide with the arguments of set_V_SRF())
+        printtot, printsurf, printvol, printint, printorig : bool
+                indicators if the corresponding components should be plotted
+        months : list of int (default = None)
+                 a list of months to plot (if None, all will be plotted)
+        years : list of int (default = None)
+                a list of years to select (if None, all will be plotted)
+        ylim : tuple
+               a tuple of (ymin, ymax) that will be used as boundaries for the
+               y-axis
+        printinc : bool (default = True)
+                   indicator if the incidence-angle dependency should be plotted
+                   (in a separate plot alongside the timeseries)
+        '''
+
+        if fit is None:
+            fit = self.fit
+
+
+        # get mask
+        (_, _, data, inc, mask, _, _, _, _) = fit.result
+        # get incidence-angles
+        inc_array = np.ma.masked_array(inc, mask)
+        inc = inc_array.compressed()
+        # get input dataset
+        data = np.ma.masked_array(data, mask)
+
+        def dBsig0convert(val):
+            # if results are provided in dB convert them to linear units
+            if fit.dB is True: val = 10**(val/10.)
+            # convert sig0 to intensity
+            if sig0 is False and fit.sig0 is True:
+                val = val/(4.*np.pi*np.cos(inc))
+            # convert intensity to sig0
+            if sig0 is True and fit.sig0 is False:
+                val = 4.*np.pi*np.cos(inc)*val
+            # if dB output is required, convert to dB
+            if dB is True: val = 10.*np.log10(val)
+            return val
+
+        # calculate individual contributions
+        contrib_array = fit._calc_model(R=fit.result[1],
+                                        res_dict=fit.result[6],
+                                        fixed_dict=fit.result[-1],
+                                        return_components=True)
+
+        # apply mask and convert to pandas dataframe
+        contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
+        contrib_array += [data, inc_array]
+
+        contrib = []
+        for i, cont in enumerate(contrib_array):
+            contrib += [pd.concat([pd.DataFrame(i, index = fit.index) for i in cont.T])[0]]
+
+        contrib = pd.concat(contrib,
+                            keys=['tot', 'surf', 'vol', 'inter',
+                                  '$\\sigma_0$ dataset', 'inc'], axis=1).dropna()
+
+        # convert units
+        contrib[['tot', 'surf', 'vol', 'inter',
+                 '$\\sigma_0$ dataset']] = contrib[[
+                         'tot', 'surf', 'vol', 'inter', '$\\sigma_0$ dataset'
+                         ]].apply(dBsig0convert)
+
+        # drop unneeded columns
+        if fit.result[1].int_Q is False or printint is False:
+            contrib = contrib.drop('inter', axis=1)
+        if printtot is False: contrib = contrib.drop('tot', axis=1)
+        if printsurf is False: contrib = contrib.drop('surf', axis=1)
+        if printvol is False: contrib = contrib.drop('vol', axis=1)
+        if printorig is False:
+            contrib = contrib.drop('$\\sigma_0$ dataset', axis=1)
+
+        # select years and months
+        if years is not None:
+            contrib = contrib.loc[contrib.index.year.isin(years)]
+        if months is not None:
+            contrib = contrib.loc[contrib.index.month.isin(months)]
+
+        # print incidence-angle dependency
+        if printinc is True:
+            f, [ax, ax_inc] = plt.subplots(ncols=2, figsize=(15,5),
+                                           gridspec_kw={'width_ratios':[3,1]},
+                                           sharey=True)
+            f.subplots_adjust(left=0.05, right=0.98, top=0.98,
+                              bottom=0.1, wspace=0.1)
+
+            # -------------------
+            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y',
+                     '$\\sigma_0$ dataset':'k'}
+
+            groupedcontrib = contrib.groupby(contrib.index)
+
+            #return contrib, groupedcontrib
+            for label in contrib.keys():
+                if label in ['inc']: continue
+                a=np.rad2deg(rectangularize([x.values for _, x in groupedcontrib['inc']])).T
+                b=np.array(rectangularize([x.values for _, x in groupedcontrib[label]])).T
+                x = (np.array([a,b]).T)
+
+                l_col = mpl.collections.LineCollection(x,linewidth =.25, label='x',
+                                          color=color[label], alpha = 0.5)
+                ax_inc.add_collection(l_col)
+                ax_inc.scatter(a, b, color=color[label], s=1)
+                ax_inc.set_xlim(a.min(), a.max())
+                ax_inc.set_xlabel('$\\theta_0$')
+            ax_inc.set_xlabel('$\\theta_0$')
+
+
+        else:
+            f, ax = plt.subplots(figsize=(12,5))
+            f.subplots_adjust(left=0.05, right=0.98, top=0.98,
+                              bottom=0.1, wspace=0.05)
+
+        for label, val in contrib.items():
+            if label in ['inc']: continue
+            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
+            if printorig is True: color['$\\sigma_0$ dataset'] = 'k'
+            ax.plot(val.sort_index(), linewidth =.25, marker='.',
+                    ms=2, label=label, color=color[label], alpha = 0.5)
+        # overprint parameters
+        if params != None:
+            paramdf_dict = {}
+            # add fitted parameters
+            paramdf_dict.update(fit.result[6])
+            # add constant values
+            paramdf_dict.update(fit.result[-1])
+
+            paramdf = pd.DataFrame(paramdf_dict,
+                                   index = fit.index).sort_index()
+            if years is not None:
+                paramdf = paramdf.loc[paramdf.index.year.isin(years)]
+            if months is not None:
+                paramdf = paramdf.loc[paramdf.index.month.isin(months)]
+
+            pax = ax.twinx()
+            for k in params:
+                pax.plot(paramdf[k], lw=1, marker='.', ms=2, label=k)
+            pax.legend(loc='upper right', ncol=5)
+            pax.set_ylabel('parameter-values')
+
+        # format datetime index
+        ax.xaxis.set_minor_locator(mpl.dates.MonthLocator())
+        ax.xaxis.set_minor_formatter(mpl.dates.DateFormatter('%m'))
+        ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+        ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('\n%Y'))
+
+        # set ylabels
+        if sig0 is True:
+            label = '$\\sigma_0$'
+        else:
+            label = 'Intensity'
+        if dB is True: label += ' [dB]'
+        ax.set_ylabel(label)
+
+        # generate legend
+        hand, lab = ax.get_legend_handles_labels()
+        lab, unique_ind = np.unique(lab, return_index=True)
+        ax.legend(handles = list(np.array(hand)[unique_ind]),
+                  labels=list(lab), loc='upper left',
+                  ncol=5)
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        return f
+
+
+    def fit_errors(self, fit=None, newcalc=False, relative=False,
+                   result_selection='all'):
+        '''
+        a function to quickly print residuals for each measurement
+        and for each incidence-angle value
+
+        Parametsrs:
+        ------------
+        fit : list
+            output of performfit()-function
+        newcalc : bool (default = False)
+                  indicator whether the residuals shall be re-calculated
+                  or not.
+
+                  True:
+                      the residuals are calculated using R, inc, mask,
+                      res_dict and fixed_dict from the fit-argument
+                  False:
+                      the residuals are taken from the output of
+                      res_lsq from the fit-argument
+        relative : bool (default = False)
+                   indicator if relative (True) or absolute (False) residuals
+                   shall be plotted
+        '''
+
+        if fit is None:
+            fit = self.fit
+
+        (res_lsq, R, data, inc, mask, weights,
+         res_dict, start_dict, fixed_dict) = fit.result
+
+        if result_selection == 'all':
+            result_selection = range(len(data))
+
+        if newcalc is False:
+            # get residuals from fit into desired shape for plotting
+            # Attention -> incorporate weights and mask !
+            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
+
+            if relative is True:
+                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
+            else:
+                res = np.ma.abs(res)
+        else:
+            # Alternative way of calculating the residuals
+            # (based on R, inc and res_dict)
+
+            R.t_0 = inc
+            R.p_0 = np.zeros_like(inc)
+
+            estimates = fit._calc_model(R, res_dict, fixed_dict)
+            # calculate the residuals based on masked arrays
+            masked_estimates = np.ma.masked_array(estimates, mask=mask)
+            masked_data = np.ma.masked_array(data, mask=mask)
+
+            res = np.ma.sqrt((masked_estimates - masked_data)**2)
+
+            if relative is True:
+                res = res / masked_estimates
+
+        # apply mask to data and incidence-angles (and convert to degree)
+        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
+        data = np.ma.masked_array(data, mask=mask)
+
+        # make new figure
+        fig = plt.figure(figsize=(14, 10))
+        ax = fig.add_subplot(212)
+        if relative is True:
+            ax.set_title('Mean relative residual per measurement')
+        else:
+            ax.set_title('Mean absolute residual per measurement')
+
+        ax2 = fig.add_subplot(211)
+        if relative is True:
+            ax2.set_title('Relative residuals per incidence-angle')
+        else:
+            ax2.set_title('Residuals per incidence-angle')
+
+        # the use of masked arrays might cause python 2 compatibility issues!
+        ax.plot(fit.index[result_selection], res[result_selection], '.', alpha=0.5)
+
+        # plot mean residual for each measurement
+        ax.plot(fit.index[result_selection], np.ma.mean(res[result_selection], axis=1),
+                   'k', linewidth=3, marker='o', fillstyle='none')
+
+        # plot total mean of mean residuals per measurement
+        ax.plot(fit.index[result_selection],
+                   [np.ma.mean(np.ma.mean(res[result_selection], axis=1))] * len(result_selection),
+                   'k--')
+
+        # add some legends
+        res_h = mlines.Line2D(
+            [], [], color='black', label='Mean res.  per measurement',
+            linestyle='-', linewidth=3, marker='o', fillstyle='none')
+        res_h_dash = mlines.Line2D(
+            [], [], color='black', linestyle='--', label='Average mean res.',
+            linewidth=1, fillstyle='none')
+
+        res_h_dots = mlines.Line2D(
+            [], [], color='black', label='Residuals',
+            linestyle='-', linewidth=0, marker='.', alpha=0.5)
+
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles=handles + [res_h_dots] + [res_h] + [res_h_dash],
+                     loc=1)
+
+        ax.set_ylabel('Residual')
+
+    #        # evaluate mean residuals per incidence-angle
+        meanincs = np.ma.unique(np.concatenate(inc[result_selection]))
+        mean = np.full_like(meanincs, 0.)
+
+        for a, incval in enumerate(meanincs):
+            select = np.where(inc[result_selection] == incval)
+            res_selected = res[result_selection][select[0][:, np.newaxis],
+                               select[1][:, np.newaxis]]
+            mean[a] = np.ma.mean(res_selected)
+
+        sortpattern = np.argsort(meanincs)
+        meanincs = meanincs[sortpattern]
+        mean = mean[sortpattern]
+
+        # plot residuals per incidence-angle for each measurement
+        for i, resval in enumerate(res[result_selection]):
+            sortpattern = np.argsort(inc[result_selection[i]])
+            ax2.plot(inc[result_selection[i]][sortpattern], resval[sortpattern],
+                        ':', alpha=0.5, marker='.')
+
+        # plot mean residual per incidence-angle
+        ax2.plot(meanincs, mean,
+                    'k', linewidth=3, marker='o', fillstyle='none')
+
+        # add some legends
+        res_h2 = mlines.Line2D(
+            [], [], color='black', label='Mean res.  per inc-angle',
+            linestyle='-', linewidth=3, marker='o', fillstyle='none')
+        res_h_lines = mlines.Line2D(
+            [], [], color='black', label='Residuals',
+            linestyle=':', alpha=0.5)
+
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(handles=handles2 + [res_h_lines] + [res_h2], loc=1)
+
+        ax2.set_xlabel('$\\theta_0$ [deg]')
+        ax2.set_ylabel('Residual')
+
+        # find minimum and maximum incidence angle
+        maxinc = np.max(inc)
+        mininc = np.min(inc)
+
+        ax2.set_xlim(np.floor(mininc) - 1,
+                        np.ceil(maxinc) + 1)
+
+        # set major and minor ticks
+        ax2.xaxis.set_major_locator(plt.MultipleLocator(1))
+        ax2.xaxis.set_major_formatter(plt.FormatStrFormatter('%d'))
+        ax2.xaxis.set_minor_locator(plt.MultipleLocator(.25))
+
+        # set ticks
+        if isinstance(fit.index[0], datetime.datetime):
+            plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
+
+        fig.tight_layout()
+
+        return fig
+
+
+    def results(self, fit=None, truevals=None, startvals=False,
                  legends=True, result_selection='all'):
         '''
         a function to quickly print the fit-results and the gained parameters
@@ -961,175 +1335,137 @@ class plot:
         return fig
 
 
-    def printerr(self, fit=None, newcalc=False, relative=False,
-                 result_selection='all'):
+    def single_results(self, fit=None, fit_numbers=None, fit_indexes=None,
+                    hexbinQ=True, hexbinargs={},
+                    convertTodB=False):
         '''
-        a function to quickly print residuals for each measurement
-        and for each incidence-angle value
+        a function to investigate the quality of the individual fits
 
-        Parametsrs:
+
+        Parameters:
         ------------
         fit : list
-            output of performfit()-function
-        newcalc : bool (default = False)
-                  indicator whether the residuals shall be re-calculated
-                  or not.
+              output of the monofit()-function
+        fit_numbers : list
+                      a list containing the position of the measurements
+                      that should be plotted (starting from 0)
+        fit_indexes : list
+                      a list containing the index-values of the measurements
+                      that should be plotted
 
-                  True:
-                      the residuals are calculated using R, inc, mask,
-                      res_dict and fixed_dict from the fit-argument
-                  False:
-                      the residuals are taken from the output of
-                      res_lsq from the fit-argument
-        relative : bool (default = False)
-                   indicator if relative (True) or absolute (False) residuals
-                   shall be plotted
+        Other Parameters:
+        ------------------
+        hexbinQ : bool (default = False)
+                  indicator if a hexbin-plot should be underlayed
+                  that shows the distribution of the datapoints
+        hexbinargs : dict
+                     a dict containing arguments to customize the hexbin-plot
+        convertTodB : bool (default=False)
+                      if set to true, the datasets will be converted to dB
         '''
-
         if fit is None:
             fit = self.fit
+
+        if fit_numbers is not None and fit_indexes is not None:
+            assert False, 'please provide EITHER fit_numbers OR fit_indexes!'
+        elif fit_indexes is not None:
+            fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
+        elif fit_numbers is None and fit_indexes is None:
+            fit_numbers = range(len(fit.index))
+
+        # function to generate colormap that fades between colors
+        def CustomCmap(from_rgb, to_rgb):
+
+            # from color r,g,b
+            r1, g1, b1 = from_rgb
+
+            # to color r,g,b
+            r2, g2, b2 = to_rgb
+
+            cdict = {'red': ((0, r1, r1),
+                             (1, r2, r2)),
+                     'green': ((0, g1, g1),
+                               (1, g2, g2)),
+                     'blue': ((0, b1, b1),
+                              (1, b2, b2))}
+
+            cmap = LinearSegmentedColormap('custom_cmap', cdict)
+            return cmap
 
         (res_lsq, R, data, inc, mask, weights,
          res_dict, start_dict, fixed_dict) = fit.result
 
-        if result_selection == 'all':
-            result_selection = range(len(data))
 
-        if newcalc is False:
-            # get residuals from fit into desired shape for plotting
-            # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(res_lsq.fun, data.shape), mask)
+        estimates = fit._calc_model(R, res_dict, fixed_dict)
 
-            if relative is True:
-                res = np.ma.abs(res / (res + np.ma.masked_array(data, mask)))
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+
+        for m_i, m in enumerate(fit_numbers):
+
+            if convertTodB is True:
+                y = 10.*np.log10(estimates[m][~mask[m]])
             else:
-                res = np.ma.abs(res)
-        else:
-            # Alternative way of calculating the residuals
-            # (based on R, inc and res_dict)
+                y = estimates[m][~mask[m]]
 
-            R.t_0 = inc
-            R.p_0 = np.zeros_like(inc)
+            # plot data
+            label = fit.index[m]
 
-            estimates = fit._calc_model(R, res_dict, fixed_dict)
-            # calculate the residuals based on masked arrays
-            masked_estimates = np.ma.masked_array(estimates, mask=mask)
-            masked_data = np.ma.masked_array(data, mask=mask)
+            xdata = np.rad2deg(inc[m][~mask[m]])
 
-            res = np.ma.sqrt((masked_estimates - masked_data)**2)
+            if convertTodB is True:
+                ydata = 10.*np.log10(data[m][~mask[m]])
+            else:
+                ydata = data[m][~mask[m]]
 
-            if relative is True:
-                res = res / masked_estimates
+            # get color that will be applied to the next line drawn
+            dummy, = ax.plot(xdata[0], ydata[0], '.', alpha=0.)
+            color = dummy.get_color()
 
-        # apply mask to data and incidence-angles (and convert to degree)
-        inc = np.ma.masked_array(np.rad2deg(inc), mask=mask)
-        data = np.ma.masked_array(data, mask=mask)
+            if hexbinQ is True:
+                args = dict(gridsize=15, mincnt=1,
+                            linewidths=0., vmin=0.5, alpha=0.7)
+                args.update(hexbinargs)
 
-        # make new figure
-        fig = plt.figure(figsize=(14, 10))
-        ax = fig.add_subplot(212)
-        if relative is True:
-            ax.set_title('Mean relative residual per measurement')
-        else:
-            ax.set_title('Mean absolute residual per measurement')
+                # evaluate the hexbinplot once to get the maximum number of
+                # datapoints within a single hexagonal (used for normalization)
+                dummyargs = args.copy()
+                dummyargs.update({'alpha': 0.})
+                hb = ax.hexbin(xdata, ydata, **dummyargs)
 
-        ax2 = fig.add_subplot(211)
-        if relative is True:
-            ax2.set_title('Relative residuals per incidence-angle')
-        else:
-            ax2.set_title('Residuals per incidence-angle')
+                # generate colormap that fades from white to the color
+                # of the plotted data  (asdf.get_color())
+                cmap = CustomCmap([1.00, 1.00, 1.00],
+                                  plt.cm.colors.hex2color(color))
+                # setup correct normalizing instance
+                norm = Normalize(vmin=0, vmax=hb.get_array().max())
 
-        # the use of masked arrays might cause python 2 compatibility issues!
-        ax.plot(fit.index[result_selection], res[result_selection], '.', alpha=0.5)
+                ax.hexbin(xdata, ydata, cmap=cmap, norm=norm, **args)
 
-        # plot mean residual for each measurement
-        ax.plot(fit.index[result_selection], np.ma.mean(res[result_selection], axis=1),
-                   'k', linewidth=3, marker='o', fillstyle='none')
+            # plot datapoints
+            asdf, = ax.plot(xdata, ydata, '.',
+                            color=color, alpha=1.,
+                            label=label, markersize=10)
 
-        # plot total mean of mean residuals per measurement
-        ax.plot(fit.index[result_selection],
-                   [np.ma.mean(np.ma.mean(res[result_selection], axis=1))] * len(result_selection),
-                   'k--')
+            # plot results
+            iii = inc[m][~mask[m]]
+            ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
+                    '-', color='w', linewidth=3)
 
-        # add some legends
-        res_h = mlines.Line2D(
-            [], [], color='black', label='Mean res.  per measurement',
-            linestyle='-', linewidth=3, marker='o', fillstyle='none')
-        res_h_dash = mlines.Line2D(
-            [], [], color='black', linestyle='--', label='Average mean res.',
-            linewidth=1, fillstyle='none')
+            ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
+                    '-', color=asdf.get_color(), linewidth=2)
 
-        res_h_dots = mlines.Line2D(
-            [], [], color='black', label='Residuals',
-            linestyle='-', linewidth=0, marker='.', alpha=0.5)
+        ax.set_xlabel('$\\theta_0$ [deg]')
+        ax.set_ylabel('$\\sigma_0$ [dB]')
 
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles=handles + [res_h_dots] + [res_h] + [res_h_dash],
-                     loc=1)
-
-        ax.set_ylabel('Residual')
-
-    #        # evaluate mean residuals per incidence-angle
-        meanincs = np.ma.unique(np.concatenate(inc[result_selection]))
-        mean = np.full_like(meanincs, 0.)
-
-        for a, incval in enumerate(meanincs):
-            select = np.where(inc[result_selection] == incval)
-            res_selected = res[result_selection][select[0][:, np.newaxis],
-                               select[1][:, np.newaxis]]
-            mean[a] = np.ma.mean(res_selected)
-
-        sortpattern = np.argsort(meanincs)
-        meanincs = meanincs[sortpattern]
-        mean = mean[sortpattern]
-
-        # plot residuals per incidence-angle for each measurement
-        for i, resval in enumerate(res[result_selection]):
-            sortpattern = np.argsort(inc[result_selection[i]])
-            ax2.plot(inc[result_selection[i]][sortpattern], resval[sortpattern],
-                        ':', alpha=0.5, marker='.')
-
-        # plot mean residual per incidence-angle
-        ax2.plot(meanincs, mean,
-                    'k', linewidth=3, marker='o', fillstyle='none')
-
-        # add some legends
-        res_h2 = mlines.Line2D(
-            [], [], color='black', label='Mean res.  per inc-angle',
-            linestyle='-', linewidth=3, marker='o', fillstyle='none')
-        res_h_lines = mlines.Line2D(
-            [], [], color='black', label='Residuals',
-            linestyle=':', alpha=0.5)
-
-        handles2, labels2 = ax2.get_legend_handles_labels()
-        ax2.legend(handles=handles2 + [res_h_lines] + [res_h2], loc=1)
-
-        ax2.set_xlabel('$\\theta_0$ [deg]')
-        ax2.set_ylabel('Residual')
-
-        # find minimum and maximum incidence angle
-        maxinc = np.max(inc)
-        mininc = np.min(inc)
-
-        ax2.set_xlim(np.floor(mininc) - 1,
-                        np.ceil(maxinc) + 1)
-
-        # set major and minor ticks
-        ax2.xaxis.set_major_locator(plt.MultipleLocator(1))
-        ax2.xaxis.set_major_formatter(plt.FormatStrFormatter('%d'))
-        ax2.xaxis.set_minor_locator(plt.MultipleLocator(.25))
-
-        # set ticks
-        if isinstance(fit.index[0], datetime.datetime):
-            plt.setp(ax.get_xticklabels(), rotation=30, ha='right')
-
-        fig.tight_layout()
+        ax.legend(title='# Measurement')
 
         return fig
 
 
-    def plot_interres(self, fit=None, params = None,
-                      cmaps=None):
+    def intermediate_results(self, fit=None, params = None,
+                             cmaps=None):
         '''
         a function to plot the intermediate-results
         (the data is only available if rtfits.monofit has been called with
@@ -1265,324 +1601,4 @@ class plot:
                 axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.', ms=3, lw=0.5, c='g')
                 axrelerr.legend(ncol=5, loc='upper right')
 
-
         return f
-
-
-    def printsig0timeseries(self, fit=None, dB=True, sig0=True, params=None,
-                            printtot = True, printsurf = True,
-                            printvol = True, printint = True,
-                            printorig = True, months = None, years = None,
-                            ylim=None, printinc = True):
-        '''
-        Print individual contributions, resulting parameters and the
-        reference dataset of an rt1.rtfits object as timeseries.
-
-        Parameters:
-        -------------
-        fit : rtfits object
-              the rtfits-object containing the fit-results
-        dB : bool (default = True)
-             indicator if the plot is intended to be in dB or linear units
-        sig0 : bool (default = True)
-             indicator if the plot should display sigma_0 (sig0) or intensity (I)
-             The applied relation is: sig0 = 4.*pi*cos(theta) * I
-        params: list
-                a list of parameter-names that should be overprinted
-                (the names must coincide with the arguments of set_V_SRF())
-        printtot, printsurf, printvol, printint, printorig : bool
-                indicators if the corresponding components should be plotted
-        months : list of int (default = None)
-                 a list of months to plot (if None, all will be plotted)
-        years : list of int (default = None)
-                a list of years to select (if None, all will be plotted)
-        ylim : tuple
-               a tuple of (ymin, ymax) that will be used as boundaries for the
-               y-axis
-        printinc : bool (default = True)
-                   indicator if the incidence-angle dependency should be plotted
-                   (in a separate plot alongside the timeseries)
-        '''
-
-        if fit is None:
-            fit = self.fit
-
-
-        # get mask
-        (_, _, data, inc, mask, _, _, _, _) = fit.result
-        # get incidence-angles
-        inc_array = np.ma.masked_array(inc, mask)
-        inc = inc_array.compressed()
-        # get input dataset
-        data = np.ma.masked_array(data, mask)
-
-        def dBsig0convert(val):
-            # if results are provided in dB convert them to linear units
-            if fit.dB is True: val = 10**(val/10.)
-            # convert sig0 to intensity
-            if sig0 is False and fit.sig0 is True:
-                val = val/(4.*np.pi*np.cos(inc))
-            # convert intensity to sig0
-            if sig0 is True and fit.sig0 is False:
-                val = 4.*np.pi*np.cos(inc)*val
-            # if dB output is required, convert to dB
-            if dB is True: val = 10.*np.log10(val)
-            return val
-
-        # calculate individual contributions
-        contrib_array = fit._calc_model(R=fit.result[1],
-                                        res_dict=fit.result[6],
-                                        fixed_dict=fit.result[-1],
-                                        return_components=True)
-
-        # apply mask and convert to pandas dataframe
-        contrib_array = [np.ma.masked_array(con, mask) for con in contrib_array]
-        contrib_array += [data, inc_array]
-
-        contrib = []
-        for i, cont in enumerate(contrib_array):
-            contrib += [pd.concat([pd.DataFrame(i, index = fit.index) for i in cont.T])[0]]
-
-        contrib = pd.concat(contrib,
-                            keys=['tot', 'surf', 'vol', 'inter',
-                                  '$\\sigma_0$ dataset', 'inc'], axis=1).dropna()
-
-        # convert units
-        contrib[['tot', 'surf', 'vol', 'inter',
-                 '$\\sigma_0$ dataset']] = contrib[[
-                         'tot', 'surf', 'vol', 'inter', '$\\sigma_0$ dataset'
-                         ]].apply(dBsig0convert)
-
-        # drop unneeded columns
-        if fit.result[1].int_Q is False or printint is False:
-            contrib = contrib.drop('inter', axis=1)
-        if printtot is False: contrib = contrib.drop('tot', axis=1)
-        if printsurf is False: contrib = contrib.drop('surf', axis=1)
-        if printvol is False: contrib = contrib.drop('vol', axis=1)
-        if printorig is False:
-            contrib = contrib.drop('$\\sigma_0$ dataset', axis=1)
-
-        # select years and months
-        if years is not None:
-            contrib = contrib.loc[contrib.index.year.isin(years)]
-        if months is not None:
-            contrib = contrib.loc[contrib.index.month.isin(months)]
-
-        # print incidence-angle dependency
-        if printinc is True:
-            f, [ax, ax_inc] = plt.subplots(ncols=2, figsize=(15,5),
-                                           gridspec_kw={'width_ratios':[3,1]},
-                                           sharey=True)
-            f.subplots_adjust(left=0.05, right=0.98, top=0.98,
-                              bottom=0.1, wspace=0.1)
-
-            # -------------------
-            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y',
-                     '$\\sigma_0$ dataset':'k'}
-
-            groupedcontrib = contrib.groupby(contrib.index)
-
-            #return contrib, groupedcontrib
-            for label in contrib.keys():
-                if label in ['inc']: continue
-                a=np.rad2deg(rectangularize([x.values for _, x in groupedcontrib['inc']])).T
-                b=np.array(rectangularize([x.values for _, x in groupedcontrib[label]])).T
-                x = (np.array([a,b]).T)
-
-                l_col = mpl.collections.LineCollection(x,linewidth =.25, label='x',
-                                          color=color[label], alpha = 0.5)
-                ax_inc.add_collection(l_col)
-                ax_inc.scatter(a, b, color=color[label], s=1)
-                ax_inc.set_xlim(a.min(), a.max())
-                ax_inc.set_xlabel('$\\theta_0$')
-            ax_inc.set_xlabel('$\\theta_0$')
-
-
-        else:
-            f, ax = plt.subplots(figsize=(12,5))
-            f.subplots_adjust(left=0.05, right=0.98, top=0.98,
-                              bottom=0.1, wspace=0.05)
-
-        for label, val in contrib.items():
-            if label in ['inc']: continue
-            color = {'tot':'r', 'surf':'b', 'vol':'g', 'inter':'y'}
-            if printorig is True: color['$\\sigma_0$ dataset'] = 'k'
-            ax.plot(val.sort_index(), linewidth =.25, marker='.',
-                    ms=2, label=label, color=color[label], alpha = 0.5)
-        # overprint parameters
-        if params != None:
-            paramdf_dict = {}
-            # add fitted parameters
-            paramdf_dict.update(fit.result[6])
-            # add constant values
-            paramdf_dict.update(fit.result[-1])
-
-            paramdf = pd.DataFrame(paramdf_dict,
-                                   index = fit.index).sort_index()
-            if years is not None:
-                paramdf = paramdf.loc[paramdf.index.year.isin(years)]
-            if months is not None:
-                paramdf = paramdf.loc[paramdf.index.month.isin(months)]
-
-            pax = ax.twinx()
-            for k in params:
-                pax.plot(paramdf[k], lw=1, marker='.', ms=2, label=k)
-            pax.legend(loc='upper right', ncol=5)
-            pax.set_ylabel('parameter-values')
-
-        # format datetime index
-        ax.xaxis.set_minor_locator(mpl.dates.MonthLocator())
-        ax.xaxis.set_minor_formatter(mpl.dates.DateFormatter('%m'))
-        ax.xaxis.set_major_locator(mpl.dates.YearLocator())
-        ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('\n%Y'))
-
-        # set ylabels
-        if sig0 is True:
-            label = '$\\sigma_0$'
-        else:
-            label = 'Intensity'
-        if dB is True: label += ' [dB]'
-        ax.set_ylabel(label)
-
-        # generate legend
-        hand, lab = ax.get_legend_handles_labels()
-        lab, unique_ind = np.unique(lab, return_index=True)
-        ax.legend(handles = list(np.array(hand)[unique_ind]),
-                  labels=list(lab), loc='upper left',
-                  ncol=5)
-
-        if ylim is not None:
-            ax.set_ylim(ylim)
-
-        return f
-
-    def printsingle(self, fit=None, fit_numbers=None, fit_indexes=None,
-                    hexbinQ=True, hexbinargs={},
-                    convertTodB=False):
-        '''
-        a function to investigate the quality of the individual fits
-
-
-
-        Parameters:
-        ------------
-        fit : list
-              output of the monofit()-function
-        fit_numbers : list
-                      a list containing the position of the measurements
-                      that should be plotted (starting from 0)
-        fit_indexes : list
-                      a list containing the index-values of the measurements
-                      that should be plotted
-
-        Other Parameters:
-        ------------------
-        hexbinQ : bool (default = False)
-                  indicator if a hexbin-plot should be underlayed
-                  that shows the distribution of the datapoints
-        hexbinargs : dict
-                     a dict containing arguments to customize the hexbin-plot
-        convertTodB : bool (default=False)
-                      if set to true, the datasets will be converted to dB
-        '''
-        if fit is None:
-            fit = self.fit
-
-        if fit_numbers is not None and fit_indexes is not None:
-            assert False, 'please provide EITHER fit_numbers OR fit_indexes!'
-        elif fit_indexes is not None:
-            fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
-        elif fit_numbers is None and fit_indexes is None:
-            fit_numbers = range(len(fit.index))
-
-        # function to generate colormap that fades between colors
-        def CustomCmap(from_rgb, to_rgb):
-
-            # from color r,g,b
-            r1, g1, b1 = from_rgb
-
-            # to color r,g,b
-            r2, g2, b2 = to_rgb
-
-            cdict = {'red': ((0, r1, r1),
-                             (1, r2, r2)),
-                     'green': ((0, g1, g1),
-                               (1, g2, g2)),
-                     'blue': ((0, b1, b1),
-                              (1, b2, b2))}
-
-            cmap = LinearSegmentedColormap('custom_cmap', cdict)
-            return cmap
-
-        (res_lsq, R, data, inc, mask, weights,
-         res_dict, start_dict, fixed_dict) = fit.result
-
-
-        estimates = fit._calc_model(R, res_dict, fixed_dict)
-
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-
-        for m_i, m in enumerate(fit_numbers):
-
-            if convertTodB is True:
-                y = 10.*np.log10(estimates[m][~mask[m]])
-            else:
-                y = estimates[m][~mask[m]]
-
-            # plot data
-            label = fit.index[m]
-
-            xdata = np.rad2deg(inc[m][~mask[m]])
-
-            if convertTodB is True:
-                ydata = 10.*np.log10(data[m][~mask[m]])
-            else:
-                ydata = data[m][~mask[m]]
-
-            # get color that will be applied to the next line drawn
-            dummy, = ax.plot(xdata[0], ydata[0], '.', alpha=0.)
-            color = dummy.get_color()
-
-            if hexbinQ is True:
-                args = dict(gridsize=15, mincnt=1,
-                            linewidths=0., vmin=0.5, alpha=0.7)
-                args.update(hexbinargs)
-
-                # evaluate the hexbinplot once to get the maximum number of
-                # datapoints within a single hexagonal (used for normalization)
-                dummyargs = args.copy()
-                dummyargs.update({'alpha': 0.})
-                hb = ax.hexbin(xdata, ydata, **dummyargs)
-
-                # generate colormap that fades from white to the color
-                # of the plotted data  (asdf.get_color())
-                cmap = CustomCmap([1.00, 1.00, 1.00],
-                                  plt.cm.colors.hex2color(color))
-                # setup correct normalizing instance
-                norm = Normalize(vmin=0, vmax=hb.get_array().max())
-
-                ax.hexbin(xdata, ydata, cmap=cmap, norm=norm, **args)
-
-            # plot datapoints
-            asdf, = ax.plot(xdata, ydata, '.',
-                            color=color, alpha=1.,
-                            label=label, markersize=10)
-
-            # plot results
-            iii = inc[m][~mask[m]]
-            ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
-                    '-', color='w', linewidth=3)
-
-            ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
-                    '-', color=asdf.get_color(), linewidth=2)
-
-        ax.set_xlabel('$\\theta_0$ [deg]')
-        ax.set_ylabel('$\\sigma_0$ [dB]')
-
-
-        ax.legend(title='# Measurement')
-
-        return fig
-
