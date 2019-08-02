@@ -865,24 +865,24 @@ class plot:
 
         # apply mask and convert to pandas dataframe
         contrib_array = [np.ma.masked_array(con, fit.mask) for con in contrib_array]
-        contrib_array += [data, inc_array]
 
-        contrib = []
-        for i, cont in enumerate(contrib_array):
-            contrib += [pd.concat([pd.DataFrame(i, index = fit.index) for i in cont.T])[0]]
+        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                contrib_array))
 
-        contrib = pd.concat(contrib,
-                            keys=['tot', 'surf', 'vol', 'inter',
-                                  '$\\sigma_0$ dataset', 'inc'], axis=1).dropna()
+        contrib['$\\sigma_0$ dataset'] = data
+        contrib['inc'] = inc_array
+
+        contrib = {key:pd.DataFrame(val, fit.index).stack().droplevel(1)
+                        for key, val in contrib.items()}
+        contrib = pd.DataFrame(contrib)
 
         # convert units
-        contrib[['tot', 'surf', 'vol', 'inter',
-                 '$\\sigma_0$ dataset']] = contrib[[
-                         'tot', 'surf', 'vol', 'inter', '$\\sigma_0$ dataset'
-                         ]].apply(dBsig0convert)
+        complist = [i for i in contrib.keys() if i not in ['inc']]
+        contrib[complist] = contrib[complist].apply(dBsig0convert)
+
 
         # drop unneeded columns
-        if fit.R.int_Q is False or printint is False:
+        if printint is False and 'inter' in contrib:
             contrib = contrib.drop('inter', axis=1)
         if printtot is False: contrib = contrib.drop('tot', axis=1)
         if printsurf is False: contrib = contrib.drop('surf', axis=1)
