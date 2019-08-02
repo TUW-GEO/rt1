@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import copy
 import os
 
-class TestRTfits(unittest.TestCase):
+class TestDUMPS(unittest.TestCase):
     def setUp(self):
         self.sig0_dB_path = os.path.dirname(__file__) + os.sep + "sig0_dB.dump"
         self.sig0_linear_path = os.path.dirname(__file__) + os.sep + "sig0_linear.dump"
