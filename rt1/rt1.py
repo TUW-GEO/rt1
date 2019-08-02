@@ -16,7 +16,7 @@ import sympy as sp
 
 try:
     # if symengine is available, use it to perform series-expansions
-    from symengine import expand, cse, LambdifyCSE
+    from symengine import expand, cse, Lambdify
     _init_lambda_backend='symengine'
 except ImportError:
     from sympy import expand
@@ -289,8 +289,9 @@ class RT1(object):
                 self.prv(1, 'symengine')
                 # using symengines own "common subexpression elimination"
                 # routine to perform lambdification
-                self.__fnevals = LambdifyCSE(list(variables),
-                                             self.fn, order='F')
+                self.__fnevals = Lambdify(list(variables),
+                                             self.fn, order='F',
+                                             cse=True)
 
             elif self.lambda_backend == 'sympy':
                 # using sympy's lambdify without "common subexpression
@@ -1351,9 +1352,9 @@ class RT1(object):
                 - expi(-self.V.tau) + np.exp(-self.V.tau / mu1)
                 * expi(self.V.tau / mu1 - self.V.tau))
 
-        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.V.tau) -
+        S2 = np.array([sum(mu1 ** (-k) * (expn(k + 1., self.V.tau) -
                                              np.exp(-self.V.tau / mu1) / k)
-                              for k in range(1, (n + 1) + 1))
+                                   for k in range(1, (n + 1) + 1))
                        for n in range(nmax)])
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])
