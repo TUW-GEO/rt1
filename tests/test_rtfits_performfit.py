@@ -224,7 +224,7 @@ class TestRTfits(unittest.TestCase):
         # estimates = fit[0].fun/weights + measurements
 
         estimates = np.reshape(
-                    testfit.fit_output.fun/testfit.weights, data.shape)
+                    testfit.fit_output.fun/testfit.weights, testfit.data.shape)
 
         # apply mask
         measures = testfit.data[~testfit.mask]
