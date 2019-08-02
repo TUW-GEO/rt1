@@ -196,6 +196,26 @@ class RT1(object):
 #                                     'check assignment of the parameters '
 #                                     + str(refset ^ funcset) + errdict)
 
+    def __getstate__(self):
+        # this is required since functions created by
+        # symengine are currently not pickleable!
+        if self.lambda_backend == 'symengine':
+            print('dropping fn-coefficients and _fnevals ' +
+                  'functions to allow pickling of RT-1 ' +
+                  'object whose interaction-term functions ' +
+                  'have been created by symengine')
+            for delkey in ['_RT1__fnevals', '_RT1__fn']:
+                if delkey in self.__dict__:
+                    print('removing', delkey, 'from __dict__')
+                    del self.__dict__[delkey]
+            for Nonekey in ['_fnevals_input', '_fn_input']:
+                if Nonekey in self.__dict__:
+                    print('setting', Nonekey, 'to None')
+                    self.__dict__[Nonekey] = None
+
+        return self.__dict__
+
+
     def prv(self, v, msg):
         '''
         function to set print output based on verbosity level v.
