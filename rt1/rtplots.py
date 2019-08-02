@@ -5,11 +5,8 @@ Class for quick visualization of results and used phasefunctions
 import sympy as sp
 import numpy as np
 import datetime
-try:
-    import pandas as pd
-except ImportError:
-    print('pandas could not be found! ... printsig0timeseries()\
-           will not work!')
+import pandas as pd
+pd.plotting.register_matplotlib_converters()
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -722,7 +719,13 @@ class plot:
                      to get the regression-line and the r^2 value
         kwargs : -
                  kwargs passed to matplotlib.pyplot.scatter()
+
+        Returns:
+        --------------
+        fig : matplotlib.figure
+            the used matplotlib figure instance
         '''
+        plot('asdf')
         if fit is None:
             fit = self.fit
 
@@ -824,6 +827,11 @@ class plot:
         printinc : bool (default = True)
                    indicator if the incidence-angle dependency should be plotted
                    (in a separate plot alongside the timeseries)
+
+        Returns:
+        --------------
+        f : matplotlib.figure
+            the used matplotlib figure instance
         '''
 
         if fit is None:
@@ -1000,6 +1008,11 @@ class plot:
         relative : bool (default = False)
                    indicator if relative (True) or absolute (False) residuals
                    shall be plotted
+
+        Returns:
+        --------------
+        fig : matplotlib.figure
+            the used matplotlib figure instance
         '''
 
         if fit is None:
@@ -1143,7 +1156,7 @@ class plot:
 
 
     def results(self, fit=None, truevals=None, startvals=False,
-                 legends=True, result_selection='all'):
+                 legends=False, result_selection='all'):
         '''
         a function to quickly print the fit-results and the gained parameters
 
@@ -1166,8 +1179,9 @@ class plot:
                            plotted (indexed starting from 0) or 'all' in case
                            all measurements should be plotted
         Returns:
-        ---------
-        fig : matplotlib.figure object
+        --------------
+        fig : matplotlib.figure
+              the used matplotlib figure instance
         '''
 
         if fit is None:
@@ -1180,7 +1194,7 @@ class plot:
 
         # assign colors
         colordict = {key:f'C{i%10}' for
-                     i, key in enumerate(fit.fit_output.keys())}
+                     i, key in enumerate(fit.res_dict.keys())}
 
         # reset incidence-angles in case they have been altered beforehand
         fit.R.t_0 = fit.inc
@@ -1356,6 +1370,11 @@ class plot:
                      a dict containing arguments to customize the hexbin-plot
         convertTodB : bool (default=False)
                       if set to true, the datasets will be converted to dB
+
+        Returns:
+        --------------
+        fig : matplotlib.figure
+              the used matplotlib figure instance
         '''
         if fit is None:
             fit = self.fit
@@ -1469,6 +1488,11 @@ class plot:
             as timeseries.
         cmaps : list
             a list of the colormaps used to plot the parameter variations
+
+        Returns:
+        --------------
+        f : matplotlib.figure
+            the used matplotlib figure instance
         '''
 
         if fit is None:
