@@ -190,6 +190,9 @@ class Fits(Scatter):
             self.start_dict = self.result[7]
             self.fixed_dict = self.result[8]
 
+        print('... re-initializing plot-functions')
+        self.plot = rt1_plots(self)
+
 
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
