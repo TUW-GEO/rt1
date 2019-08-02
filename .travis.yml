@@ -39,6 +39,7 @@ install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib nose numpy sympy scipy pandas
   - source activate test-environment
   - conda install -c conda-forge python-symengine
+  - conda install cloudpickle
 
   # before the actual installation we test first if existing
   # installation mechanism using PIP and CONDA work
