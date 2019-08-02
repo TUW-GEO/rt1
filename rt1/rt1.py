@@ -855,10 +855,11 @@ class RT1(object):
                     Iint[np.where(wherenan)] = 0.
                 else:
                     pass
-            else:
-                Iint = np.full_like(self.t_0, 0.)
 
-        return Isurf + Ivol + Iint, Isurf, Ivol, Iint
+        if self.int_Q is True:
+            return Isurf + Ivol + Iint, Isurf, Ivol, Iint
+        else:
+            return Isurf + Ivol, Isurf, Ivol
 
     def surface(self):
         """
