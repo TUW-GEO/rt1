@@ -100,7 +100,8 @@ class Fits(Scatter):
     '''
     Class to perform nonlinear least-squares fits to data.
 
-    Parameters:
+
+    Attributes:
     ------------
     sig0: boolean (default = False)
            Indicator whether dataset is given as sigma_0-values (sig_0) or as
@@ -170,6 +171,49 @@ class Fits(Scatter):
                >>>     SRF = Surface-function(surface-keys)
                >>>
                >>>     return V, SRF
+
+    Stored Fit-Attributes:
+    -------------------
+
+    index: array-like
+           the resulting index of the obtained fit-results, to be used via:
+                   results = pd.DataFrame(res_dict, index)
+    res_dict: dict
+              a dictionary of the obtained fit-results
+
+    fit_output: scipy.optimize.OptimizeResult
+                 the output of scipy.optimize.least_squares
+    R: rt1.RT1 object
+       the RT1 object used
+    data: array-like
+          the used measurement malues
+    inc: array-like
+         the used incidence-angles
+    mask: array-like
+          a mask that indicates the values added to "data" and "inc" in order
+          to obtain a rectangular array
+    weights: array-like
+             a weighting-matrix with values 1/sqrt(value-repetitions) where the
+             value-repetitions correspond to the number of added values needed
+             to obtain a rectangular array
+    start_dict: dict
+                a dictionary of the used start-values
+    fixed_dict: dict
+                a dictionary of the used auxiliary datasets
+    dataset_used: pandas.DataFrame
+                  a DataFrame of the used data grouped with respect to the
+                  temporal variations of the parameters that have been fitted
+
+    Methods
+    ---------
+
+    performfit(fn_input=None, _fnevals_input=None, int_Q=False,
+               setindex='mean', **kwargs)
+        perform a fit of the defined model to the dataset
+
+
+
+
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
