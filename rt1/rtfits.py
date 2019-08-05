@@ -997,7 +997,7 @@ class Fits(Scatter):
 
 
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
-                bounds_dict={}, param_dyn_dict={},
+                bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend=_init_lambda_backend, verbosity=0,
                 intermediate_results=False,
@@ -1175,8 +1175,8 @@ class Fits(Scatter):
         start_dict : dict
                      a dictionary containing the used start-values
         fixed_dict : dict
-                   a dictionary containing the parameter-values that have been
-                   used as constants during the fit
+                     a dictionary containing the parameter-values that have been
+                     used as constants during the fit
         '''
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
@@ -1192,7 +1192,11 @@ class Fits(Scatter):
         order = [i for i, v in param_dict.items() if v is not None]
         # preparation of data for fitting
         [inc, data, weights, Nmeasurements,
-         mask, fixed_dict] = self._preparedata(dataset)
+         mask, new_fixed_dict] = self._preparedata(dataset)
+
+        # TODO implement fixed_dict more proper
+        fixed_dict.update(new_fixed_dict)
+
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
