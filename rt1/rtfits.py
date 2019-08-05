@@ -18,7 +18,7 @@ from .rtplots import plot as rt1_plots
 import copy  # used to copy objects
 import datetime
 
-def rectangularize(array, weights_and_mask=False):
+def rectangularize(array, weights_and_mask=False, dim=None):
     '''
     return a rectangularized version of the input-array by repeating the
     last value to obtain the smallest possible rectangular shape.
@@ -32,6 +32,9 @@ def rectangularize(array, weights_and_mask=False):
             the input-data that is intended to be rectangularized
     weights_and_mask : bool (default = False)
                      indicator if weights and mask should be evaluated or not
+    dim : int (default = None)
+          the dimension of the rectangularized array
+          if None, the shortest length of all sub-lists will be used
     Returns:
     ----------
     new_array: array-like
@@ -44,7 +47,8 @@ def rectangularize(array, weights_and_mask=False):
            a mask indicating the added values
 
     '''
-    dim  = len(max(array, key=len))
+    if dim is None:
+        dim  = len(max(array, key=len))
     if weights_and_mask is True:
         newarray, weights, mask = [], [], []
         for s in array:
