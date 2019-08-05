@@ -102,55 +102,74 @@ class Fits(Scatter):
 
     Parameters:
     ------------
-    sig0 : boolean (default = False)
+    sig0: boolean (default = False)
            Indicator whether dataset is given as sigma_0-values (sig_0) or as
            intensity-values (I). The applied relation is:
                sig_0 = 4. * np.pi * np.cos(inc) * I
            where inc is the corresponding incident zenith-angle.
-    dB : boolean (default = False)
+    dB: boolean (default = False)
          Indicator whether dataset is given in linear units or in dB.
          The applied relation is:    x_dB = 10. * np.log10( x_linear )
-    dataset : pandas.DataFrame (default = None)
-              a pandas.DataFrame with columns 'inc' and 'sig' defined
-              where 'inc' referrs to the incidence-angle in radians, and
-              'sig' referrs to the measurement value (corresponding to
-              the assigned sig0 and dB values)
-    defdict : dict (default = None)
-              a dictionary of the following structure:
-              (the dict will be copied internally using copy.deepcopy(dict))
+    dataset: pandas.DataFrame (default = None)
+             a pandas.DataFrame with columns 'inc' and 'sig' defined
+             where 'inc' referrs to the incidence-angle in radians, and
+             'sig' referrs to the measurement value (corresponding to
+             the assigned sig0 and dB values)
+    defdict: dict (default = None)
+             a dictionary of the following structure:
+             (the dict will be copied internally using copy.deepcopy(dict))
 
-              >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
-              >>>            'key2' : [fitQ, val, freq, ([min], [max])],
-              >>>            ...}
+             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max]), dyndf],
+             >>>            'key2' : [fitQ, val, freq, ([min], [max]), dyndf],
+             >>>            ...}
 
-              where all keys required to call set_V_SRF must be defined
-              and the values are defined via:
-                  fitQ : bool
-                         indicator if the quantity should be fitted (True)
-                         or used as a constant during the fit (False)
-                  val : float or array
-                        if fitQ is True, val will be used as start-value
-                        if fitQ is False, val will be used as constant.
-                        Notice: if val is an array, symbolic evaluation
-                        of the corresponding parameter is necessary in order
-                        to generate a function that can handle array-inputs!
-                  freq : the frequency of the fit-parameter as a string
-                         (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
-                         (only needed if fitQ is True)
-                  min, max : float
-                             the boundary-conditions for the parameter
-                             (only needed if fitQ is True)
-    set_V_SRF : callable (default = None)
-                function with the following structure:
+             where all keys required to call set_V_SRF must be defined
+             and the values are defined via:
+                 fitQ: bool
+                       indicator if the quantity should be fitted (True)
+                       or used as a constant during the fit (False)
+                 val: float or pandas.DataFrame
+                       - if fitQ is True, val will be used as start-value
+                       - if fitQ is False, val will be used as constant.
+                       Notice: if val is a DataFrame, the index must coinicide
+                       with the index of the dataset, and the column-name
+                       must be the corresponding variabile-name
+                 freq: str or None (only needed if fitQ is True)
+                        - if None, a constant value will be fitted
+                        - if 'manual', the DataFrame provided as dyndf will
+                          be used to assign the temporal variability within
+                          the fit
+                        - if freq corresponds to a pandas offset-alias, it
+                          will be used together with the dataset-index to
+                          assign the temporal variability within the fit
+                          (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
+                 min, max: float (only needed if fitQ is True)
+                            the boundary-values used within the fit
+                 dyndf: pandas.DataFrame (optional)
+                         - if freq has been set to 'manual', the provided
+                           DataFrame will be used to assign the temporal
+                           variability within the fit (a single value will be
+                           fitted to all measurements where dyndf has the same
+                           value).
+                         - if freq is a pandas offset-alias and a dyndf is
+                           provided, the variability of dyndf will be
+                           superimposed onto the variability resulting form
+                           the chosen offset-alias
+                         Notice: The index must coinicide
+                         with the index of the dataset, and the column-name
+                         must be the corresponding variabile-name
 
-                >>> def set_V_SRF(volume-keys, surface-keys):
-                >>>     from rt1.volume import 'Volume-function'
-                >>>     from rt1.surface import 'Surface function'
-                >>>
-                >>>     V = Volume-function(volume-keys)
-                >>>     SRF = Surface-function(surface-keys)
-                >>>
-                >>>     return V, SRF
+    set_V_SRF: callable (default = None)
+               function with the following structure:
+
+               >>> def set_V_SRF(volume-keys, surface-keys):
+               >>>     from rt1.volume import 'Volume-function'
+               >>>     from rt1.surface import 'Surface function'
+               >>>
+               >>>     V = Volume-function(volume-keys)
+               >>>     SRF = Surface-function(surface-keys)
+               >>>
+               >>>     return V, SRF
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
@@ -978,7 +997,7 @@ class Fits(Scatter):
 
 
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
-                bounds_dict={}, fixed_dict={}, param_dyn_dict={},
+                bounds_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend=_init_lambda_backend, verbosity=0,
                 intermediate_results=False,
@@ -997,13 +1016,18 @@ class Fits(Scatter):
              The surface BRDF used to define the fit-model
              Attention if NormBRDF is set to None, the values defined by
              SRF.NormBRDF will be used as constants!
-        dataset : list
-                 list of input-data and incidence-angles arranged in the form
-                 [[inc_0, data_0], [inc_1, data_1], ...]
-                 where inc_i denotes the incident zenith-angles in radians
-                 and the data_i denotes the corresponding data-values
-                 (If the dataset provided is not rectangular, it will be
-                 rectangularized using the _preparedata()-function.)
+        dataset : array-like or pandas.DataFrame
+                 - if array-like:
+                   list of input-data and incidence-angles arranged in the form
+                   [[inc_0, data_0], [inc_1, data_1], ...]
+                   where inc_i denotes the incident zenith-angles in radians
+                   and the data_i denotes the corresponding data-values
+                   (If the dataset provided is not rectangular, it will be
+                    rectangularized using the _preparedata()-function.)
+                 - if pandas.DataFrame
+                   pandas-DataFrame with columns ['inc', 'sig', 'orig_index']
+                   and any number of additional columns that represent
+                   auxiliary datasets. The values must be provided as lists!
         param_dict : dict
                     A dictionary containing the names of the parameters that
                     are intended to be fitted together with the desired
@@ -1057,17 +1081,6 @@ class Fits(Scatter):
                             bounds_dict[key] = ([lower_bound], [upper_bound])
                             where lower_bound and upper_bound are arrays of
                             the same length as the dataset.
-        fixed_dict : dict
-                     A dictionary containing the names of the parameters that
-                     have been used to define the phase-functions, but whose
-                     values are intended to be used as constants throughout
-                     the fit.
-
-                     The primary use of this dict is for passing individual
-                     values of a parameter for each measurement.
-                     (if the parameter is constant for all measurements it
-                     can equally well be passed directly in the definition
-                     of the phase-functions.)
         param_dyn_dict : dict
                      A dictionary containing the names of the parameters that
                      are intended to be fitted together with a list of unique
@@ -1421,60 +1434,31 @@ class Fits(Scatter):
         '''
         Parameters
         -----------
-        dataset : pandas.DataFrame
-                  a pandas.DataFrame with a datetime-index and columns 'inc'
-                  and 'sig' that correspond to the incidence-angles in radians
-                  and the sigma_0 values in linear or dB units (depending on
-                  the predefined dB parameter).
-        defdict : dict
-                  a dictionary used to assign RT1 specifications with the all
-                  required keys to specify SRF and V assigned. The keys must
-                  coincide with the function-arguments of set_V_SRF()!
-        set_V_SRF : callable
-                    a function that returns the rt1.volume- and a rt1.surface
-                    objects intended to be used in the fit.
+        dataset: pandas.DataFrame
+                 see rtfits.Fits
+        defdict: dict
+                 see rtfits.Fits
+        set_V_SRF: callable
+                   see rtfits.Fits
+        fn_input: list (optional)
+                  a list of pre-evaluated fn-coefficients
+        _fnevals_input: callable (optional)
+                        a pre-compiled function for evaluation of the
+                        fn-coefficients (for speedup in case V and SRF
+                        properties are used in multiple fits)
+        int_Q: bool (default = False)
+               indicator if interaction-terms are evaluated or not
+        setindex: str (default = 'mean')
+                  indicator how the datetime-indices of the fit-results
+                  should be processed. possible values are:
+                      - 'mean': the center date of the used timespan
+                      - 'first': the first date of the timespan
+                      - 'last': the last date of the timespan
+                      - 'original': return the full list of datetime-objects
+        kwargs: dict
+                keyword arguments passed to rtfits.monofit() and further to
+                scipy.optimize.least_squares()
 
-                    For example:
-
-                    >>> def set_V_SRF(omega, tau, t, N):
-                    >>>    from rt1.volume import Rayleigh
-                    >>>    from rt1.surface import HenyeyGreenstein
-                    >>>
-                    >>>    V=Rayleigh(omega=omega, tau=tau)
-                    >>>    SRF=HenyeyGreenstein(t=t, NormBRDF=N)
-                    >>>
-                    >>>    return V, SRF
-        fn_input : list
-                   a list of pre-evaluated fn-coefficients
-        _fnevals_input : callable
-                         a pre-compiled function for evaluation of the
-                         fn-coefficients (for speedup in case V and SRF
-                         properties are used in multiple fits)
-        int_Q : bool (default = False)
-                indicator if interaction-terms are evaluated or not
-        setindex : str (default = 'mean')
-                   selection of the the datetime-index for the fit-results
-                   possible values are:
-                       'mean' : the center date of the used timespan
-                       'first' : the first date of the timespan
-                       'last' : the last date of the timespan
-                       'original' : return the full list of datetime-objects
-
-        TODO... :
-        kwargs_least_squares : dict
-                 keyword arguments passed to scipy.optimize.least_squares()
-        kwargs_monofit : dict
-                 keyword arguments passed to rtfits.monofit()
-
-        Returns:
-        -----------
-
-        return_inv : dict
-                     a dictionary with the following keys assigned:
-                         'fit' : the rtfits.monofit result,
-                         'dataset' : the dataset used in the fit,
-                         'fn_input' : resulting fn coefficients,
-                         '_fnevals_input' : resulting _fnevals functions}
         '''
 
         assert setindex in ['mean','first',
@@ -1583,6 +1567,7 @@ class Fits(Scatter):
                 bounds_dict[key] = (boundsvaldict[key])
 
         self.fixed_dict_input = fixed_dict
+
         # perform fit
         self.monofit(V=V, SRF=SRF,
                      dataset=dataset_used,
