@@ -1574,7 +1574,6 @@ class Fits(Scatter):
                      param_dict=param_dict,
                      bsf = setdict['bsf'],
                      bounds_dict=bounds_dict,
-                     fixed_dict=fixed_dict,
                      param_dyn_dict=param_dyn_dict,
                      fn_input=fn_input,
                      _fnevals_input=_fnevals_input,
