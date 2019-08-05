@@ -69,13 +69,12 @@ class Volume(Scatter):
         # (this happens e.g. for the Isotropic brdf).
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(pfunc(np.array([.1, .2, .3]),
-                                .1, .1, .1,
-                                *[i[0] for i in param_dict.values()]),
-                          np.ndarray):
+        if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                       **{key:.12 for key in param_dict.keys()}
+                                       ), np.ndarray):
             pfunc = np.vectorize(pfunc)
 
-        return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+        return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
     def p_theta_diff(self, t_0, t_ex, p_0, p_ex, geometry,
                 param_dict={}, return_symbolic=False, n=1):
@@ -205,20 +204,20 @@ class Volume(Scatter):
                     sp.Symbol('phi_ex')) + tuple(param_dict.keys())
 
 
-            pfunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
+            pfunc = sp.lambdify(args, dfunc_dtheta_0,
+                                modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function with
             # scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
             # The following query is implemented to ensure correct array-output:
             # TODO this is not a proper test !
-            if not isinstance(pfunc(np.array([.1, .2, .3]),
-                                       .1, .1, .1,
-                                       *[.345 for i in param_dict.values()]),
-                              np.ndarray):
+            if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                       **{key:.12 for key in param_dict.keys()}
+                                       ), np.ndarray):
                 pfunc = np.vectorize(pfunc)
 
-            return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+            return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
