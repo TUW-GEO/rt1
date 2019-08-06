@@ -40,9 +40,9 @@ setup(name='rt1',
                         ' covered by a homogeneous layer of scattering media.'
                         ),
 
-      install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2", "pandas>=0.24"],
-      extras_require={'symengine' : ["symengine>=0.4"],
-                      'plots' : ["matplotlib>=3.0"]},
+      install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2", "pandas>=0.24",
+                        "matplotlib>=3.0"],
+      extras_require={'symengine' : ["symengine>=0.4"]},
 
       keywords=["physics", "radiative transfer"],
 
