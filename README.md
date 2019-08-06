@@ -23,11 +23,10 @@ For a basic install, the following line should be fine:
 
     pip install rt1
 
-In order to get the full functionality of the symbolic computations,
-it is currently required to install a specific commit of symengine, i.e.:
+In order to get a speedup in the symbolic computations,
+the module can be installed with the optional symengine-dependency, i.e.:
 
-    conda install -c symengine/label/dev python-symengine=0.3.0.84
-    pip install rt1
+    pip install rt1[symengine]
 
 ## References
 * Quast & Wagner (2016): [doi:10.1364/AO.55.005379](https://doi.org/10.1364/AO.55.005379)
