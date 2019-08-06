@@ -18,7 +18,8 @@ from .rtplots import plot as rt1_plots
 import copy  # used to copy objects
 import datetime
 
-def rectangularize(array, weights_and_mask=False, dim=None):
+def rectangularize(array, weights_and_mask=False, dim=None,
+                   return_masked=False):
     '''
     return a rectangularized version of the input-array by repeating the
     last value to obtain the smallest possible rectangular shape.
@@ -35,6 +36,9 @@ def rectangularize(array, weights_and_mask=False, dim=None):
     dim: int (default = None)
           the dimension of the rectangularized array
           if None, the shortest length of all sub-lists will be used
+    return_masked: bool (default=False)
+                   indicator if a masked-array should be returned
+
     Returns:
     ----------
     new_array: array-like
@@ -50,7 +54,9 @@ def rectangularize(array, weights_and_mask=False, dim=None):
 
     '''
     if dim is None:
+        # get longest dimension of sub-arrays
         dim  = len(max(array, key=len))
+
     if weights_and_mask is True:
         newarray, weights, mask = [], [], []
         for s in array:
@@ -64,17 +70,41 @@ def rectangularize(array, weights_and_mask=False, dim=None):
             newarray += [s]
             weights  += [w]
             mask     += [m]
-        return [np.array(newarray),
-                np.array(weights),
-                np.array(mask, dtype=bool)]
+
+        newarray = np.array(newarray)
+        weights = np.array(weights)
+        mask = np.array(mask, dtype=bool)
+
+        if return_masked is True:
+            newarray = np.ma.masked_array(newarray, mask)
+
+        return [newarray, weights, mask]
+
+    elif return_masked is True:
+        newarray, mask = [], []
+        for s in array:
+            adddim = dim - len(s)
+            m = np.full_like(s, False)
+            if adddim > 0:
+                s = np.append(s, np.full(adddim, s[-1]))
+                m = np.append(m, np.full(adddim, True))
+            newarray += [s]
+            mask     += [m]
+
+        mask = np.array(mask, dtype=bool)
+        newarray = np.array(newarray)
+
+        return np.ma.masked_array(newarray, mask)
+
     else:
         newarray = []
         for s in array:
             adddim = dim - len(s)
             if adddim > 0:
                 s = np.append(s, np.full(adddim, s[-1]))
-            newarray +=[s]
+            newarray += [s]
         return np.array(newarray)
+
 
 
 def meandatetime(datetimes):
