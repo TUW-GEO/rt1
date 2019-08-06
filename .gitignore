@@ -1,6 +1,6 @@
 *.pyc
 autodoc
-_build
+build
 dist
 rt1.egg-info
 .ipynb_checkpoints

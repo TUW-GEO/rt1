@@ -3,8 +3,10 @@ Definition of volume phase scattering functions
 """
 
 import numpy as np
-from .scatter import Scatter
 import sympy as sp
+from functools import partial, update_wrapper
+from .scatter import Scatter
+from .rtplots import polarplot
 
 
 class Volume(Scatter):
@@ -18,29 +20,10 @@ class Volume(Scatter):
         # phase-functions
         self.a = getattr(self, 'a', [-1., 1., 1.])
 
-    def _get_omega(self):
-        return self.__omega
+        #add a quick way for visualizing the functions as polarplot
+        self.polarplot = partial(polarplot, V=self)
+        update_wrapper(self.polarplot, polarplot)
 
-    def _set_omega(self, omega):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        omega = np.array(omega)
-        omega.shape = omega.shape + (1,)
-        self.__omega = omega
-
-    omega = property(_get_omega, _set_omega)
-
-    def _get_tau(self):
-        return self.__tau
-
-    def _set_tau(self, tau):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        tau = np.array(tau)
-        tau.shape = tau.shape + (1,)
-        self.__tau = tau
-
-    tau = property(_get_tau, _set_tau)
 
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -86,13 +69,12 @@ class Volume(Scatter):
         # (this happens e.g. for the Isotropic brdf).
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(pfunc(np.array([.1, .2, .3]),
-                                .1, .1, .1,
-                                *[i[0] for i in param_dict.values()]),
-                          np.ndarray):
+        if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                       **{key:.12 for key in param_dict.keys()}
+                                       ), np.ndarray):
             pfunc = np.vectorize(pfunc)
 
-        return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+        return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
     def p_theta_diff(self, t_0, t_ex, p_0, p_ex, geometry,
                 param_dict={}, return_symbolic=False, n=1):
@@ -222,20 +204,20 @@ class Volume(Scatter):
                     sp.Symbol('phi_ex')) + tuple(param_dict.keys())
 
 
-            pfunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
+            pfunc = sp.lambdify(args, dfunc_dtheta_0,
+                                modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function with
             # scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
             # The following query is implemented to ensure correct array-output:
             # TODO this is not a proper test !
-            if not isinstance(pfunc(np.array([.1, .2, .3]),
-                                       .1, .1, .1,
-                                       *[.345 for i in param_dict.values()]),
-                              np.ndarray):
+            if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                       **{key:.12 for key in param_dict.keys()}
+                                       ), np.ndarray):
                 pfunc = np.vectorize(pfunc)
 
-            return pfunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+            return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
@@ -712,3 +694,4 @@ class HGRayleigh(Volume):
               (n + 1.) ** 2. / (2. * n + 3.) * self.t ** n +
               (5. * n ** 2. - 1.) / (2. * n - 1.) * self.t ** n), True)
         )
+

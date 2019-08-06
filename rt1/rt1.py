@@ -16,13 +16,11 @@ import sympy as sp
 
 try:
     # if symengine is available, use it to perform series-expansions
-    # this try-exept is necessary since symengine does currently not
-    # build correctly with conda using a python 2.7 environment
-    from symengine import expand
-    from symengine import Lambdify as lambdify_seng
+    from symengine import expand, cse, Lambdify
+    _init_lambda_backend='symengine'
 except ImportError:
     from sympy import expand
-    # print('symengine could not be imported fn-function generation')
+    _init_lambda_backend = 'cse'
 
 
 class RT1(object):
@@ -119,9 +117,9 @@ class RT1(object):
     """
 
     def __init__(self, I0, t_0, t_ex, p_0, p_ex, V=None, SRF=None,
-                 fn_input=None, _fnevals_input=None, geometry='vvvv',
-                 bsf=0., param_dict={},
-                 lambda_backend='cse', int_Q=True, verbosity = 1):
+                 fn_input=None, _fnevals_input=None, geometry='mono',
+                 bsf=0., param_dict={}, lambda_backend=_init_lambda_backend,
+                 int_Q=True, verbosity = 1):
 
         assert isinstance(geometry, str), ('ERROR: geometry must be ' +
                                            'a 4-character string')
@@ -168,13 +166,13 @@ class RT1(object):
         # axis to the given input. Checking for sp.Basic is sufficient
         # to distinguish if the input was given as a sympy equation. For
         # details see: http://docs.sympy.org/latest/guide.html#basics
-        if not isinstance(self.V.omega[0], sp.Basic):
+        if not isinstance(self.V.omega, sp.Basic):
             assert np.any(self.V.omega >= 0.), ('Single scattering albedo ' +
                                                  'must be greater than 0')
-        if not isinstance(self.V.tau[0], sp.Basic):
+        if not isinstance(self.V.tau, sp.Basic):
             assert np.any(self.V.tau >= 0.), ('Optical depth ' +
                                                  'must be greater than 0')
-        if not isinstance(self.SRF.NormBRDF[0], sp.Basic):
+        if not isinstance(self.SRF.NormBRDF, sp.Basic):
             assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
                                                  'must be greater than 0')
 
@@ -197,6 +195,26 @@ class RT1(object):
 #        assert (funcset == refset), ('false parameter-specification, please ' +
 #                                     'check assignment of the parameters '
 #                                     + str(refset ^ funcset) + errdict)
+
+    def __getstate__(self):
+        # this is required since functions created by
+        # symengine are currently not pickleable!
+        if self.lambda_backend == 'symengine':
+            print('dropping fn-coefficients and _fnevals ' +
+                  'functions to allow pickling of RT-1 ' +
+                  'object whose interaction-term functions ' +
+                  'have been created by symengine')
+            for delkey in ['_RT1__fnevals', '_RT1__fn']:
+                if delkey in self.__dict__:
+                    print('removing', delkey, 'from __dict__')
+                    del self.__dict__[delkey]
+            for Nonekey in ['_fnevals_input', '_fn_input']:
+                if Nonekey in self.__dict__:
+                    print('setting', Nonekey, 'to None')
+                    self.__dict__[Nonekey] = None
+
+        return self.__dict__
+
 
     def prv(self, v, msg):
         '''
@@ -268,16 +286,41 @@ class RT1(object):
             # use symengine's Lambdify if symengine has been used within
             # the fn-coefficient generation
             if self.lambda_backend == 'symengine':
-                self.prv(1,
-                         'symengine currently only working with dev-version!!')
-                # set lambdify module
-                lambdify = lambdify_seng
+                self.prv(1, 'symengine')
+                # using symengines own "common subexpression elimination"
+                # routine to perform lambdification
+                self.__fnevals = Lambdify(list(variables),
+                                             self.fn, order='F',
+                                             cse=True)
 
-                self.__fnevals = lambdify(list(variables),
-                                          self.fn, order='F')
+            elif self.lambda_backend == 'sympy':
+                # using sympy's lambdify without "common subexpression
+                # elimination" to perform lambdification
+
+                self.prv(1, 'sympy')
+
+                sympy_fn = list(map(sp.sympify, self.fn))
+
+                self.__fnevals = sp.lambdify((variables),
+                                          sp.sympify(sympy_fn),
+                                          modules=["numpy", "sympy"],
+                                          dummify=False)
+
+                self.__fnevals.__doc__ = ('''
+                                    A function to numerically evaluate the
+                                    fn-coefficients a for given set of
+                                    incidence angles and parameter-values
+                                    as defined in the param_dict dict.
+
+                                    The call-signature is:
+                                        RT1-object._fnevals(theta_0, phi_0, \
+                                        theta_ex, phi_ex, *param_dict.values())
+                                    ''')
 
             elif self.lambda_backend == 'cse':
                 self.prv(1, 'cse - sympy')
+                # using sympy's lambdify with "common subexpression elimination
+                # to perform lambdification
 
                 # define a generator function to use deferred vectors for cse
                 def defgen(name='defvec'):
@@ -358,29 +401,6 @@ class RT1(object):
 
                 self.__fnevals = fneval
 
-            elif self.lambda_backend == 'sympy':
-                self.prv(1, 'sympy')
-                # set lambdify module
-                lambdify = sp.lambdify
-
-                sympy_fn = list(map(sp.sympify, self.fn))
-
-                self.__fnevals = lambdify((variables),
-                                          sp.sympify(sympy_fn),
-                                          modules=["numpy", "sympy"],
-                                          dummify=False)
-
-                self.__fnevals.__doc__ = ('''
-                                    A function to numerically evaluate the
-                                    fn-coefficients a for given set of
-                                    incidence angles and parameter-values
-                                    as defined in the param_dict dict.
-
-                                    The call-signature is:
-                                        RT1-object._fnevals(theta_0, phi_0, \
-                                        theta_ex, phi_ex, *param_dict.values())
-                                    ''')
-
             elif self.lambda_backend == 'cse_symengine_sympy':
                 '''
                 sympy's cse functionality is used to avoid sympifying the whole
@@ -396,7 +416,6 @@ class RT1(object):
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                                    tuple(map(str, self.param_dict.keys())))
 
-                from symengine import cse as cse_seng
                 funs = self.fn
 
                 # initialize array that store the cse-functions and variables
@@ -404,7 +423,7 @@ class RT1(object):
                 fn_cse_repfuncs = []  # replacement functions for each coef.
                 for nf, fncoef in enumerate(funs):
                     # evaluate cse functions and variables for the i'th coef.
-                    fn_repl, fn_csefun = cse_seng([fncoef])
+                    fn_repl, fn_csefun = cse([fncoef])
 
                     self.prv(2,
                              'fn_repl has ' + str(len(fn_repl)) + ' elements')
@@ -459,18 +478,20 @@ class RT1(object):
                 modules = ['numpy'] are not pickleable.
                 (necessary for multiprocessing purposes)
                 '''
-
+                print('WARNING "cse_seng_sp_newlambdify" is depreciated \
+                       and will be removed since for sympy > v1.3 \
+                       sympy.lambdify() works as expected!')
                 # define a function for lambdification
                 def newlambdify(args, funs):
                     from sympy.printing.lambdarepr import NumPyPrinter
                     from sympy.utilities.lambdify import lambdastr
                     funcstr = lambdastr(args, funs, printer=NumPyPrinter)
 
-                    funcstr = funcstr.replace(
-                            'pi', 'np.pi').replace(
-                            'sin', 'np.sin').replace(
-                            'cos', 'np.cos').replace(
-                            'sqrt', 'np.sqrt')
+                    funcstr = funcstr.replace('numpy', 'np')
+                             #'pi', 'np.pi').replace(
+                             #'sin', 'np.sin').replace(
+                             #'cos', 'np.cos').replace(
+                             #'sqrt', 'np.sqrt')
 
                     return eval(funcstr)
 
@@ -480,7 +501,6 @@ class RT1(object):
                 variables = sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
                                    tuple(map(str, self.param_dict.keys())))
 
-                from symengine import cse as cse_seng
                 funs = self.fn
 
                 # initialize array that store the cse-functions and variables
@@ -488,7 +508,7 @@ class RT1(object):
                 fn_cse_repfuncs = []  # replacement functions for each coef.
                 for nf, fncoef in enumerate(funs):
                     # evaluate cse functions and variables for the i'th coef.
-                    fn_repl, fn_csefun = cse_seng([fncoef])
+                    fn_repl, fn_csefun = cse([fncoef])
 
                     self.prv(2,
                              'fn_repl has ' + str(len(fn_repl)) + ' elements')
@@ -610,17 +630,6 @@ class RT1(object):
     def _get_mu_ex(self):
         return np.cos(self.t_ex)
     _mu_ex = property(_get_mu_ex)
-
-    def _get_bsf(self):
-        return self.__bsf
-
-    def _set_bsf(self, bsf):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        bsf = np.array(bsf)
-        bsf.shape = bsf.shape + (1,)
-        self.__bsf = bsf
-    bsf = property(_get_bsf, _set_bsf)
 
 
     def _extract_coefficients(self, expr):
@@ -838,10 +847,6 @@ class RT1(object):
                Interaction contribution
         """
 
-        # the following if query ensures that volume- and interaction-terms
-        # are only calculated if tau > 0.
-        # (to avoid nan-values from invalid function-evaluations)
-
         if self.V.tau.shape == (1,):
             Isurf = self.surface()
             # differentiation for non-existing canopy, as otherwise NAN values
@@ -855,73 +860,27 @@ class RT1(object):
                 Ivol = np.array([0.])
                 Iint = np.array([0.])
         else:
-            # calculate surface-term (valid for any tau-value)
             Isurf = self.surface()
-
-            # store initial parameter-values
-            old_t_0 = self.t_0
-            old_p_0 = self.p_0
-            old_t_ex = self.t_ex
-            old_p_ex = self.p_ex
-
-            old_tau = self.V._get_tau()
-            old_omega = self.V._get_omega()
-            old_NN = self.SRF._get_NormBRDF()
-
-            # set mask for tau > 0.
-            mask = old_tau > 0.
-            valid_index = np.where(mask)
-            inval_index = np.where(~mask)
-
-            # set parameter-values to valid values for calculation
-            self.t_0 = old_t_0[valid_index[0]]
-            self.p_0 = old_p_0[valid_index[0]]
-            self.t_ex = old_t_ex[valid_index[0]]
-            self.p_ex = old_p_ex[valid_index[0]]
-
-            # squeezing the arrays is necessary since the setter-function for
-            # tau, omega and NormBRDF automatically adds an axis to the arrays!
-            self.V.tau = np.squeeze(old_tau[valid_index[0]])
-            if np.array(self.V.omega).size != 1:
-                self.V.omega = np.squeeze(old_omega[valid_index[0]])
-            if np.array(self.SRF.NormBRDF).size != 1:
-                self.SRF.NormBRDF = np.squeeze(old_NN[valid_index[0]])
-
-            # calculate volume and interaction term where tau-values are valid
-            _Ivol = self.volume()
+            Ivol = self.volume()
+            # TODO this should be fixed more properly
+            # (i.e. for tau=0, no interaction-term should be calculated)
             if self.int_Q is True:
-                _Iint = self.interaction()
-            else:
-                _Iint = np.full_like(self.t_0, 0.)
+                Iint = self.interaction()
+                # check if there are nan-values present that result from
+                # (self.V.tau = 0) and replace them with 0
+                wherenan = np.isnan(Iint)
+                if np.any(wherenan) and np.allclose(
+                        *np.broadcast_arrays(wherenan, self.V.tau==0.)):
+                    self.prv(3, 'Warning replacing nan-values caused by tau=0 \
+                             in the interaction-term with 0!')
+                    Iint[np.where(wherenan)] = 0.
+                else:
+                    pass
 
-            # reset parameter values to old values
-            self.t_0 = old_t_0
-            self.p_0 = old_p_0
-            self.t_ex = old_t_ex
-            self.p_ex = old_p_ex
-
-            # squeezing the arrays is necessary since the setter-function for
-            # tau, omega and NormBRDF automatically add an axis to the arrays!
-            self.V.tau = np.squeeze(old_tau)
-            self.V.omega = np.squeeze(old_omega)
-            self.SRF.NormBRDF = np.squeeze(old_NN)
-
-            # combine calculated volume-contributions for valid tau-values
-            # with zero-arrays for invalid tau-values
-            Ivol = np.ones_like(self.t_0)
-            Ivol[valid_index[0]] = _Ivol
-            Ivol[inval_index[0]] = np.ones_like(Ivol[inval_index[0]]) * 0.
-
-            # combine calculated interaction-contributions for valid tau-values
-            # with zero-arrays for invalid tau-values
-            if self.int_Q is True:
-                Iint = np.ones_like(self.t_0)
-                Iint[valid_index[0]] = _Iint
-                Iint[inval_index[0]] = np.ones_like(Iint[inval_index[0]]) * 0.
-            else:
-                Iint = np.full_like(self.t_0, 0.)
-
-        return Isurf + Ivol + Iint, Isurf, Ivol, Iint
+        if self.int_Q is True:
+            return Isurf + Ivol + Iint, Isurf, Ivol, Iint
+        else:
+            return Isurf + Ivol, Isurf, Ivol
 
     def surface(self):
         """
@@ -1376,6 +1335,7 @@ class RT1(object):
         if self.lambda_backend == 'symengine':
             args = np.broadcast_arrays(np.arccos(mu1), phi1, np.arccos(mu2),
                                        phi2, *self.param_dict.values())
+
             # to correct for 0 dimensional arrays if a fn-coefficient
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(args))
@@ -1392,9 +1352,9 @@ class RT1(object):
                 - expi(-self.V.tau) + np.exp(-self.V.tau / mu1)
                 * expi(self.V.tau / mu1 - self.V.tau))
 
-        S2 = np.array([np.sum(mu1 ** (-k) * (expn(k + 1., self.V.tau) -
+        S2 = np.array([sum(mu1 ** (-k) * (expn(k + 1., self.V.tau) -
                                              np.exp(-self.V.tau / mu1) / k)
-                              for k in range(1, (n + 1) + 1))
+                                   for k in range(1, (n + 1) + 1))
                        for n in range(nmax)])
 
         mu = np.array([mu1 ** (n + 1) for n in range(nmax)])

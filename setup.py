@@ -9,7 +9,6 @@ For COPYING and LICENSE details, please refer to the LICENSE file
 from setuptools import setup
 from setuptools import find_packages
 
-install_requires = ["numpy", "sympy", "symengine", "matplotlib"]
 
 def get_packages():
     find_packages(exclude=['contrib', 'docs', 'tests*']),
@@ -18,9 +17,9 @@ def get_packages():
 
 setup(name='rt1',
 
-      version='v0.0.2',
+      version='v0.0.3',
 
-      description='rt1 - bistatic single scattering radiative transfer model',
+      description='RT1 - bistatic single scattering radiative transfer model',
 
       packages=get_packages(),
       package_dir={'rt1': 'rt1'},
@@ -34,8 +33,16 @@ setup(name='rt1',
 
       url='https://github.com/TUW-GEO/rt1',
 
-      long_description='xxxx',
-      install_requires=install_requires,
+      long_description=('A module to perform forward-simulation and ' +
+                        'parameter-inversion of incidence-angle dependent ' +
+                        'backscatter observations based on a first-order ' +
+                        'radiative-transfer model describing a rough surface' +
+                        ' covered by a homogeneous layer of scattering media.'
+                        ),
+
+      install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2", "pandas>=0.24",
+                        "matplotlib>=3.0"],
+      extras_require={'symengine' : ["symengine>=0.4"]},
 
       keywords=["physics", "radiative transfer"],
 

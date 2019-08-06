@@ -4,8 +4,10 @@ Definition of BRDF functions
 
 import numpy as np
 import sympy as sp
-from .scatter import Scatter
+from functools import partial, update_wrapper
 
+from .scatter import Scatter
+from .rtplots import polarplot, hemreflect
 
 class Surface(Scatter):
     """
@@ -20,18 +22,13 @@ class Surface(Scatter):
         self.a = getattr(self, 'a', [1., 1., 1.])
 
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
+        #quick way for visualizing the functions as polarplot
+        self.polarplot = partial(polarplot, SRF=self)
+        update_wrapper(self.polarplot, polarplot)
+        #quick way for visualizing the associated hemispherical reflectance
+        self.hemreflect = partial(hemreflect, SRF=self)
+        update_wrapper(self.hemreflect, hemreflect)
 
-    def _get_NormBRDF(self):
-        return self.__NormBRDF
-
-    def _set_NormBRDF(self, NormBRDF):
-        # the setter-function adds an axis to the numpy-arrays of the
-        # parameters to provide the correct shape for array-processing
-        NormBRDF = np.array(NormBRDF)
-        NormBRDF.shape = NormBRDF.shape + (1,)
-        self.__NormBRDF = NormBRDF
-
-    NormBRDF = property(_get_NormBRDF, _set_NormBRDF)
 
     def brdf(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -78,13 +75,12 @@ class Surface(Scatter):
         # (this happens e.g. for the Isotropic brdf).
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(brdffunc(np.array([.1, .2, .3]),
-                                   .1, .1, .1,
-                                   *[.345 for i in param_dict.values()]),
-                          np.ndarray):
+        if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                   **{key:.12 for key in param_dict.keys()}
+                                   ), np.ndarray):
             brdffunc = np.vectorize(brdffunc)
 
-        return brdffunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+        return brdffunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
         """
@@ -339,20 +335,20 @@ class Surface(Scatter):
                     sp.Symbol('phi_ex')) + tuple(param_dict.keys())
 
 
-            brdffunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
+            brdffunc = sp.lambdify(args, dfunc_dtheta_0,
+                                   modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function with
             # scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
             # The following query is implemented to ensure correct array-output:
             # TODO this is not a proper test !
-            if not isinstance(brdffunc(np.array([.1, .2, .3]),
-                                       .1, .1, .1,
-                                       *[.345 for i in param_dict.values()]),
-                              np.ndarray):
+            if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1,
+                                       **{key:.12 for key in param_dict.keys()}
+                                       ), np.ndarray):
                 brdffunc = np.vectorize(brdffunc)
 
-            return brdffunc(t_0, t_ex, p_0, p_ex, *param_dict.values())
+            return brdffunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
 
 class LinCombSRF(Surface):

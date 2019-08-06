@@ -4,10 +4,11 @@
 language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
-  - "2.7"
-  - "3.4"
-  - "3.5"
+  # - "2.7"
+  # - "3.4"
+  # - "3.5"
   - "3.6"
+  - "3.7"
 
 env:
   # don't use gmpy in mpmath to avoid pickling errors caused by a bug
@@ -15,9 +16,6 @@ env:
   # see: https://github.com/sympy/sympy/issues/12895
   # see: https://github.com/sympy/sympy/pull/13530
   - MPMATH_NOGMPY=1
-
-before_install:
-- sudo rm -f /etc/apt/sources.list.d/cassandra*
 
 install:
   - sudo apt-get update
@@ -38,9 +36,10 @@ install:
 
   # nose must be installed explicitly to ensure that the virtual conda-environment is used within the tests
   # (otherwise import-errors will occur for non-standard packages like scipy sympy and symengine)
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib nose numpy sympy scipy
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib nose numpy sympy scipy pandas
   - source activate test-environment
   - conda install -c conda-forge python-symengine
+  - conda install cloudpickle
 
   # before the actual installation we test first if existing
   # installation mechanism using PIP and CONDA work
