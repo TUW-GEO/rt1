@@ -146,7 +146,6 @@ class Fits(Scatter):
         self.dataset = dataset
         self.set_V_SRF = set_V_SRF
         self.defdict = copy.deepcopy(defdict)
-        self.result = None
 
         # add plotfunctions
         # self.printsig0timeseries = partial(printsig0timeseries, fit = self)
@@ -176,6 +175,8 @@ class Fits(Scatter):
             self.res_dict = self.result[6]
             self.start_dict = self.result[7]
             self.fixed_dict = self.result[8]
+
+
 
         print('... re-initializing plot-functions')
         self.plot = rt1_plots(self)
@@ -307,6 +308,47 @@ class Fits(Scatter):
 
         return new_df, param_dyn_dict
 
+    def _setindex(self, setindex):
+        '''
+        set the index-property of the Fits-object
+        (dataset_used must be present, e.g. performfit() must have been run
+         prior to calling this method!)
+
+        Parameters:
+        ---------------
+        setindex: str
+                  identifyer how to assign the index of the fitted values
+                  in case timespans longer than 1 measurement are used.
+
+                  possible values are:
+
+                  - 'first': the first index-value will be used
+                  - 'last': the last index-value will be used
+                  - 'mean': the center index-value will be used
+                    (Note: this results in a index that might not have been
+                    present in the input dataset!)
+                  - 'original': the list of indices will be returned without
+                    alteration (Note: without further processing, this index
+                    can not be directly used to generate a pandas DataFrame)
+        '''
+        # generate a datetime-index from the given groups
+        try:
+            if setindex == 'first':
+                self.index = pd.to_datetime(
+                        self.dataset_used.orig_index.apply(np.take,
+                                                      indices=0).values)
+            elif setindex == 'last':
+                self.index = pd.to_datetime(
+                        self.dataset_used.orig_index.apply(np.take,
+                                                      indices=-1).values)
+            elif setindex == 'mean':
+                self.index = pd.to_datetime(
+                        self.dataset_used.orig_index.apply(meandatetime).values)
+            elif setindex == 'original':
+                self.index = self.dataset_used.index
+        except:
+            print('index could not be combined... use original index instead')
+            self.index = self.dataset_used.index
 
 
     def _preparedata(self, dataset):
@@ -1392,6 +1434,7 @@ class Fits(Scatter):
         self.res_dict = res_dict
         self.start_dict = start_dict
         self.fixed_dict = fixed_dict
+        self.dataset_used = dataset
 
         # for downward compatibility
         return [self.fit_output, self.R, self.data, self.inc, self.mask,
@@ -1553,25 +1596,5 @@ class Fits(Scatter):
                      verbosity=2,
                      **kwargs)
 
-
         # generate a datetime-index from the given groups
-        try:
-            if setindex == 'first':
-                self.index = pd.to_datetime(
-                        dataset_used.orig_index.apply(np.take,
-                                                      indices=0).values)
-            elif setindex == 'last':
-                self.index = pd.to_datetime(
-                        dataset_used.orig_index.apply(np.take,
-                                                      indices=-1).values)
-            elif setindex == 'mean':
-                self.index = pd.to_datetime(
-                        dataset_used.orig_index.apply(meandatetime).values)
-            elif setindex == 'original':
-                self.index = dataset_used.index
-        except:
-            print('index could not be combined... use original index instead')
-            self.index = dataset_used.index
-
-        self.dataset_used = dataset_used
-
+        self._setindex(setindex)
