@@ -14,7 +14,7 @@ import matplotlib.lines as mlines
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import Normalize
 
-from .rtfits import rectangularize
+from .general_functions import rectangularize
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
 
