@@ -28,23 +28,25 @@ def rectangularize(array, weights_and_mask=False, dim=None):
 
     Parameters:
     ------------
-    array : array-like
+    array: array-like
             the input-data that is intended to be rectangularized
-    weights_and_mask : bool (default = False)
+    weights_and_mask: bool (default = False)
                      indicator if weights and mask should be evaluated or not
-    dim : int (default = None)
+    dim: int (default = None)
           the dimension of the rectangularized array
           if None, the shortest length of all sub-lists will be used
     Returns:
     ----------
     new_array: array-like
-        a rectangularized version of the input-array
-    weights : array-like (only returned if 'weights_and_mask' is set to True)
-        a weighting-matrix whose entries are 1/sqrt(number of repetitions)
-        (the square-root is used since this weighting will be applied to
+               a rectangularized version of the input-array
+    weights: array-like
+             (only returned if 'weights_and_mask' is set to True)
+             a weighting-matrix whose entries are 1/sqrt(number of repetitions)
+             (the square-root is used since this weighting will be applied to
         a sum of squares)
-    mask : array-like (only returned if 'weights_and_mask' is set to True)
-           a mask indicating the added values
+    mask: array-like
+          (only returned if 'weights_and_mask' is set to True)
+          a mask indicating the added values
 
     '''
     if dim is None:
@@ -82,12 +84,12 @@ def meandatetime(datetimes):
 
     Parameters:
     ------------
-    datetimes : list
-                a list of datetime-objects
+    datetimes: list
+               a list of datetime-objects
     Returns:
     ---------
-    meandate : Timestamp
-               the center-date
+    meandate: Timestamp
+              the center-date
     '''
 
     if np.count_nonzero(datetimes) == 1:
@@ -245,7 +247,8 @@ class Fits(Scatter):
         needed for downward compatibility
         '''
         if (not hasattr(self, 'R') and
-            hasattr(self, 'result') and len(self.result) == 9):
+            hasattr(self, 'result') and
+            self.result is not None and len(self.result) == 9):
             print('... updating attributes')
             self.fit_output = self.result[0]
             self.R = self.result[1]
@@ -277,34 +280,34 @@ class Fits(Scatter):
 
         Parameters:
         -----------
-        dataset : pandas.DataFrame
-                  A pandas-DataFrame with columns inc and sig that
-                  correspond to the incidence-angle- and backscatter
-                  values
-        dyn_keys : list of strings
-                   a list of the names of the parameters that are intended
-                   ot be fitted
-        freq : list
-               a list of frequencies that will be assigned to the
-               parameters. For more details check the pandas "DateOffset"
-               https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
+        dataset: pandas.DataFrame
+                 A pandas-DataFrame with columns inc and sig that
+                 correspond to the incidence-angle- and backscatter
+                 values
+        dyn_keys: list of strings
+                  a list of the names of the parameters that are intended
+                  ot be fitted
+        freq: list
+              a list of frequencies that will be assigned to the
+              parameters. For more details check the pandas "DateOffset"
+              https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
 
-        freqkeys : list
-                   a list of parameter-names to which the corresponding
-                   frequency will be assigned.
+        freqkeys: list
+                  a list of parameter-names to which the corresponding
+                  frequency will be assigned.
 
-                   e.g. if freq is ['D', 'M'] then freqkeys might look
-                   like [['dayparam1', 'dayparam2'], ['monthparam1']]
+                  e.g. if freq is ['D', 'M'] then freqkeys might look
+                  like [['dayparam1', 'dayparam2'], ['monthparam1']]
 
-        manual_dyn_df : pandas.DataFrame
-                        a pandas-DataFrame with column-names corresponding
-                        to the keys whose temporal grouping will be
-                        assigned based on the values.
+        manual_dyn_df: pandas.DataFrame
+                       a pandas-DataFrame with column-names corresponding
+                       to the keys whose temporal grouping will be
+                       assigned based on the values.
 
-        fixed_dict : pandas.DataFrame
-                     a pandas-DataFrame with timeseries of parameters
-                     that are intended to be used as auxiliary datasets
-                     -> the index must match with the index of dataset!
+        fixed_dict: pandas.DataFrame
+                    a pandas-DataFrame with timeseries of parameters
+                    that are intended to be used as auxiliary datasets
+                    -> the index must match with the index of dataset!
         '''
 
         dataset = pd.concat([dataset] +
@@ -410,37 +413,37 @@ class Fits(Scatter):
 
         Returns:
         ---------
-        inc : array-like
-              a rectangular array consisting of the incidence-angles as
-              provided in the dataset, rectangularized by repeating the last
-              values of each row to fit in length.
-        data : array-like
-               a rectangular array consisting of the data-values as provided
-               in the dataset, rectangularized by repeating the last values
-               of each row to fit in length
-        weights : array-like
-                  an array of equal shape as inc and data, consisting of the
-                  weighting-factors that need to be applied in order to correct
-                  for the rectangularization. The weighting-factors for each
-                  individual data-element are given by
-                      weight_i = 1 / np.sqrt(N_i)
-                  where N_i is the number of repetitions of the i'th value
-                  that have been added in order to rectangularize the dataset.
+        inc: array-like
+             a rectangular array consisting of the incidence-angles as
+             provided in the dataset, rectangularized by repeating the last
+             values of each row to fit in length.
+        data: array-like
+              a rectangular array consisting of the data-values as provided
+              in the dataset, rectangularized by repeating the last values
+              of each row to fit in length
+        weights: array-like
+                 an array of equal shape as inc and data, consisting of the
+                 weighting-factors that need to be applied in order to correct
+                 for the rectangularization. The weighting-factors for each
+                 individual data-element are given by
+                     weight_i = 1 / np.sqrt(N_i)
+                 where N_i is the number of repetitions of the i'th value
+                 that have been added in order to rectangularize the dataset.
 
-                  Including the weighting-factors within the least-squares
-                  approach will result in a cancellation of the repeated
-                  results such that the artificially added values (necessary
-                  to have a rectangular array) will have no effect on the fit.
-        N : int
-            number of measurements that have been provided within the dataset
+                 Including the weighting-factors within the least-squares
+                 approach will result in a cancellation of the repeated
+                 results such that the artificially added values (necessary
+                 to have a rectangular array) will have no effect on the fit.
+        N: int
+           number of measurements that have been provided within the dataset
 
-        mask : array-like
-               a mask that indicates the artificially added values
+        mask: array-like
+              a mask that indicates the artificially added values
 
-        new_fixed_dict : dict
-                         a dictionary with the values of the auxiliary-datasets
-                         grouped such that they can be used within the
-                         fitting procedure
+        new_fixed_dict: dict
+                        a dictionary with the values of the auxiliary-datasets
+                        grouped such that they can be used within the
+                        fitting procedure
         '''
 
 
@@ -490,20 +493,20 @@ class Fits(Scatter):
 
         Parameters:
         ------------
-        R : RT1-object
-            the rt1-object for which the results shall be calculated
-        res_dict : dict
-                   a dictionary containing all parameter-values that should
-                   be updated before calling R.calc()
-        return_components : bool (default=False)
-                            indicator if the individual components or only
-                            the total backscattered radiation are returned
-                            (useful for quick evaluation of a model)
+        R: RT1-object
+           the rt1-object for which the results shall be calculated
+        res_dict: dict
+                  a dictionary containing all parameter-values that should
+                  be updated before calling R.calc()
+        return_components: bool (default=False)
+                           indicator if the individual components or only
+                           the total backscattered radiation are returned
+                           (useful for quick evaluation of a model)
         Returns:
         ----------
-        model_calc : the output of R.calc() (as intensity or sigma_0)
-                     in linear-units or dB corresponding to the specifications
-                     defined in the rtfits-class.
+        model_calc: the output of R.calc() (as intensity or sigma_0)
+                    in linear-units or dB corresponding to the specifications
+                    defined in the rtfits-class.
         '''
 
         if R is None:
@@ -639,16 +642,16 @@ class Fits(Scatter):
 
         Parameters:
         ------------
-        R : RT1-object
-            the rt1-object for which the results shall be calculated
-        res_dict : dict
-                   a dictionary containing all parameter-values that should
-                   be updated before calling R.jac()
+        R: RT1-object
+           the rt1-object for which the results shall be calculated
+        res_dict: dict
+                  a dictionary containing all parameter-values that should
+                  be updated before calling R.jac()
         Returns:
         --------
-        jac : array_like(float)
-              the jacobian corresponding to the fit-parameters in the
-              shape applicable to scipy's least_squres-function
+        jac: array_like(float)
+             the jacobian corresponding to the fit-parameters in the
+             shape applicable to scipy's least_squres-function
         '''
         # ensure correct array-processing
         res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
@@ -899,20 +902,20 @@ class Fits(Scatter):
 
         Parameters:
         ------------
-        R : RT1-object
-            the rt1-object for which the results shall be calculated
-        res_dict : dict
-                   a dictionary containing all parameter-values that should
-                   be updated before calling R.calc()
-        return_components : bool (default=False)
-                            indicator if the individual components or only
-                            the total backscattered radiation are returned
-                            (useful for quick evaluation of a model)
+        R: RT1-object
+           the rt1-object for which the results shall be calculated
+        res_dict: dict
+                  a dictionary containing all parameter-values that should
+                  be updated before calling R.calc()
+        return_components: bool (default=False)
+                           indicator if the individual components or only
+                           the total backscattered radiation are returned
+                           (useful for quick evaluation of a model)
         Returns:
         ----------
-        model_calc : the output of R.calc() (as intensity or sigma_0)
-                     in linear-units or dB corresponding to the specifications
-                     defined in the rtfits-class.
+        model_calc: the output of R.calc() (as intensity or sigma_0)
+                    in linear-units or dB corresponding to the specifications
+                    defined in the rtfits-class.
         '''
 
         if R is None:
@@ -1056,15 +1059,15 @@ class Fits(Scatter):
 
         Parameters:
         ------------
-        V : RT1.volume class object
+        V: RT1.volume class object
             The volume scattering phase-function used to define the fit-model.
             Attention: if omega and/or tau are set to None, the values
             provided by V.omega and/or V.tau are used as constants!
-        SRF : RT1.surface class object
+        SRF: RT1.surface class object
              The surface BRDF used to define the fit-model
              Attention if NormBRDF is set to None, the values defined by
              SRF.NormBRDF will be used as constants!
-        dataset : array-like or pandas.DataFrame
+        dataset: array-like or pandas.DataFrame
                  - if array-like:
                    list of input-data and incidence-angles arranged in the form
                    [[inc_0, data_0], [inc_1, data_1], ...]
@@ -1076,7 +1079,7 @@ class Fits(Scatter):
                    pandas-DataFrame with columns ['inc', 'sig', 'orig_index']
                    and any number of additional columns that represent
                    auxiliary datasets. The values must be provided as lists!
-        param_dict : dict
+        param_dict: dict
                     A dictionary containing the names of the parameters that
                     are intended to be fitted together with the desired
                     startvalues for the fit.
@@ -1104,7 +1107,7 @@ class Fits(Scatter):
                           to all measurements, using the provided value as
                           startvalue.
 
-        bounds_dict : dict
+        bounds_dict: dict
                       A dictionary containing the names of the parameters that
                       are intended to be fitted together with the desired
                       boundaries for the fit.
@@ -1129,7 +1132,7 @@ class Fits(Scatter):
                             bounds_dict[key] = ([lower_bound], [upper_bound])
                             where lower_bound and upper_bound are arrays of
                             the same length as the dataset.
-        param_dyn_dict : dict
+        param_dyn_dict: dict
                      A dictionary containing the names of the parameters that
                      are intended to be fitted together with a list of unique
                      integers for each key, specifying the number of individual
@@ -1162,69 +1165,69 @@ class Fits(Scatter):
 
         Other Parameters:
         ------------------
-        fn_input : array-like
-             a slot for pre-calculated fn-coefficients.
-             if the same model has to be fitted to multiple datasets, the
-             fn-coefficients that are returned in the first fit can be used
-             as input for the second fit to avoid repeated calculations.
-        _fnevals_input : callable
-             a slot for pre-compiled function to evaluate the fn-coefficients
-             Note that once the _fnevals function is provided, the
-             fn-coefficients are no longer needed and have no effect on the
-             calculated results!
-        int_Q : bool (default = True)
-                indicator if interaction-terms should be included
-                (note: they are always ommitted when calculating the jacobian!)
-        lambda_backend : string
-                         select method for generating the _fnevals functions
-                         if they are not provided explicitly.
-                         The default is 'cse_symengine_sympy' if symengine is
-                         installed and 'cse' otherwise.
-        verbosity : int
-                  set verbosity level of rt1-module
-        intermediate_results : bool (default = False)
-                               indicator if intermediate results should be
-                               stored (for analysis purpose only). If True, a
-                               dictionary will be generated that contains
-                               detailed results for each iteration-step of the
-                               fit-procedure. It is structured as follows:
+        fn_input: array-like
+                  a slot for pre-calculated fn-coefficients. if the same model
+                  has to be fitted to multiple datasets, the fn-coefficients
+                  that are returned in the first fit can be used as input for
+                  the second fit to avoid repeated calculations.
+        _fnevals_input: callable
+                        a slot for pre-compiled function to evaluate the
+                        fn-coefficients. Note that once the _fnevals function
+                        is provided, the fn-coefficients are no longer needed
+                        and have no effect on the calculated results!
+        int_Q: bool (default = True)
+               indicator if interaction-terms should be included
+               (Note: they are always ommitted when calculating the jacobian!)
+        lambda_backend: string
+                        select method for generating the _fnevals functions
+                        if they are not provided explicitly.
+                        The default is 'cse_symengine_sympy' if symengine is
+                        installed and 'cse' otherwise.
+        verbosity: int
+                   set verbosity level of rt1-module
+        intermediate_results: bool (default = False)
+                              indicator if intermediate results should be
+                              stored (for analysis purpose only). If True, a
+                              dictionary will be generated that contains
+                              detailed results for each iteration-step of the
+                              fit-procedure. It is structured as follows:
 
-                                   'jacobian' : a list of dicts with the
+                                   'jacobian': a list of dicts with the
                                                 jacobians for each fitted
                                                 parameter
 
-                                   'errdict' : {'abserr' : list of RMSE,
+                                   'errdict': {'abserr' : list of RMSE,
                                                 'relerr' : list of RMSE/data}
 
-                                   'parameters' : list of parameter-result
+                                   'parameters': list of parameter-result
                                                   dictionaries for each step
 
-        kwargs :
-                 keyword arguments passed to scipy's least_squares function
+        kwargs:
+                keyword arguments passed to scipy's least_squares function
 
         Returns:
         ---------
-        res_lsq : dict
-                  output of scipy's least_squares function
-        R : RT1-object
-            the RT1-object used to perform the fit
-        data : array-like
-               used dataset for the fit
-        inc : array-like
-              used incidence-angle data for the fit
-        mask : array-like(bool)
-               the masked that needs to be applied to the rectangularized
-               dataset to get the valid entries (see preparedata-function)
-        weights : array-like
-                  the weighting-matrix that has been applied to correct for the
-                  rectangularization of the dataset (see preparedata-function)
-        res_dict : dict
-                   a dictionary containing the fit-results for the parameters
-        start_dict : dict
-                     a dictionary containing the used start-values
-        fixed_dict : dict
-                     a dictionary containing the parameter-values that have been
-                     used as constants during the fit
+        res_lsq: dict
+                 output of scipy's least_squares function
+        R: RT1-object
+           the RT1-object used to perform the fit
+        data: array-like
+              used dataset for the fit
+        inc: array-like
+             used incidence-angle data for the fit
+        mask: array-like(bool)
+              the masked that needs to be applied to the rectangularized
+              dataset to get the valid entries (see preparedata-function)
+        weights: array-like
+                 the weighting-matrix that has been applied to correct for the
+                 rectangularization of the dataset (see preparedata-function)
+        res_dict: dict
+                  a dictionary containing the fit-results for the parameters
+        start_dict: dict
+                    a dictionary containing the used start-values
+        fixed_dict: dict
+                    a dictionary containing the parameter-values that have been
+                    used as constants during the fit
         '''
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
