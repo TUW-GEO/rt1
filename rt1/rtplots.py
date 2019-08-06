@@ -14,36 +14,9 @@ import matplotlib.lines as mlines
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import Normalize
 
+from .rtfits import rectangularize
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
-
-
-def rectangularize(array):
-    '''
-    return a rectangularized (masked array) version of the input-array by
-    appending masked values to obtain the smallest possible rectangular shape.
-
-        input-array = [[1,2,3], [1], [1,2]]
-        output-array = [[1,2,3], [1,--,--], [1,2,--]]
-
-    Parameters:
-    ------------
-    array : array-like
-            the input-data that is intended to be rectangularized
-
-    Returns:
-    ----------
-    new_array: np.ma.masked_array
-               a rectangularized (masked-array) version of the input-array
-    '''
-    dim  = len(max(array, key=len))
-    newarray = []
-    for s in array:
-        adddim = dim - len(s)
-        if adddim > 0:
-            s = np.append(s, np.full(adddim, np.nan))
-        newarray +=[s]
-    return np.ma.masked_array(newarray, mask=np.isnan(newarray))
 
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
@@ -692,8 +665,6 @@ class plot:
 
         generate a plot showing the development of the fitted parameters
         and the residuals for each fit-iteration
-
-
     '''
 
     def __init__(self, fit=None, **kwargs):
@@ -913,8 +884,10 @@ class plot:
             #return contrib, groupedcontrib
             for label in contrib.keys():
                 if label in ['inc']: continue
-                a=np.rad2deg(rectangularize([x.values for _, x in groupedcontrib['inc']])).T
-                b=np.array(rectangularize([x.values for _, x in groupedcontrib[label]])).T
+                a=np.rad2deg(rectangularize([x.values for _, x in groupedcontrib['inc']],
+                             return_masked=True)).T
+                b=np.array(rectangularize([x.values for _, x in groupedcontrib[label]],
+                             return_masked=True)).T
                 x = (np.array([a,b]).T)
 
                 l_col = mpl.collections.LineCollection(x,linewidth =.25, label='x',
