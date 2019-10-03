@@ -975,7 +975,7 @@ class Fits(Scatter):
 
         # ensure that the keys of the dict are strings and not sympy-symbols
         strparam_fn = dict([[str(key),
-                             np.expand_dims(param_fn[key], 1)]
+                             param_fn[key]]
                             for i, key in enumerate(param_fn.keys())])
 
         # set the param-dict to the newly generated dict
@@ -1587,7 +1587,7 @@ class Fits(Scatter):
         self.monofit(V=V, SRF=SRF,
                      dataset=dataset_used,
                      param_dict=param_dict,
-                     bsf = setdict['bsf'],
+                     bsf = setdict.get('bsf', 0.),
                      bounds_dict=bounds_dict,
                      param_dyn_dict=param_dyn_dict,
                      fn_input=fn_input,
