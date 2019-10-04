@@ -17,6 +17,11 @@ env:
   # see: https://github.com/sympy/sympy/pull/13530
   - MPMATH_NOGMPY=1
 
+# blocklist
+branches:
+  except:
+  - rtread
+
 install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
@@ -56,6 +61,6 @@ install:
   # - conda install -c conda-forge rt1
   # - conda uninstall -c conda-forge rt1
 
-
 script:
   - nosetests -v # -s to see print-output from nosetests
+
