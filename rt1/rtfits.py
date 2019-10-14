@@ -1212,7 +1212,7 @@ class Fits(Scatter):
         # (additional columns of 'dataset' do not affect the fit)
 
         for key, val in fixed_dict.items():
-            if val == 'auxiliary':
+            if isinstance(val, str) and val == 'auxiliary':
                 if key in new_fixed_dict:
                     fixed_dict[key] = new_fixed_dict[key]
                 else:
@@ -1451,6 +1451,94 @@ class Fits(Scatter):
                 self.fixed_dict]
 
 
+
+    def _set_performfit_dicts(self, defdict):
+        '''
+        Generate RT-1 specifications based on the provided "defdict".
+
+        ... used to simplify the model-specification for 'rtfits.performfit()'
+
+        Parameters
+        ----------
+        defdict : dict
+            see documentation of rt1.rtfits.Fits class
+
+        Returns
+        -------
+        list
+            a list of dicts corresponding to:
+
+            [fixed_dict, setdict, startvaldict,
+            timescaledict, boundsvaldict, manual_dyn_df] .
+
+        '''
+        # generate RT1 specifications based on defdict
+        # initialize empty dicts
+        fixed_dict = {}
+        setdict = {}
+        startvaldict = {}
+        timescaledict = {}
+        boundsvaldict = {}
+        manual_dyn_df = None
+        # set parameters
+        for key in defdict.keys():
+            # if parameter is intended to be fitted, assign a sympy-symbol
+            if defdict[key][0] is True:
+                # TODO see why this is actually necessary
+                # omega and tau must not be a sympy-symbol name
+                if key not in ['omega', 'tau']:
+                    setdict[key] = sp.var(key)
+                else:
+                    # a dummy value that will be replaced in rtfits.monofit
+                    setdict[key] = 100
+
+                # set start-values
+                startvaldict[key] = defdict[key][1]
+
+                # set temporal variability
+                if defdict[key][2] == 'manual':
+                    if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
+                    manual_dyn_df = pd.concat([manual_dyn_df,
+                                               defdict[key][4]], axis=1)
+                elif defdict[key][2] is not None:
+
+                    timescaledict[key] = defdict[key][2]
+                    try:
+                        manual_dyn_df = pd.concat([manual_dyn_df,
+                                                   defdict[key][4]], axis=1)
+                    except Exception:
+                        pass
+
+                # set boundaries
+                boundsvaldict[key] = defdict[key][3]
+
+            elif defdict[key][0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if isinstance(defdict[key][1], (int, float)) and not \
+                    isinstance(defdict[key][1], bool):
+                    setdict[key] = defdict[key][1]
+                else:
+                    # if value is provided as array, add it to fixed_dict
+                    if key not in ['omega', 'tau']:
+                        # omega and tau must not be a sympy-symbol name
+                        # TODO same as above ...why is this necessary?
+                        # TODO what about 'NormBRDF'?
+                        setdict[key] = sp.var(key)
+                    else:
+                        # a dummy value that will be replaced by rtfits.monofit
+                        setdict[key] = 100
+
+                    if isinstance(defdict[key][1], str) and \
+                        defdict[key][1] == 'auxiliary':
+                        fixed_dict[key] = 'auxiliary'
+                    else:
+                        fixed_dict[key] = defdict[key][1]
+
+        return [fixed_dict, setdict, startvaldict,
+                timescaledict, boundsvaldict, manual_dyn_df]
+
+
     def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
                    fn_input = None, _fnevals_input = None,
                    int_Q = False, setindex = 'mean',
@@ -1495,63 +1583,9 @@ class Fits(Scatter):
         if defdict is None: defdict = self.defdict
         if set_V_SRF is None: set_V_SRF = self.set_V_SRF
 
-
-        # generate RT1 specifications based on defdict
-        # initialize empty dicts
-        fixed_dict = {}
-        setdict = {}
-        startvaldict = {}
-        timescaledict = {}
-        boundsvaldict = {}
-        manual_dyn_df = None
-        # set parameters
-        for key in defdict.keys():
-            # if parameter is intended to be fitted, assign a sympy-symbol
-            if defdict[key][0] is True:
-                # TODO see why this is actually necessary
-                # omega and tau must not be a sympy-symbol name
-                if key not in ['omega', 'tau']:
-                    setdict[key] = sp.var(key)
-                else:
-                    # a dummy value that will be replaced in rtfits.monofit
-                    setdict[key] = 100
-
-                # set start-values
-                startvaldict[key] = defdict[key][1]
-
-                # set temporal variability
-                if defdict[key][2] == 'manual':
-                    if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
-                    manual_dyn_df = pd.concat([manual_dyn_df,
-                                               defdict[key][4]], axis=1)
-                elif defdict[key][2] is not None:
-
-                    timescaledict[key] = defdict[key][2]
-                    try:
-                        manual_dyn_df = pd.concat([manual_dyn_df,
-                                                   defdict[key][4]], axis=1)
-                    except Exception:
-                        pass
-
-                # set boundaries
-                boundsvaldict[key] = defdict[key][3]
-
-            elif defdict[key][0] is False:
-                # treat parameters that are intended to be constants
-                # if value is provided as a scalar, insert it in the definition
-                if np.isscalar(defdict[key][1]):
-                    setdict[key] = defdict[key][1]
-                else:
-                    # if value is provided as array, add it to fixed_dict
-                    # TODO same as above ...why is this necessary?
-                    # TODO what about 'tau' and 'NormBRDF'
-                    # omega and tau must not be a sympy-symbol name
-                    if key not in ['omega', 'tau']:
-                        setdict[key] = sp.var(key)
-                    else:
-                        # a dummy value that will be replaced by rtfits.monofit
-                        setdict[key] = 100
-                    fixed_dict[key] = defdict[key][1]
+        # get dictionary for initialization of fit
+        [fixed_dict, setdict, startvaldict, timescaledict,
+         boundsvaldict, manual_dyn_df] =self._set_performfit_dicts(defdict)
 
         # set V and SRF based on setter-function
         V, SRF = set_V_SRF(**setdict)
@@ -1563,12 +1597,10 @@ class Fits(Scatter):
             freq += [timescaledict[key]]
             freqkeys += [[key]]
 
-
         dataset_used, param_dyn_dict = self._generatedataset(
                 dataset=dataset, dyn_keys=startvaldict.keys(),
                 freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
                 fixed_dict=fixed_dict)
-
 
         # re-shape param_dict and bounds_dict to fit needs
         param_dict = {}
