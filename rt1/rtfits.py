@@ -229,7 +229,9 @@ class Fits(Scatter):
         '''
 
         dataset = pd.concat([dataset] +
-                            [val for key, val in fixed_dict.items()], axis=1)
+                            [val for key, val in fixed_dict.items() \
+                             if isinstance(val, (pd.Series, pd.DataFrame))],
+                            axis=1)
 
         if manual_dyn_df is not None:
             manual_dyn_df = copy.deepcopy(manual_dyn_df)
@@ -1204,9 +1206,17 @@ class Fits(Scatter):
         [inc, data, weights, Nmeasurements,
          mask, new_fixed_dict] = self._preparedata(dataset)
 
-        # TODO implement fixed_dict more proper
-        fixed_dict.update(new_fixed_dict)
+        # update 'fixed_dict' with timeseries provided via 'dataset'
+        # ensure that only parameters that are explicitely mentioned in
+        # fixed_dict are passed to the fit-procedure as fixed datasets
+        # (additional columns of 'dataset' do not affect the fit)
 
+        for key, val in fixed_dict.items():
+            if val == 'auxiliary':
+                if key in new_fixed_dict:
+                    fixed_dict[key] = new_fixed_dict[key]
+                else:
+                    assert False, f"auxiliary data for '{key}' is missing!"
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         try:
@@ -1273,7 +1283,6 @@ class Fits(Scatter):
         # param_R = dict(**param_dict, **fixed_dict)
         param_R = dict((k, v) for k, v in list(param_dict.items())
                        + list(fixed_dict.items()))
-
         param_R.pop('omega', None)
         param_R.pop('tau', None)
         param_R.pop('NormBRDF', None)
@@ -1581,14 +1590,13 @@ class Fits(Scatter):
             else:
                 bounds_dict[key] = (boundsvaldict[key])
 
-        self.fixed_dict_input = fixed_dict
-
         # perform fit
         self.monofit(V=V, SRF=SRF,
                      dataset=dataset_used,
                      param_dict=param_dict,
                      bsf = setdict.get('bsf', 0.),
                      bounds_dict=bounds_dict,
+                     fixed_dict=fixed_dict,
                      param_dyn_dict=param_dyn_dict,
                      fn_input=fn_input,
                      _fnevals_input=_fnevals_input,
