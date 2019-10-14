@@ -1212,10 +1212,11 @@ class Fits(Scatter):
         # (additional columns of 'dataset' do not affect the fit)
 
         for key, val in fixed_dict.items():
-            if key in new_fixed_dict:
-                if isinstance(val, str) and val == 'auxiliary':
+            if isinstance(val, str) and val == 'auxiliary':
                     assert key in new_fixed_dict, \
                         f"auxiliary data for '{key}' is missing!"
+
+            if key in new_fixed_dict:
                 fixed_dict[key] = new_fixed_dict[key]
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
