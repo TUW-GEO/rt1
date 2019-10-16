@@ -1,6 +1,5 @@
 """
-Class to perform least_squares fitting of given datasets.
-(wrapper for scipy.optimize.least_squares)
+Class to perform least_squares fitting of RT-1 models to given datasets.
 """
 
 import numpy as np
@@ -16,7 +15,14 @@ from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize
 from .rtplots import plot as rt1_plots
 
-import copy  # used to copy objects
+import copy
+import multiprocessing as mp
+from itertools import repeat
+
+try:
+    import cloudpickle
+except ModuleNotFoundError:
+    print('cloudpickle could not be imported, .dump() will not work!')
 
 
 class Fits(Scatter):
@@ -95,6 +101,18 @@ class Fits(Scatter):
                >>>
                >>>     return V, SRF
 
+    fitset: dict (default = dict())
+            a dictionary with keyword-arguments passed to monofit() and further
+            to scipy.optimize.least_squares
+
+    setindex: str (default = 'mean')
+              indicator how the datetime-indices of the fit-results
+              should be processed. possible values are:
+                  - 'mean': the center date of the used timespan
+                  - 'first': the first date of the timespan
+                  - 'last': the last date of the timespan
+                  - 'original': return the full list of datetime-objects
+
     Stored Fit-Attributes:
     -------------------
 
@@ -134,19 +152,18 @@ class Fits(Scatter):
                setindex='mean', **kwargs)
         perform a fit of the defined model to the dataset
 
-
-
-
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
-                 defdict=None, set_V_SRF=None, **kwargs):
+                 defdict=None, set_V_SRF=None, fitset=dict(),
+                 setindex = 'mean', **kwargs):
         self.sig0 = sig0
         self.dB = dB
         self.dataset = dataset
         self.set_V_SRF = set_V_SRF
         self.defdict = copy.deepcopy(defdict)
-
+        self.fitset = fitset
+        self.setindex = setindex
         # add plotfunctions
         # self.printsig0timeseries = partial(printsig0timeseries, fit = self)
         # update_wrapper(self.printsig0timeseries, printsig0timeseries)
@@ -176,6 +193,8 @@ class Fits(Scatter):
             self.start_dict = self.result[7]
             self.fixed_dict = self.result[8]
 
+        if not hasattr(self, 'setindex'):
+            self.setindex = 'mean'
 
         if not hasattr(self, 'plot'):
             print('... re-initializing plot-functions')
@@ -186,6 +205,22 @@ class Fits(Scatter):
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
         self.__update__()
+
+
+    def __getstate__(self):
+        if '_rt1_dump_mini' in self.__dict__:
+            # remove unnecessary data to save storage
+            removekeys = ['R', 'data', 'inc', 'mask', 'weights',
+                          'fit_output', 'fixed_dict', 'start_dict',
+                          'dataset_used', 'index']
+
+            delattr(self, '_rt1_dump_mini')
+
+            return {key: val for key, val in self.__dict__.items()
+                    if key not in removekeys}
+
+        else:
+            return self.__dict__
 
 
     def _generatedataset(self, dataset, dyn_keys,
@@ -309,6 +344,7 @@ class Fits(Scatter):
             param_dyn_dict[key] = list(val.values)
 
         return new_df, param_dyn_dict
+
 
     def _setindex(self, setindex):
         '''
@@ -1011,8 +1047,8 @@ class Fits(Scatter):
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
                 fn_input=None, _fnevals_input=None, int_Q=True,
-                lambda_backend=_init_lambda_backend, verbosity=0,
-                intermediate_results=False,
+                lambda_backend=_init_lambda_backend, verbosity=2,
+                intermediate_results=False, re_init=False,
                 **kwargs):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
@@ -1162,6 +1198,10 @@ class Fits(Scatter):
 
                                    'parameters': list of parameter-result
                                                   dictionaries for each step
+        re_init: bool (default = False)
+                 if re_init is True, all actions EXCEPT the actual fit will
+                 be executed. This re-initializes the Fits object based on the
+                 input in the state as if the fit has already been performed.
 
         kwargs:
                 keyword arguments passed to scipy's least_squares function
@@ -1398,9 +1438,17 @@ class Fits(Scatter):
                 else:
                     startvals = startvals + list(param_dict[key])
 
-        # perform actual fitting
-        res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                jac=dfun, **kwargs)
+        # perform the actual fit
+        if re_init is True:
+            if getattr(self, 'fit_output', None) is not None:
+                res_lsq = self.fit_output
+            else:
+                res_lsq = None
+                self.fit_output = None
+        else:
+            # perform actual fitting
+            res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                    jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
         count = 0
@@ -1412,12 +1460,16 @@ class Fits(Scatter):
             uniques = uniques[np.argsort(ind)]
             # shift index to next parameter (this is necessary since the result
             # is provided as a concatenated array)
-            res_dict[key] = np.full_like(param_dyn_dict[key], 999,
-                                            dtype=float)
-            for i, uniq in enumerate(uniques):
-                value_i = np.array(res_lsq.x)[count:count + len(uniques)][i]
-                where_i = np.where((param_dyn_dict[key]) == uniq)
-                res_dict[key][where_i] = value_i
+            if res_lsq is not None:
+                res_dict[key] = np.full_like(param_dyn_dict[key], 999,
+                                                dtype=float)
+                for i, uniq in enumerate(uniques):
+                    value_i = np.array(res_lsq.x)[count:count + len(uniques)][i]
+                    where_i = np.where((param_dyn_dict[key]) == uniq)
+                    res_dict[key][where_i] = value_i
+
+                self.fit_output = res_lsq
+                self.res_dict = res_dict
 
             start_dict[key] = np.full_like(param_dyn_dict[key], 999,
                                             dtype=float)
@@ -1435,15 +1487,13 @@ class Fits(Scatter):
         # get the data in the same shape as the incidence-angles
         data = np.array(np.split(data, Nmeasurements))
 
-        self.fit_output = res_lsq
         self.R = R
         self.data = data
         self.inc = inc
         self.mask = mask
         self.weights = weights
-        self.res_dict = res_dict
-        self.start_dict = start_dict
         self.fixed_dict = fixed_dict
+        self.start_dict = start_dict
         self.dataset_used = dataset
 
         # for downward compatibility
@@ -1452,8 +1502,7 @@ class Fits(Scatter):
                 self.fixed_dict]
 
 
-
-    def _set_performfit_dicts(self, defdict):
+    def _set_performfit_dicts(self, defdict=None):
         '''
         Generate RT-1 specifications based on the provided "defdict".
 
@@ -1473,6 +1522,9 @@ class Fits(Scatter):
             timescaledict, boundsvaldict, manual_dyn_df] .
 
         '''
+        if defdict is None:
+            defdict = self.defdict
+
         # generate RT1 specifications based on defdict
         # initialize empty dicts
         fixed_dict = {}
@@ -1541,48 +1593,42 @@ class Fits(Scatter):
 
 
     def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
-                   fn_input = None, _fnevals_input = None,
-                   int_Q = False, setindex = 'mean',
-                   **kwargs):
+                   fitset=None, re_init=False):
         '''
+        Setup a RT-1 specifications and perform a fit based on the provided
+        inputs (dataset, defdict, set_V_SRF and fitsset).
+
+
         Parameters
         -----------
         dataset: pandas.DataFrame
-                 see rtfits.Fits
+                 override the attribute of the parent Fits-object.
+                 see docstring of rtfits.Fits for details
         defdict: dict
-                 see rtfits.Fits
+                 override the attribute of the parent Fits-object.
+                 see docstring of rtfits.Fits for details
         set_V_SRF: callable
-                   see rtfits.Fits
-        fn_input: list (optional)
-                  a list of pre-evaluated fn-coefficients
-        _fnevals_input: callable (optional)
-                        a pre-compiled function for evaluation of the
-                        fn-coefficients (for speedup in case V and SRF
-                        properties are used in multiple fits)
-        int_Q: bool (default = False)
-               indicator if interaction-terms are evaluated or not
-        setindex: str (default = 'mean')
-                  indicator how the datetime-indices of the fit-results
-                  should be processed. possible values are:
-                      - 'mean': the center date of the used timespan
-                      - 'first': the first date of the timespan
-                      - 'last': the last date of the timespan
-                      - 'original': return the full list of datetime-objects
-        kwargs: dict
-                keyword arguments passed to rtfits.monofit() and further to
-                scipy.optimize.least_squares()
+                 override the attribute of the parent Fits-object.
+                 see docstring of rtfits.Fits for details
+        fitset: dict
+                 override the attribute of the parent Fits-object.
+                 see docstring of rtfits.Fits for details
+        re_init: bool (default = False)
+                 if re_init is True, all actions EXCEPT the actual fit will
+                 be executed. This re-initializes the Fits object based on the
+                 input in the state as if the fit has already been performed.
 
         '''
 
-        assert setindex in ['mean','first',
-                            'last', 'original'], 'setindex must be either' \
-                            + " 'mean', 'first', 'last' or 'original'"
+        assert self.setindex in ['mean','first', 'last', 'original'], \
+            "setindex must be either 'mean', 'first', 'last' or 'original'"
 
         # TODO change to only using rtfits objects!
         # (i.e. it is not necessary to manually specify defdict etc.)
         if dataset is None: dataset = self.dataset
         if defdict is None: defdict = self.defdict
         if set_V_SRF is None: set_V_SRF = self.set_V_SRF
+        if fitset is None: fitset = self.fitset
 
         # get dictionary for initialization of fit
         [fixed_dict, setdict, startvaldict, timescaledict,
@@ -1631,11 +1677,222 @@ class Fits(Scatter):
                      bounds_dict=bounds_dict,
                      fixed_dict=fixed_dict,
                      param_dyn_dict=param_dyn_dict,
-                     fn_input=fn_input,
-                     _fnevals_input=_fnevals_input,
-                     int_Q=int_Q,
-                     verbosity=2,
-                     **kwargs)
+                     re_init=re_init,
+                     **fitset)
 
         # generate a datetime-index from the given groups
-        self._setindex(setindex)
+        self._setindex(self.setindex)
+
+
+    def _evalfunc(self, dataset=None, reader=None, reader_arg=None,
+                  postprocess=None, fitset=None):
+        """
+        Initialize a Fits-instance and perform a fit.
+        (used for parallel processing)
+
+        Parameters
+        ----------
+        dataset : pandas.DataFrame
+            the dataset to be processed.
+        reader : callable
+            A function that returns a pandas.DataFrame that can be used
+            as a 'dataset' (e.g. columns 'inc' and 'sig' must be defined).
+        reader_arg : dict
+            The arguments passed to the reader.
+        postprocess : callable
+            A fucntion that accepts a rt1.rtfits.Fits object and a dict
+            as arguments and returns any desired output.
+
+            It is called via:
+
+            >>> ...
+            >>> fit.performfit()
+            >>> return postprocess(fit, reader_arg)
+
+        fitset : dict, optional
+            override the fitset-dict of the parent Fits-object.
+            The default is None.
+
+        Returns
+        -------
+        The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
+        """
+
+        if fitset is None: fitset = self.fitset
+
+        # if a reader (and no dataset) is provided, use the reader
+        if dataset is None and isinstance(reader_arg,
+                                          dict) and callable(reader):
+            dataset = reader(**reader_arg)
+
+        # perform the fit
+        fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
+                   set_V_SRF=self.set_V_SRF, defdict=self.defdict,
+                   fitset=fitset)
+        fit.performfit()
+        # if a post-processing function is provided, return its output
+        if callable(postprocess):
+            return postprocess(fit, reader_arg)
+        else:
+            return fit
+
+
+    def processfunc(self, ncpu=1, datasets=None, reader=None,
+                    reader_args=None, postprocess=None, fitset=None):
+        """
+        Evaluate a RT-1 model on a single core or in parallel using either
+            - a list of datasets or
+            - a reader-function together with a list of arguments that
+              will be used to read the datasets
+
+        Notice:
+            On Windows, if multiprocessing is used, you must protect the call
+            of this function via:
+            (see for example: )
+
+            >>> if __name__ == '__main__':
+                    fit.processfunc(...)
+
+            In order to allow pickling the final rt1.rtfits.Fits object,
+            it is required to store ALL definitions within a separate
+            file and call processfunc in the 'main'-file as follows:
+
+            >>> from specification_file import fit reader fitset ... ...
+                if __name__ == '__main__':
+                    fit.processfunc(ncpu=5, reader=reader,
+                                    fitset=fitset, ... ...)
+
+        Parameters
+        ----------
+        ncpu : int, optional
+            The number of kernels to use. The default is 1.
+        datasets : list, optional
+            A list of datasets (see documentation of 'rt1.rtfits.Fits'
+            for details on how to specify the dataset). The default is None.
+        reader : callable, optional
+            A function that returns a pandas.DataFrame that can be used
+            as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
+            for details on how to specify the dataset). The default is None.
+        reader_args : list, optional
+            A list of dicts that will be passed to the reader-function.
+            The default is None.
+        postprocess : callable, optional
+            A fucntion that accepts a rt1.rtfits.Fits object and a dict
+            as arguments and returns any desired output.
+
+            It is called via:
+
+            >>> ...
+            >>> fit.performfit(**fitset)
+            >>> return postprocess(fit, reader_arg)
+
+            The default is None.
+        fitset : dict, optional
+            override the fitset-dict of the parent Fits-object.
+            The default is None.
+
+        Returns
+        -------
+        res : list
+            A list of rt1.rtfits.Fits objects or a list of outputs of the
+            postprocess-function.
+
+        """
+        if fitset is None: fitset = self.fitset
+
+        if 'int_Q' in fitset and fitset['int_Q'] is True:
+            # pre-evaluate the fn-coefficients
+            # initialize a dummy-fit
+            print('evaluation of fn-coefficients ...')
+            [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
+            fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
+                                       **{key:[0.5]
+                                          for key in fixed_dict.keys()}},
+                                      index=[pd.datetime(2020, 1,1)])
+
+            # evaluate the dummy-fit to obtain the fn-coefficients
+            res = self._evalfunc(dataset=fn_dataset, reader=None,
+                                 reader_arg=None, postprocess=None,
+                                 fitset={**fitset, 'max_nfev':1, 'verbose':0})
+            #TODO pickling currently only works for symengine
+            fitset['_fnevals_input'] = res.R._fnevals
+
+        if ncpu > 1:
+            print('start of parallel evaluation')
+            with mp.Pool(ncpu) as pool:
+                if datasets is not None:
+                    # loop over the reader_args
+                    res = pool.starmap(self._evalfunc,
+                                       zip(datasets,
+                                           repeat(reader),
+                                           repeat(reader_args),
+                                           repeat(postprocess),
+                                           repeat(fitset)))
+                elif callable(reader) and reader_args is not None:
+                    # loop over the reader_args
+                    res = pool.starmap(self._evalfunc,
+                                       zip(repeat(datasets),
+                                           repeat(reader),
+                                           reader_args,
+                                           repeat(postprocess),
+                                           repeat(fitset)))
+
+        else:
+            print('start of single-core evaluation')
+            res = []
+            if datasets is not None:
+                for dataset in datasets:
+                    res.append(self._evalfunc(dataset, reader, reader_args,
+                                              postprocess, fitset))
+            elif callable(reader) and reader_args is not None:
+                for reader_arg in reader_args:
+                    res.append(self._evalfunc(datasets, reader, reader_arg,
+                                              postprocess, fitset))
+
+        return res
+
+
+    def dump(self, path, mini=False):
+        '''
+        Save the rt1.rtfits.Fits object using cloudpickle.dump()
+
+        The generated (platform and environment-specific) file can be loaded
+        via:
+
+        >>> import cloudpickle
+            with open(--path-to-file--, 'rb') as file
+                fit = cloudpickle.load(file)
+
+        Parameters
+        ----------
+        path : str
+            The path to the file that should be created.
+        mini : bool, optional
+            Indicator if unnecessary attributes should be removed before
+            pickling or not (to avoid storing duplicated data).
+            To re-create the attributes, run
+
+            >>> fit.performfit(re_init=True)
+
+            The default is False.
+        '''
+
+        if mini is True:
+            self._rt1_dump_mini = True
+        else:
+            try:
+                delattr(self, '_rt1_dump_mini')
+            except AttributeError:
+                pass
+
+        with open(path, 'wb') as file:
+            cloudpickle.dump(self, file)
+
+
+    def _reinit(self):
+        '''
+        re-initialize a fit-object based on the provided input without
+        performing the actual fit
+        '''
+        self.performfit(re_init=True)
+

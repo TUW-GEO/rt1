@@ -174,8 +174,7 @@ class TestRTfits(unittest.TestCase):
                 'method': 'trf',
                 'tr_solver': 'lsmr',
                 'x_scale': 'jac',
-                'intermediate_results':False,
-                'setindex' : 'mean'}
+                'intermediate_results':False}
 
 
 
@@ -204,9 +203,10 @@ class TestRTfits(unittest.TestCase):
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
-                       set_V_SRF=set_V_SRF,)
+                       set_V_SRF=set_V_SRF, fitset=fitset,
+                       setindex='mean')
 
-        testfit.performfit(**fitset)
+        testfit.performfit()
 
 
         # provide true-values for comparison of fitted results
