@@ -1693,12 +1693,16 @@ class Fits(Scatter):
         Parameters
         ----------
         dataset : pandas.DataFrame
-            the dataset to be processed.
-        reader : callable
-            A function that returns a pandas.DataFrame that can be used
-            as a 'dataset' (e.g. columns 'inc' and 'sig' must be defined).
+            the dataset to be processed (see documentation of 'rt1.rtfits.Fits'
+            for details on how to specify the dataset)
+        reader : callable, optional
+            A function whose first return-value is a pandas.DataFrame that can
+            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
+            for details on how to properly specify a RT-1 dataset).
+            Any additional (optional) return-values will be appended to the
+            Fits-object in the 'aux_data' attribute. The default is None.
         reader_arg : dict
-            The arguments passed to the reader.
+            A dict of arguments passed to the reader.
         postprocess : callable
             A fucntion that accepts a rt1.rtfits.Fits object and a dict
             as arguments and returns any desired output.
@@ -1723,12 +1727,27 @@ class Fits(Scatter):
         # if a reader (and no dataset) is provided, use the reader
         if dataset is None and isinstance(reader_arg,
                                           dict) and callable(reader):
-            dataset = reader(**reader_arg)
+            read_data = reader(**reader_arg)
+            # check for multiple return values and split them accordingly
+            if isinstance(read_data, pd.DataFrame):
+                dataset = read_data
+                aux_data = None
+            elif isinstance(read_data, tuple) and len(read_data) == 2:
+                dataset, aux_data = read_data
+            elif isinstance(read_data, tuple) and len(read_data) > 2:
+                dataset = read_data[0]
+                aux_data = read_data[1:]
+        else:
+            aux_data = None
 
         # perform the fit
         fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                    set_V_SRF=self.set_V_SRF, defdict=self.defdict,
                    fitset=fitset)
+
+        if aux_data is not None:
+            fit.aux_data = aux_data
+
         fit.performfit()
         # if a post-processing function is provided, return its output
         if callable(postprocess):
@@ -1770,9 +1789,11 @@ class Fits(Scatter):
             A list of datasets (see documentation of 'rt1.rtfits.Fits'
             for details on how to specify the dataset). The default is None.
         reader : callable, optional
-            A function that returns a pandas.DataFrame that can be used
-            as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to specify the dataset). The default is None.
+            A function whose first return-value is a pandas.DataFrame that can
+            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
+            for details on how to properly specify a RT-1 dataset).
+            Any additional (optional) return-values will be appended to the
+            Fits-object in the 'aux_data' attribute. The default is None.
         reader_args : list, optional
             A list of dicts that will be passed to the reader-function.
             The default is None.
