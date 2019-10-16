@@ -177,9 +177,9 @@ class Fits(Scatter):
             self.fixed_dict = self.result[8]
 
 
-
-        print('... re-initializing plot-functions')
-        self.plot = rt1_plots(self)
+        if not hasattr(self, 'plot'):
+            print('... re-initializing plot-functions')
+            self.plot = rt1_plots(self)
 
 
     def __setstate__(self, d):
