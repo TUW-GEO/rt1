@@ -1757,7 +1757,8 @@ class Fits(Scatter):
 
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
-                    reader_args=None, postprocess=None, fitset=None):
+                    reader_args=None, postprocess=None, fitset=None,
+                    exceptfunc=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -1811,6 +1812,18 @@ class Fits(Scatter):
         fitset : dict, optional
             override the fitset-dict of the parent Fits-object.
             The default is None.
+        exceptfunc : callable, optional
+            A function that is called in case an exception occurs.
+            It is implemented via:
+
+            >>> try:
+            >>>     ...
+            >>>     ... processfunc ...
+            >>>     ...
+            >>> except Exception as ex:
+            >>>     exceptfunc(ex, reader_args)
+
+            The default is None, in which case the exception will be raised.
 
         Returns
         -------
@@ -1819,57 +1832,63 @@ class Fits(Scatter):
             postprocess-function.
 
         """
-        if fitset is None: fitset = self.fitset
 
-        if 'int_Q' in fitset and fitset['int_Q'] is True:
-            # pre-evaluate the fn-coefficients
-            # initialize a dummy-fit
-            print('evaluation of fn-coefficients ...')
-            [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
-            fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
-                                       **{key:[0.5]
-                                          for key in fixed_dict.keys()}},
-                                      index=[pd.datetime(2020, 1,1)])
+        try:
+            if fitset is None: fitset = self.fitset
 
-            # evaluate the dummy-fit to obtain the fn-coefficients
-            res = self._evalfunc(dataset=fn_dataset, reader=None,
-                                 reader_arg=None, postprocess=None,
-                                 fitset={**fitset, 'max_nfev':1, 'verbose':0})
-            #TODO pickling currently only works for symengine
-            fitset['_fnevals_input'] = res.R._fnevals
+            if 'int_Q' in fitset and fitset['int_Q'] is True:
+                # pre-evaluate the fn-coefficients
+                # initialize a dummy-fit
+                print('evaluation of fn-coefficients ...')
+                [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
+                fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
+                                           **{key:[0.5]
+                                              for key in fixed_dict.keys()}},
+                                          index=[pd.datetime(2020, 1,1)])
 
-        if ncpu > 1:
-            print('start of parallel evaluation')
-            with mp.Pool(ncpu) as pool:
+                # evaluate the dummy-fit to obtain the fn-coefficients
+                res = self._evalfunc(dataset=fn_dataset, reader=None,
+                                     reader_arg=None, postprocess=None,
+                                     fitset={**fitset, 'max_nfev':1, 'verbose':0})
+                #TODO pickling currently only works for symengine
+                fitset['_fnevals_input'] = res.R._fnevals
+
+            if ncpu > 1:
+                print('start of parallel evaluation')
+                with mp.Pool(ncpu) as pool:
+                    if datasets is not None:
+                        # loop over the reader_args
+                        res = pool.starmap(self._evalfunc,
+                                           zip(datasets,
+                                               repeat(reader),
+                                               repeat(reader_args),
+                                               repeat(postprocess),
+                                               repeat(fitset)))
+                    elif callable(reader) and reader_args is not None:
+                        # loop over the reader_args
+                        res = pool.starmap(self._evalfunc,
+                                           zip(repeat(datasets),
+                                               repeat(reader),
+                                               reader_args,
+                                               repeat(postprocess),
+                                               repeat(fitset)))
+
+            else:
+                print('start of single-core evaluation')
+                res = []
                 if datasets is not None:
-                    # loop over the reader_args
-                    res = pool.starmap(self._evalfunc,
-                                       zip(datasets,
-                                           repeat(reader),
-                                           repeat(reader_args),
-                                           repeat(postprocess),
-                                           repeat(fitset)))
+                    for dataset in datasets:
+                        res.append(self._evalfunc(dataset, reader, reader_args,
+                                                  postprocess, fitset))
                 elif callable(reader) and reader_args is not None:
-                    # loop over the reader_args
-                    res = pool.starmap(self._evalfunc,
-                                       zip(repeat(datasets),
-                                           repeat(reader),
-                                           reader_args,
-                                           repeat(postprocess),
-                                           repeat(fitset)))
-
-        else:
-            print('start of single-core evaluation')
-            res = []
-            if datasets is not None:
-                for dataset in datasets:
-                    res.append(self._evalfunc(dataset, reader, reader_args,
-                                              postprocess, fitset))
-            elif callable(reader) and reader_args is not None:
-                for reader_arg in reader_args:
-                    res.append(self._evalfunc(datasets, reader, reader_arg,
-                                              postprocess, fitset))
-
+                    for reader_arg in reader_args:
+                        res.append(self._evalfunc(datasets, reader, reader_arg,
+                                                  postprocess, fitset))
+        except Exception as ex:
+            if callable(exceptfunc):
+                exceptfunc(ex, reader_args)
+            else:
+                raise ex
         return res
 
 
