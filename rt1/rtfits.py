@@ -212,7 +212,7 @@ class Fits(Scatter):
             # remove unnecessary data to save storage
             removekeys = ['R', 'data', 'inc', 'mask', 'weights',
                           'fit_output', 'fixed_dict', 'start_dict',
-                          'dataset_used', 'index']
+                          'dataset_used']
 
             delattr(self, '_rt1_dump_mini')
 
@@ -1685,7 +1685,7 @@ class Fits(Scatter):
 
 
     def _evalfunc(self, dataset=None, reader=None, reader_arg=None,
-                  postprocess=None, fitset=None):
+                  postprocess=None, fitset=None, exceptfunc=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -1722,39 +1722,50 @@ class Fits(Scatter):
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
 
-        if fitset is None: fitset = self.fitset
+        try:
+            if fitset is None: fitset = self.fitset
 
-        # if a reader (and no dataset) is provided, use the reader
-        if dataset is None and isinstance(reader_arg,
-                                          dict) and callable(reader):
-            read_data = reader(**reader_arg)
-            # check for multiple return values and split them accordingly
-            if isinstance(read_data, pd.DataFrame):
-                dataset = read_data
+            # if a reader (and no dataset) is provided, use the reader
+            if dataset is None and isinstance(reader_arg,
+                                              dict) and callable(reader):
+                read_data = reader(**reader_arg)
+                # check for multiple return values and split them accordingly
+                if isinstance(read_data, pd.DataFrame):
+                    dataset = read_data
+                    aux_data = None
+                elif isinstance(read_data, tuple) and len(read_data) == 2:
+                    dataset, aux_data = read_data
+                elif isinstance(read_data, tuple) and len(read_data) > 2:
+                    dataset = read_data[0]
+                    aux_data = read_data[1:]
+            else:
                 aux_data = None
-            elif isinstance(read_data, tuple) and len(read_data) == 2:
-                dataset, aux_data = read_data
-            elif isinstance(read_data, tuple) and len(read_data) > 2:
-                dataset = read_data[0]
-                aux_data = read_data[1:]
-        else:
-            aux_data = None
 
-        # perform the fit
-        fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                   set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                   fitset=fitset)
+            # if the dataset is still None after executing the reader, skip it
+            if dataset is None:
+                return None
 
-        if aux_data is not None:
-            fit.aux_data = aux_data
+            # perform the fit
+            fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
+                       set_V_SRF=self.set_V_SRF, defdict=self.defdict,
+                       fitset=fitset)
 
-        fit.performfit()
-        # if a post-processing function is provided, return its output
-        if callable(postprocess):
-            return postprocess(fit, reader_arg)
-        else:
-            return fit
+            if aux_data is not None:
+                fit.aux_data = aux_data
 
+            fit.performfit()
+            # if a post-processing function is provided, return its output
+            if callable(postprocess):
+                return postprocess(fit, reader_arg)
+            else:
+                return fit
+
+        except Exception as ex:
+            if callable(exceptfunc):
+                exceptfunc(ex, reader_arg)
+                return None
+            else:
+                raise ex
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
                     reader_args=None, postprocess=None, fitset=None,
@@ -1814,14 +1825,15 @@ class Fits(Scatter):
             The default is None.
         exceptfunc : callable, optional
             A function that is called in case an exception occurs.
-            It is implemented via:
+            It is (roughly) implemented via:
 
-            >>> try:
-            >>>     ...
-            >>>     ... processfunc ...
-            >>>     ...
-            >>> except Exception as ex:
-            >>>     exceptfunc(ex, reader_args)
+            >>> for reader_arg in reader_args:
+            >>>     try:
+            >>>         ...
+            >>>         ... perform fit ...
+            >>>         ...
+            >>>     except Exception as ex:
+            >>>         exceptfunc(ex, reader_arg)
 
             The default is None, in which case the exception will be raised.
 
@@ -1833,62 +1845,59 @@ class Fits(Scatter):
 
         """
 
-        try:
-            if fitset is None: fitset = self.fitset
+        if fitset is None: fitset = self.fitset
 
-            if 'int_Q' in fitset and fitset['int_Q'] is True:
-                # pre-evaluate the fn-coefficients
-                # initialize a dummy-fit
-                print('evaluation of fn-coefficients ...')
-                [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
-                fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
-                                           **{key:[0.5]
-                                              for key in fixed_dict.keys()}},
-                                          index=[pd.datetime(2020, 1,1)])
+        if 'int_Q' in fitset and fitset['int_Q'] is True:
+            # pre-evaluate the fn-coefficients
+            # initialize a dummy-fit
+            print('evaluation of fn-coefficients ...')
+            [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
+            fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
+                                       **{key:[0.5]
+                                          for key in fixed_dict.keys()}},
+                                      index=[pd.datetime(2020, 1,1)])
 
-                # evaluate the dummy-fit to obtain the fn-coefficients
-                res = self._evalfunc(dataset=fn_dataset, reader=None,
-                                     reader_arg=None, postprocess=None,
-                                     fitset={**fitset, 'max_nfev':1, 'verbose':0})
-                #TODO pickling currently only works for symengine
-                fitset['_fnevals_input'] = res.R._fnevals
+            # evaluate the dummy-fit to obtain the fn-coefficients
+            res = self._evalfunc(dataset=fn_dataset, reader=None,
+                                 reader_arg=None, postprocess=None,
+                                 fitset={**fitset, 'max_nfev':1, 'verbose':0},
+                                 exceptfunc=exceptfunc)
+            #TODO pickling currently only works for symengine
+            fitset['_fnevals_input'] = res.R._fnevals
 
-            if ncpu > 1:
-                print('start of parallel evaluation')
-                with mp.Pool(ncpu) as pool:
-                    if datasets is not None:
-                        # loop over the reader_args
-                        res = pool.starmap(self._evalfunc,
-                                           zip(datasets,
-                                               repeat(reader),
-                                               repeat(reader_args),
-                                               repeat(postprocess),
-                                               repeat(fitset)))
-                    elif callable(reader) and reader_args is not None:
-                        # loop over the reader_args
-                        res = pool.starmap(self._evalfunc,
-                                           zip(repeat(datasets),
-                                               repeat(reader),
-                                               reader_args,
-                                               repeat(postprocess),
-                                               repeat(fitset)))
-
-            else:
-                print('start of single-core evaluation')
-                res = []
+        if ncpu > 1:
+            print('start of parallel evaluation')
+            with mp.Pool(ncpu) as pool:
                 if datasets is not None:
-                    for dataset in datasets:
-                        res.append(self._evalfunc(dataset, reader, reader_args,
-                                                  postprocess, fitset))
+                    # loop over the reader_args
+                    res = pool.starmap(self._evalfunc,
+                                       zip(datasets,
+                                           repeat(reader),
+                                           repeat(reader_args),
+                                           repeat(postprocess),
+                                           repeat(fitset),
+                                           repeat(exceptfunc)))
                 elif callable(reader) and reader_args is not None:
-                    for reader_arg in reader_args:
-                        res.append(self._evalfunc(datasets, reader, reader_arg,
-                                                  postprocess, fitset))
-        except Exception as ex:
-            if callable(exceptfunc):
-                exceptfunc(ex, reader_args)
-            else:
-                raise ex
+                    # loop over the reader_args
+                    res = pool.starmap(self._evalfunc,
+                                       zip(repeat(datasets),
+                                           repeat(reader),
+                                           reader_args,
+                                           repeat(postprocess),
+                                           repeat(fitset),
+                                           repeat(exceptfunc)))
+
+        else:
+            print('start of single-core evaluation')
+            res = []
+            if datasets is not None:
+                for dataset in datasets:
+                    res.append(self._evalfunc(dataset, reader, reader_args,
+                                              postprocess, fitset, exceptfunc))
+            elif callable(reader) and reader_args is not None:
+                for reader_arg in reader_args:
+                    res.append(self._evalfunc(datasets, reader, reader_arg,
+                                              postprocess, fitset, exceptfunc))
         return res
 
 
