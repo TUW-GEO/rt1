@@ -1972,7 +1972,7 @@ class plot:
             unila, wherela = np.unique(la, return_index=True)
             # sort legend entries
             sort_order = dict(data_1=0, data_2=1, total=2,
-                              surface=3, volume=4)
+                              surface=3, volume=4, interaction=5)
 
             halas = [[ha, la] for ha, la in zip(np.array(la)[wherela],
                                                 np.array(ha)[wherela])]
