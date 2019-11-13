@@ -1741,10 +1741,6 @@ class Fits(Scatter):
             else:
                 aux_data = None
 
-            # if the dataset is still None after executing the reader, skip it
-            if dataset is None:
-                return None
-
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        set_V_SRF=self.set_V_SRF, defdict=self.defdict,
@@ -1762,14 +1758,13 @@ class Fits(Scatter):
 
         except Exception as ex:
             if callable(exceptfunc):
-                exceptfunc(ex, reader_arg)
-                return None
+                return exceptfunc(ex, reader_arg)
             else:
                 raise ex
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
                     reader_args=None, postprocess=None, fitset=None,
-                    exceptfunc=None):
+                    exceptfunc=None, finaloutput=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -1837,6 +1832,10 @@ class Fits(Scatter):
 
             The default is None, in which case the exception will be raised.
 
+        finaloutput : callable, optional
+            A function that will be called on the list of returned objects
+            after the processing has been finished.
+
         Returns
         -------
         res : list
@@ -1898,7 +1897,11 @@ class Fits(Scatter):
                 for reader_arg in reader_args:
                     res.append(self._evalfunc(datasets, reader, reader_arg,
                                               postprocess, fitset, exceptfunc))
-        return res
+
+        if finaloutput is not None:
+            return finaloutput(res)
+        else:
+            return res
 
 
     def dump(self, path, mini=False):
