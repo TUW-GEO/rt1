@@ -56,7 +56,10 @@ class TestDUMPS(unittest.TestCase):
             for function_name in method_list:
                 print(f'... {function_name}')
                 f = fit.plot.__getattribute__(function_name)()
-                plt.close(f)
+                if function_name == 'printsig0analysis':
+                    plt.close(f[0])
+                else:
+                    plt.close(f)
 
     def test_performfit(self):
         # settings with whome the fit has been performed
