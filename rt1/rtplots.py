@@ -14,9 +14,80 @@ import matplotlib.lines as mlines
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import Normalize
 
-from .general_functions import rectangularize
+from .general_functions import rectangularize, dBsig0convert
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
+
+from matplotlib.widgets import Slider
+from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpecFromSubplotSpec
+from functools import partial
+import copy
+
+
+def _getbackscatter(fit, inc=None, return_components=True):
+    '''
+    get backscatter values from a rtfits.Fits object
+    (possibly replace the incidence-angle array by an alternative one)
+
+
+    Parameters
+    ----------
+    fit : rt1.rtfits.Fits object
+        The fit-object whose backscatter should be returned.
+    inc : array-like, optional
+        The incidence-angles at which the backscatter values are intended
+        to be evaluated. If None, the incidence-angles of the provided
+        fit-object will be used (e.g. fit.R.t_0). The default is None.
+    return_components : bool, optional
+        Indicator if all components (tot, surf, vol, inter) or just the total
+        backscatter should be returned. The default is True.
+
+    Returns
+    -------
+    totsurfvolinter : dict
+        A dict with columns 'inc' and 'tot' ('surf','vol','inter')
+        corresponding to the incidence-angles and the backscatter-values
+        respectively.
+    '''
+
+    if inc is not None:
+        # copy initial values
+        orig_fixed_dict = copy.deepcopy(fit.fixed_dict)
+        orig_t_0 = copy.deepcopy(fit.R.t_0)
+        orig_p_0 = copy.deepcopy(fit.R.p_0)
+
+        assert len(fit.R.t_0) != len(inc), 'inc and fit.R.t_0 must have the ' \
+                                           + 'same length to allow correct ' \
+                                           + 'array-broadcasting of parameters'
+
+        fit.R.t_0 = inc
+        fit.R.p_0 = np.full_like(inc, 0.)
+
+        for key, val in fit.fixed_dict.items():
+            if val.shape != inc.shape:
+                print(f'shape {val.shape} of fixed_input for "{key}" does ' +
+                      'not match shape {inc.shape} of "inc" and is updated')
+                fit.fixed_dict[key] = np.repeat(val[:,0][:,np.newaxis],
+                                                inc.shape[1], axis=1)
+
+    totsurfvolinter = fit._calc_model(return_components=return_components)
+    if return_components is True:
+        totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                   totsurfvolinter))
+    else:
+        totsurfvolinter = dict(tot=totsurfvolinter)
+
+    # get incidence-angles
+    totsurfvolinter['incs'] = fit.R.t_0
+
+    # revert changes to the dicts
+    if inc is not None:
+        fit.fixed_dict = orig_fixed_dict
+        fit.R.t_0 = orig_t_0
+        fit.R.p_0 = orig_p_0
+
+    return totsurfvolinter
 
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
@@ -665,6 +736,11 @@ class plot:
 
         generate a plot showing the development of the fitted parameters
         and the residuals for each fit-iteration
+
+    - printsig0analysis
+        a widget to analyze the fit-results of individual timestamps within
+        the considered timeseries
+
     '''
 
     def __init__(self, fit=None, **kwargs):
@@ -1588,3 +1664,507 @@ class plot:
                 axrelerr.legend(ncol=5, loc='upper right')
 
         return f
+
+
+    def printsig0analysis(self, fit=None,
+                          dayrange1=10,
+                          dayrange2=1,
+                          printcomponents1=True,
+                          printcomponents2=True,
+                          secondslider=False,
+                          printfullt_0=True,
+                          printfulldata=True,
+                          dB = True,
+                          sig0=True,
+                          printparamnames=None):
+        '''
+        A widget to analyze the results of a rt1.rtfits.Fits object.
+        (In order to keep the widget responsive, a reference to the returns
+        must be kept!)
+
+
+        Parameters
+        ----------
+        fit : rt1.rtfits.Fits object
+            The used fit-object.
+        dayrange1, dayrange2 : int, optional
+            The number of consecutive measurements considered by the first/second
+            slider. The default is (10 / 1).
+        printcomponents1, printcomponents2 : bool, optional
+            Indicator if individual backscatter contributions (surface, volume,
+            interaction) should be plotted or not. The default is (True, True).
+        secondslider : bool, optional
+            Indicator if a second slider should be added. The default is False.
+        printfullt_0 : bool, optional
+            Indicator if backscatter-contributions should be evaluated over the
+            full incidence-angle range or just over the range coverd by the
+            dataset. The default is True.
+        printfulldata : bool, optional
+            Indicator if the range of the whole dataset should be indicated by
+            small dots or not. The default is True.
+        dB : bool, optional
+            Indicator if the backscatter-plot should be in linear-units or dB.
+            The default is True.
+        sig0 : bool, optional
+            Indicator if the backscatter-plot should represent sigma0 or intensity.
+            The default is True.
+        printparamnames : list of str, optional
+            A list of strings corresponding to the parameter-names whose results
+            should be added to the plot. The default is None.
+
+        Returns
+        -------
+        list
+            a reference to the matplotlib-objects corresponding to:
+            [figure, first_slider, (second_slider)].
+
+        '''
+
+        if fit is None:
+            fit = self.fit
+
+        # deepcopy the fit-object to avoid altering data
+        # TODO avoid copying if possible!
+        fit = copy.deepcopy(fit)
+        #int_Q = fit.R.int_Q
+
+        if printparamnames is None:
+            printparamnames = fit.res_dict.keys()
+
+        # gridspec for incidence-angle and parameter plots
+        gs = GridSpec(3, 2, height_ratios=[.65, .25, .1])
+        gs.update(top=0.98, left=0.1, right=0.9, bottom=0.025)
+        # sub-gridspec for sliders
+        gs2 = GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[2, :])
+
+
+        f = plt.figure(figsize=(10, 6))
+        # add plot-axes
+        ax = f.add_subplot(gs[0,0])
+        ax1 = f.add_subplot(gs[0,1])
+        ax2 = f.add_subplot(gs[1,:])
+
+        # add slider axes
+        slider_ax = f.add_subplot(gs2[0])
+        if secondslider:
+            slider_bx = f.add_subplot(gs2[1])
+
+        ax.grid()
+        ax1.grid()
+
+
+        # calculate backscatter values
+        data = fit.data
+        mask = fit.mask
+        sig0_vals = fit._calc_model(return_components=True)
+
+        # apply mask and convert to pandas dataframe
+        sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
+        sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
+
+        sig0_vals['data'] = np.ma.masked_array(data, mask)
+        sig0_vals['incs'] = np.ma.masked_array(fit.R.t_0, mask)
+        sig0_vals['indexes'] = fit.index
+
+        # convert to sig0 and dB if necessary
+        sig0_vals_I_linear = dict()
+        for key in ['tot', 'surf', 'vol', 'inter', 'data']:
+            if key not in sig0_vals: continue
+            sig0_vals[key] = dBsig0convert(sig0_vals[key], sig0_vals['incs'],
+                                           dB = dB, sig0=sig0,
+                                           fitdB=fit.dB,
+                                           fitsig0=fit.sig0)
+            sig0_vals_I_linear[key] = dBsig0convert(sig0_vals[key],
+                                                    sig0_vals['incs'],
+                                                    dB = False, sig0=False,
+                                                    fitdB=dB, fitsig0=sig0)
+        if printfullt_0 is True:
+            inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit.index))
+            newsig0_vals = _getbackscatter(fit, inc)
+            newsig0_vals_I_linear = dict()
+            for key in ['tot', 'surf', 'vol', 'inter']:
+                if key not in newsig0_vals: continue
+                newsig0_vals[key] = dBsig0convert(newsig0_vals[key],
+                                                  newsig0_vals['incs'],
+                                                  fitdB=fit.dB, fitsig0=fit.sig0,
+                                                  dB = dB, sig0=sig0)
+                newsig0_vals_I_linear[key] = dBsig0convert(newsig0_vals[key],
+                                                           newsig0_vals['incs'],
+                                                           dB = False, sig0=False,
+                                                           fitdB=dB, fitsig0=sig0)
+
+
+            ax.set_xlim([-2 + np.rad2deg(np.ma.min(newsig0_vals['incs'])),
+                          2 + np.rad2deg(np.ma.max(newsig0_vals['incs']))])
+            ax.set_ylim([np.min([np.ma.min(newsig0_vals['tot']), np.ma.min(sig0_vals['data'])]),
+                         np.max([np.ma.max(newsig0_vals['tot']), np.ma.max(sig0_vals['data'])])])
+        else:
+            ax.set_xlim([-2 + np.rad2deg(np.ma.min(sig0_vals['incs'][0])),
+                          2 + np.rad2deg(np.ma.max(sig0_vals['incs'][0]))])
+            ax.set_ylim([np.min([np.ma.min(sig0_vals['tot']), np.ma.min(sig0_vals['data'])]),
+                         np.max([np.ma.max(sig0_vals['tot']), np.ma.max(sig0_vals['data'])])])
+
+        # print full data points in the background
+        if printfulldata is True:
+            ax.plot(np.rad2deg(sig0_vals['incs']),
+                    sig0_vals['data'], lw=0., marker='.', ms=.5, color = 'k', alpha = 0.5)
+
+
+        # get upper and lower boundaries for the indicator-lines in the timeseries
+        indicator_bounds = [0,1]
+        try:
+            for key in printparamnames:
+                indicator_bounds = [np.min({**fit.res_dict,
+                                            **fit.fixed_dict}[key]),
+                                    np.max({**fit.res_dict,
+                                            **fit.fixed_dict}[key])]
+                # if a constant value is plotted, ensure that the boundaries
+                # are not equal
+                if indicator_bounds[0] == indicator_bounds[1]:
+                    indicator_bounds[1] = indicator_bounds[0]*1.1
+                    indicator_bounds[0] = indicator_bounds[0]*0.9
+                break
+        except:
+            pass
+
+        # plot WG and LAI from SURFEX and retrieval (if available)
+        axparamplot = ax2
+        handles, labels = [], []
+        i = 0
+        pos = 1 - len(printparamnames)//2 * 0.035
+        for key in printparamnames:
+            try:
+                if i > 0:
+                    axparamplot = ax2.twinx()
+                    axparamplot.tick_params(axis='y', which='both', labelsize=5, length=2)
+                    pos += 0.035
+                    axparamplot.spines["right"].set_position(('axes', pos))
+                    axparamplot.tick_params(axis='y', which='both', labelsize=5, length=2)
+
+                l, = axparamplot.plot(fit.index,
+                                      {**fit.res_dict,
+                                       **fit.fixed_dict}[key],
+                                       label = key, color='C' + str(i))
+                # add handles and labels to legend
+                handles += axparamplot.get_legend_handles_labels()[0]
+                labels += axparamplot.get_legend_handles_labels()[1]
+
+                # change color of axis to fit color of lines
+                axparamplot.yaxis.label.set_color(l.get_color())
+                axparamplot.tick_params(axis='y', colors=l.get_color())
+                # shift twin-axes if necessary
+                i += 1
+            except:
+                pass
+        axparamplot.legend(handles=handles, labels=labels, loc='upper center',
+                           ncol=len(printparamnames))
+
+        ax2.xaxis.set_minor_locator(mpl.dates.MonthLocator())
+        ax2.xaxis.set_minor_formatter(mpl.dates.DateFormatter('%m'))
+        ax2.xaxis.set_major_locator(mpl.dates.YearLocator())
+        ax2.xaxis.set_major_formatter(mpl.dates.DateFormatter('\n%Y'))
+
+
+        # -----------------------------------------------------------
+        # plot lines
+        def plotlines(dayrange, printcomponents, printfullt_0,
+                      styledict_dict, styledict_fullt0_dict):
+
+            incs = np.rad2deg(sig0_vals['incs'])
+
+            lines = []
+            for day in np.arange(0, dayrange, 1):
+                lines += ax.plot(incs[day], sig0_vals['tot'][day], **styledict_dict['tot'])
+                if printcomponents:
+                    lines += ax.plot(incs[day], sig0_vals['surf'][day], **styledict_dict['surf'])
+                    lines += ax.plot(incs[day], sig0_vals['vol'][day], **styledict_dict['vol'])
+                    if fit.R.int_Q is True:
+                        lines += ax.plot(incs[day], sig0_vals['inter'][day], **styledict_dict['inter'])
+
+                lines += ax.plot(incs[day], sig0_vals['data'][day], **styledict_dict['data'])
+                lines += ax2.plot([sig0_vals['indexes'][day]]*2, indicator_bounds, **styledict_dict['indicator'])
+
+            lines_frac = []
+            for day in np.arange(0, dayrange, 1):
+                lintot = sig0_vals_I_linear['tot'][day]
+                linsurf = sig0_vals_I_linear['surf'][day]
+                linvol = sig0_vals_I_linear['vol'][day]
+
+                if fit.R.int_Q is True:
+                    lininter = sig0_vals_I_linear['inter'][day]
+
+                lines_frac += ax1.plot(incs[day], linsurf/lintot, **styledict_dict['surf'])
+                lines_frac += ax1.plot(incs[day], linvol/lintot, **styledict_dict['vol'])
+                if fit.R.int_Q is True:
+                    lines_frac += ax1.plot(incs[day], lininter/lintot, **styledict_dict['inter'])
+
+            # plot full-incidence-angle lines
+            linesfull = []
+            lines_frac_full = []
+            if printfullt_0 is True:
+                newincs = np.rad2deg(newsig0_vals['incs'])
+
+                for day in np.arange(0, dayrange, 1):
+                    linesfull += ax.plot(np.rad2deg(newsig0_vals['incs'][day]), newsig0_vals['tot'][day], **styledict_fullt0_dict['tot'])
+                    if printcomponents:
+                        linesfull += ax.plot(newincs[day], newsig0_vals['surf'][day], **styledict_fullt0_dict['surf'])
+                        linesfull += ax.plot(newincs[day], newsig0_vals['vol'][day], **styledict_fullt0_dict['vol'])
+                        if fit.R.int_Q is True:
+                            linesfull += ax.plot(newincs[day], newsig0_vals['inter'][day], **styledict_fullt0_dict['inter'])
+                for day in np.arange(0, dayrange, 1):
+                    lintot = newsig0_vals_I_linear['tot'][day]
+                    linsurf = newsig0_vals_I_linear['surf'][day]
+                    linvol = newsig0_vals_I_linear['vol'][day]
+                    if fit.R.int_Q is True:
+                        lininter = newsig0_vals_I_linear['inter'][day]
+
+                    lines_frac_full += ax1.plot(newincs[day], linsurf/lintot, **styledict_fullt0_dict['surf'])
+                    lines_frac_full += ax1.plot(newincs[day], linvol/lintot, **styledict_fullt0_dict['vol'])
+                    if fit.R.int_Q is True:
+                        lines_frac_full += ax1.plot(newincs[day], lininter/lintot, **styledict_fullt0_dict['inter'])
+            return lines, lines_frac, linesfull, lines_frac_full
+
+        # plot first set of lines
+        styletot      = {'lw':1, 'marker':'o', 'ms':3, 'color':'k'}
+        stylevol   = {'lw':1, 'marker':'o', 'ms':3, 'color':'g', 'markerfacecolor':'gray'}
+        stylesurf  = {'lw':1, 'marker':'o', 'ms':3, 'color':'y', 'markerfacecolor':'gray'}
+        styleinter = {'lw':1, 'marker':'o', 'ms':3, 'color':'c', 'markerfacecolor':'gray'}
+        styledata  = {'lw':0, 'marker':'s', 'ms':5, 'color':'k', 'markerfacecolor':'gray'}
+        styleindicator = {'c':'k'}
+
+        stylefullt0tot = {'lw':.25, 'color':'k'}
+        stylefullt0vol = {'lw':.25, 'color':'g'}
+        stylefullt0surf = {'lw':.25, 'color':'y'}
+        stylefullt0inter = {'lw':.25, 'color':'c'}
+
+        styledict_dict = dict(zip(['tot', 'surf', 'vol', 'inter', 'data', 'indicator'],
+                                  [styletot, stylevol, stylesurf, styleinter, styledata, styleindicator]))
+        styledict_fullt0_dict = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                  [stylefullt0tot, stylefullt0vol, stylefullt0surf, stylefullt0inter]))
+
+        lines, lines_frac, linesfull, lines_frac_full = plotlines(dayrange1, printcomponents1, printfullt_0,
+                                                                  styledict_dict, styledict_fullt0_dict)
+
+
+
+        if secondslider:
+            # plot second set of lines
+            styletot       = {'lw':1, 'marker':'o', 'ms':3, 'color':'r', 'dashes':[5, 5],  'markerfacecolor':'none'}
+            stylevol    = {'lw':1, 'marker':'o', 'ms':3, 'color':'g', 'dashes':[5, 5],  'markerfacecolor':'r'}
+            stylesurf   = {'lw':1, 'marker':'o', 'ms':3, 'color':'y', 'dashes':[5, 5],  'markerfacecolor':'r'}
+            styleinter  = {'lw':1, 'marker':'o', 'ms':3, 'color':'c', 'dashes':[5, 5],  'markerfacecolor':'r'}
+            styledata   = {'lw':0, 'marker':'s', 'ms':5, 'color':'r', 'markerfacecolor':'none'}
+            styleindicator = {'c':'gray', 'ls':'--'}
+
+            stylefullt0tot = {'lw':.25, 'color':'r', 'dashes':[5, 5]}
+            stylefullt0vol = {'lw':.25, 'color':'g', 'dashes':[5, 5]}
+            stylefullt0surf = {'lw':.25, 'color':'y', 'dashes':[5, 5]}
+            stylefullt0inter = {'lw':.25, 'color':'c', 'dashes':[5, 5]}
+
+            styledict_dict = dict(zip(['tot', 'surf', 'vol', 'inter', 'data', 'indicator'],
+                                  [styletot, stylevol, stylesurf, styleinter, styledata, styleindicator]))
+            styledict_fullt0_dict = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                      [stylefullt0tot, stylefullt0vol, stylefullt0surf, stylefullt0inter]))
+
+            lines2, lines_frac2, linesfull2, lines_frac_full2 = plotlines(dayrange2, printcomponents2, printfullt_0,
+                                                                          styledict_dict, styledict_fullt0_dict)
+
+
+
+        # define function to update lines based on slider-input
+        def animate(day0, lines, linesfull,
+                    lines_frac, lines_frac_full,
+                    dayrange, printcomponents,
+                    label):
+
+            day0 = int(day0)
+
+
+            label.set_position([day0, label.get_position()[1]])
+            if dayrange == 1:
+                label.set_text(sig0_vals['indexes'][day0].strftime('%d. %b %Y %H:%M'))
+            elif dayrange > 1:
+                label.set_text(f"{sig0_vals['indexes'][day0].strftime('%d. %b %Y %H:%M')} - {sig0_vals['indexes'][day0 + dayrange -1].strftime('%d. %b %Y %H:%M')}")
+
+
+            maxdays = len(sig0_vals['incs'])
+            i = 0
+            for day in np.arange(day0, day0 + dayrange, 1):
+                if day >= maxdays: continue
+                lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                lines[i].set_ydata(sig0_vals['tot'][day])  # update the data
+                i += 1
+                if printcomponents:
+                    lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                    lines[i].set_ydata(sig0_vals['surf'][day])  # update the data
+                    i += 1
+                    lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                    lines[i].set_ydata(sig0_vals['vol'][day])  # update the data
+                    if fit.R.int_Q is True:
+                       i += 1
+                       lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                       lines[i].set_ydata(sig0_vals['inter'][day])  # update the data
+                    i += 1
+
+                # update data measurements
+                lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
+                lines[i].set_ydata(sig0_vals['data'][day])
+                i += 1
+                # update day-indicator line
+                lines[i].set_xdata([sig0_vals['indexes'][day]]*2)
+                i += 1
+
+            i = 0
+            for day in np.arange(day0, day0 + dayrange, 1):
+                if day >= maxdays: continue
+                lintot = sig0_vals_I_linear['tot'][day]
+                linsurf = sig0_vals_I_linear['surf'][day]
+                linvol = sig0_vals_I_linear['vol'][day]
+                if fit.R.int_Q is True:
+                    lininter = sig0_vals_I_linear['inter'][day]
+
+                lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                lines_frac[i].set_ydata(linsurf/lintot)  # update the data
+                i += 1
+                lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                lines_frac[i].set_ydata(linvol/lintot)  # update the data
+                if fit.R.int_Q is True:
+                    i += 1
+                    lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))  # update the data
+                    lines_frac[i].set_ydata(lininter/lintot)  # update the data
+                i += 1
+
+            if printfullt_0 is True:
+                i = 0
+                for day in np.arange(day0, day0 + dayrange, 1):
+                    if day >= maxdays: continue
+                    linesfull[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                    linesfull[i].set_ydata(newsig0_vals['tot'][day])  # update the data
+                    i += 1
+                    if printcomponents:
+                        linesfull[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                        linesfull[i].set_ydata(newsig0_vals['surf'][day])  # update the data
+                        i += 1
+                        linesfull[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                        linesfull[i].set_ydata(newsig0_vals['vol'][day])  # update the data
+                        if fit.R.int_Q is True:
+                            i += 1
+                            linesfull[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                            linesfull[i].set_ydata(newsig0_vals['inter'][day])  # update the data
+                        i += 1
+                i = 0
+                for day in np.arange(day0, day0 + dayrange, 1):
+                    if day >= maxdays: continue
+                    lintot = newsig0_vals_I_linear['tot'][day]
+                    linsurf = newsig0_vals_I_linear['surf'][day]
+                    linvol = newsig0_vals_I_linear['vol'][day]
+                    if fit.R.int_Q is True:
+                        lininter = newsig0_vals_I_linear['inter'][day]
+
+                    lines_frac_full[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                    lines_frac_full[i].set_ydata(linsurf/lintot)  # update the data
+                    i += 1
+                    lines_frac_full[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                    lines_frac_full[i].set_ydata(linvol/lintot)  # update the data
+                    if fit.R.int_Q is True:
+                        i += 1
+                        lines_frac_full[i].set_xdata(np.rad2deg(newsig0_vals['incs'][day]))  # update the data
+                        lines_frac_full[i].set_ydata(lininter/lintot)  # update the data
+                    i += 1
+
+            return lines
+
+        # define function to update slider-range based on zoom
+        def updatesliderboundary(evt, slider):
+            indexes = sig0_vals['indexes']
+            # Get the range for the new area
+            xstart, ystart, xdelta, ydelta = ax2.viewLim.bounds
+            xend = xstart + xdelta
+
+            # convert to datetime-objects and ensure that they are in the
+            # same time-zone as the sig0_vals indexes
+            xend = mpl.dates.num2date(xend).replace(tzinfo=sig0_vals['indexes'].tzinfo)
+            xstart = mpl.dates.num2date(xstart).replace(tzinfo=sig0_vals['indexes'].tzinfo)
+
+            zoomindex = np.where(np.logical_and(indexes > xstart, indexes < xend))[0]
+            slider.valmin = zoomindex[0] - 1
+            slider.valmax = zoomindex[-1] + 1
+
+            slider.ax.set_xlim(slider.valmin,
+                               slider.valmax)
+
+        # create the slider
+        a_slider = Slider(slider_ax,            # the axes object containing the slider
+                          'solid lines',        # the name of the slider parameter
+                          0,                    # minimal value of the parameter
+                          len(fit.index) - 1, # maximal value of the parameter
+                          valinit=0,            # initial value of the parameter
+                          valfmt="%i",          # print slider-value as integer
+                          valstep=1,
+                          closedmax=True)
+        a_slider.valtext.set_visible(False)
+
+        slider_ax.set_xticks(np.arange(slider_ax.get_xlim()[0] - 1,
+                                       slider_ax.get_xlim()[1] + 1, 1, dtype=int))
+        slider_ax.tick_params(bottom=False, labelbottom=False)
+        slider_ax.grid()
+
+        label = slider_ax.text(0, 0.5, f"{sig0_vals['indexes'][0].strftime('%d. %b %Y %H:%M')}",
+                               horizontalalignment='center', verticalalignment='center',
+                               fontsize=8, bbox=dict(facecolor='w', alpha=0.75, boxstyle='round,pad=.2'))
+
+        # set slider to call animate function when changed
+        a_slider.on_changed(partial(animate,
+                                    lines=lines,
+                                    linesfull=linesfull,
+                                    lines_frac = lines_frac,
+                                    lines_frac_full = lines_frac_full,
+                                    dayrange=dayrange1,
+                                    printcomponents=printcomponents1,
+                                    label=label))
+
+        # update slider boundary with respect to zoom of second plot
+        ax2.callbacks.connect('xlim_changed', partial(updatesliderboundary,
+                                                      slider=a_slider))
+
+        if secondslider:
+
+            # here we create the slider
+            b_slider = Slider(slider_bx,             # the axes object containing the slider
+                              'dashed lines',        # the name of the slider parameter
+                              0,                     # minimal value of the parameter
+                              len(fit.index) - 1,  # maximal value of the parameter
+                              valinit=0,             # initial value of the parameter
+                              valfmt="%i",
+                              valstep=1,
+                              closedmax=True)
+
+            b_slider.valtext.set_visible(False)
+
+            slider_bx.set_xticks(np.arange(slider_bx.get_xlim()[0] - 1,
+                                           slider_bx.get_xlim()[1] + 1, 1, dtype=int))
+            slider_bx.tick_params(bottom=False, labelbottom=False)
+            slider_bx.grid()
+
+            label2 = slider_bx.text(0, 0.5, f"{sig0_vals['indexes'][0].strftime('%d. %b %Y %H:%M')}",
+                                   horizontalalignment='center', verticalalignment='center',
+                                   fontsize=8, bbox=dict(facecolor='w', alpha=0.75, boxstyle='round,pad=.2'))
+
+            b_slider.on_changed(partial(animate,
+                                        lines=lines2,
+                                        linesfull=linesfull2,
+                                        lines_frac = lines_frac2,
+                                        lines_frac_full = lines_frac_full2,
+                                        dayrange=dayrange2,
+                                        printcomponents=printcomponents2,
+                                        label=label2))
+
+            ax2.callbacks.connect('xlim_changed', partial(updatesliderboundary,
+                                                          slider=b_slider))
+
+
+        # !!! a reference to the sliders must be returned in order to be interactive !!!
+        if secondslider:
+            return f, a_slider, b_slider
+        else:
+            return f, a_slider
