@@ -2680,14 +2680,14 @@ class plot:
             axbox0 = plt.axes([val.ax.get_position().x0,
                                val.ax.get_position().y1,
                                0.05, 0.025])
-            text_box0 = TextBox(axbox0, '', initial=str(bounds[key][0]))
+            text_box0 = TextBox(axbox0, '', initial=str(round(bounds[key][0]), 4))
             text_box0.on_submit(partial(submit, key=key, minmax=0))
 
 
             axbox1 = plt.axes([val.ax.get_position().x1 - 0.05,
                                val.ax.get_position().y1,
                                0.05, 0.025])
-            text_box1 = TextBox(axbox1, '', initial=str(bounds[key][1]))
+            text_box1 = TextBox(axbox1, '', initial=str(round(bounds[key][1]), 4))
             text_box1.on_submit(partial(submit, key=key, minmax=1))
 
 
