@@ -2665,6 +2665,10 @@ class plot:
                 slider.valmax = float(val)
                 slider.ax.set_xlim(None, slider.valmax)
                 maxparams[key] = float(val)
+
+            # call animate to update ranges
+            animate(slider.val, key)
+
             f.canvas.draw_idle()
             plt.draw()
 
