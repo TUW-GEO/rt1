@@ -133,6 +133,9 @@ def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
            a dict with keys 'tot', ('surf', 'vol', ('inter'), ('_fnevals'))
 
     '''
+
+    params = params.copy()
+
     if fit is not None:
         if set_V_SRF is None: set_V_SRF = fit.set_V_SRF
         if 'bsf' not in params: params['bsf'] = fit.R.bsf
