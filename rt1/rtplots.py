@@ -92,8 +92,8 @@ def _evalfit(fit, inc=None, return_components=True):
 
 
 def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
-                   dB=True, sig0=True, int_Q = False, return_fnevals=False,
-                   **kwargs):
+                    dB=True, sig0=True, int_Q = False, return_fnevals=False,
+                    **kwargs):
     '''
     get backscatter values based on given configuration and parameter values
     (used in analyzemodel)
@@ -133,7 +133,6 @@ def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
            a dict with keys 'tot', ('surf', 'vol', ('inter'), ('_fnevals'))
 
     '''
-
     if fit is not None:
         if set_V_SRF is None: set_V_SRF = fit.set_V_SRF
         if 'bsf' not in params: params['bsf'] = fit.R.bsf
@@ -2634,7 +2633,8 @@ class plot:
             elif printvariationQ[label] is False:
                 printvariationQ[label] = True
 
-            animate(paramslider[label].val, label)
+            animate(paramslider[label].val, key=label)
+
             plt.draw()
 
         buttons.on_clicked(buttonfunc)
@@ -2662,7 +2662,7 @@ class plot:
                 maxparams[key] = float(val)
 
             # call animate to update ranges
-            animate(slider.val, key)
+            animate(params[key], key=key)
 
             f.canvas.draw_idle()
             plt.draw()
