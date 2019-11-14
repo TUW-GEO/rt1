@@ -2404,7 +2404,6 @@ class plot:
 
         inc = np.array(np.deg2rad(np.linspace(1, 89, N_param)))
 
-
         # get parameter ranges from defdict and fit
         minparams, maxparams, startparams, fixparams = {}, {}, {}, {}
         for key, val in defdict.items():
@@ -2445,7 +2444,6 @@ class plot:
 
         _fnevals_input = modelresult.pop('_fnevals')
 
-
         f = plt.figure(figsize=(12,9))
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
                       # generate figure grid and populate with axes
@@ -2455,9 +2453,7 @@ class plot:
                            )
         gsbuttonslider = GridSpec(1 + len(minparams)//2, 1 + 3 ,
                        height_ratios=[8] + [1]*(len(minparams) // 2),
-                       width_ratios=[.75, 1, 1, 1]
-                       )
-
+                       width_ratios=[.75, 1, 1, 1])
 
         gs.update(wspace=.3)
         gsbuttonslider.update(wspace=.3, bottom=0.05)
@@ -2632,7 +2628,6 @@ class plot:
                     label = key
 
             #ax.collections.clear()
-
             if printvariationQ[label] is True:
                 ax.collections.clear()
                 printvariationQ[label] = False
@@ -2680,20 +2675,17 @@ class plot:
             axbox0 = plt.axes([val.ax.get_position().x0,
                                val.ax.get_position().y1,
                                0.05, 0.025])
-            text_box0 = TextBox(axbox0, '', initial=str(round(bounds[key][0]), 4))
+            text_box0 = TextBox(axbox0, '', initial=str(round(bounds[key][0], 4)))
             text_box0.on_submit(partial(submit, key=key, minmax=0))
 
 
             axbox1 = plt.axes([val.ax.get_position().x1 - 0.05,
                                val.ax.get_position().y1,
                                0.05, 0.025])
-            text_box1 = TextBox(axbox1, '', initial=str(round(bounds[key][1]), 4))
+            text_box1 = TextBox(axbox1, '', initial=str(round(bounds[key][1], 4)))
             text_box1.on_submit(partial(submit, key=key, minmax=1))
 
 
             textboxes += [text_box0, text_box1]
-
-
-
 
         return f, paramslider, buttons, textboxes
