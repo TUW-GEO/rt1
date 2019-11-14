@@ -2,34 +2,35 @@
 Class for quick visualization of results and used phasefunctions
 """
 
-import sympy as sp
-import numpy as np
+from functools import partial
+import copy
 import datetime
+
+import numpy as np
+import sympy as sp
 import pandas as pd
 pd.plotting.register_matplotlib_converters()
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.colors import Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.widgets import Slider, CheckButtons
+from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpecFromSubplotSpec
 
 from .general_functions import rectangularize, dBsig0convert
+from rt1.rt1 import RT1
+
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
 
-from matplotlib.widgets import Slider
-from matplotlib.gridspec import GridSpec
-from matplotlib.gridspec import GridSpecFromSubplotSpec
-from functools import partial
-import copy
 
-
-def _getbackscatter(fit, inc=None, return_components=True):
+def _evalfit(fit, inc=None, return_components=True):
     '''
-    get backscatter values from a rtfits.Fits object
+    get backscatter timeseries values from a rtfits.Fits object
     (possibly replace the incidence-angle array by an alternative one)
-
+    (used in printsig0analysis)
 
     Parameters
     ----------
@@ -88,6 +89,75 @@ def _getbackscatter(fit, inc=None, return_components=True):
         fit.R.p_0 = orig_p_0
 
     return totsurfvolinter
+
+
+def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
+                   dB=True, sig0=True, int_Q = False, return_fnevals=False,
+                   **kwargs):
+    '''
+    get backscatter values based on given configuration and parameter values
+    (used in analyzemodel)
+
+    Parameters
+    ----------
+    params : dict
+        A dict containing the values for ALL parameters involved.
+    fit : rt1.rtfits.Fits, optional
+        Optionally provide a fits-object from which `set_V_SRF`, `inc` and
+        `params['bsf']` will be retrieved if not provided explicitly.
+        The default is None.
+    set_V_SRF : callable, optional
+        A setter function for V and SRF. (see rt1.rtfits.Fits for details)
+        The default is None.
+    inc : array-like, optional
+        The incidence-angles to be used in the calculation. The default is None
+    dB : bool, optional
+        Indicator if the values should be returned in linear-units or dB.
+        The default is True.
+    sig0 : bool, optional
+        Indicator if intensity- or sigma-0 values should be returned.
+        ( sig0 = 4 pi cos(theta) I ). The default is True.
+    int_Q : bool, optional
+        Indicator if the interaction-term should be evaluated.
+        The default is False.
+    return_fnevals : bool, optional
+        Indicator if the obtained _fnevals functions should be returned.
+        (if true, the returned dict will contain a key '_fnevals' with
+        the fnevals-function). The default is False.
+    **kwargs :
+        kwargs passed to the initialization of the rt1.RT1 object.
+
+    Returns
+    -------
+    tsvi : dict
+           a dict with keys 'tot', ('surf', 'vol', ('inter'), ('_fnevals'))
+
+    '''
+
+    if fit is not None:
+        if set_V_SRF is None: set_V_SRF = fit.set_V_SRF
+        if 'bsf' not in params: params['bsf'] = fit.R.bsf
+        # get incidence-angle from fit if inc is not provided explicitly
+        if inc is None: inc = copy.deepcopy(fit.inc)
+
+    bsf = params.pop('bsf', 0)
+
+    # set V and SRF
+    V, SRF = set_V_SRF(**params)
+
+    R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
+            V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
+            int_Q=int_Q, **kwargs)
+
+    tsvi = dict(zip(['tot','surf','vol','inter'], R.calc()))
+
+    # convert to sig0 and dB if required
+    for key, val in tsvi.items():
+        tsvi[key] = dBsig0convert(tsvi[key], inc, dB, sig0, False, False)
+
+    if return_fnevals is True: tsvi['_fnevals'] = R._fnevals
+
+    return tsvi
 
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
@@ -891,18 +961,18 @@ class plot:
         # get input dataset
         data = np.ma.masked_array(fit.data, fit.mask)
 
-        def dBsig0convert(val):
-            # if results are provided in dB convert them to linear units
-            if fit.dB is True: val = 10**(val/10.)
-            # convert sig0 to intensity
-            if sig0 is False and fit.sig0 is True:
-                val = val/(4.*np.pi*np.cos(inc))
-            # convert intensity to sig0
-            if sig0 is True and fit.sig0 is False:
-                val = 4.*np.pi*np.cos(inc)*val
-            # if dB output is required, convert to dB
-            if dB is True: val = 10.*np.log10(val)
-            return val
+        # def dBsig0convert(val):
+        #     # if results are provided in dB convert them to linear units
+        #     if fit.dB is True: val = 10**(val/10.)
+        #     # convert sig0 to intensity
+        #     if sig0 is False and fit.sig0 is True:
+        #         val = val/(4.*np.pi*np.cos(inc))
+        #     # convert intensity to sig0
+        #     if sig0 is True and fit.sig0 is False:
+        #         val = 4.*np.pi*np.cos(inc)*val
+        #     # if dB output is required, convert to dB
+        #     if dB is True: val = 10.*np.log10(val)
+        #     return val
 
         # calculate individual contributions
         contrib_array = fit._calc_model(R=fit.R,
@@ -925,7 +995,10 @@ class plot:
 
         # convert units
         complist = [i for i in contrib.keys() if i not in ['inc']]
-        contrib[complist] = contrib[complist].apply(dBsig0convert)
+        contrib[complist] = contrib[complist].apply(dBsig0convert,
+                                                    inc=inc, dB=dB, sig0=sig0,
+                                                    fitdB=fit.dB,
+                                                    fitsig0=fit.sig0)
 
 
         # drop unneeded columns
@@ -1601,7 +1674,7 @@ class plot:
 
         f = plt.figure(figsize=(15,10))
         f.subplots_adjust(top=0.98, left=0.05, right=0.95)
-        gs = mpl.gridspec.GridSpec(4, len(interjacs),
+        gs = Gridspec(4, len(interjacs),
                                #width_ratios=[1, 2],
                                #height_ratios=[1, 2, 1]
                                )
@@ -1780,7 +1853,7 @@ class plot:
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
             inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit.index))
-            newsig0_vals = _getbackscatter(fit, inc)
+            newsig0_vals = _evalfit(fit, inc)
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
                 if key not in newsig0_vals: continue
@@ -2168,3 +2241,311 @@ class plot:
             return f, a_slider, b_slider
         else:
             return f, a_slider
+
+
+    def analyzemodel(self, fit=None, set_V_SRF=None, defdict=None, inc=None,
+                     labels = dict(), dB=True, sig0=True, int_Q=False,
+                     fillcomponents=True):
+        '''
+        Analyze the range of backscatter for a given model-configuration
+        based on the defined parameter-ranges
+
+        Parameters
+        ----------
+        fit : rt1.rtfits.Fits, optional
+            Optionally provide a fits-object from which `set_V_SRF`, `inc` and
+            `params['bsf']` will be retrieved if not provided explicitly.
+            The default is None.
+        set_V_SRF : callable, optional
+            A setter function for V and SRF. (see rt1.rtfits.Fits for details)
+            The default is None.
+        defdict : dict, optional
+            A defdict used to define the rt1-configuration.
+            (see rt1.rtfits.Fits for details). The default is None.
+        inc : array-like, optional
+            The incidence-angles to be used in the calculation. The default is None
+        labels : dict, optional
+            A dict with labels that will be used to replace the parameter-names.
+            (e.g. {'parameter' : 'parameter_label', ....})
+            The default is {}.
+        dB : bool, optional
+            Indicator if the plot is in linear-units or dB. The default is True.
+        sig0 : bool, optional
+            Indicator if intensity- or sigma-0 values should be plotted.
+            ( sig0 = 4 pi cos(theta) I ). The default is True.
+        int_Q : bool, optional
+            Indicator if the interaction-term should be evaluated.
+            The default is False.
+        fillcomponents : bool, optional
+            Indicator if the variabilities of the components should
+            be indicated by fillings. The default is True.
+
+        Returns
+        -------
+        f, slider, buttons
+            the matplotlib figure, slider and button instances
+
+        '''
+
+        if fit is None:
+            fit = self.fit
+
+        if fit is not None:
+            _fnevals_input = fit.R._fnevals
+            fitdB = fit.dB
+            fitsig0 = fit.sig0
+            defdict = fit.defdict
+        else:
+            _fnevals_input = None
+            fitdB = dB
+            fitsig0 = sig0
+
+        # number of measurements
+        N_param = 100
+
+        inc = np.array(np.deg2rad(np.linspace(1, 89, N_param)))
+
+
+        # get parameter ranges from defdict and fit
+        minparams, maxparams, startparams, fixparams = {}, {}, {}, {}
+        for key, val in defdict.items():
+            if val[0] is True:
+                 minparams[key] = val[3][0][0]
+                 maxparams[key] = val[3][1][0]
+                 startparams[key] = val[1]
+            if val[0] is False and isinstance(val[1], (int, float)):
+                     startparams[key] = val[1]
+                     fixparams[key] = val[1]
+            if val[0] is False and val[1] == 'auxiliary':
+                assert (key in fit.dataset or
+                        key in fit.fixed_dict), (f'auxiliary dataset for {key} ' +
+                                                 'not found in fit.dataset or ' +
+                                                 'fit.fixed_dict')
+                if key in fit.dataset:
+                    minparams[key] = fit.dataset[key].min()
+                    maxparams[key] = fit.dataset[key].max()
+                    startparams[key] = fit.dataset[key].mean()
+
+                elif key in fit.fixed_dict:
+                    minparams[key] = fit.fixed_dict[key].min()
+                    maxparams[key] = fit.fixed_dict[key].max()
+                    startparams[key] = fit.fixed_dict[key].mean()
+
+        if 'bsf' not in defdict:
+            startparams['bsf']  = fit.R.bsf
+            fixparams['bsf']  = fit.R.bsf
+
+        modelresult = _getbackscatter(fit=fit,
+                                     set_V_SRF=set_V_SRF,
+                                     int_Q=int_Q,
+                                     inc=inc,
+                                     params=startparams,
+                                     dB=dB, sig0=sig0,
+                                     _fnevals_input = _fnevals_input,
+                                     return_fnevals = True)
+
+        _fnevals_input = modelresult.pop('_fnevals')
+
+
+        f = plt.figure(figsize=(12,9))
+        f.subplots_adjust(top=0.93, right=0.98, left=0.07)
+                      # generate figure grid and populate with axes
+        gs = Gridspec(1 + len(minparams)//2, 1 + 3 ,
+                           height_ratios=[8] + [1]*(len(minparams) // 2),
+                           width_ratios=[.75, 1, 1, 1]
+                           )
+        gsbuttonslider = Gridspec(1 + len(minparams)//2, 1 + 3 ,
+                       height_ratios=[8] + [1]*(len(minparams) // 2),
+                       width_ratios=[.75, 1, 1, 1]
+                       )
+
+
+        gs.update(wspace=.3)
+        gsbuttonslider.update(wspace=.3, bottom=0.05)
+
+        ax = plt.subplot(gs[0,0:])
+        paramaxes = {}
+        col = 0
+        for i, key in enumerate(minparams):
+            if i%3 == 0: col += 1
+            paramaxes[key] = plt.subplot(gsbuttonslider[col, 1 + i%3])
+
+        buttonax = plt.subplot(gsbuttonslider[1:, 0])
+
+
+        # plot data
+        try:
+            ax.plot(fit.R.t_0.T,
+                    dBsig0convert(fit.data.T, fit.R.t_0.T,
+                                  dB, sig0, fitdB, fitsig0), '.')
+        except:
+            pass
+
+        # plot initial curves
+        ltot, = ax.plot(inc, modelresult['tot'], 'k',
+                        label = 'total contribution')
+
+        lsurf, = ax.plot(inc, modelresult['surf'], 'b',
+                         label = 'surface contribution')
+
+        lvol, = ax.plot(inc, modelresult['vol'], 'g',
+                        label = 'volume contribution')
+
+        if int_Q is True:
+            lint, = ax.plot(inc, modelresult['inter'], 'y',
+                            label = 'interaction contribution')
+
+
+        if dB is True: ax.set_ylim(-35, 5)
+        ax.set_xticks(np.deg2rad(np.arange(5,95, 10)))
+        ax.set_xticklabels(np.arange(5,95, 10))
+
+        # a legend for the lines
+        leg0 = ax.legend(ncol=4, bbox_to_anchor=(.5, 1.1), loc='upper center')
+        # add the line-legend as individual artist
+        ax.add_artist(leg0)
+
+        if dB is True and sig0 is True: ax.set_ylabel(r'$\sigma_0$ [dB]')
+        if dB is True and sig0 is False: ax.set_ylabel(r'$I/I_0$ [dB]')
+        if dB is False and sig0 is True: ax.set_ylabel(r'$\sigma_0$')
+        if dB is False and sig0 is False: ax.set_ylabel(r'$I/I_0$')
+
+        ax.set_xlabel(r'$\theta_0$ [deg]')
+
+
+        # create the slider for the parameter
+        paramslider = {}
+        buttonlabels = []
+        for key, val in minparams.items():
+            # replace label of key with provided label
+            if key in labels:
+                keylabel = labels[key]
+            else:
+                keylabel = key
+            buttonlabels += [keylabel]
+
+            startval = startparams[key]
+
+            paramslider[key] = Slider(paramaxes[key], # axes object for the slider
+                              keylabel,               # name of the slider
+                              minparams[key],         # minimal value
+                              maxparams[key],         # maximal value
+                              startval,               # initial value
+                              #valfmt="%i"            # slider-value as integer
+                              color='gray')
+            paramslider[key].label.set_position([.05, 0.5])
+            paramslider[key].label.set_bbox(dict(boxstyle="round,pad=0.5",
+                                                 facecolor='w'))
+            paramslider[key].label.set_horizontalalignment('left')
+            paramslider[key].valtext.set_position([.8, 0.5])
+
+
+        buttons = CheckButtons(buttonax, buttonlabels,
+                               [False for i in buttonlabels])
+
+        params = startparams.copy()
+        # define function to update lines based on slider-input
+        def animate(value, key):
+            #params = copy.deepcopy(startparams)
+
+            params[key] = value
+            modelresult = _getbackscatter(fit=fit, set_V_SRF=set_V_SRF,
+                                         int_Q=int_Q, inc=inc,
+                                         params=params, dB=dB, sig0=sig0,
+                                         _fnevals_input = _fnevals_input)
+            # update the data
+            ltot.set_ydata(modelresult['tot'].T)
+            lsurf.set_ydata(modelresult['surf'].T)
+            lvol.set_ydata(modelresult['vol'].T)
+            if int_Q is True: lint.set_ydata(modelresult['inter'].T)
+
+            # poverprint boundaries
+            hatches = ['//', '\\\ ', '+', 'oo', '--', '..']
+            colors = ['C' + str(i) for i in range(10)]
+            ax.collections.clear()
+            legendhandles = []
+            for i, [key_i, key_Q] in enumerate(printvariationQ.items()):
+                # replace label of key_i with provided label
+                if key_i in labels:
+                    keylabel = labels[key_i]
+                else:
+                    keylabel = key_i
+
+                # reset color of text-backtround
+                paramslider[key_i].label.get_bbox_patch().set_facecolor('w')
+                if key_Q is True:
+                    # set color of text-background to hatch-color
+                    #paramslider[key_i].label.set_color(colors[i%len(colors)])
+                    paramslider[key_i].label.get_bbox_patch(
+                        ).set_facecolor(colors[i%len(colors)])
+
+                    fillparams = params.copy()
+                    fillparams[key_i] = minparams[key_i]
+
+                    modelresultmin = _getbackscatter(
+                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
+                        params=fillparams, dB=dB, sig0=sig0,
+                        _fnevals_input = _fnevals_input)
+
+                    fillparams[key_i] = maxparams[key_i]
+
+                    modelresultmax = _getbackscatter(
+                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
+                        params=fillparams, dB=dB, sig0=sig0,
+                        _fnevals_input = _fnevals_input)
+
+                    legendhandles += [ax.fill_between(
+                        inc, modelresultmax['tot'], modelresultmin['tot'],
+                        facecolor='none', hatch=hatches[i%len(hatches)],
+                        edgecolor=colors[i%len(colors)],
+                        label = 'total variability (' + keylabel + ')')]
+
+                    if fillcomponents is True:
+
+                        legendhandles += [ax.fill_between(
+                            inc, modelresultmax['surf'], modelresultmin['surf'],
+                            color='b', alpha = 0.1,
+                            label = 'surf variability (' + keylabel + ')')]
+
+                        legendhandles += [ax.fill_between(
+                            inc, modelresultmax['vol'], modelresultmin['vol'],
+                            color='g', alpha = 0.1,
+                            label = 'vol variability (' + keylabel + ')')]
+
+                        if int_Q is True:
+                            legendhandles += [ax.fill_between(
+                                inc, modelresultmax['inter'],
+                                modelresultmin['inter'], color='y', alpha = 0.1,
+                                label = 'int variability (' + keylabel + ')')]
+
+                # a legend for the hatches
+                leg1 = ax.legend(handles=legendhandles,
+                                 labels=[i.get_label() for i in legendhandles])
+
+                if len(legendhandles) == 0: leg1.remove()
+
+        printvariationQ = {key: False for key in minparams}
+        def buttonfunc(label):
+            # if labels of the buttons have been changed by the labels-argument
+            # set the name to the corresponding key (= the actual parameter name)
+            for key, val in labels.items():
+                if label == val:
+                    label = key
+
+            #ax.collections.clear()
+
+            if printvariationQ[label] is True:
+                ax.collections.clear()
+                printvariationQ[label] = False
+            elif printvariationQ[label] is False:
+                printvariationQ[label] = True
+
+            animate(paramslider[label].val, label)
+            plt.draw()
+
+        buttons.on_clicked(buttonfunc)
+
+        for key, slider in paramslider.items():
+            slider.on_changed(partial(animate, key=key))
+
+        return f, paramslider, buttons
