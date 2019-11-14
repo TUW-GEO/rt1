@@ -58,6 +58,8 @@ class TestDUMPS(unittest.TestCase):
                 f = fit.plot.__getattribute__(function_name)()
                 if function_name == 'printsig0analysis':
                     plt.close(f[0])
+                elif function_name == 'analyzemodel':
+                    plt.close(f[0])
                 else:
                     plt.close(f)
 
