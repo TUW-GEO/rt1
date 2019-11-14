@@ -853,7 +853,7 @@ class RT1(object):
                Interaction contribution
         """
 
-        if self.V.tau.shape == (1,):
+        if isinstance(self.V.tau, (int, float)):
             Isurf = self.surface()
             # differentiation for non-existing canopy, as otherwise NAN values
             if self.V.tau > 0.:
