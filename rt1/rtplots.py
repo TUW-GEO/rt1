@@ -1684,7 +1684,7 @@ class plot:
 
         f = plt.figure(figsize=(15,10))
         f.subplots_adjust(top=0.98, left=0.05, right=0.95)
-        gs = Gridspec(4, len(interjacs),
+        gs = GridSpec(4, len(interjacs),
                                #width_ratios=[1, 2],
                                #height_ratios=[1, 2, 1]
                                )
@@ -2449,11 +2449,11 @@ class plot:
         f = plt.figure(figsize=(12,9))
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
                       # generate figure grid and populate with axes
-        gs = Gridspec(1 + len(minparams)//2, 1 + 3 ,
+        gs = GridSpec(1 + len(minparams)//2, 1 + 3 ,
                            height_ratios=[8] + [1]*(len(minparams) // 2),
                            width_ratios=[.75, 1, 1, 1]
                            )
-        gsbuttonslider = Gridspec(1 + len(minparams)//2, 1 + 3 ,
+        gsbuttonslider = GridSpec(1 + len(minparams)//2, 1 + 3 ,
                        height_ratios=[8] + [1]*(len(minparams) // 2),
                        width_ratios=[.75, 1, 1, 1]
                        )
