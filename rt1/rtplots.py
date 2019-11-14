@@ -2647,4 +2647,49 @@ class plot:
         for key, slider in paramslider.items():
             slider.on_changed(partial(animate, key=key))
 
-        return f, paramslider, buttons
+
+        # define textboxes that allow changing the slider-boundaries
+        bounds = dict(zip(minparams.keys(),
+                          np.array([list(minparams.values()),
+                                    list(maxparams.values())]).T))
+
+        def submit(val, key, minmax):
+            slider = paramslider[key]
+            if minmax == 0:
+                bounds[key][0] = float(val)
+                slider.valmin = float(val)
+                slider.ax.set_xlim(slider.valmin, None)
+                minparams[key] = val
+            if minmax == 1:
+                bounds[key][1] = float(val)
+                slider.valmax = float(val)
+                slider.ax.set_xlim(None, slider.valmax)
+                maxparams[key] = val
+            f.canvas.draw_idle()
+            plt.draw()
+
+        from matplotlib.widgets import TextBox
+
+        textboxes = []
+        for i, [key, val] in enumerate(paramslider.items()):
+
+            axbox0 = plt.axes([val.ax.get_position().x0,
+                               val.ax.get_position().y1,
+                               0.05, 0.025])
+            text_box0 = TextBox(axbox0, '', initial=str(bounds[key][0]))
+            text_box0.on_submit(partial(submit, key=key, minmax=0))
+
+
+            axbox1 = plt.axes([val.ax.get_position().x1 - 0.05,
+                               val.ax.get_position().y1,
+                               0.05, 0.025])
+            text_box1 = TextBox(axbox1, '', initial=str(bounds[key][1]))
+            text_box1.on_submit(partial(submit, key=key, minmax=1))
+
+
+            textboxes += [text_box0, text_box1]
+
+
+
+
+        return f, paramslider, buttons, textboxes
