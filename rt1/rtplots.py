@@ -2659,12 +2659,12 @@ class plot:
                 bounds[key][0] = float(val)
                 slider.valmin = float(val)
                 slider.ax.set_xlim(slider.valmin, None)
-                minparams[key] = val
+                minparams[key] = float(val)
             if minmax == 1:
                 bounds[key][1] = float(val)
                 slider.valmax = float(val)
                 slider.ax.set_xlim(None, slider.valmax)
-                maxparams[key] = val
+                maxparams[key] = float(val)
             f.canvas.draw_idle()
             plt.draw()
 
