@@ -2410,23 +2410,24 @@ class plot:
                  minparams[key] = val[3][0][0]
                  maxparams[key] = val[3][1][0]
                  startparams[key] = val[1]
-            if val[0] is False and isinstance(val[1], (int, float)):
-                     startparams[key] = val[1]
-                     fixparams[key] = val[1]
-            if val[0] is False and val[1] == 'auxiliary':
-                assert (key in fit.dataset or
-                        key in fit.fixed_dict), (f'auxiliary dataset for {key} ' +
-                                                 'not found in fit.dataset or ' +
-                                                 'fit.fixed_dict')
-                if key in fit.dataset:
-                    minparams[key] = fit.dataset[key].min()
-                    maxparams[key] = fit.dataset[key].max()
-                    startparams[key] = fit.dataset[key].mean()
+            if val[0] is False:
+                if isinstance(val[1], (int, float)):
+                         startparams[key] = val[1]
+                         fixparams[key] = val[1]
+                elif val[1] == 'auxiliary':
+                    assert (key in fit.dataset or
+                            key in fit.fixed_dict), (f'auxiliary dataset for {key} ' +
+                                                     'not found in fit.dataset or ' +
+                                                     'fit.fixed_dict')
+                    if key in fit.dataset:
+                        minparams[key] = fit.dataset[key].min()
+                        maxparams[key] = fit.dataset[key].max()
+                        startparams[key] = fit.dataset[key].mean()
 
-                elif key in fit.fixed_dict:
-                    minparams[key] = fit.fixed_dict[key].min()
-                    maxparams[key] = fit.fixed_dict[key].max()
-                    startparams[key] = fit.fixed_dict[key].mean()
+                    elif key in fit.fixed_dict:
+                        minparams[key] = fit.fixed_dict[key].min()
+                        maxparams[key] = fit.fixed_dict[key].max()
+                        startparams[key] = fit.fixed_dict[key].mean()
 
         if 'bsf' not in defdict:
             startparams['bsf']  = fit.R.bsf
@@ -2669,7 +2670,7 @@ class plot:
 
         from matplotlib.widgets import TextBox
 
-        textboxes = []
+        textboxes_buttons = {}
         for i, [key, val] in enumerate(paramslider.items()):
 
             axbox0 = plt.axes([val.ax.get_position().x0,
@@ -2686,6 +2687,9 @@ class plot:
             text_box1.on_submit(partial(submit, key=key, minmax=1))
 
 
-            textboxes += [text_box0, text_box1]
+            textboxes_buttons[key + '_min'] = text_box0
+            textboxes_buttons[key + '_max'] = text_box1
 
-        return f, paramslider, buttons, textboxes
+        textboxes_buttons['buttons'] = buttons
+
+        return f, paramslider, textboxes_buttons
