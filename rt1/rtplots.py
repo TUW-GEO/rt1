@@ -2077,11 +2077,11 @@ class plot:
 
         styledict_dict = dict(zip(['tot', 'surf', 'vol', 'inter',
                                    'data', 'indicator'],
-                                  [styletot, stylevol, stylesurf, styleinter,
+                                  [styletot, stylesurf, stylevol, styleinter,
                                    styledata, styleindicator]))
         styledict_fullt0_dict = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                  [stylefullt0tot, stylefullt0vol,
-                                   stylefullt0surf, stylefullt0inter]))
+                                  [stylefullt0tot, stylefullt0surf,
+                                   stylefullt0vol, stylefullt0inter]))
 
         lines, lines_frac, linesfull, lines_frac_full = plotlines(
             dayrange1, printcomponents1, printfullt_0, styledict_dict,
