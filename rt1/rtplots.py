@@ -2396,6 +2396,7 @@ class plot:
             fitdB = fit.dB
             fitsig0 = fit.sig0
             defdict = fit.defdict
+            res_dict = getattr(fit, 'res_dict', None)
         else:
             _fnevals_input = None
             fitdB = dB
@@ -2412,7 +2413,11 @@ class plot:
             if val[0] is True:
                  minparams[key] = val[3][0][0]
                  maxparams[key] = val[3][1][0]
-                 startparams[key] = val[1]
+                 # try to use fitted-values as start values for the parameters
+                 if res_dict is not None and key in res_dict:
+                     startparams[key] = np.mean(res_dict[key])
+                 else:
+                     startparams[key] = val[1]
             if val[0] is False:
                 if isinstance(val[1], (int, float)):
                          startparams[key] = val[1]
@@ -2470,6 +2475,9 @@ class plot:
 
         buttonax = plt.subplot(gsbuttonslider[1:, 0])
 
+        # add values of fixed parameters
+        ax.text(.05, .95,
+                ''.join(['{key}={val}   ' for key, val in fixed_dict.items()]))
 
         # plot data
         try:
