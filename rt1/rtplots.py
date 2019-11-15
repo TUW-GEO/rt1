@@ -2389,18 +2389,21 @@ class plot:
         '''
 
         if fit is None:
-            fit = self.fit
+            fit = getattr(self, 'fit', None)
 
         if fit is not None:
-            _fnevals_input = fit.R._fnevals
-            fitdB = fit.dB
-            fitsig0 = fit.sig0
-            defdict = fit.defdict
             res_dict = getattr(fit, 'res_dict', None)
+
+            try:
+                _fnevals_input = fit.R._fnevals
+            except Exception:
+                pass
+
+            if defdict is None:
+                defdict = fit.defdict
+
         else:
             _fnevals_input = None
-            fitdB = dB
-            fitsig0 = sig0
 
         # number of measurements
         N_param = 100
@@ -2456,34 +2459,42 @@ class plot:
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
                       # generate figure grid and populate with axes
         gs = GridSpec(1 + len(minparams)//2, 1 + 3 ,
-                           height_ratios=[8] + [1]*(len(minparams) // 2),
-                           width_ratios=[.75, 1, 1, 1]
-                           )
-        gsbuttonslider = GridSpec(1 + len(minparams)//2, 1 + 3 ,
-                       height_ratios=[8] + [1]*(len(minparams) // 2),
-                       width_ratios=[.75, 1, 1, 1])
-
+                      height_ratios=[8] + [1]*(len(minparams) // 2),
+                      width_ratios=[.75, 1, 1, 1])
         gs.update(wspace=.3)
-        gsbuttonslider.update(wspace=.3, bottom=0.05)
+
+        gsslider = GridSpec(1 + len(minparams)//2, 1 + 3 ,
+                            height_ratios=[8] + [1]*(len(minparams) // 2),
+                            width_ratios=[.75, 1, 1, 1])
+        gsslider.update(wspace=.3, bottom=0.05)
+
+        gsbutton = GridSpec(1 + len(minparams)//2, 1 + 3 ,
+                            height_ratios=[8] + [1]*(len(minparams)//2),
+                            width_ratios=[.75, 1, 1, 1])
+        gsbutton.update(hspace=0.75, wspace=.1, bottom=0.05)
+
 
         ax = plt.subplot(gs[0,0:])
         paramaxes = {}
         col = 0
         for i, key in enumerate(minparams):
             if i%3 == 0: col += 1
-            paramaxes[key] = plt.subplot(gsbuttonslider[col, 1 + i%3])
+            paramaxes[key] = plt.subplot(gsslider[col, 1 + i%3])
 
-        buttonax = plt.subplot(gsbuttonslider[1:, 0])
-
+        buttonax = plt.subplot(gsbutton[1:, 0])
+        # hide frame of button-axes
+        buttonax.axis('off')
         # add values of fixed parameters
-        ax.text(.05, .95,
-                ''.join(['{key}={val}   ' for key, val in fixed_dict.items()]))
+        if len(fixparams) > 0:
+            ax.text(.01, .98, 'fixed parameters:\n' +
+                    ''.join([f'{key}={round(val, 5)}   ' for
+                             key, val in fixparams.items()]))
 
-        # plot data
+        # overplot data used in fit
         try:
             ax.plot(fit.R.t_0.T,
                     dBsig0convert(fit.data.T, fit.R.t_0.T,
-                                  dB, sig0, fitdB, fitsig0), '.')
+                                  dB, sig0, fit.dB, fit.sig0), '.')
         except:
             pass
 
