@@ -45,6 +45,11 @@ class Fits(Scatter):
              where 'inc' referrs to the incidence-angle in radians, and
              'sig' referrs to the measurement value (corresponding to
              the assigned sig0 and dB values)
+
+             If a column 'data_weights' is provided, the residuals in the
+             fit-procedure will be weighted accordingly.
+             (e.g. residuals = weights * calculated_residuals )
+
     defdict: dict (default = None)
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
@@ -431,6 +436,10 @@ class Fits(Scatter):
                  approach will result in a cancellation of the repeated
                  results such that the artificially added values (necessary
                  to have a rectangular array) will have no effect on the fit.
+
+                 If a column 'data_weights' has been provided in the dataset,
+                 the obtained weights will additionally be multiplied by the
+                 values provided as 'data_weights'.
         N: int
            number of measurements that have been provided within the dataset
 
@@ -476,6 +485,10 @@ class Fits(Scatter):
             for key in dataset:
                 if key not in ['inc', 'sig', 'orig_index']:
                     new_fixed_dict[key] = rectangularize(dataset[key])
+
+        if 'data_weights' in new_fixed_dict:
+            print('applying data_weights')
+            weights = weights * new_fixed_dict.pop('data_weights')
 
         return [inc, np.concatenate(data), np.concatenate(weights),
                 N, mask, new_fixed_dict]
