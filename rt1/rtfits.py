@@ -1757,7 +1757,7 @@ class Fits(Scatter):
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                       fitset=fitset)
+                       fitset=fitset, setindex=self.setindex)
 
             if aux_data is not None:
                 fit.aux_data = aux_data
