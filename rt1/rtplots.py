@@ -2494,7 +2494,7 @@ class plot:
         try:
             ax.plot(fit.R.t_0.T,
                     dBsig0convert(fit.data.T, fit.R.t_0.T,
-                                  dB, sig0, fit.dB, fit.sig0), '.')
+                                  dB, sig0, fit.dB, fit.sig0), '.', zorder=0)
         except:
             pass
 
