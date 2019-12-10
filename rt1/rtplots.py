@@ -2474,14 +2474,14 @@ class plot:
         gsbutton.update(hspace=0.75, wspace=.1, bottom=0.05)
 
 
-        ax = plt.subplot(gs[0,0:])
+        ax = f.add_subplot(gs[0,0:])
         paramaxes = {}
         col = 0
         for i, key in enumerate(minparams):
             if i%3 == 0: col += 1
-            paramaxes[key] = plt.subplot(gsslider[col, 1 + i%3])
+            paramaxes[key] = f.add_subplot(gsslider[col, 1 + i%3])
 
-        buttonax = plt.subplot(gsbutton[1:, 0])
+        buttonax = f.add_subplot(gsbutton[1:, 0])
         # hide frame of button-axes
         buttonax.axis('off')
         # add values of fixed parameters
