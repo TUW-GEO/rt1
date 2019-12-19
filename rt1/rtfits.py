@@ -836,11 +836,6 @@ class Fits(Scatter):
             dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
             # calculate the derivative with respect to the parameters
 
-            # average over all obtained values in case a
-            # fixed-dict with higher temporal resolution has been provided
-            if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
-                dtau_dx = dtau_dx.mean(axis=1)
-
             if np.isscalar(dtau_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
             elif isspmatrix(newjacdict[str(i)]):
@@ -848,13 +843,20 @@ class Fits(Scatter):
                 # repeated by the number of incidence-angles in order
                 # to have correct array-processing (it is assumed that no
                 # parameter is incidence-angle dependent itself)
-                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
+
                 # calculate "outer" * "inner" derivative for sparse matrices
-                newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
+                if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
+                         dtau_dx.reshape(np.prod(dtau_dx.shape)))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
             else:
-                dtau_dx = np.repeat(dtau_dx, len(np.atleast_2d(R.t_0)[0]))
                 # calculate "outer" * "inner" derivative for numpy arrays
-                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
+                if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx.reshape(
+                         np.prod(dtau_dx.shape))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
         # same for omega
         for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
@@ -862,14 +864,28 @@ class Fits(Scatter):
                                                      sp.Symbol(i)),
                                   modules=['numpy'])
             domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
+
             if np.isscalar(domega_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
             elif isspmatrix(newjacdict[str(i)]):
-                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
-                newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
+                # In case the parameter is varying temporally, it must be
+                # repeated by the number of incidence-angles in order
+                # to have correct array-processing (it is assumed that no
+                # parameter is incidence-angle dependent itself)
+
+                # calculate "outer" * "inner" derivative for sparse matrices
+                if np.atleast_1d(domega_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
+                         domega_dx.reshape(np.prod(domega_dx.shape)))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
             else:
-                domega_dx = np.repeat(domega_dx, len(np.atleast_2d(R.t_0)[0]))
-                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
+                # calculate "outer" * "inner" derivative for numpy arrays
+                if np.atleast_1d(domega_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)] * domega_dx.reshape(
+                         np.prod(domega_dx.shape))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
         # same for NormBRDF
         for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
@@ -877,14 +893,28 @@ class Fits(Scatter):
                                                  sp.Symbol(i)),
                                   modules=['numpy'])
             dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
+
             if np.isscalar(dN_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
             elif isspmatrix(newjacdict[str(i)]):
-                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
-                newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
+                # In case the parameter is varying temporally, it must be
+                # repeated by the number of incidence-angles in order
+                # to have correct array-processing (it is assumed that no
+                # parameter is incidence-angle dependent itself)
+
+                # calculate "outer" * "inner" derivative for sparse matrices
+                if np.atleast_1d(dN_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
+                         dN_dx.reshape(np.prod(dN_dx.shape)))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
             else:
-                dN_dx = np.repeat(dN_dx, len(np.atleast_2d(R.t_0)[0]))
-                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+                # calculate "outer" * "inner" derivative for numpy arrays
+                if np.atleast_1d(dN_dx).shape == R.t_0.shape:
+                     newjacdict[str(i)] = newjacdict[str(i)] * dN_dx.reshape(
+                         np.prod(dN_dx.shape))
+                else:
+                    newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
 
         if hasattr(self, 'intermediate_results'):
             self.intermediate_results['jacobian'] += [newjacdict]
