@@ -1777,7 +1777,8 @@ class Fits(Scatter):
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
                     reader_args=None, postprocess=None, fitset=None,
-                    exceptfunc=None, finaloutput=None):
+                    exceptfunc=None, finaloutput=None,
+                    pool_kwargs=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -1848,6 +1849,12 @@ class Fits(Scatter):
         finaloutput : callable, optional
             A function that will be called on the list of returned objects
             after the processing has been finished.
+        pool_kwargs : dict
+            A dict with additional keyword-arguments passed to the
+            initialization of the multiprocessing-pool via:
+
+            >>> mp.Pool(ncpu, **pool_kwargs)
+
 
         Returns
         -------
@@ -1858,6 +1865,8 @@ class Fits(Scatter):
         """
 
         if fitset is None: fitset = self.fitset
+        if pool_kwargs is None: pool_kwargs = dict()
+
 
         if 'int_Q' in fitset and fitset['int_Q'] is True:
             # pre-evaluate the fn-coefficients
@@ -1879,7 +1888,7 @@ class Fits(Scatter):
 
         if ncpu > 1:
             print('start of parallel evaluation')
-            with mp.Pool(ncpu) as pool:
+            with mp.Pool(ncpu, **pool_kwargs) as pool:
                 if datasets is not None:
                     # loop over the reader_args
                     res = pool.starmap(self._evalfunc,
