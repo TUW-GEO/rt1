@@ -69,7 +69,7 @@ def _evalfit(fit, inc=None, return_components=True):
             if val.shape != inc.shape:
                 print(f'shape {val.shape} of fixed_input for "{key}" does ' +
                       f'not match shape {inc.shape} of "inc" and is updated')
-                fit.fixed_dict[key] = np.repeat(val[:,0][:,np.newaxis],
+                fit.fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
                                                 inc.shape[1], axis=1)
 
     totsurfvolinter = fit._calc_model(return_components=return_components)
