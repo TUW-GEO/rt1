@@ -289,7 +289,7 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
             if paprox is True:
                 phasefunktapprox = sp.lambdify((
                     'theta_0', 'theta_s',
-                    'phi_0', 'phi_s'),
+                    'phi_0', 'phi_s', *Vparam_dict[n_V].keys()),
                     V.legexpansion('theta_0', 'theta_s',
                                    'phi_0', 'phi_s', 'vvvv').doit(),
                     modules=["numpy", "sympy"])
@@ -326,8 +326,11 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 if paprox is True:
                     # the use of np.pi-ti stems from the definition
                     # of legexpansion() in volume.py
-                    radapprox = phasefunktapprox(np.pi - ti,
-                                                 thetass, 0., 0.)
+                    radapprox = phasefunktapprox(theta_0=np.pi - ti,
+                                                 theta_s=thetass,
+                                                 phi_0=0.,
+                                                 phi_s=0.,
+                                                 **Vparam_dict[n_V])
                 # set theta direction to clockwise
                 polarax.set_theta_direction(-1)
                 # set theta to start at z-axis
@@ -393,7 +396,7 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
             # define a plotfunction of the analytic form of the BRDF
             if BRDFaprox is True:
                 brdffunktapprox = sp.lambdify(
-                    ('theta_ex', 'theta_s', 'phi_ex', 'phi_s'),
+                    ('theta_ex', 'theta_s', 'phi_ex', 'phi_s', *BRDFparam_dict[n_SRF].keys()),
                     SRF.legexpansion(
                         'theta_ex', 'theta_s', 'phi_ex', 'phi_s', 'vvvv'
                         ).doit(), modules=["numpy", "sympy"])
@@ -426,7 +429,11 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 rad = SRF.brdf(ti, thetass, 0., 0.,
                                param_dict=BRDFparam_dict[n_SRF])
                 if BRDFaprox is True:
-                    radapprox = brdffunktapprox(ti, thetass, 0., 0.)
+                    radapprox = brdffunktapprox(theta_ex=ti,
+                                                theta_s=thetass,
+                                                phi_ex=0.,
+                                                phi_s=0.,
+                                                **BRDFparam_dict[n_SRF])
                 # set theta direction to clockwise
                 polarax.set_theta_direction(-1)
                 # set theta to start at z-axis
