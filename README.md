@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/TUW-GEO/rt1.svg?branch=master)](https://travis-ci.org/TUW-GEO/rt1) [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/)
+[![Build Status](https://travis-ci.org/TUW-GEO/rt1.svg?branch=master)](https://travis-ci.org/TUW-GEO/rt1) [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/) [![Coverage Status](https://coveralls.io/repos/github/TUW-GEO/rt1/badge.svg?branch=coveralls_test)](https://coveralls.io/github/TUW-GEO/rt1?branch=coveralls_test)
 
 # RT1 - bistatic scattering model for first order scattering of random media
 
