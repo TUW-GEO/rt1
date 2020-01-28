@@ -327,17 +327,13 @@ class Fits(Scatter):
         groupdf = dataset.groupby(level=0)
 
         # generate new data-frame based on groups
-        new_df_cols = []
-        for key in dataset.keys():
-            new_df_cols += [groupdf[key].apply(list).apply(np.array)]
-        new_df = pd.concat(new_df_cols, axis=1)
-
+        new_df = groupdf.agg(pd.Series.tolist)
 
         param_dyn_df['orig_index'] = param_dyn_df.index
         param_dyn_df = param_dyn_df.set_index(groupindex)
         param_dyn_groupdf = param_dyn_df.groupby(level=0)
 
-        index = param_dyn_groupdf['orig_index'].apply(list).apply(np.array)
+        index = param_dyn_groupdf['orig_index'].apply(np.array)
         vals = [param_dyn_groupdf[key].apply(list).apply(np.take, indices=0)
                 for key in param_dyn_df]
         param_dyn_df = pd.concat([index, *vals], axis=1)
