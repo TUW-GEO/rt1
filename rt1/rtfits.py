@@ -1746,10 +1746,10 @@ class Fits(Scatter):
         reader_arg : dict
             A dict of arguments passed to the reader.
         postprocess : callable
-            A fucntion that accepts a rt1.rtfits.Fits object and a dict
+            A function that accepts a rt1.rtfits.Fits object and a dict
             as arguments and returns any desired output.
 
-            It is called via:
+            Internally it is called after calling performfit() via:
 
             >>> ...
             >>> fit.performfit()
@@ -1802,7 +1802,8 @@ class Fits(Scatter):
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
             else:
-                raise ex
+                raise ex 
+
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
                     reader_args=None, postprocess=None, fitset=None,
