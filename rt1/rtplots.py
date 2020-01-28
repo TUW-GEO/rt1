@@ -826,7 +826,7 @@ class plot:
         self.fit = fit
 
     def scatter(self, fit=None, mima=None, pointsize=0.5,
-                regression=True, newcalc=False,  **kwargs):
+                regression=True, newcalc=True,  **kwargs):
         '''
         geerate a scatterplot of modelled vs. original backscatter data
 
