@@ -325,6 +325,10 @@ class Fits(Scatter):
             else:
                 groupindex = np.char.add(groupindex, dd)
 
+
+        if groupindex is None:
+            groupindex = dataset.index
+
         dataset['orig_index'] = dataset.index
         dataset = dataset.set_index(groupindex)
         groupdf = dataset.groupby(level=0)
@@ -1505,7 +1509,7 @@ class Fits(Scatter):
             # is provided as a concatenated array)
             if res_lsq is not None:
                 res_dict[key] = np.full_like(param_dyn_dict[key], 999,
-                                                dtype=float)
+                                             dtype=float)
                 for i, uniq in enumerate(uniques):
                     value_i = np.array(res_lsq.x)[count:count + len(uniques)][i]
                     where_i = np.where((param_dyn_dict[key]) == uniq)
@@ -1538,6 +1542,8 @@ class Fits(Scatter):
         self.fixed_dict = fixed_dict
         self.start_dict = start_dict
         self.dataset_used = dataset
+
+        self.res_dict = getattr(self, 'res_dict', dict())
 
         # for downward compatibility
         return [self.fit_output, self.R, self.data, self.inc, self.mask,
