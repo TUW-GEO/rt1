@@ -170,13 +170,6 @@ class Fits(Scatter):
         self.fitset = fitset
         self.setindex = setindex
         # add plotfunctions
-        # self.printsig0timeseries = partial(printsig0timeseries, fit = self)
-        # update_wrapper(self.printsig0timeseries, printsig0timeseries)
-        # self.printresults = partial(printresults, fit = self)
-        # update_wrapper(self.printresults, printresults)
-        # self.printerr = partial(printerr, fit = self)
-        # update_wrapper(self.printerr, printerr)
-
         self.plot = rt1_plots(self)
 
 
@@ -1284,7 +1277,6 @@ class Fits(Scatter):
                                              'residuals':[],
                                              'jacobian':[]}
 
-
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
@@ -1682,6 +1674,7 @@ class Fits(Scatter):
         # get dictionary for initialization of fit
         [fixed_dict, setdict, startvaldict, timescaledict,
          boundsvaldict, manual_dyn_df] =self._set_performfit_dicts(defdict)
+
 
         # set V and SRF based on setter-function
         V, SRF = set_V_SRF(**setdict)
