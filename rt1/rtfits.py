@@ -214,6 +214,11 @@ class Fits(Scatter):
 
             delattr(self, '_rt1_dump_mini')
 
+            # remove pre-evaluated fn-evals functions
+            if (getattr(self, 'fitset', None) is not None
+                and '_fnevals_input' in self.fitset):
+                self.fitset['_fnevals_input'] = None
+
             return {key: val for key, val in self.__dict__.items()
                     if key not in removekeys}
 
