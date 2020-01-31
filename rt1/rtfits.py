@@ -17,7 +17,7 @@ from .rtplots import plot as rt1_plots
 
 import copy
 import multiprocessing as mp
-from itertools import repeat
+from itertools import chain, repeat
 
 try:
     import cloudpickle
@@ -171,6 +171,7 @@ class Fits(Scatter):
         self.setindex = setindex
         # add plotfunctions
         self.plot = rt1_plots(self)
+
 
 
     def __update__(self):
@@ -533,9 +534,8 @@ class Fits(Scatter):
             except AttributeError:
                 assert False, 'fixed_dict is not available and must be provided'
 
-
         # ensure correct array-processing
-        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
+        res_dict = {key:np.repeat(*val)[:,np.newaxis] for
                     key, val in res_dict.items()}
         res_dict.update(fixed_dict)
 
@@ -657,7 +657,7 @@ class Fits(Scatter):
              shape applicable to scipy's least_squres-function
         '''
         # ensure correct array-processing
-        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
+        res_dict = {key:np.repeat(*val)[:,np.newaxis] for
                     key, val in res_dict.items()}
         res_dict.update(fixed_dict)
 
@@ -1267,6 +1267,37 @@ class Fits(Scatter):
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
         order = [i for i, v in param_dict.items() if v is not None]
+
+        # will be used to assign the values to the individual parameters
+        # (the returned parameters are given as a concatenated array
+        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
+        # values for each parameter
+        splits = np.cumsum([len(np.unique(param_dyn_dict[key]))
+                            for key in order])
+
+        # will be used to re-assign the values to the index of the dataset
+        # this procedure is necessary to ensure correct broadcasting in case
+        # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
+        from itertools import groupby
+
+        repeatdict = dict()
+        for key in order:
+            # get the (sorted) unique values and locations in param_dyn_dict
+            dynnr, uniquewhere = np.unique(param_dyn_dict[key],
+                                           return_inverse=True)
+            # get value positions and number of repetitions to reconstruct an
+            # array indexed like the dataset
+            # (param_dyn_dict[key] = np.repeat(dynnr[repeats[0]], repeats[1]))
+            repeats = [[], []]
+            for i,j in groupby(uniquewhere):
+                repeats[0].append(i)
+                repeats[1].append(sum(1 for x in j))
+            if len(set(repeats[1])) == 1:
+                repeats[1] = repeats[1][0]
+
+            repeatdict[key] = repeats
+
+
         # preparation of data for fitting
         [inc, data, weights, Nmeasurements,
          mask, new_fixed_dict] = self._preparedata(dataset)
@@ -1384,24 +1415,12 @@ class Fits(Scatter):
         # for scipy's least_squares function
         def fun(params):
             # generate a dictionary to assign values based on input
-            count = 0
-            newdict = {}
-            for key in order:
-                # find unique parameter estimates and how often they occur
-                uniques, ind = np.unique(param_dyn_dict[key],
-                                         return_index=True)
-                uniques = uniques[np.argsort(ind)]
-                # shift index to next parameter (this is necessary since the
-                # result is provided as a concatenated array)
-                newdict[key] = np.full_like(param_dyn_dict[key], 999,
-                                            dtype=float)
-                for i, uniq in enumerate(uniques):
-                    value_i = np.array(params)[count:count + len(uniques)][i]
-                    where_i = np.where((param_dyn_dict[key]) == uniq)
-                    newdict[key][where_i] = value_i
-
-                # increase counter
-                count = count + len(uniques)
+            split_vals = np.split(params, splits)[:-1]
+            newdict = dict()
+            for key, val in zip(order, split_vals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                newdict[key] = (val[reloc], rep)
 
             # calculate the residuals
             errs = self._calc_model(R, newdict, fixed_dict).flatten() - data
@@ -1409,36 +1428,25 @@ class Fits(Scatter):
             # of artificially added values (see _preparedata()-function)
             errs = weights * errs
 
-
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
                            'relerr' : errs/data}
                 self.intermediate_results['residuals'] += [errdict]
 
+
             return errs
+
 
         # function to evaluate the jacobian
         def dfun(params):
             # generate a dictionary to assign values based on input
-            count = 0
-            newdict = {}
-            for key in order:
-                # find unique parameter estimates and how often they occur
-                uniques, ind = np.unique(param_dyn_dict[key],
-                                         return_index=True)
-                uniques = uniques[np.argsort(ind)]
-                # shift index to next parameter (this is necessary since the
-                # result is provided as a concatenated array)
-                newdict[key] = np.full_like(param_dyn_dict[key], 999,
-                                            dtype=float)
-                for i, uniq in enumerate(uniques):
-                    value_i = np.array(params)[count:count + len(uniques)][i]
-                    where_i = np.where((param_dyn_dict[key]) == uniq)
-                    newdict[key][where_i] = value_i
-
-                # increase counter
-                count = count + len(uniques)
+            split_vals = np.split(params, splits)[:-1]
+            newdict = dict()
+            for key, val in zip(order, split_vals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                newdict[key] = (val[reloc], rep)
 
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
@@ -1476,35 +1484,26 @@ class Fits(Scatter):
                                     jac=dfun, **kwargs)
 
         # generate a dictionary to assign values based on fit-results
-        count = 0
-        res_dict = {}
-        start_dict = {}
-        for key in order:
-            # find unique parameter estimates and how often they occur
-            uniques, ind = np.unique(param_dyn_dict[key], return_index=True)
-            uniques = uniques[np.argsort(ind)]
-            # shift index to next parameter (this is necessary since the result
-            # is provided as a concatenated array)
-            if res_lsq is not None:
-                res_dict[key] = np.full_like(param_dyn_dict[key], 999,
-                                             dtype=float)
-                for i, uniq in enumerate(uniques):
-                    value_i = np.array(res_lsq.x)[count:count + len(uniques)][i]
-                    where_i = np.where((param_dyn_dict[key]) == uniq)
-                    res_dict[key][where_i] = value_i
+        # split the obtained result with respect to the individual parameters
+        if res_lsq is not None:
+            # split concatenated parameter-results given in res_lsq.x
+            # (don't use the last array since it is empty)
 
-                self.fit_output = res_lsq
-                self.res_dict = res_dict
+            split_vals = np.split(res_lsq.x, splits)[:-1]
+            split_startvals = np.split(res_lsq.x, splits)[:-1]
 
-            start_dict[key] = np.full_like(param_dyn_dict[key], 999,
-                                            dtype=float)
-            for i, uniq in enumerate(uniques):
-                value_i = np.array(startvals)[count:count + len(uniques)][i]
-                where_i = np.where((param_dyn_dict[key]) == uniq)
-                start_dict[key][where_i] = value_i
+            res_dict = dict()
+            start_dict = dict()
+            for key, val, startval in zip(order, split_vals, split_startvals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                res_dict[key] = [val[reloc], rep]
+                start_dict[key] = [startval[reloc], rep]
 
-            # increase counter
-            count = count + len(uniques)
+            self.fit_output = res_lsq
+            self.res_dict = res_dict
+            self.start_dict = start_dict
+
 
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
@@ -1518,10 +1517,10 @@ class Fits(Scatter):
         self.mask = mask
         self.weights = weights
         self.fixed_dict = fixed_dict
-        self.start_dict = start_dict
         self.dataset_used = dataset
 
         self.res_dict = getattr(self, 'res_dict', dict())
+        self.start_dict = getattr(self, 'start_dict', dict())
 
         # for downward compatibility
         return [self.fit_output, self.R, self.data, self.inc, self.mask,
@@ -1788,7 +1787,7 @@ class Fits(Scatter):
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
             else:
-                raise ex 
+                raise ex
 
 
     def processfunc(self, ncpu=1, datasets=None, reader=None,
