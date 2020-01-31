@@ -922,6 +922,21 @@ class Fits(Scatter):
 
         return jac_lsq
 
+    def _get_res_df(self):
+        '''
+        return a pandas DataFrame with the obtained parameters
+        '''
+        newdict = dict()
+        for key, val in self.res_dict.items():
+            if isinstance(val[1], (int, float)):
+                newdict[key] = chain.from_iterable(repeat(val[0], val[1]))
+            else:
+                newdict[key] = chain.from_iterable(
+                    [repeat(i, int(j)) for i,j in np.array(val).T])
+        return pd.DataFrame(newdict, self.index)
+
+    res_df = property(_get_res_df)
+
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
                          return_components=False):
