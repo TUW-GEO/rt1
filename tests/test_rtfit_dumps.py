@@ -88,9 +88,9 @@ class TestDUMPS(unittest.TestCase):
             fit.performfit(fitset=fitset)
 
             for key, val in old_results.items():
-                self.assertTrue(np.allclose(fit.res_dict[key], val, atol=1e-4, rtol=1e-4),
+                self.assertTrue(np.allclose(np.repeat(*fit.res_dict[key]), val, atol=1e-4, rtol=1e-4),
                                 msg=f'fitted values for {msg} fit of {key} ' +
-                                     f'differ by {np.mean(fit.res_dict[key] - val)}')
+                                     f'differ by {np.mean(np.repeat(*fit.res_dict[key]) - val)}')
 
 
 
