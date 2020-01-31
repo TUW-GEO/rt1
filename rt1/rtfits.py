@@ -4,6 +4,7 @@ Class to perform least_squares fitting of RT-1 models to given datasets.
 
 import numpy as np
 import sympy as sp
+from sympy.abc import _clash
 import pandas as pd
 
 from scipy.optimize import least_squares
@@ -14,6 +15,9 @@ from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize
 from .rtplots import plot as rt1_plots
+
+from . import surface as rt1_s
+from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
@@ -1084,6 +1088,83 @@ class Fits(Scatter):
         return {'slope' : model_slope,
                 'curv' : model_curv}
 
+    def _init_V_SRF(self, V_props, SRF_props, setdict=dict()):
+        '''
+        initialize a volume and a surface scattering function based on
+        a list of dicts
+
+        Parameters
+        ----------
+        V_params, SRF_params : dict
+            a dict that defines all variables needed to initialize the
+            selected volume (surface) scattering function.
+
+            if the value is a string, it will be converted to a sympy
+            expression to determine the variables of the resulting expression
+
+        V_name, SRF_name : str
+            the name of the volume (surface)-scattering function.
+        setdict : TYPE, optional
+            DESCRIPTION. The default is dict().
+
+        Returns
+        -------
+        V : a function of rt1.volume
+            the used volume-scattering function.
+        SRF : a function of rt1.surface
+            the used surface-scattering function.
+
+        '''
+        V_dict = dict()
+        for key, val in V_props.items():
+            if key == 'V_name': continue
+
+            # check if val is directly provided in setdict, if yes use it
+            if val in setdict:
+                useval = setdict[val]
+            # check if val is a number, if yes use it directly
+            elif isinstance(val, (int, float, np.ndarray)):
+                useval = val
+            # in any other case, try to sympify the provided value
+            # to determine the free variables of the resulting equation and
+            # then replace them by the corresponding values in setdict
+            else:
+                # convert to sympy expression (check doc for use of _clash)
+                useval = sp.sympify(val, _clash)
+                # in case parts of the expression are provided in setdict,
+                # replace them with the provided values
+                replacements = dict()
+                for val_i in useval.free_symbols:
+                    if str(val_i) in setdict:
+                        replacements[val_i] = setdict[str(val_i)]
+                useval = useval.xreplace(replacements)
+
+
+            V_dict[key] = useval
+
+        # same for SRF
+        SRF_dict = dict()
+        for key, val in SRF_props.items():
+            if key == 'SRF_name': continue
+            if str(val) in setdict:
+                useval = setdict[str(val)]
+            elif isinstance(val, (int, float, np.ndarray)):
+                useval = val
+            else:
+                useval = sp.sympify(val, _clash)
+                replacements = dict()
+                for val_i in useval.free_symbols:
+                    if str(val_i) in setdict:
+                        replacements[val_i] = setdict[str(val_i)]
+                useval = useval.xreplace(replacements)
+            SRF_dict[key] = useval
+
+        # initialize the volume-scattering function
+        V = getattr(rt1_v, V_props['V_name'])(**V_dict)
+        # initialize the surface-scattering function
+        SRF = getattr(rt1_s, SRF_props['SRF_name'])(**SRF_dict)
+
+        return V, SRF
 
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
@@ -1677,7 +1758,11 @@ class Fits(Scatter):
 
 
         # set V and SRF based on setter-function
-        V, SRF = set_V_SRF(**setdict)
+        if callable(set_V_SRF):
+            V, SRF = set_V_SRF(**setdict)
+        elif isinstance(set_V_SRF, dict):
+            V, SRF = self._init_V_SRF(**set_V_SRF,
+                                      setdict=setdict)
 
         # set frequencies of fitted parameters
         freq = []
