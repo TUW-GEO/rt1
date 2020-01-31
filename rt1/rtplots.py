@@ -145,7 +145,10 @@ def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
     bsf = params.pop('bsf', 0)
 
     # set V and SRF
-    V, SRF = set_V_SRF(**params)
+    if callable(set_V_SRF):
+        V, SRF = set_V_SRF(**params)
+    else:
+        V, SRF = fit._init_V_SRF(**fit.set_V_SRF, setdict=params)
 
     R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
             V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
@@ -1075,14 +1078,8 @@ class plot:
                     ms=2, label=label, color=color[label], alpha = 0.5)
         # overprint parameters
         if params != None:
-            paramdf_dict = {}
-            # add fitted parameters
-            paramdf_dict.update(fit.res_dict)
-            # add constant values
-            paramdf_dict.update(fit.fixed_dict)
+            paramdf = fit.res_df
 
-            paramdf = pd.DataFrame(paramdf_dict,
-                                   index = fit.index).sort_index()
             if years is not None:
                 paramdf = paramdf.loc[paramdf.index.year.isin(years)]
             if months is not None:
@@ -1417,39 +1414,36 @@ class plot:
         ax2.set_title('Estimated parameters')
 
 
-        if truevals is not None:
+        # if truevals is not None:
 
-            # plot actual values
-            for key in truevals:
-                ax2.plot(fit.index, truevals[key],
-                         '--', alpha=0.75, color=colordict[key])
-            for key in truevals:
-                ax2.plot(fit.index, truevals[key], 'o',
-                         color=colordict[key])
+        #     # plot actual values
+        #     for key in truevals:
+        #         ax2.plot(fit.index, truevals[key],
+        #                  '--', alpha=0.75, color=colordict[key])
+        #     for key in truevals:
+        #         ax2.plot(fit.index, truevals[key], 'o',
+        #                  color=colordict[key])
 
-            param_errs = {}
-            for key in truevals:
-                param_errs[key] = fit.res_dict[key] - truevals[key]
+        #     param_errs = {}
+        #     for key in truevals:
+        #         param_errs[key] = fit.res_dict[key] - truevals[key]
 
-            for key in truevals:
-                ax2.plot(fit.index, param_errs[key],
-                         ':', alpha=.25, color=colordict[key])
-            for key in truevals:
-                ax2.plot(fit.index, param_errs[key],
-                         '.', alpha=.25, color=colordict[key])
+        #     for key in truevals:
+        #         ax2.plot(fit.index, param_errs[key],
+        #                  ':', alpha=.25, color=colordict[key])
+        #     for key in truevals:
+        #         ax2.plot(fit.index, param_errs[key],
+        #                  '.', alpha=.25, color=colordict[key])
 
-            h2 = mlines.Line2D([], [], color='black', label='data',
-                               linestyle='--', alpha=0.75, marker='o')
-            h3 = mlines.Line2D([], [], color='black', label='errors',
-                               linestyle=':', alpha=0.5, marker='.')
+        #     h2 = mlines.Line2D([], [], color='black', label='data',
+        #                        linestyle='--', alpha=0.75, marker='o')
+        #     h3 = mlines.Line2D([], [], color='black', label='errors',
+        #                        linestyle=':', alpha=0.5, marker='.')
 
 
         # plot fitted values
-        for key in fit.res_dict:
-            ax2.plot(fit.index,
-                     np.ma.masked_array(fit.res_dict[key],
-                                        np.all(fit.mask, axis=1)),
-                     alpha=1., label=key, color=colordict[key])
+        for key, val in fit.res_df.items():
+            ax2.plot(val, alpha=1., label=key, color=colordict[key])
 
         if len(result_selection) < len(fit.data):
             for i, resid in enumerate(result_selection):
@@ -1914,10 +1908,10 @@ class plot:
         indicator_bounds = [0,1]
         try:
             for key in printparamnames:
-                indicator_bounds = [np.min({**fit.res_dict,
-                                            **fit.fixed_dict}[key]),
-                                    np.max({**fit.res_dict,
-                                            **fit.fixed_dict}[key])]
+                indicator_bounds = [np.nanmin([fit.res_dict.get(key, [np.nan])[0],
+                                               fit.fixed_dict.get(key, np.nan)]),
+                                    np.nanmax([fit.res_dict.get(key, [np.nan])[0],
+                                               fit.fixed_dict.get(key, np.nan)])]
                 # if a constant value is plotted, ensure that the boundaries
                 # are not equal
                 if indicator_bounds[0] == indicator_bounds[1]:
@@ -1943,10 +1937,8 @@ class plot:
                     axparamplot.tick_params(axis='y', which='both',
                                             labelsize=5, length=2)
 
-                l, = axparamplot.plot(fit.index,
-                                      {**fit.res_dict,
-                                       **fit.fixed_dict}[key],
-                                       label = key, color='C' + str(i))
+                l, = axparamplot.plot(fit.res_df[key],
+                                      label = key, color='C' + str(i))
                 # add handles and labels to legend
                 handles += axparamplot.get_legend_handles_labels()[0]
                 labels += axparamplot.get_legend_handles_labels()[1]
@@ -2425,7 +2417,7 @@ class plot:
                  maxparams[key] = val[3][1][0]
                  # try to use fitted-values as start values for the parameters
                  if res_dict is not None and key in res_dict:
-                     startparams[key] = np.mean(res_dict[key])
+                     startparams[key] = np.mean(res_dict[key][0])
                  else:
                      startparams[key] = val[1]
             if val[0] is False:
@@ -2452,13 +2444,13 @@ class plot:
             fixparams['bsf']  = fit.R.bsf
 
         modelresult = _getbackscatter(fit=fit,
-                                     set_V_SRF=set_V_SRF,
-                                     int_Q=int_Q,
-                                     inc=inc,
-                                     params=startparams,
-                                     dB=dB, sig0=sig0,
-                                     _fnevals_input = _fnevals_input,
-                                     return_fnevals = True)
+                                      set_V_SRF=set_V_SRF,
+                                      int_Q=int_Q,
+                                      inc=inc,
+                                      params=startparams,
+                                      dB=dB, sig0=sig0,
+                                      _fnevals_input = _fnevals_input,
+                                      return_fnevals = True)
 
         _fnevals_input = modelresult.pop('_fnevals')
 
