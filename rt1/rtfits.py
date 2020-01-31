@@ -28,6 +28,7 @@ try:
 except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
 
+from configparser import ConfigParser
 
 class Fits(Scatter):
     '''
@@ -2084,4 +2085,140 @@ class Fits(Scatter):
         performing the actual fit
         '''
         self.performfit(re_init=True)
+
+
+
+class RT1_configparser(object):
+    def __init__(self, configpath):
+        # setup config (allow empty values -> will result in None)
+        self.config = ConfigParser(allow_no_value=True)
+        # avoid converting uppercase characters (see https://stackoverflow.com/a/19359720/9703451)
+        self.config.optionxform = str
+        # read config file
+        self.cfg = self.config.read(configpath)
+
+        # keys that will be converted to int, float or bool
+        self.lsq_parse_props = dict(section = 'least_squares_kwargs',
+                                    int_keys = ['verbose', 'max_nfev'],
+                                    float_keys = ['ftol', 'gtol', 'xtol'])
+
+        self.fitprop_parse_props = dict(section = 'general_RT1_properties',
+                                        bool_keys = ['int_q'])
+
+        self.fitargs_parse_props = dict(section = 'fits_kwargs',
+                                        bool_keys = ['sig0', 'dB'])
+
+    def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[]):
+        '''
+        a function to convert the parsed string values to int, float or bool
+        (any additional values will be left unchanged)
+
+        Parameters
+        ----------
+        section : str
+            the name of the section in the config-file.
+        int_keys : list
+            keys that should be converted to int.
+        float_keys : list
+            keys that should be converted to float.
+        bool_keys : list
+            keys that should be converted to bool.
+
+        Returns
+        -------
+        parsed_dict : dict
+            a dict with the converted values.
+
+        '''
+
+        inp = self.config[section]
+
+        parsed_dict = dict()
+        for key in inp:
+            if key in float_keys:
+                val = inp.getfloat(key)
+            elif key in int_keys:
+                val = inp.getint(key)
+            elif key in bool_keys:
+                val = inp.getboolean(key)
+            else:
+                val = inp[key]
+
+            parsed_dict[key] = val
+        return parsed_dict
+
+    def _parse_V_SRF(self, section):
+
+        inp = self.config[section]
+
+        parsed_dict = dict()
+        for key in inp:
+            val = None
+            if key == 'ncoefs':
+                val = inp.getint(key)
+            else:
+                # try to convert floats, if it fails return the string
+                try:
+                    val = inp.getfloat(key)
+                except:
+                    val = inp[key]
+
+            parsed_dict[key] = val
+
+        return parsed_dict
+
+
+    def _parse_defdict(self, section):
+        inp = self.config[section]
+
+        parsed_dict = dict()
+        for key in inp:
+            val = inp[key]
+
+            if val.startswith('[') and val.endswith(']'):
+                val = val[1:-1].replace(' ', '').split(',')
+            else:
+                assert False, f'the passed defdict for {key} is not a list'
+
+            # convert values
+            parsed_val = []
+            parsed_val += [bool(val[0])]
+            parsed_val += [float(val[1])]
+            if val[2] == 'None':
+                parsed_val += [None]
+            else:
+                parsed_val += [val[2]]
+
+            parsed_val += [([float(val[3])],
+                            [float(val[4])])]
+
+            parsed_dict[key] = parsed_val
+
+        return parsed_dict
+
+
+    def get_config(self):
+        lsq_dict = self._parse_dict(**self.lsq_parse_props)
+        fitprop_dict = self._parse_dict(**self.fitprop_parse_props)
+        fitset = dict(**lsq_dict, **fitprop_dict)
+
+        fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
+        defdict = self._parse_defdict('defdict')
+        set_V_SRF = dict(V_props = self._parse_V_SRF('RT1_V'),
+                         SRF_props = self._parse_V_SRF('RT1_SRF'))
+
+        return dict(fitset=fitset,
+                    defdict=defdict,
+                    set_V_SRF=set_V_SRF,
+                    fits_kwargs=fits_kwargs)
+
+
+    def get_fitobject(self):
+        cfg = self.get_config()
+
+        rt1_fits = Fits(dataset=None, defdict=cfg['defdict'],
+                        set_V_SRF=cfg['set_V_SRF'],
+                        fitset=cfg['fitset'], **cfg['fits_kwargs'])
+
+        return rt1_fits
 
