@@ -1033,20 +1033,14 @@ class Fits(Scatter):
         vsymb = set(map(str, R.V._func.free_symbols)) - angset
         srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
 
-        param_fn = res_dict.copy()
-        param_fn.pop('omega', None)
-        param_fn.pop('tau', None)
-        param_fn.pop('NormBRDF', None)
-        param_fn.pop('bsf', None)
+        # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
         # for omega, tau or NormBRDF definition and in the function definiton
-        for i in set(toNlist - vsymb - srfsymb):
-            param_fn.pop(str(i), None)
+        excludekeys = ['omega', 'tau', 'NormBRDF', 'bsf',
+                       *[str(i) for i in set(toNlist - vsymb - srfsymb)]]
 
-        # ensure that the keys of the dict are strings and not sympy-symbols
-        strparam_fn = dict([[str(key),
-                             param_fn[key]]
-                            for i, key in enumerate(param_fn.keys())])
+        strparam_fn = {str(key) : val for key, val in res_dict.items()
+                       if key not in excludekeys}
 
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
