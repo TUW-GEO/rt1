@@ -1812,17 +1812,15 @@ class Fits(Scatter):
         self._setindex(self.setindex)
 
 
-    def _evalfunc(self, dataset=None, reader=None, reader_arg=None,
-                  postprocess=None, fitset=None, exceptfunc=None):
+    def _evalfunc(self, reader=None, reader_arg=None, fitset=None,
+                  preprocess=None, postprocess=None, exceptfunc=None,
+                  preeval_fn=False):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
 
         Parameters
         ----------
-        dataset : pandas.DataFrame
-            the dataset to be processed (see documentation of 'rt1.rtfits.Fits'
-            for details on how to specify the dataset)
         reader : callable, optional
             A function whose first return-value is a pandas.DataFrame that can
             be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
@@ -1831,6 +1829,15 @@ class Fits(Scatter):
             Fits-object in the 'aux_data' attribute. The default is None.
         reader_arg : dict
             A dict of arguments passed to the reader.
+        fitset : dict, optional
+            override the fitset-dict of the parent Fits-object.
+            (see documentation of 'rt1.rtfits.Fits')
+            The default is None.
+        preprocess : callable
+            A function that will be called prior to the start of the processing
+            It is called via:
+
+            >>> preprocess(reader_arg)
         postprocess : callable
             A function that accepts a rt1.rtfits.Fits object and a dict
             as arguments and returns any desired output.
@@ -1840,10 +1847,19 @@ class Fits(Scatter):
             >>> ...
             >>> fit.performfit()
             >>> return postprocess(fit, reader_arg)
+        exceptfunc : callable, optional
+            A function that is called in case an exception occurs.
+            It is (roughly) implemented via:
 
-        fitset : dict, optional
-            override the fitset-dict of the parent Fits-object.
-            The default is None.
+            >>> for reader_arg in reader_args:
+            >>>     try:
+            >>>         ...
+            >>>         ... perform fit ...
+            >>>         ...
+            >>>     except Exception as ex:
+            >>>         exceptfunc(ex, reader_arg)
+
+            The default is None, in which case the exception will be raised.
 
         Returns
         -------
@@ -1851,34 +1867,53 @@ class Fits(Scatter):
         """
 
         try:
-            if fitset is None: fitset = self.fitset
+            # call preprocess function if provided
+            if callable(preprocess):
+                preprocess(reader_arg)
+
+            if fitset is None:
+                fitset = self.fitset
 
             # if a reader (and no dataset) is provided, use the reader
-            if dataset is None and isinstance(reader_arg,
-                                              dict) and callable(reader):
-                read_data = reader(**reader_arg)
-                # check for multiple return values and split them accordingly
-                if isinstance(read_data, pd.DataFrame):
-                    dataset = read_data
-                    aux_data = None
-                elif isinstance(read_data, tuple) and len(read_data) == 2:
+            read_data = reader(**reader_arg)
+            # check for multiple return values and split them accordingly
+            # (any value beyond the first is appended as aux_data)
+            if isinstance(read_data, pd.DataFrame):
+                dataset = read_data
+                aux_data = None
+            elif (isinstance(read_data, (list, tuple))
+                  and isinstance(read_data[0], pd.DataFrame)):
+                if len(read_data) == 2:
                     dataset, aux_data = read_data
-                elif isinstance(read_data, tuple) and len(read_data) > 2:
+                elif  len(read_data) > 2:
                     dataset = read_data[0]
                     aux_data = read_data[1:]
             else:
-                aux_data = None
+                raise TypeError('the first return-value of reader function ' +
+                                'must be a pandas DataFrame')
+
+
+            # pre-evaluate fn-coefficients
+            if preeval_fn is True:
+                fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
+                           set_V_SRF=self.set_V_SRF, defdict=self.defdict,
+                           fitset=fitset, setindex=self.setindex)
+                fit.performfit(re_init=True)
+
+                return fit
 
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        set_V_SRF=self.set_V_SRF, defdict=self.defdict,
                        fitset=fitset, setindex=self.setindex)
+            fit.performfit()
 
+            # append auxiliary data
             if aux_data is not None:
                 fit.aux_data = aux_data
 
-            fit.performfit()
-            # if a post-processing function is provided, return its output
+            # if a post-processing function is provided, return its output,
+            # else return the fit-object directly
             if callable(postprocess):
                 return postprocess(fit, reader_arg)
             else:
@@ -1891,10 +1926,9 @@ class Fits(Scatter):
                 raise ex
 
 
-    def processfunc(self, ncpu=1, datasets=None, reader=None,
-                    reader_args=None, postprocess=None, fitset=None,
-                    exceptfunc=None, finaloutput=None,
-                    pool_kwargs=None):
+    def processfunc(self, ncpu=1, reader=None, reader_args=None,
+                    fitset=None, preprocess=None, postprocess=None,
+                    exceptfunc=None, finaloutput=None, pool_kwargs=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -1922,9 +1956,6 @@ class Fits(Scatter):
         ----------
         ncpu : int, optional
             The number of kernels to use. The default is 1.
-        datasets : list, optional
-            A list of datasets (see documentation of 'rt1.rtfits.Fits'
-            for details on how to specify the dataset). The default is None.
         reader : callable, optional
             A function whose first return-value is a pandas.DataFrame that can
             be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
@@ -1934,20 +1965,24 @@ class Fits(Scatter):
         reader_args : list, optional
             A list of dicts that will be passed to the reader-function.
             The default is None.
-        postprocess : callable, optional
-            A fucntion that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            It is called via:
-
-            >>> ...
-            >>> fit.performfit(**fitset)
-            >>> return postprocess(fit, reader_arg)
-
-            The default is None.
         fitset : dict, optional
             override the fitset-dict of the parent Fits-object.
+            (see documentation of 'rt1.rtfits.Fits')
             The default is None.
+        preprocess : callable
+            A function that will be called prior to the start of the processing
+            It is called via:
+
+            >>> preprocess(reader_arg)
+        postprocess : callable
+            A function that accepts a rt1.rtfits.Fits object and a dict
+            as arguments and returns any desired output.
+
+            Internally it is called after calling performfit() via:
+
+            >>> ...
+            >>> fit.performfit()
+            >>> return postprocess(fit, reader_arg)
         exceptfunc : callable, optional
             A function that is called in case an exception occurs.
             It is (roughly) implemented via:
@@ -1961,7 +1996,6 @@ class Fits(Scatter):
             >>>         exceptfunc(ex, reader_arg)
 
             The default is None, in which case the exception will be raised.
-
         finaloutput : callable, optional
             A function that will be called on the list of returned objects
             after the processing has been finished.
@@ -1983,60 +2017,40 @@ class Fits(Scatter):
         if fitset is None: fitset = self.fitset
         if pool_kwargs is None: pool_kwargs = dict()
 
-
         if 'int_Q' in fitset and fitset['int_Q'] is True:
-            # pre-evaluate the fn-coefficients
-            # initialize a dummy-fit
-            print('evaluation of fn-coefficients ...')
-            [fixed_dict,_,_,_,_,_] = self._set_performfit_dicts()
-            fn_dataset = pd.DataFrame({'inc':[.1], 'sig':[.5],
-                                       **{key:[0.5]
-                                          for key in fixed_dict.keys()}},
-                                      index=[pd.datetime(2020, 1,1)])
+            # pre-evaluate the fn-coefficients if interaction terms are used
+            fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
+                                 fitset={**fitset, 'max_nfev':0, 'verbose':2},
+                                 preprocess=None,
+                                 postprocess=None,
+                                 exceptfunc=exceptfunc,
+                                 preeval_fn=True)
 
-            # evaluate the dummy-fit to obtain the fn-coefficients
-            res = self._evalfunc(dataset=fn_dataset, reader=None,
-                                 reader_arg=None, postprocess=None,
-                                 fitset={**fitset, 'max_nfev':1, 'verbose':0},
-                                 exceptfunc=exceptfunc)
-            #TODO pickling currently only works for symengine
-            fitset['_fnevals_input'] = res.R._fnevals
+            fitset['_fnevals_input'] = fit.R._fnevals
 
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
-                if datasets is not None:
-                    # loop over the reader_args
-                    res = pool.starmap(self._evalfunc,
-                                       zip(datasets,
-                                           repeat(reader),
-                                           repeat(reader_args),
-                                           repeat(postprocess),
-                                           repeat(fitset),
-                                           repeat(exceptfunc)))
-                elif callable(reader) and reader_args is not None:
-                    # loop over the reader_args
-                    res = pool.starmap(self._evalfunc,
-                                       zip(repeat(datasets),
-                                           repeat(reader),
-                                           reader_args,
-                                           repeat(postprocess),
-                                           repeat(fitset),
-                                           repeat(exceptfunc)))
+                # loop over the reader_args
+                res = pool.starmap(self._evalfunc,
+                                   zip(repeat(reader),
+                                       reader_args,
+                                       repeat(fitset),
+                                       repeat(preprocess),
+                                       repeat(postprocess),
+                                       repeat(exceptfunc)))
 
         else:
             print('start of single-core evaluation')
             res = []
-            if datasets is not None:
-                for dataset in datasets:
-                    res.append(self._evalfunc(dataset, reader, reader_args,
-                                              postprocess, fitset, exceptfunc))
-            elif callable(reader) and reader_args is not None:
-                for reader_arg in reader_args:
-                    res.append(self._evalfunc(datasets, reader, reader_arg,
-                                              postprocess, fitset, exceptfunc))
+            for reader_arg in reader_args:
+                res.append(self._evalfunc(reader=reader, reader_arg=reader_arg,
+                                          fitset=fitset,
+                                          preprocess=preprocess,
+                                          postprocess=postprocess,
+                                          exceptfunc=exceptfunc))
 
-        if finaloutput is not None:
+        if callable(finaloutput):
             return finaloutput(res)
         else:
             return res
