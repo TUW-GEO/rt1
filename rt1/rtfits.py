@@ -1686,7 +1686,7 @@ class Fits(Scatter):
                     if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
                     manual_dyn_df = pd.concat([manual_dyn_df,
                                                defdict[key][4]], axis=1)
-                if defdict[key][2] == 'index':
+                elif defdict[key][2] == 'index':
                     indexdyn = pd.DataFrame({key:1}, self.dataset.index
                                             ).groupby(axis=0, level=0
                                                       ).ngroup().to_frame()
