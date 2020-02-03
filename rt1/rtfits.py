@@ -91,6 +91,9 @@ class Fits(Scatter):
                            variability within the fit (a single value will be
                            fitted to all measurements where dyndf has the same
                            value).
+                         - if freq is set to 'index', a unique value will be
+                           fitted to each unique index of the provided
+                           dataset
                          - if freq is a pandas offset-alias and a dyndf is
                            provided, the variability of dyndf will be
                            superimposed onto the variability resulting form
@@ -1360,6 +1363,8 @@ class Fits(Scatter):
                                              'residuals':[],
                                              'jacobian':[]}
 
+
+
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
@@ -1394,6 +1399,11 @@ class Fits(Scatter):
 
             repeatdict[key] = repeats
 
+        # set index
+        self.dataset_used = dataset
+        # generate a datetime-index from the given groups
+        self._setindex(self.setindex)
+        # get a dict of the mean datetime-values for each parameter
 
         # preparation of data for fitting
         [inc, data, weights, Nmeasurements,
@@ -1614,10 +1624,10 @@ class Fits(Scatter):
         self.mask = mask
         self.weights = weights
         self.fixed_dict = fixed_dict
-        self.dataset_used = dataset
 
         self.res_dict = getattr(self, 'res_dict', dict())
         self.start_dict = getattr(self, 'start_dict', dict())
+
 
         # for downward compatibility
         return [self.fit_output, self.R, self.data, self.inc, self.mask,
@@ -1676,6 +1686,15 @@ class Fits(Scatter):
                     if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
                     manual_dyn_df = pd.concat([manual_dyn_df,
                                                defdict[key][4]], axis=1)
+                if defdict[key][2] == 'index':
+                    indexdyn = pd.DataFrame({key:1}, self.dataset.index
+                                            ).groupby(axis=0, level=0
+                                                      ).ngroup().to_frame()
+                    indexdyn.columns = [key]
+                    if manual_dyn_df is None:
+                        manual_dyn_df = pd.DataFrame()
+                    manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
+                                              axis=1)
                 elif defdict[key][2] is not None:
 
                     timescaledict[key] = defdict[key][2]
@@ -1777,6 +1796,7 @@ class Fits(Scatter):
                 freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
                 fixed_dict=fixed_dict)
 
+
         # re-shape param_dict and bounds_dict to fit needs
         param_dict = {}
         for key in startvaldict:
@@ -1808,8 +1828,6 @@ class Fits(Scatter):
                      re_init=re_init,
                      **fitset)
 
-        # generate a datetime-index from the given groups
-        self._setindex(self.setindex)
 
 
     def _evalfunc(self, reader=None, reader_arg=None, fitset=None,
