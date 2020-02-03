@@ -2103,7 +2103,7 @@ class RT1_configparser(object):
                                     float_keys = ['ftol', 'gtol', 'xtol'])
 
         self.fitprop_parse_props = dict(section = 'general_RT1_properties',
-                                        bool_keys = ['int_q'])
+                                        bool_keys = ['int_Q'])
 
         self.fitargs_parse_props = dict(section = 'fits_kwargs',
                                         bool_keys = ['sig0', 'dB'])
