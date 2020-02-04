@@ -33,11 +33,7 @@ class TestDUMPS(unittest.TestCase):
 
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(path)
-
             fitset = {
-                'int_Q': True,
-                '_fnevals_input': None,
-                'verbose': 0,
                 'ftol': 1e-3,
                 'gtol': 1e-3,
                 'xtol': 1e-3,
@@ -45,9 +41,11 @@ class TestDUMPS(unittest.TestCase):
                 'method': 'trf',
                 'tr_solver': 'lsmr',
                 'x_scale': 'jac'}
+            fit.fitset = fitset
+
             # call performfit to re-initialize _fnevals functions
             # (they might have been removed if symeninge has been used)
-            fit.performfit(fitset=fitset)
+            fit.performfit()
 
             # get list of available plot-methods
             method_list = [func for func in dir(fit.plot) if
@@ -66,9 +64,6 @@ class TestDUMPS(unittest.TestCase):
     def test_performfit(self):
         # settings with whome the fit has been performed
         fitset = {
-            'int_Q': True,
-            '_fnevals_input': None,
-            'verbose': 0,
             'ftol': 1e-3,
             'gtol': 1e-3,
             'xtol': 1e-3,
@@ -76,16 +71,15 @@ class TestDUMPS(unittest.TestCase):
             'method': 'trf',
             'tr_solver': 'lsmr',
             'x_scale': 'jac'}
-
         for path, msg in zip([self.sig0_dB_path, self.sig0_linear_path],
                              ['dB', 'linear']):
 
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(path)
-
+            fit.fitset = fitset
             old_results = copy.deepcopy(fit.res_dict)
             print('testing performfit')
-            fit.performfit(fitset=fitset)
+            fit.performfit()
 
             for key, val in old_results.items():
                 self.assertTrue(np.allclose(np.repeat(*fit.res_dict[key]), val, atol=1e-4, rtol=1e-4),
