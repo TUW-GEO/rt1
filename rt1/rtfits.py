@@ -22,6 +22,7 @@ from . import volume as rt1_v
 import copy
 import multiprocessing as mp
 from itertools import chain, repeat
+from functools import partial
 
 try:
     import cloudpickle
@@ -217,8 +218,7 @@ class Fits(Scatter):
     def __getstate__(self):
         if '_rt1_dump_mini' in self.__dict__:
             # remove unnecessary data to save storage
-            removekeys = ['R', 'data', 'inc', 'mask', 'weights',
-                          'fit_output', 'fixed_dict', 'start_dict',
+            removekeys = ['R', 'fit_output', 'fixed_dict', 'start_dict',
                           'dataset_used']
 
             delattr(self, '_rt1_dump_mini')
@@ -942,6 +942,25 @@ class Fits(Scatter):
                 newdict[key] = chain.from_iterable(
                     [repeat(i, int(j)) for i,j in np.array(val).T])
         return pd.DataFrame(newdict, self.index)
+    def __get_data(self, prop):
+        if not hasattr(self, 'dataset_used'):
+            print('call _reinit() or performfit() to set the data first!')
+            return
+        else:
+            if prop in ['inc', 'sig']:
+                return rectangularize(self.dataset_used[prop].values)
+            elif prop in ['weights', 'mask']:
+                _, weights, mask = rectangularize(self.dataset_used.inc.values,
+                                                  weights_and_mask=True)
+                if prop == 'weights':
+                    return weights
+                if prop == 'mask':
+                    return mask
+
+    data = property(partial(__get_data, prop='sig'))
+    inc = property(partial(__get_data, prop='inc'))
+    weights = property(partial(__get_data, prop='weights'))
+    mask = property(partial(__get_data, prop='mask'))
 
     res_df = property(_get_res_df)
 
@@ -1615,16 +1634,9 @@ class Fits(Scatter):
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
 
-        # get the data in the same shape as the incidence-angles
-        data = np.array(np.split(data, Nmeasurements))
 
         self.R = R
-        self.data = data
-        self.inc = inc
-        self.mask = mask
-        self.weights = weights
         self.fixed_dict = fixed_dict
-
         self.res_dict = getattr(self, 'res_dict', dict())
         self.start_dict = getattr(self, 'start_dict', dict())
 
