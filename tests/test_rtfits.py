@@ -204,15 +204,18 @@ class TestRTfits(unittest.TestCase):
                     }
 
         # perform fit
-        fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
+        fit = testfit.monofit(V=V, SRF=SRF,
+                              dataset=dataset,
                               param_dict=param_dict,
                               bounds_dict=bounds_dict,
                               fixed_dict=fixed_dict,
                               param_dyn_dict=param_dyn_dict,
-                              verbose=2,
-                              ftol=1.e-8, xtol=1.e-8, gtol=1.e-8,
-                              x_scale='jac',
-                              max_nfev=500
+                              lsq_kwargs=dict(verbose=2,
+                                              ftol=1.e-8,
+                                              xtol=1.e-8,
+                                              gtol=1.e-8,
+                                              x_scale='jac',
+                                              max_nfev=500)
                               )
 
         # ----------- calculate R^2 values and errors of parameters -----------

@@ -10,6 +10,7 @@ import pandas as pd
 from scipy.optimize import least_squares
 from scipy.sparse import vstack
 from scipy.sparse import csr_matrix, isspmatrix
+from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
@@ -126,6 +127,25 @@ class Fits(Scatter):
                   - 'first': the first date of the timespan
                   - 'last': the last date of the timespan
                   - 'original': return the full list of datetime-objects
+    int_Q: bool (default = True)
+           indicator if the interaction-term should be evaluated or not.
+
+    lambda_backend: str, optional
+                    select method for generating the _fnevals functions
+                    if they are not provided explicitly and int_Q is True
+                    The default is 'symengine' if symengine is installed and
+                    'cse' otherwise.
+    _fnevals_input: callable, optional
+                    pre-evaluated functions used for evaluating the
+                    interaction-term
+                    -> use with care! you must ensure that the provided
+                    function evaluates correctly for the used definitions
+    _interp_vals: list, optional
+                  a list of keys corresponding to parameters whose values
+                  should be quadratically interpolated over the timespan
+                  instead of using a step-function that assigns the obtained
+                  value equally to all observations within the timespan.
+                  -> use with care! this might cause unexpected behaviour!
 
     Stored Fit-Attributes:
     -------------------
@@ -170,7 +190,10 @@ class Fits(Scatter):
 
     def __init__(self, sig0=False, dB=False, dataset=None,
                  defdict=None, set_V_SRF=None, fitset=dict(),
-                 setindex = 'mean', **kwargs):
+                 setindex = 'mean', int_Q=True,
+                 lambda_backend=None, _fnevals_input=None, interp_vals=None,
+                 **kwargs):
+
         self.sig0 = sig0
         self.dB = dB
         self.dataset = dataset
@@ -178,6 +201,16 @@ class Fits(Scatter):
         self.defdict = copy.deepcopy(defdict)
         self.fitset = fitset
         self.setindex = setindex
+
+        self.int_Q = int_Q
+        self.lambda_backend = lambda_backend
+
+        if self.lambda_backend is None:
+            self.lambda_backend = _init_lambda_backend
+
+        self._fnevals_input = _fnevals_input
+        self.interp_vals = interp_vals
+
         # add plotfunctions
         self.plot = rt1_plots(self)
 
@@ -208,6 +241,19 @@ class Fits(Scatter):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
+        if not hasattr(self, 'int_Q'):
+            self.int_Q = self.fitset.pop('int_Q', True)
+
+        if not hasattr(self, 'lambda_backend'):
+            self.lambda_backend = self.fitset.pop('lambda_backend',
+                                                  _init_lambda_backend)
+
+        if not hasattr(self, '_fnevals_input'):
+            self._fnevals_input = self.fitset.pop('_fnevals_input',
+                                                  None)
+
+        if not hasattr(self, 'interp_vals'):
+            self.interp_vals = None
 
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
@@ -224,9 +270,7 @@ class Fits(Scatter):
             delattr(self, '_rt1_dump_mini')
 
             # remove pre-evaluated fn-evals functions
-            if (getattr(self, 'fitset', None) is not None
-                and '_fnevals_input' in self.fitset):
-                self.fitset['_fnevals_input'] = None
+            self._fnevals_input = None
 
             return {key: val for key, val in self.__dict__.items()
                     if key not in removekeys}
@@ -506,6 +550,26 @@ class Fits(Scatter):
         return [inc, np.concatenate(data), np.concatenate(weights),
                 N, mask, new_fixed_dict]
 
+    def _assignvals(self, res_dict):
+        if self.interp_vals is not None and isinstance(self.interp_vals, list):
+            # get the results and a quadratic interpolation-function
+            use_res_dict = dict()
+            for key, val in res_dict.items():
+                if (key in self.interp_vals and len(val[0]) > 2 and
+                    not isinstance(val[1], int)):
+                    # generate an interpolaion function
+                    f = interp1d(self.meandatetimes[key].to_julian_date(),
+                                 val[0], fill_value='extrapolate', axis=0,
+                                 kind='quadratic')
+                    # interpolate the data to the used timestamps
+                    use_res_dict[key] = f(self.index.to_julian_date())
+                else:
+                    use_res_dict[key] = np.repeat(*val)
+        else:
+            use_res_dict = {key:np.repeat(*val)
+                            for key, val in res_dict.items()}
+        return use_res_dict
+
 
     def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
                     return_components=False,
@@ -549,8 +613,8 @@ class Fits(Scatter):
                 assert False, 'fixed_dict is not available and must be provided'
 
         # ensure correct array-processing
-        res_dict = {key:np.repeat(*val)[:,np.newaxis] for
-                    key, val in res_dict.items()}
+        res_dict = {key:val[:,np.newaxis] for
+                    key, val in self._assignvals(res_dict).items()}
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -671,8 +735,8 @@ class Fits(Scatter):
              shape applicable to scipy's least_squres-function
         '''
         # ensure correct array-processing
-        res_dict = {key:np.repeat(*val)[:,np.newaxis] for
-                    key, val in res_dict.items()}
+        res_dict = {key:val[:,np.newaxis] for
+                    key, val in self._assignvals(res_dict).items()}
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -936,18 +1000,14 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    def _get_res_df(self):
+    def __get_res_df(self):
         '''
         return a pandas DataFrame with the obtained parameters
         '''
-        newdict = dict()
-        for key, val in self.res_dict.items():
-            if isinstance(val[1], (int, float)):
-                newdict[key] = chain.from_iterable(repeat(val[0], val[1]))
-            else:
-                newdict[key] = chain.from_iterable(
-                    [repeat(i, int(j)) for i,j in np.array(val).T])
-        return pd.DataFrame(newdict, self.index)
+        return pd.DataFrame(self._assignvals(self.res_dict), self.index)
+
+    res_df = property(__get_res_df)
+
     def __get_data(self, prop):
         if not hasattr(self, 'dataset_used'):
             print('call _reinit() or performfit() to set the data first!')
@@ -984,7 +1044,6 @@ class Fits(Scatter):
     weights = property(partial(__get_data, prop='weights'))
     mask = property(partial(__get_data, prop='mask'))
 
-    res_df = property(_get_res_df)
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1216,7 +1275,7 @@ class Fits(Scatter):
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend=_init_lambda_backend, verbosity=2,
                 intermediate_results=False, re_init=False,
-                **kwargs):
+                lsq_kwargs=dict()):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -1445,7 +1504,11 @@ class Fits(Scatter):
         # generate a datetime-index from the given groups
         self._setindex(self.setindex)
         # get a dict of the mean datetime-values for each parameter
-
+        try:
+            self.meandatetimes = {param: pd.to_datetime([meandatetime(val) for key, val in self.index.groupby(np.repeat(*param_repeat)).items()])
+                                  for param, param_repeat in repeatdict.items()}
+        except:
+            pass
         # preparation of data for fitting
         [inc, data, weights, Nmeasurements,
          mask, new_fixed_dict] = self._preparedata(dataset)
@@ -1629,7 +1692,7 @@ class Fits(Scatter):
         else:
             # perform actual fitting
             res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                    jac=dfun, **kwargs)
+                                    jac=dfun, **lsq_kwargs)
 
         # generate a dictionary to assign values based on fit-results
         # split the obtained result with respect to the individual parameters
@@ -1769,7 +1832,7 @@ class Fits(Scatter):
 
 
     def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
-                   fitset=None, re_init=False):
+                   fitset=None, re_init=False, **kwargs):
         '''
         Setup a RT-1 specifications and perform a fit based on the provided
         inputs (dataset, defdict, set_V_SRF and fitsset).
@@ -1859,8 +1922,13 @@ class Fits(Scatter):
                      bounds_dict=bounds_dict,
                      fixed_dict=fixed_dict,
                      param_dyn_dict=param_dyn_dict,
+                     fn_input=None,
+                     _fnevals_input=self._fnevals_input,
+                     int_Q=self.int_Q,
+                     lambda_backend=self.lambda_backend,
                      re_init=re_init,
-                     **fitset)
+                     lsq_kwargs=self.fitset,
+                     **kwargs)
 
 
 
@@ -1956,8 +2024,12 @@ class Fits(Scatter):
 
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                       set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                       fitset=fitset, setindex=self.setindex)
+                       defdict=self.defdict, set_V_SRF=self.set_V_SRF,
+                       fitset=fitset, setindex=self.setindex, int_Q=self.int_Q,
+                       lambda_backend=self.lambda_backend,
+                       _fnevals_input=self._fnevals_input,
+                       interp_vals=self.interp_vals)
+
             fit.performfit()
 
             # append auxiliary data
@@ -2069,7 +2141,7 @@ class Fits(Scatter):
         if fitset is None: fitset = self.fitset
         if pool_kwargs is None: pool_kwargs = dict()
 
-        if 'int_Q' in fitset and fitset['int_Q'] is True:
+        if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
             fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
                                  fitset={**fitset, 'max_nfev':0, 'verbose':2},
@@ -2078,7 +2150,7 @@ class Fits(Scatter):
                                  exceptfunc=exceptfunc,
                                  preeval_fn=True)
 
-            fitset['_fnevals_input'] = fit.R._fnevals
+            self._fnevals_input = fit.R._fnevals
 
         if ncpu > 1:
             print('start of parallel evaluation')
@@ -2168,13 +2240,12 @@ class RT1_configparser(object):
                                     int_keys = ['verbose', 'max_nfev'],
                                     float_keys = ['ftol', 'gtol', 'xtol'])
 
-        self.fitprop_parse_props = dict(section = 'general_RT1_properties',
-                                        bool_keys = ['int_Q'])
-
         self.fitargs_parse_props = dict(section = 'fits_kwargs',
-                                        bool_keys = ['sig0', 'dB'])
+                                        bool_keys = ['sig0', 'dB', 'int_Q'],
+                                        list_keys = ['interp_vals'])
 
-    def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[]):
+    def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
+                    list_keys=[]):
         '''
         a function to convert the parsed string values to int, float or bool
         (any additional values will be left unchanged)
@@ -2207,6 +2278,10 @@ class RT1_configparser(object):
                 val = inp.getint(key)
             elif key in bool_keys:
                 val = inp.getboolean(key)
+            elif key in list_keys:
+                assert inp[key].startswith('['), f'{key}  must start with "[" '
+                assert inp[key].endswith(']'), f'{key} must end with "]" '
+                val = inp[key][1:-1].replace(' ', '').split(',')
             else:
                 val = inp[key]
 
@@ -2264,9 +2339,7 @@ class RT1_configparser(object):
 
 
     def get_config(self):
-        lsq_dict = self._parse_dict(**self.lsq_parse_props)
-        fitprop_dict = self._parse_dict(**self.fitprop_parse_props)
-        fitset = dict(**lsq_dict, **fitprop_dict)
+        fitset = self._parse_dict(**self.lsq_parse_props)
 
         fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
         defdict = self._parse_defdict('defdict')

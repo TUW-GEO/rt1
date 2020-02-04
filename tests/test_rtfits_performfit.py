@@ -164,17 +164,13 @@ class TestRTfits(unittest.TestCase):
 
         # specify additional arguments for scipy.least_squares and rtfits.monofit
         fitset = {
-                'int_Q': True,
-                '_fnevals_input': None,
-                'verbose': 2,
                 'ftol': 1e-8,
                 'gtol': 1e-8,
                 'xtol': 1e-8,
                 'max_nfev': 500,
                 'method': 'trf',
                 'tr_solver': 'lsmr',
-                'x_scale': 'jac',
-                'intermediate_results':False}
+                'x_scale': 'jac'}
 
 
 
@@ -204,7 +200,8 @@ class TestRTfits(unittest.TestCase):
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
                        set_V_SRF=set_V_SRF, fitset=fitset,
-                       setindex='mean')
+                       setindex='mean',
+                       int_Q=True, verbose=2)
 
         testfit.performfit()
 
@@ -222,7 +219,6 @@ class TestRTfits(unittest.TestCase):
         # sicne fit[0].fun gives the residuals weighted with respect to
         # weights, the model calculation can be gained via
         # estimates = fit[0].fun/weights + measurements
-
         estimates = np.reshape(
                     testfit.fit_output.fun/testfit.weights, testfit.data.shape)
 
