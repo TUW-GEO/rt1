@@ -237,22 +237,20 @@ class Fits(Scatter):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
-        if not hasattr(self, 'lsq_kwargs'):
-            self.lsq_kwargs = dict()
 
         if hasattr(self, 'fitset'):
-            if not hasattr(self, 'int_Q'):
-                self.int_Q = self.fitset.pop('int_Q', True)
-
-            if not hasattr(self, 'lambda_backend'):
-                self.lambda_backend = self.fitset.pop('lambda_backend',
-                                                      _init_lambda_backend)
-
-            if not hasattr(self, '_fnevals_input'):
-                self._fnevals_input = self.fitset.pop('_fnevals_input',
-                                                      None)
             self.lsq_kwargs = self.fitset
             del self.fitset
+        if not hasattr(self, 'lsq_kwargs'):
+            self.lsq_kwargs = dict()
+        if not hasattr(self, 'int_Q'):
+            self.int_Q = self.lsq_kwargs.pop('int_Q', True)
+        if not hasattr(self, 'lambda_backend'):
+            self.lambda_backend = self.lsq_kwargs.pop('lambda_backend',
+                                                      _init_lambda_backend)
+        if not hasattr(self, '_fnevals_input'):
+            self._fnevals_input = self.lsq_kwargs.pop('_fnevals_input',
+                                                      None)
 
         if not hasattr(self, 'interp_vals'):
             self.interp_vals = None
