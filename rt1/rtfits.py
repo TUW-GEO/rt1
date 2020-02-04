@@ -396,10 +396,16 @@ class Fits(Scatter):
                         self.dataset_used.orig_index.apply(meandatetime).values)
             elif setindex == 'original':
                 self.index = self.dataset_used.index
+            else:
+                print('setindex must be  either "first", "last",',
+                      ' "mean" or "original"')
+                raise Exception
         except:
             print('index could not be combined... use original index instead')
-            self.index = self.dataset_used.index
-
+            if isinstance(self.dataset_used, pd.DataFrame):
+                self.index = self.dataset_used.index
+            elif isinstance(self.dataset_used, list):
+                self.index = range(len(self.dataset_used))
 
     def _preparedata(self, dataset):
         '''
@@ -947,15 +953,31 @@ class Fits(Scatter):
             print('call _reinit() or performfit() to set the data first!')
             return
         else:
-            if prop in ['inc', 'sig']:
-                return rectangularize(self.dataset_used[prop].values)
-            elif prop in ['weights', 'mask']:
-                _, weights, mask = rectangularize(self.dataset_used.inc.values,
-                                                  weights_and_mask=True)
-                if prop == 'weights':
-                    return weights
-                if prop == 'mask':
-                    return mask
+
+            if isinstance(self.dataset_used, pd.DataFrame):
+                if prop in ['inc', 'sig']:
+                    return rectangularize(self.dataset_used[prop].values)
+                elif prop in ['weights', 'mask']:
+                    _, weights, mask = rectangularize(self.dataset_used.inc.values,
+                                                      weights_and_mask=True)
+                    if prop == 'weights':
+                        return np.concatenate(weights)
+                    if prop == 'mask':
+                        return mask
+            elif isinstance(self.dataset_used, list):
+                if prop == 'inc':
+                    return rectangularize([i[0] for i in self.dataset_used])
+                elif prop == 'sig':
+                    return rectangularize([i[1] for i in self.dataset_used])
+                elif prop in ['weights', 'mask']:
+                    _, weights, mask = rectangularize([i[0] for i in
+                                                       self.dataset_used],
+                                                      weights_and_mask=True)
+                    if prop == 'weights':
+                        return np.concatenate(weights)
+                    if prop == 'mask':
+                        return mask
+
 
     data = property(partial(__get_data, prop='sig'))
     inc = property(partial(__get_data, prop='inc'))
