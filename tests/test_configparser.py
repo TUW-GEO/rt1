@@ -8,6 +8,7 @@ a quick check if a standard config-file is read correctly
 import unittest
 import os
 from rt1.rtfits import RT1_configparser
+import sympy as sp
 
 
 class TestCONFIGPARSER(unittest.TestCase):
@@ -29,14 +30,15 @@ class TestCONFIGPARSER(unittest.TestCase):
                       'x_scale': 'jac'}
 
         defdict = {'omega': [True, 0.05, '2M', ([0.01], [0.5])],
-                    't_v': [True, 0.25, None, ([0.01], [0.5])],
+                   't_v': [True, 0.25, None, ([0.01], [0.5])],
                     't_s': [True, 0.25, None, ([0.01], [0.5])],
                     'N': [True, 0.1, 'index', ([0.01], [0.2])],
                     'tau': [True, 0.5, '3M', ([0.01], [1.5])],
-                    'bsf': [True, 0.05, 'A', ([0.01], [1.0])]}
+                    'bsf': [True, 0.05, 'A', ([0.01], [1.0])],
+                    'tau_multip': [False, 0.5]}
 
         set_V_SRF = {'V_props': {'V_name': 'HenyeyGreenstein',
-                                 'tau': 'tau',
+                                 'tau': 'tau * tau_multip',
                                  'omega': 'omega',
                                  't': 't_v',
                                  'ncoefs': 10},
@@ -63,9 +65,11 @@ class TestCONFIGPARSER(unittest.TestCase):
         for key, val in defdict.items():
             assert key in configdicts['defdict'], f'error in defdict {key}'
             for i, val_i in enumerate(val[:3]):
+                if len(val) <= 2: continue
                 assert val_i == configdicts['defdict'][key][i], f'error in defdict {key}'
-            assert val[-1][0][0] == configdicts['defdict'][key][-1][0][0], f'error in defdict {key}'
-            assert val[-1][1][0] == configdicts['defdict'][key][-1][1][0], f'error in defdict {key}'
+            if len(val) == 4:
+                assert val[-1][0][0] == configdicts['defdict'][key][-1][0][0], f'error in defdict {key}'
+                assert val[-1][1][0] == configdicts['defdict'][key][-1][1][0], f'error in defdict {key}'
 
         for key, val in set_V_SRF.items():
             assert key in configdicts['set_V_SRF'], f'error in set_V_SRF {key}'
@@ -79,7 +83,15 @@ class TestCONFIGPARSER(unittest.TestCase):
             assert key in configdicts['fits_kwargs'], f'error in fits_kwargs {key}'
             assert val == configdicts['fits_kwargs'][key], f'error in fits_kwargs {key}'
 
+
         fit = cfg.get_fitobject()
+        V, SRF = fit._init_V_SRF(**fit.set_V_SRF)
+
+        assert V.t == sp.Symbol('t_v'), 'V.t assigned incorrectly'
+        assert V.tau == sp.Symbol('tau') * sp.Symbol('tau_multip'), 'V.tau assigned incorrectly'
+        assert V.omega == sp.Symbol('omega'), 'V.omega assigned incorrectly'
+        assert SRF.t == sp.Symbol('t_s'), 'SRF.t assigned incorrectly'
+        assert SRF.NormBRDF == sp.Symbol('N'), 'SRF.NormBRDF assigned incorrectly'
 
 
 if __name__ == "__main__":
