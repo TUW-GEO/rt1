@@ -858,16 +858,11 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        # reset incidence-angles in case they have been altered beforehand
-        fit.R.t_0 = fit.inc
-        fit.R.p_0 = np.zeros_like(fit.inc)
-
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
         if newcalc is True:
-
-            estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+            estimates = fit._calc_model()
 
             # apply mask
             estimates = estimates[~fit.mask]
