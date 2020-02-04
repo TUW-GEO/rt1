@@ -2393,10 +2393,7 @@ class plot:
         if fit is not None:
             res_dict = getattr(fit, 'res_dict', None)
 
-            try:
-                _fnevals_input = fit.R._fnevals
-            except Exception:
-                pass
+            _fnevals_input = getattr(fit, '_fnevals_input', None)
 
             if defdict is None:
                 defdict = fit.defdict
@@ -2491,9 +2488,12 @@ class plot:
 
         # overplot data used in fit
         try:
-            ax.plot(fit.R.t_0.T,
-                    dBsig0convert(fit.data.T, fit.R.t_0.T,
-                                  dB, sig0, fit.dB, fit.sig0), '.', zorder=0)
+            ax.plot(fit.dataset.inc,
+                    dBsig0convert(fit.dataset.sig, fit.dataset.inc,
+                                  dB, sig0, fit.dB, fit.sig0),
+                    zorder=0, marker='.', alpha=0.5, lw=0,
+                    markerfacecolor='none', markeredgecolor='k')
+
         except:
             pass
 
@@ -2566,9 +2566,9 @@ class plot:
 
             params[key] = value
             modelresult = _getbackscatter(fit=fit, set_V_SRF=set_V_SRF,
-                                         int_Q=int_Q, inc=inc,
-                                         params=params, dB=dB, sig0=sig0,
-                                         _fnevals_input = _fnevals_input)
+                                          int_Q=int_Q, inc=inc,
+                                          params=params, dB=dB, sig0=sig0,
+                                          _fnevals_input = _fnevals_input)
             # update the data
             ltot.set_ydata(modelresult['tot'].T)
             lsurf.set_ydata(modelresult['surf'].T)
