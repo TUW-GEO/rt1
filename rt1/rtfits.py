@@ -22,6 +22,7 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
+from itertools import repeat
 from functools import partial
 
 try:
@@ -112,9 +113,9 @@ class Fits(Scatter):
                >>>     SRF = Surface-function(surface-keys)
                >>>
                >>>     return V, SRF
-    fitset: dict (default = dict())
-            a dictionary with keyword-arguments passed to monofit() and further
-            to scipy.optimize.least_squares
+    lsq_kwargs: dict (default = dict())
+                a dictionary with keyword-arguments passed to
+                scipy.optimize.least_squares
     setindex: str (default = 'mean')
               indicator how the datetime-indices of the fit-results
               should be processed. possible values are:
@@ -183,7 +184,7 @@ class Fits(Scatter):
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
-                 defdict=None, set_V_SRF=None, fitset=dict(),
+                 defdict=None, set_V_SRF=None, lsq_kwargs=None,
                  setindex = 'mean', int_Q=True,
                  lambda_backend=None, _fnevals_input=None, interp_vals=None,
                  **kwargs):
@@ -193,7 +194,9 @@ class Fits(Scatter):
         self.dataset = dataset
         self.set_V_SRF = set_V_SRF
         self.defdict = copy.deepcopy(defdict)
-        self.fitset = fitset
+        self.lsq_kwargs = lsq_kwargs
+        if self.lsq_kwargs is None:
+            lsq_kwargs = dict()
         self.setindex = setindex
 
         self.int_Q = int_Q
@@ -234,19 +237,22 @@ class Fits(Scatter):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
-        if not hasattr(self, 'fitset'):
-            self.fitset = dict()
+        if not hasattr(self, 'lsq_kwargs'):
+            self.lsq_kwargs = dict()
 
-        if not hasattr(self, 'int_Q'):
-            self.int_Q = self.fitset.pop('int_Q', True)
+        if hasattr(self, 'fitset'):
+            if not hasattr(self, 'int_Q'):
+                self.int_Q = self.fitset.pop('int_Q', True)
 
-        if not hasattr(self, 'lambda_backend'):
-            self.lambda_backend = self.fitset.pop('lambda_backend',
-                                                  _init_lambda_backend)
+            if not hasattr(self, 'lambda_backend'):
+                self.lambda_backend = self.fitset.pop('lambda_backend',
+                                                      _init_lambda_backend)
 
-        if not hasattr(self, '_fnevals_input'):
-            self._fnevals_input = self.fitset.pop('_fnevals_input',
-                                                  None)
+            if not hasattr(self, '_fnevals_input'):
+                self._fnevals_input = self.fitset.pop('_fnevals_input',
+                                                      None)
+            self.lsq_kwargs = self.fitset
+            del self.fitset
 
         if not hasattr(self, 'interp_vals'):
             self.interp_vals = None
@@ -1084,8 +1090,8 @@ class Fits(Scatter):
 
 
         # ensure correct array-processing
-        res_dict = {key:np.atleast_1d(val)[:,np.newaxis] for
-                    key, val in res_dict.items()}
+        res_dict = {key:val[:,np.newaxis] for
+                    key, val in self._assignvals(res_dict).items()}
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -1795,7 +1801,7 @@ class Fits(Scatter):
 
 
     def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
-                   fitset=None, re_init=False, **kwargs):
+                   lsq_kwargs=None, re_init=False, **kwargs):
         '''
         Setup a RT-1 specifications and perform a fit based on the provided
         inputs (dataset, defdict, set_V_SRF and fitsset).
@@ -1812,7 +1818,7 @@ class Fits(Scatter):
         set_V_SRF: callable
                  override the attribute of the parent Fits-object.
                  see docstring of rtfits.Fits for details
-        fitset: dict
+        lsq_kwargs: dict
                  override the attribute of the parent Fits-object.
                  see docstring of rtfits.Fits for details
         re_init: bool (default = False)
@@ -1830,7 +1836,7 @@ class Fits(Scatter):
         if dataset is None: dataset = self.dataset
         if defdict is None: defdict = self.defdict
         if set_V_SRF is None: set_V_SRF = self.set_V_SRF
-        if fitset is None: fitset = self.fitset
+        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
 
         # get dictionary for initialization of fit
         [fixed_dict, setdict, startvaldict, timescaledict,
@@ -1890,11 +1896,11 @@ class Fits(Scatter):
                      int_Q=self.int_Q,
                      lambda_backend=self.lambda_backend,
                      re_init=re_init,
-                     lsq_kwargs=self.fitset,
+                     lsq_kwargs=self.lsq_kwargs,
                      **kwargs)
 
 
-    def _evalfunc(self, reader=None, reader_arg=None, fitset=None,
+    def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
                   preprocess=None, postprocess=None, exceptfunc=None,
                   preeval_fn=False):
         """
@@ -1911,8 +1917,8 @@ class Fits(Scatter):
             Fits-object in the 'aux_data' attribute. The default is None.
         reader_arg : dict
             A dict of arguments passed to the reader.
-        fitset : dict, optional
-            override the fitset-dict of the parent Fits-object.
+        lsq_kwargs : dict, optional
+            override the lsq_kwargs-dict of the parent Fits-object.
             (see documentation of 'rt1.rtfits.Fits')
             The default is None.
         preprocess : callable
@@ -1953,8 +1959,8 @@ class Fits(Scatter):
             if callable(preprocess):
                 preprocess(reader_arg)
 
-            if fitset is None:
-                fitset = self.fitset
+            if lsq_kwargs is None:
+                lsq_kwargs = self.lsq_kwargs
 
             # if a reader (and no dataset) is provided, use the reader
             read_data = reader(**reader_arg)
@@ -1979,7 +1985,7 @@ class Fits(Scatter):
             if preeval_fn is True:
                 fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                            set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                           fitset=fitset, setindex=self.setindex)
+                           lsq_kwargs=lsq_kwargs, setindex=self.setindex)
                 fit.performfit(re_init=True)
 
                 return fit
@@ -1987,7 +1993,7 @@ class Fits(Scatter):
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
-                       fitset=fitset, setindex=self.setindex, int_Q=self.int_Q,
+                       lsq_kwargs=lsq_kwargs, setindex=self.setindex, int_Q=self.int_Q,
                        lambda_backend=self.lambda_backend,
                        _fnevals_input=self._fnevals_input,
                        interp_vals=self.interp_vals)
@@ -2013,7 +2019,7 @@ class Fits(Scatter):
 
 
     def processfunc(self, ncpu=1, reader=None, reader_args=None,
-                    fitset=None, preprocess=None, postprocess=None,
+                    lsq_kwargs=None, preprocess=None, postprocess=None,
                     exceptfunc=None, finaloutput=None, pool_kwargs=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
@@ -2033,10 +2039,10 @@ class Fits(Scatter):
             it is required to store ALL definitions within a separate
             file and call processfunc in the 'main'-file as follows:
 
-            >>> from specification_file import fit reader fitset ... ...
+            >>> from specification_file import fit reader lsq_kwargs ... ...
                 if __name__ == '__main__':
                     fit.processfunc(ncpu=5, reader=reader,
-                                    fitset=fitset, ... ...)
+                                    lsq_kwargs=lsq_kwargs, ... ...)
 
         Parameters
         ----------
@@ -2051,8 +2057,8 @@ class Fits(Scatter):
         reader_args : list, optional
             A list of dicts that will be passed to the reader-function.
             The default is None.
-        fitset : dict, optional
-            override the fitset-dict of the parent Fits-object.
+        lsq_kwargs : dict, optional
+            override the lsq_kwargs-dict of the parent Fits-object.
             (see documentation of 'rt1.rtfits.Fits')
             The default is None.
         preprocess : callable
@@ -2100,13 +2106,13 @@ class Fits(Scatter):
 
         """
 
-        if fitset is None: fitset = self.fitset
+        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
         if pool_kwargs is None: pool_kwargs = dict()
 
         if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
             fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
-                                 fitset={**fitset, 'max_nfev':0, 'verbose':2},
+                                 lsq_kwargs={'max_nfev':0, 'verbose':2},
                                  preprocess=None,
                                  postprocess=None,
                                  exceptfunc=exceptfunc,
@@ -2121,7 +2127,7 @@ class Fits(Scatter):
                 res = pool.starmap(self._evalfunc,
                                    zip(repeat(reader),
                                        reader_args,
-                                       repeat(fitset),
+                                       repeat(lsq_kwargs),
                                        repeat(preprocess),
                                        repeat(postprocess),
                                        repeat(exceptfunc)))
@@ -2131,7 +2137,7 @@ class Fits(Scatter):
             res = []
             for reader_arg in reader_args:
                 res.append(self._evalfunc(reader=reader, reader_arg=reader_arg,
-                                          fitset=fitset,
+                                          lsq_kwargs=lsq_kwargs,
                                           preprocess=preprocess,
                                           postprocess=postprocess,
                                           exceptfunc=exceptfunc))
@@ -2301,14 +2307,14 @@ class RT1_configparser(object):
 
 
     def get_config(self):
-        fitset = self._parse_dict(**self.lsq_parse_props)
+        lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
 
         fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
         defdict = self._parse_defdict('defdict')
         set_V_SRF = dict(V_props = self._parse_V_SRF('RT1_V'),
                          SRF_props = self._parse_V_SRF('RT1_SRF'))
 
-        return dict(fitset=fitset,
+        return dict(lsq_kwargs=lsq_kwargs,
                     defdict=defdict,
                     set_V_SRF=set_V_SRF,
                     fits_kwargs=fits_kwargs)
@@ -2319,7 +2325,7 @@ class RT1_configparser(object):
 
         rt1_fits = Fits(dataset=None, defdict=cfg['defdict'],
                         set_V_SRF=cfg['set_V_SRF'],
-                        fitset=cfg['fitset'], **cfg['fits_kwargs'])
+                        lsq_kwargs=cfg['lsq_kwargs'], **cfg['fits_kwargs'])
 
         return rt1_fits
 

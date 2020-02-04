@@ -163,7 +163,7 @@ class TestRTfits(unittest.TestCase):
 
 
         # specify additional arguments for scipy.least_squares and rtfits.monofit
-        fitset = {
+        lsq_kwargs = {
                 'ftol': 1e-8,
                 'gtol': 1e-8,
                 'xtol': 1e-8,
@@ -199,7 +199,7 @@ class TestRTfits(unittest.TestCase):
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
-                       set_V_SRF=set_V_SRF, fitset=fitset,
+                       set_V_SRF=set_V_SRF, lsq_kwargs=lsq_kwargs,
                        setindex='mean',
                        int_Q=True, verbose=2)
 
