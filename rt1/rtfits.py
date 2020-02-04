@@ -56,7 +56,6 @@ class Fits(Scatter):
              If a column 'data_weights' is provided, the residuals in the
              fit-procedure will be weighted accordingly.
              (e.g. residuals = weights * calculated_residuals )
-
     defdict: dict (default = None)
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
@@ -103,7 +102,6 @@ class Fits(Scatter):
                          Notice: The index must coinicide
                          with the index of the dataset, and the column-name
                          must be the corresponding variabile-name
-
     set_V_SRF: callable (default = None)
                function with the following structure:
 
@@ -115,11 +113,9 @@ class Fits(Scatter):
                >>>     SRF = Surface-function(surface-keys)
                >>>
                >>>     return V, SRF
-
     fitset: dict (default = dict())
             a dictionary with keyword-arguments passed to monofit() and further
             to scipy.optimize.least_squares
-
     setindex: str (default = 'mean')
               indicator how the datetime-indices of the fit-results
               should be processed. possible values are:
@@ -129,7 +125,6 @@ class Fits(Scatter):
                   - 'original': return the full list of datetime-objects
     int_Q: bool (default = True)
            indicator if the interaction-term should be evaluated or not.
-
     lambda_backend: str, optional
                     select method for generating the _fnevals functions
                     if they are not provided explicitly and int_Q is True
@@ -213,7 +208,6 @@ class Fits(Scatter):
 
         # add plotfunctions
         self.plot = rt1_plots(self)
-
 
 
     def __update__(self):
@@ -454,6 +448,7 @@ class Fits(Scatter):
             elif isinstance(self.dataset_used, list):
                 self.index = range(len(self.dataset_used))
 
+
     def _preparedata(self, dataset):
         '''
         prepare data such that it is applicable to least_squres fitting
@@ -552,6 +547,7 @@ class Fits(Scatter):
 
         return [inc, np.concatenate(data), np.concatenate(weights),
                 N, mask, new_fixed_dict]
+
 
     def _assignvals(self, res_dict):
         if self.interp_vals is not None and isinstance(self.interp_vals, list):
@@ -1041,12 +1037,10 @@ class Fits(Scatter):
                     if prop == 'mask':
                         return mask
 
-
     data = property(partial(__get_data, prop='sig'))
     inc = property(partial(__get_data, prop='inc'))
     weights = property(partial(__get_data, prop='weights'))
     mask = property(partial(__get_data, prop='mask'))
-
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1195,6 +1189,7 @@ class Fits(Scatter):
         return {'slope' : model_slope,
                 'curv' : model_curv}
 
+
     def _init_V_SRF(self, V_props, SRF_props, setdict=dict()):
         '''
         initialize a volume and a surface scattering function based on
@@ -1246,7 +1241,6 @@ class Fits(Scatter):
                         replacements[val_i] = setdict[str(val_i)]
                 useval = useval.xreplace(replacements)
 
-
             V_dict[key] = useval
 
         # same for SRF
@@ -1272,6 +1266,7 @@ class Fits(Scatter):
         SRF = getattr(rt1_s, SRF_props['SRF_name'])(**SRF_dict)
 
         return V, SRF
+
 
     def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
                 bounds_dict={}, fixed_dict={}, param_dyn_dict={},
@@ -1432,7 +1427,7 @@ class Fits(Scatter):
                  be executed. This re-initializes the Fits object based on the
                  input in the state as if the fit has already been performed.
 
-        kwargs:
+        lsq_kwargs: dict (default = {})
                 keyword arguments passed to scipy's least_squares function
 
         Returns:
@@ -1465,8 +1460,6 @@ class Fits(Scatter):
                 self.intermediate_results = {'parameters':[],
                                              'residuals':[],
                                              'jacobian':[]}
-
-
 
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
@@ -1508,8 +1501,11 @@ class Fits(Scatter):
         self._setindex(self.setindex)
         # get a dict of the mean datetime-values for each parameter
         try:
-            self.meandatetimes = {param: pd.to_datetime([meandatetime(val) for key, val in self.index.groupby(np.repeat(*param_repeat)).items()])
-                                  for param, param_repeat in repeatdict.items()}
+            self.meandatetimes = {
+                param: pd.to_datetime(
+                    [meandatetime(val) for key, val in self.index.groupby(
+                        np.repeat(*param_repeat)).items()])
+                for param, param_repeat in repeatdict.items()}
         except:
             pass
         # preparation of data for fitting
@@ -1560,40 +1556,9 @@ class Fits(Scatter):
             str((vsymb | srfsymb) - paramset) +
             ' must be provided in param_dict')
 
-
-# TODO fix asserts
-#        if omega is not None and not np.isscalar(omega):
-#            assert len(omega) == Nmeasurements, ('len. of omega-array must' +
-#                      'be equal to the length of the dataset')
-#        if omega is None:
-#            assert len(V.omega) == Nmeasurements, ('length of' +
-#                      ' omega-array provided in the definition of V must' +
-#                      ' be equal to the length of the dataset')
-#
-#        if tau is not None and not np.isscalar(tau):
-#            assert len(tau) == Nmeasurements, ('length of tau-array' +
-#                      ' must be equal to the length of the dataset')
-#
-#        if tau is None:
-#            assert len(V.tau) == Nmeasurements, ('length of tau-array' +
-#                      ' provided in the definition of V must be equal to' +
-#                      ' the length of the dataset')
-#
-#        if NormBRDF is not None and not np.isscalar(NormBRDF):
-#            assert len(NormBRDF) == Nmeasurements, ('length of' +
-#                      ' NormBRDF-array must be equal to the' +
-#                      ' length of the dataset')
-#        if NormBRDF is None:
-#            assert len(SRF.NormBRDF) == Nmeasurements, ('length of' +
-#                      ' NormBRDF-array provided in the definition of SRF' +
-#                      ' must be equal to the length of the dataset')
-#
         # generate a dict containing only the parameters needed to evaluate
         # the fn-coefficients
-        # for python > 3.4
-        # param_R = dict(**param_dict, **fixed_dict)
-        param_R = dict((k, v) for k, v in list(param_dict.items())
-                       + list(fixed_dict.items()))
+        param_R = dict(**param_dict, **fixed_dict)
         param_R.pop('omega', None)
         param_R.pop('tau', None)
         param_R.pop('NormBRDF', None)
@@ -1647,7 +1612,6 @@ class Fits(Scatter):
                 errdict = {'abserr' : errs,
                            'relerr' : errs/data}
                 self.intermediate_results['residuals'] += [errdict]
-
 
             return errs
 
@@ -1718,11 +1682,8 @@ class Fits(Scatter):
             self.res_dict = res_dict
             self.start_dict = start_dict
 
-
         # ------------------------------------------------------------------
         # ------------ prepare output-data for later convenience -----------
-
-
         self.R = R
         self.fixed_dict = fixed_dict
         self.res_dict = getattr(self, 'res_dict', dict())
@@ -1932,7 +1893,6 @@ class Fits(Scatter):
                      re_init=re_init,
                      lsq_kwargs=self.fitset,
                      **kwargs)
-
 
 
     def _evalfunc(self, reader=None, reader_arg=None, fitset=None,
@@ -2228,12 +2188,12 @@ class Fits(Scatter):
         self.performfit(re_init=True)
 
 
-
 class RT1_configparser(object):
     def __init__(self, configpath):
         # setup config (allow empty values -> will result in None)
         self.config = ConfigParser(allow_no_value=True)
-        # avoid converting uppercase characters (see https://stackoverflow.com/a/19359720/9703451)
+        # avoid converting uppercase characters
+        # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
         # read config file
         self.cfg = self.config.read(configpath)
