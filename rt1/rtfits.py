@@ -241,6 +241,9 @@ class Fits(Scatter):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
+        if not hasattr(self, 'fitset'):
+            self.fitset = dict()
+
         if not hasattr(self, 'int_Q'):
             self.int_Q = self.fitset.pop('int_Q', True)
 
