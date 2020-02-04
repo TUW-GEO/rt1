@@ -205,6 +205,10 @@ class TestRTfits(unittest.TestCase):
 
         testfit.performfit()
 
+        # check if _calc_slope_curv is working
+        # TODO this only tests if a result is obtained, not if the result
+        # is actually correct !!
+        slops, curvs = testfit._calc_slope_curv()
 
         # provide true-values for comparison of fitted results
         truevals = {'tau': taudata,
