@@ -2291,13 +2291,14 @@ class RT1_configparser(object):
             parsed_val = []
             parsed_val += [bool(val[0])]
             parsed_val += [float(val[1])]
-            if val[2] == 'None':
-                parsed_val += [None]
-            else:
-                parsed_val += [val[2]]
+            if len(val) > 2:
+                if val[2] == 'None':
+                    parsed_val += [None]
+                else:
+                    parsed_val += [val[2]]
 
-            parsed_val += [([float(val[3])],
-                            [float(val[4])])]
+                parsed_val += [([float(val[3])],
+                                [float(val[4])])]
 
             parsed_dict[key] = parsed_val
 
