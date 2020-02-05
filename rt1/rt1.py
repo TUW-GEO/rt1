@@ -142,9 +142,10 @@ class RT1(object):
         self._fnevals_input = _fnevals_input
 
         self._set_t_0(t_0)
-        self._set_t_ex(t_ex)
         self._set_p_0(p_0)
-        self._set_p_ex(p_ex)
+        if self.geometry != 'mono':
+            self._set_t_ex(t_ex)
+            self._set_p_ex(p_ex)
 
         self.verbosity = verbosity
         self.bsf = bsf
@@ -580,25 +581,8 @@ class RT1(object):
         if np.isscalar(t_0):
             t_0 = np.array([t_0])
         self.__t_0 = t_0
-        # if geometry is mono, set t_ex to t_0
-        if self.geometry == 'mono':
-            self._set_t_ex(t_0)
 
     t_0 = property(_get_t_0, _set_t_0)
-
-    def _get_t_ex(self):
-        return self.__t_ex
-
-    def _set_t_ex(self, t_ex):
-        # if geometry is mono, set t_ex to t_0
-        if self.geometry == 'mono':
-            t_ex = self._get_t_0()
-        else:
-            # if t_ex is given as scalar input, convert it to 1d numpy array
-            if np.isscalar(t_ex):
-                t_ex = np.array([t_ex])
-        self.__t_ex = t_ex
-    t_ex = property(_get_t_ex, _set_t_ex)
 
     def _get_p_0(self):
         return self.__p_0
@@ -608,24 +592,44 @@ class RT1(object):
         if np.isscalar(p_0):
             p_0 = np.array([p_0])
         self.__p_0 = p_0
-        # if geometry is mono, set p_ex to p_0
-        if self.geometry == 'mono':
-            self._set_p_ex(p_0)
 
     p_0 = property(_get_p_0, _set_p_0)
 
+    def _get_t_ex(self):
+        if self.geometry == 'mono':
+            return self._get_t_0()
+        else:
+            return self.__t_ex
+
+    def _set_t_ex(self, t_ex):
+        # if geometry is mono, set t_ex to t_0
+        if self.geometry == 'mono':
+            print('t_ex is always equal to t_0 if geometry is "mono"')
+            pass
+        else:
+            # if t_ex is given as scalar input, convert it to 1d numpy array
+            if np.isscalar(t_ex):
+                t_ex = np.array([t_ex])
+            self.__t_ex = t_ex
+
+    t_ex = property(_get_t_ex, _set_t_ex)
+
     def _get_p_ex(self):
-        return self.__p_ex
+        if self.geometry == 'mono':
+            return self._get_p_0() + np.pi
+        else:
+            return self.__p_ex
 
     def _set_p_ex(self, p_ex):
         # if geometry is mono, set p_ex to p_0
         if self.geometry == 'mono':
-            p_ex = self._get_p_0() + np.pi
+            print('p_ex is always equal to (p_0 + PI) if geometry is "mono"')
+            pass
         else:
             # if p_ex is given as scalar input, convert it to 1d numpy array
             if np.isscalar(p_ex):
                 p_ex = np.array([p_ex])
-        self.__p_ex = p_ex
+            self.__p_ex = p_ex
     p_ex = property(_get_p_ex, _set_p_ex)
 
     # calculate cosines of incident- and exit angle
