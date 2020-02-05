@@ -204,15 +204,18 @@ class TestRTfits(unittest.TestCase):
                     }
 
         # perform fit
-        fit = testfit.monofit(V=V, SRF=SRF, dataset=dataset,
+        fit = testfit.monofit(V=V, SRF=SRF,
+                              dataset=dataset,
                               param_dict=param_dict,
                               bounds_dict=bounds_dict,
                               fixed_dict=fixed_dict,
                               param_dyn_dict=param_dyn_dict,
-                              verbose=2,
-                              ftol=1.e-8, xtol=1.e-8, gtol=1.e-8,
-                              x_scale='jac',
-                              max_nfev=500
+                              lsq_kwargs=dict(verbose=2,
+                                              ftol=1.e-8,
+                                              xtol=1.e-8,
+                                              gtol=1.e-8,
+                                              x_scale='jac',
+                                              max_nfev=500)
                               )
 
         # ----------- calculate R^2 values and errors of parameters -----------
@@ -230,7 +233,7 @@ class TestRTfits(unittest.TestCase):
         # estimates = fit[0].fun/weights + measurements
 
         estimates = np.reshape(
-                    fit[0].fun/weights, data.shape)
+                    res_lsq.fun/weights, data.shape)
 
         # apply mask
         measures = data[~mask]
@@ -267,7 +270,7 @@ class TestRTfits(unittest.TestCase):
                        't1': 0.09}
 
         for key in truevals:
-            err = abs(fit[6][key] - truevals[key]).mean()
+            err = abs(np.repeat(*res_dict[key]) - truevals[key]).mean()
             self.assertTrue(
                 err < errdict[key],
                 msg='derived error' + str(err) + 'too high for ' + str(key))

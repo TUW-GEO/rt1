@@ -163,18 +163,14 @@ class TestRTfits(unittest.TestCase):
 
 
         # specify additional arguments for scipy.least_squares and rtfits.monofit
-        fitset = {
-                'int_Q': True,
-                '_fnevals_input': None,
-                'verbose': 2,
+        lsq_kwargs = {
                 'ftol': 1e-8,
                 'gtol': 1e-8,
                 'xtol': 1e-8,
                 'max_nfev': 500,
                 'method': 'trf',
                 'tr_solver': 'lsmr',
-                'x_scale': 'jac',
-                'intermediate_results':False}
+                'x_scale': 'jac'}
 
 
 
@@ -203,11 +199,16 @@ class TestRTfits(unittest.TestCase):
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
-                       set_V_SRF=set_V_SRF, fitset=fitset,
-                       setindex='mean')
+                       set_V_SRF=set_V_SRF, lsq_kwargs=lsq_kwargs,
+                       setindex='mean',
+                       int_Q=True, verbose=2)
 
         testfit.performfit()
 
+        # check if _calc_slope_curv is working
+        # TODO this only tests if a result is obtained, not if the result
+        # is actually correct !!
+        slops, curvs = testfit._calc_slope_curv()
 
         # provide true-values for comparison of fitted results
         truevals = {'tau': taudata,
@@ -222,7 +223,6 @@ class TestRTfits(unittest.TestCase):
         # sicne fit[0].fun gives the residuals weighted with respect to
         # weights, the model calculation can be gained via
         # estimates = fit[0].fun/weights + measurements
-
         estimates = np.reshape(
                     testfit.fit_output.fun/testfit.weights, testfit.data.shape)
 
@@ -261,7 +261,7 @@ class TestRTfits(unittest.TestCase):
                        't1': 0.09}
 
         for key in truevals:
-            err = abs(testfit.res_dict[key] - truevals[key]).mean()
+            err = abs(np.repeat(*testfit.res_dict[key]) - truevals[key]).mean()
             self.assertTrue(
                 err < errdict[key],
                 msg='derived error' + str(err) + 'too high for ' + str(key))
