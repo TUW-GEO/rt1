@@ -2289,8 +2289,19 @@ class RT1_configparser(object):
 
             # convert values
             parsed_val = []
-            parsed_val += [bool(val[0])]
-            parsed_val += [float(val[1])]
+            if val[0] == 'True':
+                parsed_val += [True]
+            elif val[0] == 'False':
+                parsed_val += [False]
+            else:
+                assert False, (f'the passed first defdict-argument of {key} ' +
+                               f'({val[0]}) must be either "True" or "False"')
+
+            if val[1] == 'auxiliary':
+                parsed_val += [val[1]]
+            else:
+                parsed_val += [float(val[1])]
+
             if len(val) > 2:
                 if val[2] == 'None':
                     parsed_val += [None]
