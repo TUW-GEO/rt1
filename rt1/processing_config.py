@@ -188,9 +188,8 @@ class rt1_processing_config(object):
                     hdf_key = 'result'
 
             # create (or append) results to a HDF-store
-            with pd.HDFStore(os.path.join(self.save_path, self.finalout_name),
-                             'a') as hdfstore:
-                res.to_hdf(hdfstore, key=hdf_key)
+            res.to_hdf(os.path.join(self.save_path, self.finalout_name),
+                       key=hdf_key, format='table', complevel=5)
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
