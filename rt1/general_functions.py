@@ -6,6 +6,7 @@ helper functions that are used both in rtfits and rtplots
 import numpy as np
 import pandas as pd
 import datetime
+from itertools import tee
 
 def rectangularize(array, weights_and_mask=False, dim=None,
                    return_masked=False):
@@ -112,12 +113,14 @@ def meandatetime(datetimes):
               the center-date
     '''
 
-    if np.count_nonzero(datetimes) == 1:
+    if len(datetimes) == 1:
         return datetimes[0]
 
-    x = pd.to_datetime(datetimes)
+    #x = pd.to_datetime(datetimes)
+    x = datetimes
     deltas = (x[0] - x[1:])/len(x)
-    meandelta = sum(deltas, datetime.timedelta(0))
+    #meandelta = sum(deltas, datetime.timedelta(0))
+    meandelta = sum(deltas)
     meandate = x[0] - meandelta
     return meandate
 
@@ -179,3 +182,10 @@ def dBsig0convert(val, inc,
 
 
     return val
+
+# taken from https://docs.python.org/3.7/library/itertools.html
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
