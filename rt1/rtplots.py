@@ -19,7 +19,7 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 
-from .general_functions import rectangularize, dBsig0convert
+from .general_functions import rectangularize, dBsig0convert, meandatetime
 from rt1.rt1 import RT1
 
 # plot of 3d scattering distribution
@@ -57,13 +57,13 @@ def _evalfit(fit, inc=None, return_components=True):
         orig_fixed_dict = copy.deepcopy(fit.fixed_dict)
         orig_t_0 = copy.deepcopy(fit.R.t_0)
         orig_p_0 = copy.deepcopy(fit.R.p_0)
-
+        orig_max_rep = copy.deepcopy(fit._max_rep)
         assert len(fit.R.t_0) == len(inc), 'inc and fit.R.t_0 must have the ' \
                                             + 'same length to allow correct ' \
                                             + 'array-broadcasting'
-
         fit.R.t_0 = inc
         fit.R.p_0 = np.full_like(inc, 0.)
+        fit._max_rep = inc.shape[1]
 
         for key, val in fit.fixed_dict.items():
             if val.shape != inc.shape:
@@ -72,7 +72,10 @@ def _evalfit(fit, inc=None, return_components=True):
                 fit.fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
                                                 inc.shape[1], axis=1)
 
+
+
     totsurfvolinter = fit._calc_model(return_components=return_components)
+
     if return_components is True:
         totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
                                    totsurfvolinter))
@@ -87,7 +90,7 @@ def _evalfit(fit, inc=None, return_components=True):
         fit.fixed_dict = orig_fixed_dict
         fit.R.t_0 = orig_t_0
         fit.R.p_0 = orig_p_0
-
+        fit._max_rep = orig_max_rep
     return totsurfvolinter
 
 
@@ -153,7 +156,6 @@ def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
     R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
             V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
             int_Q=int_Q, **kwargs)
-
     tsvi = dict(zip(['tot','surf','vol','inter'], R.calc()))
 
     # convert to sig0 and dB if required
@@ -982,24 +984,20 @@ class plot:
         #     return val
 
         # calculate individual contributions
-        contrib_array = fit._calc_model(R=fit.R,
-                                        res_dict=fit.res_dict,
-                                        fixed_dict=fit.fixed_dict,
-                                        return_components=True)
+        contrib_array = fit._calc_model(return_components=True)
 
         # apply mask and convert to pandas dataframe
-        contrib_array = [np.ma.masked_array(con,
-                                            fit.mask) for con in contrib_array]
+        contrib_array = [np.ma.masked_array(con, fit.mask)
+                         for con in contrib_array]
 
-        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                contrib_array))
+        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'], contrib_array))
 
         contrib['$\\sigma_0$ dataset'] = data
         contrib['inc'] = inc_array
 
-        contrib = {key:pd.DataFrame(val, fit.index).stack().droplevel(1)
-                        for key, val in contrib.items()}
-        contrib = pd.DataFrame(contrib)
+        contrib = pd.DataFrame({key:val.compressed()
+                                for key, val in contrib.items()},
+                               fit.dataset.index)
 
         # convert units
         complist = [i for i in contrib.keys() if i not in ['inc']]
@@ -1474,7 +1472,7 @@ class plot:
 
     def single_results(self, fit=None, fit_numbers=None, fit_indexes=None,
                     hexbinQ=True, hexbinargs={},
-                    convertTodB=False):
+                    convertTodB=False, datetime_unit='h'):
         '''
         a function to investigate the quality of the individual fits
 
@@ -1511,9 +1509,15 @@ class plot:
         if fit_numbers is not None and fit_indexes is not None:
             assert False, 'please provide EITHER fit_numbers OR fit_indexes!'
         elif fit_indexes is not None:
-            fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
+            #fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
+            fit_numbers = np.argmin(
+                np.abs(fit.fit_index -
+                       np.expand_dims(np.atleast_1d(
+                           np.array(fit_indexes, dtype=fit.index.dtype)),-1)),
+                axis=1)
+
         elif fit_numbers is None and fit_indexes is None:
-            fit_numbers = range(len(fit.index))
+            fit_numbers = [1]
 
         # function to generate colormap that fades between colors
         def CustomCmap(from_rgb, to_rgb):
@@ -1534,7 +1538,8 @@ class plot:
             cmap = LinearSegmentedColormap('custom_cmap', cdict)
             return cmap
 
-        estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+        estimates = fit._calc_model()
+        indexsplits = np.split(fit.index, np.cumsum(fit.group_repeats))[:-1]
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1547,7 +1552,19 @@ class plot:
                 y = estimates[m][~fit.mask[m]]
 
             # plot data
-            label = fit.index[m]
+            nindexes = len(indexsplits[m])
+            if nindexes > 1:
+                mindate = np.datetime_as_string(indexsplits[m][0],
+                                                unit=datetime_unit)
+                maxdate = np.datetime_as_string(indexsplits[m][-1],
+                                                unit=datetime_unit)
+                if mindate == maxdate:
+                    label = f'{mindate} [{nindexes}]'
+                else:
+                    label = f'({mindate} - {maxdate}) [{nindexes}]'
+            else:
+                label = np.datetime_as_string(indexsplits[m][0],
+                                              unit=datetime_unit)
 
             xdata = np.rad2deg(fit.inc[m][~fit.mask[m]])
 
@@ -1636,6 +1653,11 @@ class plot:
         if params is None:
             params = fit.res_dict.keys()
 
+        # constant parameters
+        constparams = [key for key in params if len(fit.res_dict[key][0]) == 1]
+        # timeseries-parameters
+        tsparams = [i for i in params if i not in constparams]
+
 
         if cmaps is None:
             cmaps = ['Reds', 'Greens', 'Blues', 'Purples', 'Oranges', 'Greys',
@@ -1646,9 +1668,9 @@ class plot:
         for i, valdict in enumerate(fit.intermediate_results['parameters']):
             for key, val in valdict.items():
                 if key in interparams:
-                    interparams[key] += [[i, np.mean(val)]]
+                    interparams[key] += [[i, np.mean(val[0])]]
                 else:
-                    interparams[key] = [[i, np.mean(val)]]
+                    interparams[key] = [[i, np.mean(val[0])]]
         intererrs = {}
         for i, valdict in enumerate(fit.intermediate_results['residuals']):
             for key, val in valdict.items():
@@ -1670,8 +1692,8 @@ class plot:
 
         interres_params = {}
         for key in params:
-            interres_p = pd.concat([pd.DataFrame(valdict[key],
-                                                 fit.index.drop_duplicates(),
+            interres_p = pd.concat([pd.DataFrame(valdict[key][0],
+                                                 fit.meandatetimes[key],
                                     columns=[i])
                                     for i, valdict in enumerate(
                                             fit.intermediate_results[
@@ -1694,8 +1716,10 @@ class plot:
             jacaxes += [plt.subplot(gs[3,i])]
 
         smhandles, smlabels = [],[]
-        for nparam, [parameter, paramdf] in enumerate(interres_params.items()):
-
+        nparam = 0
+        for [parameter, paramdf] in interres_params.items():
+            # plot only temporally varying parameters as timeseries
+            if parameter not in tsparams: continue
             cmap = plt.get_cmap(cmaps[nparam])
 
             for key, val in paramdf.items():
@@ -1717,35 +1741,58 @@ class plot:
                 boundaries = [0] + cbbounds + [cbbounds[-1]+1],
                 spacing='proportional',
                 norm=mpl.colors.BoundaryNorm(cbbounds, cmap.N))
+            axcb.text(0.51, 0.5, parameter, rotation=90, fontsize=8,
+                      horizontalalignment='center',
+                      verticalalignment='center')
             if nparam > 0: cb.set_ticks([])
 
             smhandles += [mpl.lines.Line2D([],[], color=cmap(.9))]
             smlabels += [parameter]
+            nparam += 1
+
         axsm.legend(handles=smhandles, labels=smlabels, loc='upper left')
 
         axsmbounds = list(axsm.get_position().bounds)
-        axsmbounds[2] = axsmbounds[2] - 0.015*len(interres_params)
+        axsmbounds[2] = axsmbounds[2] - 0.015*nparam
         axsm.set_position(axsmbounds)
 
         for [pax, jax, [key, val]] in zip(paramaxes, jacaxes,
                                           interparams.items()):
             if key not in interjacs: continue
-            pax.plot(*val, label=key, marker='.', ms=3, lw=0.5)
+
+            if key in tsparams:
+                label = f'{key} (mean)'
+            else:
+                label = key
+
+            pax.plot(*val, label=label, marker='.', ms=3, lw=0.5)
             pax.legend(loc='upper center')
-            jax.plot(interjacs[key][0], interjacs[key][1], label=key,
+            jax.plot(interjacs[key][0], interjacs[key][1], label=label,
                      marker='.', ms=3, lw=0.5)
             jax.legend(loc='upper center')
 
+        paramaxes[-1].text(1.03, .5, 'Parameter estimates', rotation=90,
+                           fontweight='bold',
+                           horizontalalignment='left',
+                           verticalalignment='center',
+                           transform=paramaxes[-1].transAxes)
+        jacaxes[-1].text(1.03, .5, 'Jacobi determinant', rotation=90,
+                           fontweight='bold',
+                           horizontalalignment='left',
+                           verticalalignment='center',
+                           transform=jacaxes[-1].transAxes)
+
         for key, val in intererrs.items():
             if key == 'abserr':
-                axerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.',
+                axerr.semilogy(val[0],np.abs(val[1]), label='absolute error', marker='.',
                                ms=3, lw=0.5, c='r')
                 axerr.legend(ncol=5, loc='upper left')
             if key == 'relerr':
                 axrelerr = axerr.twinx()
-                axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.',
+                axrelerr.semilogy(val[0],np.abs(val[1]), label='relative error', marker='.',
                                   ms=3, lw=0.5, c='g')
                 axrelerr.legend(ncol=5, loc='upper right')
+
 
         return f
 
@@ -1842,13 +1889,22 @@ class plot:
         mask = fit.mask
         sig0_vals = fit._calc_model(return_components=True)
 
+
         # apply mask and convert to pandas dataframe
         sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
         sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
 
         sig0_vals['data'] = np.ma.masked_array(data, mask)
         sig0_vals['incs'] = np.ma.masked_array(fit.R.t_0, mask)
-        sig0_vals['indexes'] = fit.index
+
+
+        indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
+        np.take(fit.index, fit._idx_assigns, out=indexes)
+        indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
+        indexes = [meandatetime(i.compressed()) for i in indexes]
+
+        sig0_vals['indexes'] = pd.to_datetime(indexes)#pd.to_datetime(fit.index)
+
 
         # convert to sig0 and dB if necessary
         sig0_vals_I_linear = dict()
@@ -1863,7 +1919,7 @@ class plot:
                                                     dB = False, sig0=False,
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
-            inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit.index))
+            inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit._idx_assigns))
             newsig0_vals = _evalfit(fit, inc)
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
@@ -2104,11 +2160,11 @@ class plot:
 
             styledict_dict = dict(zip(['tot', 'surf', 'vol', 'inter',
                                        'data', 'indicator'],
-                                  [styletot, stylevol, stylesurf, styleinter,
+                                  [styletot, stylesurf, stylevol, styleinter,
                                    styledata, styleindicator]))
             styledict_fullt0_dict = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                      [stylefullt0tot, stylefullt0vol,
-                                       stylefullt0surf, stylefullt0inter]))
+                                      [stylefullt0tot, stylefullt0surf,
+                                       stylefullt0vol, stylefullt0inter]))
 
             lines2, lines_frac2, linesfull2, lines_frac_full2 = plotlines(
                 dayrange2, printcomponents2, printfullt_0, styledict_dict,
@@ -2257,7 +2313,7 @@ class plot:
         a_slider = Slider(slider_ax,            # axes object for the slider
                           'solid lines',        # name of the slider parameter
                           0,                    # minimal value of parameter
-                          len(fit.index) - 1,   # maximal value of parameter
+                          len(fit._idx_assigns) - 1,   # maximal value of parameter
                           valinit=0,            # initial value of parameter
                           valfmt="%i",          # print slider-value as integer
                           valstep=1,
@@ -2296,7 +2352,7 @@ class plot:
             b_slider = Slider(slider_bx,         # axes object for the slider
                               'dashed lines',    # name of the slider parameter
                               0,                 # minimal value of parameter
-                              len(fit.index) - 1,# maximal value of parameter
+                              len(fit._idx_assigns) - 1,# maximal value of parameter
                               valinit=0,         # initial value of parameter
                               valfmt="%i",
                               valstep=1,
