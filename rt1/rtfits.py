@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize
+from .general_functions import meandatetime, rectangularize, pairwise
 from .rtplots import plot as rt1_plots
 
 from . import surface as rt1_s
@@ -22,8 +22,10 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
-from itertools import repeat
-from functools import partial
+from itertools import repeat, groupby, accumulate
+from functools import partial, lru_cache
+from operator import itemgetter
+
 
 try:
     import cloudpickle
@@ -31,6 +33,9 @@ except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
 
 from configparser import ConfigParser
+from collections import Counter, deque
+
+
 
 class Fits(Scatter):
     '''
@@ -116,13 +121,6 @@ class Fits(Scatter):
     lsq_kwargs: dict (default = dict())
                 a dictionary with keyword-arguments passed to
                 scipy.optimize.least_squares
-    setindex: str (default = 'mean')
-              indicator how the datetime-indices of the fit-results
-              should be processed. possible values are:
-                  - 'mean': the center date of the used timespan
-                  - 'first': the first date of the timespan
-                  - 'last': the last date of the timespan
-                  - 'original': return the full list of datetime-objects
     int_Q: bool (default = True)
            indicator if the interaction-term should be evaluated or not.
     lambda_backend: str, optional
@@ -177,15 +175,13 @@ class Fits(Scatter):
     Methods
     ---------
 
-    performfit(fn_input=None, _fnevals_input=None, int_Q=False,
-               setindex='mean', **kwargs)
+    performfit(fn_input=None, _fnevals_input=None, int_Q=False, **kwargs)
         perform a fit of the defined model to the dataset
 
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
-                 defdict=None, set_V_SRF=None, lsq_kwargs=None,
-                 setindex = 'mean', int_Q=True,
+                 defdict=None, set_V_SRF=None, lsq_kwargs=None, int_Q=True,
                  lambda_backend=None, _fnevals_input=None, interp_vals=None,
                  **kwargs):
 
@@ -197,7 +193,6 @@ class Fits(Scatter):
         self.lsq_kwargs = lsq_kwargs
         if self.lsq_kwargs is None:
             lsq_kwargs = dict()
-        self.setindex = setindex
 
         self.int_Q = int_Q
         self.lambda_backend = lambda_backend
@@ -206,11 +201,12 @@ class Fits(Scatter):
             self.lambda_backend = _init_lambda_backend
 
         self._fnevals_input = _fnevals_input
-        self.interp_vals = interp_vals
+
+        if interp_vals is None:
+            self.interp_vals = []
 
         # add plotfunctions
         self.plot = rt1_plots(self)
-
 
     def __update__(self):
         '''
@@ -229,9 +225,6 @@ class Fits(Scatter):
             self.res_dict = self.result[6]
             self.start_dict = self.result[7]
             self.fixed_dict = self.result[8]
-
-        if not hasattr(self, 'setindex'):
-            self.setindex = 'mean'
 
         if not hasattr(self, 'plot'):
             print('... re-initializing plot-functions')
@@ -253,7 +246,7 @@ class Fits(Scatter):
                                                       None)
 
         if not hasattr(self, 'interp_vals'):
-            self.interp_vals = None
+            self.interp_vals = []
 
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
@@ -278,51 +271,50 @@ class Fits(Scatter):
         else:
             return self.__dict__
 
+    # a list of the names of the properties that are cached
+    @property
+    def __cached_props(self):
+        return ['param_dyn_dict', 'param_dyn_df', '_groupindex',
+                'group_repeats', '_dataset_used', 'index',
+                'fit_index', '_jac_assign_rule',
+                'meandatetimes', 'inc', 'mask', 'weights',
+                'data', 'data_weights']
 
-    def _generatedataset(self, dataset, dyn_keys,
-                         freq=None, freqkeys=[],
-                         manual_dyn_df=None,
-                         fixed_dict=dict()):
+    def _clear_cache(self):
         '''
-        a function to group the dataset to arrays based
-        on the provided frequency-keys
-
-        Parameters:
-        -----------
-        dataset: pandas.DataFrame
-                 A pandas-DataFrame with columns inc and sig that
-                 correspond to the incidence-angle- and backscatter
-                 values
-        dyn_keys: list of strings
-                  a list of the names of the parameters that are intended
-                  ot be fitted
-        freq: list
-              a list of frequencies that will be assigned to the
-              parameters. For more details check the pandas "DateOffset"
-              https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
-
-        freqkeys: list
-                  a list of parameter-names to which the corresponding
-                  frequency will be assigned.
-
-                  e.g. if freq is ['D', 'M'] then freqkeys might look
-                  like [['dayparam1', 'dayparam2'], ['monthparam1']]
-
-        manual_dyn_df: pandas.DataFrame
-                       a pandas-DataFrame with column-names corresponding
-                       to the keys whose temporal grouping will be
-                       assigned based on the values.
-
-        fixed_dict: pandas.DataFrame
-                    a pandas-DataFrame with timeseries of parameters
-                    that are intended to be used as auxiliary datasets
-                    -> the index must match with the index of dataset!
+        clear all cached properties
         '''
+        for name in self.__cached_props:
+            getattr(Fits, name).fget.cache_clear()
 
-        dataset = pd.concat([dataset] +
-                            [val for key, val in fixed_dict.items() \
-                             if isinstance(val, (pd.Series, pd.DataFrame))],
-                            axis=1)
+        print('...cache cleared')
+
+    def _cache_info(self):
+        '''
+        print the state of the lru_cache for all cached properties
+        '''
+        print(*[f'{name:<18}:   {getattr(Fits, name).fget.cache_info()}'
+                for name in self.__cached_props],
+              sep='\n')
+
+    @property
+    @lru_cache()
+    def param_dyn_dict(self):
+        '''
+        get index to assign grouping
+        '''
+        [fixed_dict, setdict, startvaldict, timescaledict,
+         boundsvaldict, manual_dyn_df] = self._performfit_dicts
+
+        # the names of the parameters that will be fitted
+        dyn_keys = startvaldict.keys()
+
+        # set frequencies of fitted parameters
+        # (group by similar frequencies)
+        grps = [[i, [p[0] for p in j]] for i, j in groupby(
+            timescaledict.items(), key=itemgetter(1))]
+        freq = [i[0] for i in grps]
+        freqkeys = [i[1] for i in grps]
 
         if manual_dyn_df is not None:
             manual_dyn_df = copy.deepcopy(manual_dyn_df)
@@ -332,7 +324,8 @@ class Fits(Scatter):
         param_dyn_dict = {}
         # initialize all parameters as scalar parameters
         for key in dyn_keys:
-            param_dyn_dict[key] = np.ones(len(dataset.index), dtype=int)
+            param_dyn_dict[key] = np.ones(len(self.dataset.index),
+                                          dtype=int)
 
         if freq is not None:
             for i, f in enumerate(freq):
@@ -341,33 +334,54 @@ class Fits(Scatter):
                     df = pd.concat([
                                 pd.DataFrame({key:[nval]}, val.index)
                                 for nval, [_, val] in enumerate(
-                                        dataset.groupby(
+                                        self.dataset.index.to_frame().groupby(
                                                 pd.Grouper(freq=f)))])
 
                     param_dyn_dict[key] = np.array(df[key].values,
                                                    dtype=int).flatten()
 
         if manual_dyn_df is not None:
-            for key, val in manual_dyn_df.items():
-                # param_dyn_dict values as strings (zfilled to N digits)
-                dd1 = np.char.zfill(np.array(param_dyn_dict[key],
-                                            dtype='str'),
-                              len(max(np.array(param_dyn_dict[key],
-                                               dtype='str'), key=len)))
-                # manual_dyn_df values as strings (zfilled to N digits)
-                dd2 = np.char.zfill(np.array(val, dtype='str'),
-                              len(max(np.array(val, dtype='str'),
-                                      key=len)))
+            for key, val in manual_dyn_df.astype(str).items():
+                dd1 = np.char.zfill(
+                    np.array(param_dyn_dict[key], dtype='str'),
+                    len(max(np.array(param_dyn_dict[key], dtype='str'),
+                            key=len)))
+                dd2 = val.str.zfill(len(max(val, key=len)))
                 # generate a combined (unique) integer
                 param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
                                                dtype=int)
+        return param_dyn_dict
 
-        param_dyn_df = pd.DataFrame(param_dyn_dict, index=dataset.index)
-        # get name of parameter with the maximum amount of unique values
 
+    @property
+    @lru_cache()
+    def param_dyn_df(self):
+        '''
+        a data-frame with the individual group-indexes for each parameter
+        (with respect to the unique index values of the provided dataset)
+        '''
+
+        groupids = [next(j) for i,j in groupby(
+            zip(self._groupindex, *self.param_dyn_dict.values()),
+            key=itemgetter(0))]
+
+        param_dyn_df = pd.DataFrame(groupids,
+                                    columns=['groupindex',
+                                             *self.param_dyn_dict.keys()])
+        param_dyn_df.drop(columns='groupindex', inplace=True)
+
+        return param_dyn_df
+
+    @property
+    @lru_cache()
+    def _groupindex(self):
+        '''
+        the index used to group the dataset with respect to the temporal
+        dynamics of the parameters
+        '''
         # get final group-indexes
         groupindex = None
-        for key, val in param_dyn_df.items():
+        for key, val in self.param_dyn_dict.items():
             dd = np.char.zfill(np.array(val, dtype='str'),
                                len(max(np.array(val, dtype='str'),
                                        key=len)))
@@ -376,200 +390,176 @@ class Fits(Scatter):
             else:
                 groupindex = np.char.add(groupindex, dd)
 
-
         if groupindex is None:
-            groupindex = dataset.index
+            _, groupindex = np.unique(self.dataset.index,
+                                      return_inverse=True)
+
+        return groupindex.astype(np.int64)
+
+
+    @property
+    @lru_cache()
+    def group_repeats(self):
+        return list(map(len, map(set, self._orig_index)))
+
+
+    @property
+    def _orig_index(self):
+        '''
+        a list of the (grouped) index-values
+        '''
+        orig_index = [np.array([k[1] for k in j],
+                               dtype=self.dataset.index.dtype)
+                      for i,j in groupby(zip(self._groupindex,
+                                             self.dataset.index),
+                                         key=itemgetter(0))]
+        return orig_index
+
+
+    @property
+    def _idx_assigns(self):
+        '''
+        a list of ranges that is used to assign values provided as a list
+        with length of the dataset to the shape needed for further processing
+        (e.g. grouped with respect to the temporal dynamics of the parameters)
+        '''
+        return rectangularize([range(*i) for i in
+                               pairwise(accumulate([0, *self.group_repeats]))],
+                              dim=self._max_rep)
+
+    @property
+    @lru_cache()
+    def _dataset_used(self):
+        '''
+        group the dataset with respect to the required parameter-groups
+        '''
+
+        [fixed_dict, setdict, startvaldict, timescaledict,
+         boundsvaldict, manual_dyn_df] = self._performfit_dicts
+
+        # prepare dataset
+        dataset = pd.concat([self.dataset] +
+                            [val for key, val in fixed_dict.items() \
+                             if isinstance(val, (pd.Series, pd.DataFrame))],
+                            axis=1)
 
         dataset['orig_index'] = dataset.index
-        dataset = dataset.set_index(groupindex)
+        dataset = dataset.set_index(self._groupindex)
         groupdf = dataset.groupby(level=0)
 
         # generate new data-frame based on groups
-        new_df = groupdf.agg(pd.Series.tolist)
+        dataset_used = groupdf.agg(pd.Series.tolist)
 
-        param_dyn_df['orig_index'] = param_dyn_df.index
-        param_dyn_df = param_dyn_df.set_index(groupindex)
-        param_dyn_groupdf = param_dyn_df.groupby(level=0)
-
-        index = param_dyn_groupdf['orig_index'].apply(np.array)
-        vals = [param_dyn_groupdf[key].apply(list).apply(np.take, indices=0)
-                for key in param_dyn_df]
-        param_dyn_df = pd.concat([index, *vals], axis=1)
-
-        for key, val in param_dyn_df.items():
-            param_dyn_dict[key] = list(val.values)
-
-        return new_df, param_dyn_dict
+        return dataset_used
 
 
-    def _setindex(self, setindex):
+    @property
+    @lru_cache()
+    def index(self):
         '''
-        set the index-property of the Fits-object
-        (dataset_used must be present, e.g. performfit() must have been run
-         prior to calling this method!)
+        return the unique index-values of the dataset
+        (used to assign the fit-results)
 
-        Parameters:
-        ---------------
-        setindex: str
-                  identifyer how to assign the index of the fitted values
-                  in case timespans longer than 1 measurement are used.
+        - if `dataset` is provided, the unique index-values are used
+        - if `dataset` is not provided but 'dataset_used'
 
-                  possible values are:
-
-                  - 'first': the first index-value will be used
-                  - 'last': the last index-value will be used
-                  - 'mean': the center index-value will be used
-                    (Note: this results in a index that might not have been
-                    present in the input dataset!)
-                  - 'original': the list of indices will be returned without
-                    alteration (Note: without further processing, this index
-                    can not be directly used to generate a pandas DataFrame)
-        '''
-        # generate a datetime-index from the given groups
-        try:
-            if setindex == 'first':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(np.take,
-                                                      indices=0).values)
-            elif setindex == 'last':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(np.take,
-                                                      indices=-1).values)
-            elif setindex == 'mean':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(meandatetime).values)
-            elif setindex == 'original':
-                self.index = self.dataset_used.index
-            else:
-                print('setindex must be  either "first", "last",',
-                      ' "mean" or "original"')
-                raise Exception
-        except:
-            print('index could not be combined... use original index instead')
-            if isinstance(self.dataset_used, pd.DataFrame):
-                self.index = self.dataset_used.index
-            elif isinstance(self.dataset_used, list):
-                self.index = range(len(self.dataset_used))
-
-
-    def _preparedata(self, dataset):
-        '''
-        prepare data such that it is applicable to least_squres fitting
-        - separate incidence-angles and data-values
-        - rectangularize the data-array
-          (this is necessary in order to allow array-processing)
-        - provide weighting-matrix to correct for rectangularization
-
-        Parameters:
-        ------------
-        dataset: pandas.DataFrame or list
-                 input-dataset as pandas-DataFrame with columns
-                 ['inc', 'sig'] and any number of additional columns that
-                 represent auxiliary datasets
-
-                 input-dataset as list of the shape:
-                     [[inc_0, data_0], [inc_1, data_2], ...]
-
-
-        Returns:
-        ---------
-        inc: array-like
-             a rectangular array consisting of the incidence-angles as
-             provided in the dataset, rectangularized by repeating the last
-             values of each row to fit in length.
-        data: array-like
-              a rectangular array consisting of the data-values as provided
-              in the dataset, rectangularized by repeating the last values
-              of each row to fit in length
-        weights: array-like
-                 an array of equal shape as inc and data, consisting of the
-                 weighting-factors that need to be applied in order to correct
-                 for the rectangularization. The weighting-factors for each
-                 individual data-element are given by
-                     weight_i = 1 / np.sqrt(N_i)
-                 where N_i is the number of repetitions of the i'th value
-                 that have been added in order to rectangularize the dataset.
-
-                 Including the weighting-factors within the least-squares
-                 approach will result in a cancellation of the repeated
-                 results such that the artificially added values (necessary
-                 to have a rectangular array) will have no effect on the fit.
-
-                 If a column 'data_weights' has been provided in the dataset,
-                 the obtained weights will additionally be multiplied by the
-                 values provided as 'data_weights'.
-        N: int
-           number of measurements that have been provided within the dataset
-
-        mask: array-like
-              a mask that indicates the artificially added values
-
-        new_fixed_dict: dict
-                        a dictionary with the values of the auxiliary-datasets
-                        grouped such that they can be used within the
-                        fitting procedure
         '''
 
+        # get all unique values of each group in _orig_index
+        return np.concatenate([list(dict.fromkeys(i))
+                               for i in self._orig_index])
 
-        # prepare data to avoid nan-values
-        #      since numpy only supports rectangular arrays, and least_squares
-        #      does neither support masked arrays, nor containing nan-values,
-        #      the problem of missing values within the dataset is currently
-        #      adressed by repeating the values from the nearest available
-        #      neighbour to rectangularize the dataset.
 
-        #      this of course results in an inhomogeneous treatment of the
-        #      measurements since the duplicates have been added artificially!
-        #      -> in order to correct for the added duplicates, a
-        #      weighting-matrix is provided that can be used to correct for
-        #      the unwanted duplicates.
+    @property
+    @lru_cache()
+    def fit_index(self):
+        '''
+        the mean datetime-indexes that correspond to each fit-group
+        '''
+        #indexgroups = np.split(self.index, np.cumsum(self.group_repeats))[:-1]
+        #return np.array(list(map(meandatetime, indexgroups)), dtype=self.index.dtype)
 
-        # this is here for backward-support
-        if isinstance(dataset, list):
-            N = len(dataset)
-            inc, weights, mask = rectangularize([i[0] for i in dataset],
-                                                weights_and_mask = True)
-            data = rectangularize([i[1] for i in dataset])
-            new_fixed_dict = dict()
+        # be careful in case an unsorted grouping is applied !!! (e.g. manual dyn)
+        return np.array(list(map(meandatetime, self._orig_index)),
+                        dtype=self.index.dtype)
 
-        elif isinstance(dataset, pd.DataFrame):
-            # save number of datasets
-            N = len(dataset)
-            inc, weights, mask = rectangularize(dataset.inc.values,
-                                                weights_and_mask = True)
-            data = rectangularize(dataset.sig.values)
 
-            new_fixed_dict = dict()
-            for key in dataset:
-                if key not in ['inc', 'sig', 'orig_index']:
-                    new_fixed_dict[key] = rectangularize(dataset[key])
+    @property
+    @lru_cache()
+    def _jac_assign_rule(self):
+        shape = self.inc.shape
 
-        if 'data_weights' in new_fixed_dict:
-            print('applying data_weights')
-            weights = weights * new_fixed_dict.pop('data_weights')
+        jac_rules = dict()
+        for key, val in self.param_dyn_df.items():
+            uniques = pd.unique(val)
 
-        return [inc, np.concatenate(data), np.concatenate(weights),
-                N, mask, new_fixed_dict]
+            row_ind = []  # row-indices where jac is nonzero
+            col_ind = []  # col-indices where jac is nonzero
+            for n_uni, uni in enumerate(uniques):
+                rule = (val == uni).values
+                where_n = np.where(
+                        np.concatenate(np.broadcast_to(rule[:,np.newaxis],
+                                                       shape)))[0]
+
+                col_ind += list(where_n)
+                row_ind += list(np.full_like(where_n, n_uni))
+            jac_rules[key] = [row_ind, col_ind]
+        return jac_rules
+
+
+    @property
+    @lru_cache()
+    def meandatetimes(self):
+        '''
+        a dict of the mean datetime-indexes that correspond to each obtained
+        parameter
+        '''
+        dates = dict()
+        for key, val in self.param_dyn_df.items():
+            grp = groupby(zip(val.values, self.fit_index), key=itemgetter(0))
+            dates[key] = np.array(list(map(meandatetime,
+                             [[k[1] for k in j] for i,j in grp])),
+                                  dtype=self.index.dtype)
+        return dates
 
 
     def _assignvals(self, res_dict):
-        if self.interp_vals is not None and isinstance(self.interp_vals, list):
+        if len(self.interp_vals) > 0:
+
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
             for key, val in res_dict.items():
-                if (key in self.interp_vals and len(val[0]) > 2 and
-                    not isinstance(val[1], int)):
+                if key in self.interp_vals:
                     # generate an interpolaion function
-                    f = interp1d(self.meandatetimes[key].to_julian_date(),
-                                 val[0], fill_value='extrapolate', axis=0,
-                                 kind='quadratic')
+                    # the values at the boundaries are set to the nearest
+                    # obtained values to avoid extrapolation
+                    # "deque" is a list-type that supports append on both sides
+                    useindex = deque(self.meandatetimes[key])
+                    useindex.appendleft(self.dataset.index[0])
+                    useindex.append(self.dataset.index[-1])
+                    useindex = np.array(useindex,
+                                        dtype='datetime64[ns]').astype(float)
+
+                    usevals = deque(val[0])
+                    usevals.appendleft(val[0][0])
+                    usevals.append(val[0][-1])
+
                     # interpolate the data to the used timestamps
-                    use_res_dict[key] = f(self.index.to_julian_date())
+                    f = interp1d(useindex.astype(float), usevals,
+                                 fill_value='extrapolate', axis=0,
+                                 kind='quadratic')
+
+                    interpvals = f(np.array(self.index, dtype='datetime64[ns]'))
+
+                    # assign correct shape
+                    use_res_dict[key] = np.take(interpvals, self._idx_assigns)
+
                 else:
-                    use_res_dict[key] = np.repeat(*val)
+                    use_res_dict[key] = np.repeat(*val)[:,np.newaxis]
         else:
-            use_res_dict = {key:np.repeat(*val)
+            use_res_dict = {key:np.repeat(*val)[:,np.newaxis]
                             for key, val in res_dict.items()}
+
         return use_res_dict
 
 
@@ -615,8 +605,9 @@ class Fits(Scatter):
                 assert False, 'fixed_dict is not available and must be provided'
 
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -737,8 +728,9 @@ class Fits(Scatter):
              shape applicable to scipy's least_squres-function
         '''
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -836,6 +828,7 @@ class Fits(Scatter):
         # (evaluating only "outer" derivatives with respect to omega,
         # tau and NormBRDF)
         jac = R.jacobian(sig0=self.sig0, dB=self.dB, param_list=neworder)
+        #self.jacshape = jac[0].shape
 
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
@@ -850,44 +843,13 @@ class Fits(Scatter):
 
             if len(uniques) == 1:
                 newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
-# TODO is it faster to use numpy directly for small arrays ?
-#            elif len(uniques) < 50:
-#                data = np.concatenate(jac[i])
-#                row_ind = []  # row-indices where jac is nonzero
-#                col_ind = []  # col-indices where jac is nonzero
-#                for n_uni, uni in enumerate(uniques):
-#                    rule = (param_dyn_dict[key] == uni)
-#                    where_n = np.where(
-#                            np.concatenate(
-#                                    np.broadcast_arrays(
-#                                            rule[:,np.newaxis], jac[0])[0]))[0]
-#
-#                    col_ind += list(where_n)
-#                    row_ind += list(np.full_like(where_n, n_uni))
-#                # generate a sparse matrix
-#                m = np.full((max(row_ind) + 1,
-#                                      max(col_ind) + 1), 0.)
-#                # fill matrix with values
-#                m[row_ind, col_ind] = data
-#                newjacdict[key] = m
             else:
                 # if too many unique values occur, use scipy sparse matrix
                 # to avoid memory-overflow due to the large number of zeroes...
                 # (this will reduce speed since scipy.sparse does not fully
                 # supprot BLAS and so no proper parallelization is performed)
                 data = np.concatenate(jac[i])
-
-                row_ind = []  # row-indices where jac is nonzero
-                col_ind = []  # col-indices where jac is nonzero
-                for n_uni, uni in enumerate(uniques):
-                    rule = (param_dyn_dict[key] == uni)
-                    where_n = np.where(
-                            np.concatenate(np.broadcast_to(rule[:,np.newaxis],
-                                                           jac[i].shape)))[0]
-
-                    col_ind += list(where_n)
-                    row_ind += list(np.full_like(where_n, n_uni))
-
+                row_ind, col_ind = self._jac_assign_rule[key]
                 # generate a sparse matrix
                 m = csr_matrix((data, (row_ind, col_ind)),
                                shape=(max(row_ind) + 1,
@@ -1002,48 +964,135 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    def __get_res_df(self):
+    @property
+    def res_df(self):
         '''
-        return a pandas DataFrame with the obtained parameters
+        return a pandas DataFrame with the obtained parameters from the fit
+        (performfit must be called prior to accessing this property!)
         '''
-        return pd.DataFrame(self._assignvals(self.res_dict), self.index)
+        if not hasattr(self, 'res_dict'):
+            print('you must perform the fit first! ...e.g. call performfit()')
+            return
 
-    res_df = property(__get_res_df)
+        series = []
+        for key, val in self._assignvals(self.res_dict).items():
+            if key in self.interp_vals:
+                # re-assign interpolated values to the corresponding indexes
+                # (they are provided as groups corresponding to the fitted
+                # time-periods)
+                x = np.full(len(self.index), -999.)
+                np.put(a=x, ind=self._idx_assigns, v=val)
+                series.append(pd.Series(x, self.index, name=key))
+            else:
+                series.append(pd.Series(np.repeat(val, self.group_repeats),
+                                        self.index, name=key))
+        resdf = pd.concat(series, axis=1).ffill()
+
+        return resdf
+
 
     def __get_data(self, prop):
-        if not hasattr(self, 'dataset_used'):
+        '''
+        a function to retrieve properties from the provided dataset
+
+        Parameters
+        ----------
+        prop : str
+            the name of the property.
+
+        Returns
+        -------
+        np.array
+            the values of the requested property
+
+        '''
+        if not hasattr(self, '_dataset_used'):
             print('call _reinit() or performfit() to set the data first!')
             return
         else:
 
-            if isinstance(self.dataset_used, pd.DataFrame):
-                if prop in ['inc', 'sig']:
-                    return rectangularize(self.dataset_used[prop].values)
+            if isinstance(self._dataset_used, pd.DataFrame):
+                if prop in ['inc', 'sig', 'data_weights']:
+                    return rectangularize(self._dataset_used[prop].values)
                 elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize(self.dataset_used.inc.values,
+                    _, weights, mask = rectangularize(self._dataset_used.inc.values,
                                                       weights_and_mask=True)
                     if prop == 'weights':
                         return np.concatenate(weights)
                     if prop == 'mask':
                         return mask
-            elif isinstance(self.dataset_used, list):
+            elif isinstance(self._dataset_used, list):
                 if prop == 'inc':
-                    return rectangularize([i[0] for i in self.dataset_used])
+                    return rectangularize([i[0] for i in self._dataset_used])
                 elif prop == 'sig':
-                    return rectangularize([i[1] for i in self.dataset_used])
+                    return rectangularize([i[1] for i in self._dataset_used])
                 elif prop in ['weights', 'mask']:
                     _, weights, mask = rectangularize([i[0] for i in
-                                                       self.dataset_used],
+                                                       self._dataset_used],
                                                       weights_and_mask=True)
                     if prop == 'weights':
                         return np.concatenate(weights)
                     if prop == 'mask':
                         return mask
 
-    data = property(partial(__get_data, prop='sig'))
-    inc = property(partial(__get_data, prop='inc'))
-    weights = property(partial(__get_data, prop='weights'))
-    mask = property(partial(__get_data, prop='mask'))
+    @property
+    @lru_cache()
+    def inc(self):
+        '''
+        a rectangular array consisting of the incidence-angles as
+        provided in the dataset, rectangularized by repeating the last
+        values of each row to fit in length.
+        '''
+        return self.__get_data(prop='inc')
+
+
+    @property
+    @lru_cache()
+    def mask(self):
+        '''
+        a mask that indicates the artificially added values
+        (see 'inc', 'data' and 'weights' properties for details)
+        '''
+        return self.__get_data(prop='mask')
+
+
+    @property
+    @lru_cache()
+    def weights(self):
+        '''
+        an array of equal shape as inc and data, consisting of the
+        weighting-factors that need to be applied in order to correct
+        for the rectangularization. The weighting-factors for each
+        individual data-element are given by
+            weight_i = 1 / np.sqrt(N_i)
+        where N_i is the number of repetitions of the i'th value
+        that have been added in order to rectangularize the dataset.
+
+        Including the weighting-factors within the least-squares
+        approach will result in a cancellation of the repeated
+        results such that the artificially added values (necessary
+        to have a rectangular array) will have no effect on the fit.
+
+        If a column 'data_weights' has been provided in the dataset,
+        the obtained weights will additionally be multiplied by the
+        values provided as 'data_weights'.
+
+        '''
+        if 'data_weights' in self.dataset:
+            return self.__get_data(
+                prop='data_weights') * self.__get_data(prop='weights')
+        else:
+            return self.__get_data(prop='weights')
+
+    @property
+    @lru_cache()
+    def data(self):
+        '''
+        a rectangular array consisting of the data-values as provided
+        in the dataset, rectangularized by repeating the last values
+        of each row to fit in length
+        '''
+        return self.__get_data(prop='sig')
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1088,8 +1137,7 @@ class Fits(Scatter):
 
 
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
         # store original V and SRF
@@ -1276,7 +1324,7 @@ class Fits(Scatter):
                 fn_input=None, _fnevals_input=None, int_Q=True,
                 lambda_backend=_init_lambda_backend, verbosity=2,
                 intermediate_results=False, re_init=False,
-                lsq_kwargs=dict()):
+                lsq_kwargs=dict(), clear_cache=True):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -1298,7 +1346,7 @@ class Fits(Scatter):
                    where inc_i denotes the incident zenith-angles in radians
                    and the data_i denotes the corresponding data-values
                    (If the dataset provided is not rectangular, it will be
-                    rectangularized using the _preparedata()-function.)
+                    rectangularized)
                  - if pandas.DataFrame
                    pandas-DataFrame with columns ['inc', 'sig', 'orig_index']
                    and any number of additional columns that represent
@@ -1433,6 +1481,9 @@ class Fits(Scatter):
         lsq_kwargs: dict (default = {})
                 keyword arguments passed to scipy's least_squares function
 
+        clear_cache: bool (default = True)
+                indicator if the lru_cached properties should be cleared
+
         Returns:
         ---------
         res_lsq: dict
@@ -1445,10 +1496,10 @@ class Fits(Scatter):
              used incidence-angle data for the fit
         mask: array-like(bool)
               the masked that needs to be applied to the rectangularized
-              dataset to get the valid entries (see preparedata-function)
+              dataset to get the valid entries
         weights: array-like
                  the weighting-matrix that has been applied to correct for the
-                 rectangularization of the dataset (see preparedata-function)
+                 rectangularization of the dataset
         res_dict: dict
                   a dictionary containing the fit-results for the parameters
         start_dict: dict
@@ -1457,6 +1508,10 @@ class Fits(Scatter):
                     a dictionary containing the parameter-values that have been
                     used as constants during the fit
         '''
+
+        # set the number of repetitions (e.g. the max. number of values
+        # encountered in a group)
+
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
             if not hasattr(self, 'intermediate_results'):
@@ -1479,8 +1534,9 @@ class Fits(Scatter):
         # will be used to re-assign the values to the index of the dataset
         # this procedure is necessary to ensure correct broadcasting in case
         # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
-        from itertools import groupby
 
+        # get mean datetime-values for each fitted parameter and a dict
+        # that can be used to re-assign the values
         repeatdict = dict()
         for key in order:
             # get the (sorted) unique values and locations in param_dyn_dict
@@ -1493,27 +1549,23 @@ class Fits(Scatter):
             for i,j in groupby(uniquewhere):
                 repeats[0].append(i)
                 repeats[1].append(sum(1 for x in j))
+
+            # in case all parameters are repeated by the same amount,
+            # return an integer instead of an array of N time the same value
             if len(set(repeats[1])) == 1:
                 repeats[1] = repeats[1][0]
 
             repeatdict[key] = repeats
 
-        # set index
-        self.dataset_used = dataset
-        # generate a datetime-index from the given groups
-        self._setindex(self.setindex)
-        # get a dict of the mean datetime-values for each parameter
-        try:
-            self.meandatetimes = {
-                param: pd.to_datetime(
-                    [meandatetime(val) for key, val in self.index.groupby(
-                        np.repeat(*param_repeat)).items()])
-                for param, param_repeat in repeatdict.items()}
-        except:
-            pass
-        # preparation of data for fitting
-        [inc, data, weights, Nmeasurements,
-         mask, new_fixed_dict] = self._preparedata(dataset)
+        # append fixed values provided in the dataset-DataFrame
+        new_fixed_dict = dict()
+        if isinstance(dataset, pd.DataFrame):
+            for key, val in fixed_dict.items():
+                if isinstance(val, str) and val == 'auxiliary':
+                    assert key in dataset, \
+                        f"auxiliary data for '{key}' is missing!"
+
+                    new_fixed_dict[key] = rectangularize(dataset[key])
 
         # update 'fixed_dict' with timeseries provided via 'dataset'
         # ensure that only parameters that are explicitely mentioned in
@@ -1573,7 +1625,8 @@ class Fits(Scatter):
             param_R.pop(i)
 
         # define rt1-object
-        R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
+        R = RT1(1., self.inc, self.inc,
+                np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
                 V=V, SRF=SRF, fn_input=fn_input, _fnevals_input=_fnevals_input,
                 geometry='mono', bsf = bsf, param_dict=param_R, int_Q=int_Q,
                 lambda_backend=lambda_backend, verbosity=verbosity)
@@ -1582,16 +1635,6 @@ class Fits(Scatter):
         R._fnevals_input = R._fnevals
         # set fn_input to any value except None to avoid re-calculation
         R.fn_input = 1
-
-        # if param_dyn_dict is not set explicitly, use the number of
-        # start-values provided in param_dict to assign the dynamics of
-        # the parameters (i.e. either constant or varying for each measurement)
-        if param_dyn_dict == {}:
-            for key in param_dict:
-                param_dyn_dict[key] = np.linspace(
-                    1,
-                    len(np.atleast_1d(param_dict[key])),
-                    Nmeasurements)
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
@@ -1605,15 +1648,16 @@ class Fits(Scatter):
                 newdict[key] = (val[reloc], rep)
 
             # calculate the residuals
-            errs = self._calc_model(R, newdict, fixed_dict).flatten() - data
+            errs = (self._calc_model(R, newdict, fixed_dict) -
+                    self.data).flatten()
             # incorporate weighting-matrix to ensure correct treatment
-            # of artificially added values (see _preparedata()-function)
-            errs = weights * errs
+            # of artificially added values
+            errs = self.weights * errs
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
-                           'relerr' : errs/data}
+                           'relerr' : errs/self.data}
                 self.intermediate_results['residuals'] += [errdict]
 
             return errs
@@ -1692,6 +1736,9 @@ class Fits(Scatter):
         self.res_dict = getattr(self, 'res_dict', dict())
         self.start_dict = getattr(self, 'start_dict', dict())
 
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
 
         # for downward compatibility
         return [self.fit_output, self.R, self.data, self.inc, self.mask,
@@ -1699,7 +1746,8 @@ class Fits(Scatter):
                 self.fixed_dict]
 
 
-    def _set_performfit_dicts(self, defdict=None):
+    @property
+    def _performfit_dicts(self):
         '''
         Generate RT-1 specifications based on the provided "defdict".
 
@@ -1719,8 +1767,6 @@ class Fits(Scatter):
             timescaledict, boundsvaldict, manual_dyn_df] .
 
         '''
-        if defdict is None:
-            defdict = self.defdict
 
         # generate RT1 specifications based on defdict
         # initialize empty dicts
@@ -1731,9 +1777,9 @@ class Fits(Scatter):
         boundsvaldict = {}
         manual_dyn_df = None
         # set parameters
-        for key in defdict.keys():
+        for key in self.defdict.keys():
             # if parameter is intended to be fitted, assign a sympy-symbol
-            if defdict[key][0] is True:
+            if self.defdict[key][0] is True:
                 # TODO see why this is actually necessary
                 # omega and tau must not be a sympy-symbol name
                 if key not in ['omega', 'tau']:
@@ -1743,14 +1789,14 @@ class Fits(Scatter):
                     setdict[key] = 100
 
                 # set start-values
-                startvaldict[key] = defdict[key][1]
+                startvaldict[key] = self.defdict[key][1]
 
                 # set temporal variability
-                if defdict[key][2] == 'manual':
+                if self.defdict[key][2] == 'manual':
                     if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
                     manual_dyn_df = pd.concat([manual_dyn_df,
-                                               defdict[key][4]], axis=1)
-                elif defdict[key][2] == 'index':
+                                               self.defdict[key][4]], axis=1)
+                elif self.defdict[key][2] == 'index':
                     indexdyn = pd.DataFrame({key:1}, self.dataset.index
                                             ).groupby(axis=0, level=0
                                                       ).ngroup().to_frame()
@@ -1759,24 +1805,25 @@ class Fits(Scatter):
                         manual_dyn_df = pd.DataFrame()
                     manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
                                               axis=1)
-                elif defdict[key][2] is not None:
+                elif self.defdict[key][2] is not None:
 
-                    timescaledict[key] = defdict[key][2]
+                    timescaledict[key] = self.defdict[key][2]
                     try:
                         manual_dyn_df = pd.concat([manual_dyn_df,
-                                                   defdict[key][4]], axis=1)
+                                                   self.defdict[key][4]],
+                                                  axis=1)
                     except Exception:
                         pass
 
                 # set boundaries
-                boundsvaldict[key] = defdict[key][3]
+                boundsvaldict[key] = self.defdict[key][3]
 
-            elif defdict[key][0] is False:
+            elif self.defdict[key][0] is False:
                 # treat parameters that are intended to be constants
                 # if value is provided as a scalar, insert it in the definition
-                if isinstance(defdict[key][1], (int, float)) and not \
-                    isinstance(defdict[key][1], bool):
-                    setdict[key] = defdict[key][1]
+                if isinstance(self.defdict[key][1], (int, float)) and not \
+                    isinstance(self.defdict[key][1], bool):
+                    setdict[key] = self.defdict[key][1]
                 else:
                     # if value is provided as array, add it to fixed_dict
                     if key not in ['omega', 'tau']:
@@ -1788,11 +1835,11 @@ class Fits(Scatter):
                         # a dummy value that will be replaced by rtfits.monofit
                         setdict[key] = 100
 
-                    if isinstance(defdict[key][1], str) and \
-                        defdict[key][1] == 'auxiliary':
+                    if isinstance(self.defdict[key][1], str) and \
+                        self.defdict[key][1] == 'auxiliary':
                         fixed_dict[key] = 'auxiliary'
                     else:
-                        fixed_dict[key] = defdict[key][1]
+                        fixed_dict[key] = self.defdict[key][1]
 
         return [fixed_dict, setdict, startvaldict,
                 timescaledict, boundsvaldict, manual_dyn_df]
@@ -1826,64 +1873,50 @@ class Fits(Scatter):
 
         '''
 
-        assert self.setindex in ['mean','first', 'last', 'original'], \
-            "setindex must be either 'mean', 'first', 'last' or 'original'"
-
         # TODO change to only using rtfits objects!
         # (i.e. it is not necessary to manually specify defdict etc.)
-        if dataset is None: dataset = self.dataset
-        if defdict is None: defdict = self.defdict
-        if set_V_SRF is None: set_V_SRF = self.set_V_SRF
-        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
+        if dataset is not None: self.dataset = dataset
+        if defdict is not None: self.defdict = defdict
+        if set_V_SRF is not None: self.set_V_SRF = set_V_SRF
+        if lsq_kwargs is not None: self.lsq_kwargs = lsq_kwargs
 
         # get dictionary for initialization of fit
         [fixed_dict, setdict, startvaldict, timescaledict,
-         boundsvaldict, manual_dyn_df] =self._set_performfit_dicts(defdict)
+         boundsvaldict, manual_dyn_df] = self._performfit_dicts
 
+        param_dyn_dict = self.param_dyn_df.to_dict(orient='list')
 
         # set V and SRF based on setter-function
-        if callable(set_V_SRF):
-            V, SRF = set_V_SRF(**setdict)
-        elif isinstance(set_V_SRF, dict):
-            V, SRF = self._init_V_SRF(**set_V_SRF,
+        if callable(self.set_V_SRF):
+            V, SRF = self.set_V_SRF(**setdict)
+        elif isinstance(self.set_V_SRF, dict):
+            V, SRF = self._init_V_SRF(**self.set_V_SRF,
                                       setdict=setdict)
 
-        # set frequencies of fitted parameters
-        freq = []
-        freqkeys = []
-        for key in timescaledict:
-            freq += [timescaledict[key]]
-            freqkeys += [[key]]
-
-        dataset_used, param_dyn_dict = self._generatedataset(
-                dataset=dataset, dyn_keys=startvaldict.keys(),
-                freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
-                fixed_dict=fixed_dict)
-
-
         # re-shape param_dict and bounds_dict to fit needs
+        uniques = self.param_dyn_df.nunique()
         param_dict = {}
         for key in startvaldict:
-            uniqueparams = len(pd.unique(param_dyn_dict[key]))
             # adjust shape of startvalues
-            if uniqueparams >= 1 and np.isscalar(startvaldict[key]):
-                param_dict[key] = [startvaldict[key]]*uniqueparams
+            if uniques[key] >= 1 and np.isscalar(startvaldict[key]):
+                param_dict[key] = [startvaldict[key]]*uniques[key]
             else:
                 param_dict[key] = startvaldict[key]
 
         bounds_dict = {}
         for key in boundsvaldict:
-            uniqueparams = len(pd.unique(param_dyn_dict[key]))
             # adjust shape of boundary conditions
-            if uniqueparams >= 1 and len(boundsvaldict[key][0]) == 1:
-                bounds_dict[key] = (boundsvaldict[key][0]*uniqueparams,
-                                    boundsvaldict[key][1]*uniqueparams)
+            if uniques[key] >= 1 and len(boundsvaldict[key][0]) == 1:
+                bounds_dict[key] = (boundsvaldict[key][0]*uniques[key],
+                                    boundsvaldict[key][1]*uniques[key])
             else:
                 bounds_dict[key] = (boundsvaldict[key])
 
+
+        self._max_rep = Counter(self._groupindex).most_common(1)[0][1]
         # perform fit
         self.monofit(V=V, SRF=SRF,
-                     dataset=dataset_used,
+                     dataset=self._dataset_used,
                      param_dict=param_dict,
                      bsf = setdict.get('bsf', 0.),
                      bounds_dict=bounds_dict,
@@ -1983,7 +2016,7 @@ class Fits(Scatter):
             if preeval_fn is True:
                 fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                            set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                           lsq_kwargs=lsq_kwargs, setindex=self.setindex)
+                           lsq_kwargs=lsq_kwargs)
                 fit.performfit(re_init=True)
 
                 return fit
@@ -1991,7 +2024,7 @@ class Fits(Scatter):
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
-                       lsq_kwargs=lsq_kwargs, setindex=self.setindex, int_Q=self.int_Q,
+                       lsq_kwargs=lsq_kwargs, int_Q=self.int_Q,
                        lambda_backend=self.lambda_backend,
                        _fnevals_input=self._fnevals_input,
                        interp_vals=self.interp_vals)
