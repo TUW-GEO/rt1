@@ -191,11 +191,17 @@ class TestRTfits(unittest.TestCase):
         # specify the treatment of the parameters in the retrieval procedure
         defdict = {
                     't1': [True, tstart, 'D', ([tmin], [tmax])],
-                    'N': [False, pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]],
+                    'N': [False, 'auxiliary'],
                     'tau': [True, taustart, 'manual', ([taumin], [taumax]), manual_tau_dyn],
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
                     }
+
+        # append auxiliary datasets
+
+        N_auxdata = pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]
+        dataset['N'] = N_auxdata
+
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
