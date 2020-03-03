@@ -276,7 +276,7 @@ class Fits(Scatter):
                 'group_repeats', '_dataset_used', 'index',
                 'fit_index', '_jac_assign_rule',
                 'meandatetimes', 'inc', 'mask', 'weights',
-                'data', 'V', 'SRF', 'R']
+                'data']
 
     def _clear_cache(self):
         '''
@@ -1301,7 +1301,7 @@ class Fits(Scatter):
 
 
     @property
-    @lru_cache()
+    #@lru_cache()
     def V(self):
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
@@ -1310,11 +1310,12 @@ class Fits(Scatter):
             V = self._init_V_SRF(**self.set_V_SRF,
                                  setdict=self._setdict,
                                  V_SRF_Q='V')
+
         return V
 
 
     @property
-    @lru_cache()
+    #@lru_cache()
     def SRF(self):
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
@@ -1681,6 +1682,167 @@ class Fits(Scatter):
                 self.fixed_dict]
 
 
+
+    def performfit(self, re_init=False, clear_cache=True,
+                   intermediate_results=False):
+        '''
+        Perform least-squares fitting of omega, tau, NormBRDF and any
+        parameter used to define V and SRF to sets of monostatic measurements.
+        '''
+
+        # set the number of repetitions (e.g. the max. number of values
+        # encountered in a group)
+
+        # set up the dictionary for storing intermediate results
+        if intermediate_results is True:
+            if not hasattr(self, 'intermediate_results'):
+                self.intermediate_results = {'parameters':[],
+                                             'residuals':[],
+                                             'jacobian':[]}
+
+        # generate a list of the names of the parameters that will be fitted.
+        # (this is necessary to ensure correct broadcasting of values since
+        # dictionarys do)
+        order = [i for i, v in self._startvaldict.items() if v is not None]
+
+        # will be used to assign the values to the individual parameters
+        # (the returned parameters are given as a concatenated array
+        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
+        # values for each parameter
+        splits = np.cumsum(self.param_dyn_df.nunique()[order].values)
+        # will be used to re-assign the values to the index of the dataset
+        # this procedure is necessary to ensure correct broadcasting in case
+        # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
+
+        use_dyndict = self.param_dyn_df.to_dict(orient='list')
+
+        # get mean datetime-values for each fitted parameter and a dict
+        # that can be used to re-assign the values
+        repeatdict = dict()
+        for key in order:
+            # get the (sorted) unique values and locations in param_dyn_dict
+            dynnr, uniquewhere = np.unique(use_dyndict[key],
+                                           return_inverse=True)
+            # get value positions and number of repetitions to reconstruct an
+            # array indexed like the dataset
+            # (param_dyn_dict[key] = np.repeat(dynnr[repeats[0]], repeats[1]))
+            repeats = [[], []]
+            for i,j in groupby(uniquewhere):
+                repeats[0].append(i)
+                repeats[1].append(sum(1 for x in j))
+
+            # in case all parameters are repeated by the same amount,
+            # return an integer instead of an array of N time the same value
+            if len(set(repeats[1])) == 1:
+                repeats[1] = repeats[1][0]
+
+            repeatdict[key] = repeats
+
+        # define a function that evaluates the model in the shape as needed
+        # for scipy's least_squares function
+        def fun(params):
+            # generate a dictionary to assign values based on input
+            split_vals = np.split(params, splits)[:-1]
+            newdict = dict()
+            for key, val in zip(order, split_vals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                newdict[key] = (val[reloc], rep)
+
+            # calculate the residuals
+            errs = (self._calc_model(res_dict=newdict,
+                                     fixed_dict=self.fixed_dict) - self.data
+                    ).flatten()
+            # incorporate weighting-matrix to ensure correct treatment
+            # of artificially added values
+            errs = self.weights * errs
+
+            if intermediate_results is True:
+                self.intermediate_results['parameters'] += [newdict]
+                errdict = {'abserr' : errs,
+                           'relerr' : errs/self.data}
+                self.intermediate_results['residuals'] += [errdict]
+
+            return errs
+
+
+        # function to evaluate the jacobian
+        def dfun(params):
+            # generate a dictionary to assign values based on input
+            split_vals = np.split(params, splits)[:-1]
+            newdict = dict()
+            for key, val in zip(order, split_vals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                newdict[key] = (val[reloc], rep)
+
+            # calculate the jacobian
+            # (no need to include weighting matrix in here since the jacobian
+            # of the artificially added colums must be the same!)
+            jac = self._calc_jac(R=self.R, res_dict=newdict,
+                                 fixed_dict=self.fixed_dict,
+                                 param_dyn_dict=use_dyndict,
+                                 order=order)
+
+            return jac
+
+
+        # generate list of boundary conditions as needed for the fit
+        bounds = [[], []]
+        for key in order:
+            bounds[0] = bounds[0] + list(self._boundsvaldict[key][0])
+            bounds[1] = bounds[1] + list(self._boundsvaldict[key][1])
+
+        # setup the start-value array as needed for the fit
+        startvals = []
+        for key in order:
+            if self._startvaldict[key] is not None:
+                if np.isscalar(self._startvaldict[key]):
+                    startvals = startvals + [self._startvaldict[key]]
+                else:
+                    startvals = startvals + list(self._startvaldict[key])
+
+        # perform the actual fit
+        if re_init is True:
+            if getattr(self, 'fit_output', None) is not None:
+                res_lsq = self.fit_output
+            else:
+                res_lsq = None
+                self.fit_output = None
+        else:
+            # perform actual fitting
+            res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                    jac=dfun, **self.lsq_kwargs)
+
+        # generate a dictionary to assign values based on fit-results
+        # split the obtained result with respect to the individual parameters
+        if res_lsq is not None:
+            # split concatenated parameter-results given in res_lsq.x
+            # (don't use the last array since it is empty)
+
+            split_vals = np.split(res_lsq.x, splits)[:-1]
+            split_startvals = np.split(res_lsq.x, splits)[:-1]
+
+            res_dict = dict()
+            start_dict = dict()
+            for key, val, startval in zip(order, split_vals, split_startvals):
+                # value positions and consecutive repetitions
+                reloc, rep = repeatdict[key]
+                res_dict[key] = [val[reloc], rep]
+                start_dict[key] = [startval[reloc], rep]
+
+            self.fit_output = res_lsq
+            self.res_dict = res_dict
+        else:
+            self.res_dict = dict()
+            self.fit_output = None
+
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
+
+
+
     @property
     def _setdict(self):
         '''
@@ -1889,8 +2051,9 @@ class Fits(Scatter):
 
         return param_R
 
+
     @property
-    @lru_cache()
+    #@lru_cache()
     def R(self):
 
         #TODO add verbosity as parameter of fits object
@@ -1905,61 +2068,19 @@ class Fits(Scatter):
                 lambda_backend=self.lambda_backend,
                 param_dict=self._param_R_dict,
                 verbosity=verbosity)
+
+        if self.int_Q is True and self._fnevals_input is None:
+            self._fnevals_input = R._fnevals
+        elif self.int_Q is True:
+            # store _fnevals functions in case they have not been provided
+            # as input-arguments explicitly to avoid recalculation for each step
+            R._fnevals_input = self._fnevals_input
+            # set fn_input to any value except None to avoid re-calculation
+            R.fn_input = 1
+
         return R
 
 
-    def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
-                   lsq_kwargs=None, re_init=False, **kwargs):
-        '''
-        Setup a RT-1 specifications and perform a fit based on the provided
-        inputs (dataset, defdict, set_V_SRF and fitsset).
-
-
-        Parameters
-        -----------
-        dataset: pandas.DataFrame
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        defdict: dict
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        set_V_SRF: callable
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        lsq_kwargs: dict
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        re_init: bool (default = False)
-                 if re_init is True, all actions EXCEPT the actual fit will
-                 be executed. This re-initializes the Fits object based on the
-                 input in the state as if the fit has already been performed.
-
-        '''
-
-        # TODO change to only using rtfits objects!
-        # (i.e. it is not necessary to manually specify defdict etc.)
-        if dataset is not None: self.dataset = dataset
-        if defdict is not None: self.defdict = defdict
-        if set_V_SRF is not None: self.set_V_SRF = set_V_SRF
-        if lsq_kwargs is not None: self.lsq_kwargs = lsq_kwargs
-
-        #self._max_rep = Counter(self._groupindex).most_common(1)[0][1]
-        # perform fit
-        self.monofit(V=self.V, SRF=self.SRF,
-                     bsf = self._setdict.get('bsf', 0.),
-                     param_dict=self._startvaldict,
-                     bounds_dict=self._boundsvaldict,
-                     fixed_dict=self._fixed_dict,
-                     dataset=self._dataset_used,
-                     param_dyn_dict=self.param_dyn_df.to_dict(orient='list'),
-                     _fnevals_input=self._fnevals_input,
-                     int_Q=self.int_Q,
-                     lambda_backend=self.lambda_backend,
-                     lsq_kwargs=self.lsq_kwargs,
-                     #
-                     fn_input=None,
-                     re_init=re_init,
-                     **kwargs)
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
