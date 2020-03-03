@@ -23,7 +23,7 @@ from . import volume as rt1_v
 import copy
 import multiprocessing as mp
 from itertools import repeat, groupby, accumulate
-from functools import partial, lru_cache
+from functools import lru_cache
 from operator import itemgetter
 
 
