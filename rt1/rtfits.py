@@ -202,7 +202,8 @@ class Fits(Scatter):
 
         self._fnevals_input = _fnevals_input
 
-        if interp_vals is None:
+        self.interp_vals = interp_vals
+        if self.interp_vals is None:
             self.interp_vals = []
 
         # add plotfunctions
