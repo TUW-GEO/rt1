@@ -515,6 +515,358 @@ class Fits(Scatter):
         return dates
 
 
+    @property
+    @lru_cache()
+    def inc(self):
+        '''
+        a rectangular array consisting of the incidence-angles as
+        provided in the dataset, rectangularized by repeating the last
+        values of each row to fit in length.
+        '''
+        return self.__get_data(prop='inc')
+
+
+    @property
+    @lru_cache()
+    def mask(self):
+        '''
+        a mask that indicates the artificially added values
+        (see 'inc', 'data' and 'weights' properties for details)
+        '''
+        return self.__get_data(prop='mask')
+
+
+    @property
+    @lru_cache()
+    def weights(self):
+        '''
+        an array of equal shape as inc and data, consisting of the
+        weighting-factors that need to be applied in order to correct
+        for the rectangularization. The weighting-factors for each
+        individual data-element are given by
+            weight_i = 1 / np.sqrt(N_i)
+        where N_i is the number of repetitions of the i'th value
+        that have been added in order to rectangularize the dataset.
+
+        Including the weighting-factors within the least-squares
+        approach will result in a cancellation of the repeated
+        results such that the artificially added values (necessary
+        to have a rectangular array) will have no effect on the fit.
+
+        If a column 'data_weights' has been provided in the dataset,
+        the obtained weights will additionally be multiplied by the
+        values provided as 'data_weights'.
+
+        '''
+        if 'data_weights' in self.dataset:
+            return self.__get_data(
+                prop='data_weights') * self.__get_data(prop='weights')
+        else:
+            return self.__get_data(prop='weights')
+
+    @property
+    @lru_cache()
+    def data(self):
+        '''
+        a rectangular array consisting of the data-values as provided
+        in the dataset, rectangularized by repeating the last values
+        of each row to fit in length
+        '''
+        return self.__get_data(prop='sig')
+
+
+    @property
+    def _setdict(self):
+        '''
+        Generate RT-1 specifications based on the provided "defdict".
+        ... used to simplify the model-specification for 'rtfits.performfit()'
+
+        '''
+        # generate RT1 specifications based on defdict
+        # initialize empty dicts
+        setdict = {}
+        # set parameters
+        for key, val in self.defdict.items():
+            # if parameter is intended to be fitted, assign a sympy-symbol
+            if val[0] is True:
+                # TODO see why this is actually necessary
+                # omega and tau must not be a sympy-symbol name
+                if key not in ['omega', 'tau']:
+                    setdict[key] = sp.var(key)
+                else:
+                    # a dummy value that will be replaced using self._setdict
+                    setdict[key] = 100
+
+            elif val[0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if isinstance(val[1],
+                              (int, float)) and not isinstance(val[1], bool):
+                    setdict[key] = val[1]
+                else:
+                    # if value is provided as array, add it to fixed_dict
+                    if key not in ['omega', 'tau']:
+                        # omega and tau must not be a sympy-symbol name
+                        # TODO same as above ...why is this necessary?
+                        # TODO what about 'NormBRDF'?
+                        setdict[key] = sp.var(key)
+                    else:
+                        # dummy value that will be replaced using self._setdict
+                        setdict[key] = 100
+        return setdict
+
+
+    @property
+    def _fixed_dict(self):
+        '''
+        a dictionary containing the fixed-values to be used
+        '''
+        _fixed_dict = {}
+        for key, val in self.defdict.items():
+            if val[0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if isinstance(val[1], str) and val[1] == 'auxiliary':
+                    _fixed_dict[key] = 'auxiliary'
+                else:
+                    _fixed_dict[key] = val[1]
+
+        return _fixed_dict
+
+
+    @property
+    def fixed_dict(self):
+        # update 'fixed_dict' with timeseries provided via 'dataset'-DataFrame
+        # ensure that only parameters that are explicitely mentioned in
+        # fixed_dict are passed to the fit-procedure as fixed datasets
+        # (additional columns of 'dataset' do not affect the fit)
+        fixed_dict = dict()
+        if isinstance(self.dataset, pd.DataFrame):
+            for key, val in self._fixed_dict.items():
+                if isinstance(val, str) and val == 'auxiliary':
+                    assert key in self._dataset_used, \
+                        f"auxiliary data for '{key}' is missing!"
+                    fixed_dict[key] = rectangularize(self._dataset_used[key])
+
+        return fixed_dict
+
+
+    @property
+    def _startvaldict(self):
+        '''
+        a dictionary containing the start-values to be used
+        '''
+        startvaldict = {}
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                startvaldict[key] = val[1]
+
+        # re-shape param_dict and bounds_dict to fit needs
+        uniques = self.param_dyn_df.nunique()
+        for key, val in startvaldict.items():
+            # adjust shape of startvalues
+            if uniques[key] >= 1 and np.isscalar(val):
+                startvaldict[key] = [val for i in range(uniques[key])]
+
+        return startvaldict
+
+
+    @property
+    def _boundsvaldict(self):
+        '''
+        a dictionary containing the boundary-values to be used
+        '''
+        boundsvaldict = {}
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                boundsvaldict[key] = val[3]
+
+        # re-shape param_dict and bounds_dict to fit needs
+        uniques = self.param_dyn_df.nunique()
+        for key, val in boundsvaldict.items():
+            # adjust shape of boundary conditions
+            if uniques[key] >= 1 and len(val[0]) == 1:
+                boundsvaldict[key] = (val[0]*uniques[key], val[1]*uniques[key])
+
+        return boundsvaldict
+
+
+    @property
+    def _timescaledict(self):
+        '''
+        a dictionary containing the pandas datetime offset strings to use
+        '''
+
+        timescaledict = {}
+        for key, val in self.defdict.items():
+            if (val[0] is True and val[2] is not None
+                and val[2] != 'manual' and val[2] != 'index'):
+                    timescaledict[key] = self.defdict[key][2]
+        return timescaledict
+
+
+    @property
+    def _manual_dyn_df(self):
+        '''
+        a dictionary containing possible additional temporal dynamics
+        (e.g. in addition to _timescaledict)
+        '''
+
+        manual_dyn_df = pd.DataFrame()
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                # set temporal variability
+                if val[2] == 'manual':
+                    manual_dyn_df = pd.concat([manual_dyn_df, val[4]], axis=1)
+                elif val[2] == 'index':
+                    indexdyn = pd.DataFrame({key:1}, self.dataset.index
+                                            ).groupby(axis=0, level=0
+                                                      ).ngroup().to_frame()
+                    indexdyn.columns = [key]
+                    manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
+                                              axis=1)
+                elif val[2] is not None:
+                    try:
+                        manual_dyn_df = pd.concat([manual_dyn_df, val[4]],
+                                                  axis=1)
+                    except Exception:
+                        pass
+        if manual_dyn_df.empty:
+            return None
+        else:
+            return manual_dyn_df
+
+
+    @property
+    def _param_R_dict(self):
+        param_R = dict(**self._startvaldict, **self.fixed_dict)
+        param_R.pop('omega', None)
+        param_R.pop('tau', None)
+        param_R.pop('NormBRDF', None)
+        param_R.pop('bsf', None)
+
+        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
+        try:
+            tausymb = self.V.tau.free_symbols
+        except Exception:
+            tausymb = set()
+        try:
+            omegasymb = self.V.omega.free_symbols
+        except Exception:
+            omegasymb = set()
+        try:
+            Nsymb = self.SRF.NormBRDF.free_symbols
+        except Exception:
+            Nsymb = set()
+
+        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
+
+        # check of general input-requirements
+        # check if all parameters have been provided
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        paramset = ((set(map(str, self._startvaldict.keys()))
+                     ^ set(map(str, self.fixed_dict.keys())))
+                    - {'tau', 'omega', 'NormBRDF'})
+
+        assert paramset >= (vsymb | srfsymb), (
+            'the parameters ' +
+            str((vsymb | srfsymb) - paramset) +
+            ' must be provided in param_dict')
+
+        # remove also other symbols that are used in the definitions of
+        # tau, omega and NormBRDF
+        for i in set(toNlist - vsymb - srfsymb):
+            param_R.pop(i)
+
+        return param_R
+
+
+    @property
+    #@lru_cache()
+    def V(self):
+        # set V and SRF based on setter-function
+        if callable(self.set_V_SRF):
+            V, _ = self.set_V_SRF(**self._setdict)
+        elif isinstance(self.set_V_SRF, dict):
+            V = self._init_V_SRF(**self.set_V_SRF,
+                                 setdict=self._setdict,
+                                 V_SRF_Q='V')
+
+        return V
+
+
+    @property
+    #@lru_cache()
+    def SRF(self):
+        # set V and SRF based on setter-function
+        if callable(self.set_V_SRF):
+            _, SRF = self.set_V_SRF(**self._setdict)
+        elif isinstance(self.set_V_SRF, dict):
+            SRF = self._init_V_SRF(**self.set_V_SRF,
+                                   setdict=self._setdict,
+                                   V_SRF_Q='SRF')
+        return SRF
+
+
+    @property
+    #@lru_cache()
+    def R(self):
+
+        #TODO add verbosity as parameter of fits object
+        verbosity = 2
+
+        R = RT1(1., self.inc, self.inc,
+                np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
+                V=self.V, SRF=self.SRF,
+                fn_input=None, _fnevals_input=None,
+                geometry='mono', bsf = self._setdict.get('bsf', 0.),
+                int_Q=self.int_Q,
+                lambda_backend=self.lambda_backend,
+                param_dict=self._param_R_dict,
+                verbosity=verbosity)
+
+        if self.int_Q is True and self._fnevals_input is None:
+            self._fnevals_input = R._fnevals
+        elif self.int_Q is True:
+            # store _fnevals functions in case they have not been provided
+            # as input-arguments explicitly to avoid recalculation for each step
+            R._fnevals_input = self._fnevals_input
+            # set fn_input to any value except None to avoid re-calculation
+            R.fn_input = 1
+
+        return R
+
+
+    @property
+    def res_df(self):
+        '''
+        return a pandas DataFrame with the obtained parameters from the fit
+        (performfit must be called prior to accessing this property!)
+        '''
+        if not hasattr(self, 'res_dict'):
+            print('you must perform the fit first! ...e.g. call performfit()')
+            return
+
+        series = []
+        for key, val in self._assignvals(self.res_dict).items():
+            if key in self.interp_vals:
+                # re-assign interpolated values to the corresponding indexes
+                # (they are provided as groups corresponding to the fitted
+                # time-periods)
+                x = np.full(len(self.index), -999.)
+                np.put(a=x, ind=self._idx_assigns, v=val)
+                series.append(pd.Series(x, self.index, name=key))
+            else:
+                series.append(pd.Series(np.repeat(val, self.group_repeats),
+                                        self.index, name=key))
+        resdf = pd.concat(series, axis=1).ffill()
+
+        return resdf
+
+
     def _assignvals(self, res_dict):
         if len(self.interp_vals) > 0:
 
@@ -955,31 +1307,6 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    @property
-    def res_df(self):
-        '''
-        return a pandas DataFrame with the obtained parameters from the fit
-        (performfit must be called prior to accessing this property!)
-        '''
-        if not hasattr(self, 'res_dict'):
-            print('you must perform the fit first! ...e.g. call performfit()')
-            return
-
-        series = []
-        for key, val in self._assignvals(self.res_dict).items():
-            if key in self.interp_vals:
-                # re-assign interpolated values to the corresponding indexes
-                # (they are provided as groups corresponding to the fitted
-                # time-periods)
-                x = np.full(len(self.index), -999.)
-                np.put(a=x, ind=self._idx_assigns, v=val)
-                series.append(pd.Series(x, self.index, name=key))
-            else:
-                series.append(pd.Series(np.repeat(val, self.group_repeats),
-                                        self.index, name=key))
-        resdf = pd.concat(series, axis=1).ffill()
-
-        return resdf
 
 
     def __get_data(self, prop):
@@ -1025,65 +1352,6 @@ class Fits(Scatter):
                         return np.concatenate(weights)
                     if prop == 'mask':
                         return mask
-
-    @property
-    @lru_cache()
-    def inc(self):
-        '''
-        a rectangular array consisting of the incidence-angles as
-        provided in the dataset, rectangularized by repeating the last
-        values of each row to fit in length.
-        '''
-        return self.__get_data(prop='inc')
-
-
-    @property
-    @lru_cache()
-    def mask(self):
-        '''
-        a mask that indicates the artificially added values
-        (see 'inc', 'data' and 'weights' properties for details)
-        '''
-        return self.__get_data(prop='mask')
-
-
-    @property
-    @lru_cache()
-    def weights(self):
-        '''
-        an array of equal shape as inc and data, consisting of the
-        weighting-factors that need to be applied in order to correct
-        for the rectangularization. The weighting-factors for each
-        individual data-element are given by
-            weight_i = 1 / np.sqrt(N_i)
-        where N_i is the number of repetitions of the i'th value
-        that have been added in order to rectangularize the dataset.
-
-        Including the weighting-factors within the least-squares
-        approach will result in a cancellation of the repeated
-        results such that the artificially added values (necessary
-        to have a rectangular array) will have no effect on the fit.
-
-        If a column 'data_weights' has been provided in the dataset,
-        the obtained weights will additionally be multiplied by the
-        values provided as 'data_weights'.
-
-        '''
-        if 'data_weights' in self.dataset:
-            return self.__get_data(
-                prop='data_weights') * self.__get_data(prop='weights')
-        else:
-            return self.__get_data(prop='weights')
-
-    @property
-    @lru_cache()
-    def data(self):
-        '''
-        a rectangular array consisting of the data-values as provided
-        in the dataset, rectangularized by repeating the last values
-        of each row to fit in length
-        '''
-        return self.__get_data(prop='sig')
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1300,33 +1568,6 @@ class Fits(Scatter):
             return SRF
 
 
-    @property
-    #@lru_cache()
-    def V(self):
-        # set V and SRF based on setter-function
-        if callable(self.set_V_SRF):
-            V, _ = self.set_V_SRF(**self._setdict)
-        elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(**self.set_V_SRF,
-                                 setdict=self._setdict,
-                                 V_SRF_Q='V')
-
-        return V
-
-
-    @property
-    #@lru_cache()
-    def SRF(self):
-        # set V and SRF based on setter-function
-        if callable(self.set_V_SRF):
-            _, SRF = self.set_V_SRF(**self._setdict)
-        elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(**self.set_V_SRF,
-                                   setdict=self._setdict,
-                                   V_SRF_Q='SRF')
-        return SRF
-
-
     def performfit(self, re_init=False, clear_cache=True,
                    intermediate_results=False):
         '''
@@ -1484,247 +1725,6 @@ class Fits(Scatter):
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
-
-
-
-    @property
-    def _setdict(self):
-        '''
-        Generate RT-1 specifications based on the provided "defdict".
-        ... used to simplify the model-specification for 'rtfits.performfit()'
-
-        '''
-        # generate RT1 specifications based on defdict
-        # initialize empty dicts
-        setdict = {}
-        # set parameters
-        for key, val in self.defdict.items():
-            # if parameter is intended to be fitted, assign a sympy-symbol
-            if val[0] is True:
-                # TODO see why this is actually necessary
-                # omega and tau must not be a sympy-symbol name
-                if key not in ['omega', 'tau']:
-                    setdict[key] = sp.var(key)
-                else:
-                    # a dummy value that will be replaced using self._setdict
-                    setdict[key] = 100
-
-            elif val[0] is False:
-                # treat parameters that are intended to be constants
-                # if value is provided as a scalar, insert it in the definition
-                if isinstance(val[1],
-                              (int, float)) and not isinstance(val[1], bool):
-                    setdict[key] = val[1]
-                else:
-                    # if value is provided as array, add it to fixed_dict
-                    if key not in ['omega', 'tau']:
-                        # omega and tau must not be a sympy-symbol name
-                        # TODO same as above ...why is this necessary?
-                        # TODO what about 'NormBRDF'?
-                        setdict[key] = sp.var(key)
-                    else:
-                        # dummy value that will be replaced using self._setdict
-                        setdict[key] = 100
-        return setdict
-
-
-    @property
-    def _fixed_dict(self):
-        '''
-        a dictionary containing the fixed-values to be used
-        '''
-        _fixed_dict = {}
-        for key, val in self.defdict.items():
-            if val[0] is False:
-                # treat parameters that are intended to be constants
-                # if value is provided as a scalar, insert it in the definition
-                if isinstance(val[1], str) and val[1] == 'auxiliary':
-                    _fixed_dict[key] = 'auxiliary'
-                else:
-                    _fixed_dict[key] = val[1]
-
-        return _fixed_dict
-
-
-    @property
-    def fixed_dict(self):
-        # update 'fixed_dict' with timeseries provided via 'dataset'-DataFrame
-        # ensure that only parameters that are explicitely mentioned in
-        # fixed_dict are passed to the fit-procedure as fixed datasets
-        # (additional columns of 'dataset' do not affect the fit)
-        fixed_dict = dict()
-        if isinstance(self.dataset, pd.DataFrame):
-            for key, val in self._fixed_dict.items():
-                if isinstance(val, str) and val == 'auxiliary':
-                    assert key in self._dataset_used, \
-                        f"auxiliary data for '{key}' is missing!"
-                    fixed_dict[key] = rectangularize(self._dataset_used[key])
-
-        return fixed_dict
-
-
-    @property
-    def _startvaldict(self):
-        '''
-        a dictionary containing the start-values to be used
-        '''
-        startvaldict = {}
-        for key, val in self.defdict.items():
-            if val[0] is True:
-                startvaldict[key] = val[1]
-
-        # re-shape param_dict and bounds_dict to fit needs
-        uniques = self.param_dyn_df.nunique()
-        for key, val in startvaldict.items():
-            # adjust shape of startvalues
-            if uniques[key] >= 1 and np.isscalar(val):
-                startvaldict[key] = [val for i in range(uniques[key])]
-
-        return startvaldict
-
-
-    @property
-    def _boundsvaldict(self):
-        '''
-        a dictionary containing the boundary-values to be used
-        '''
-        boundsvaldict = {}
-        for key, val in self.defdict.items():
-            if val[0] is True:
-                boundsvaldict[key] = val[3]
-
-        # re-shape param_dict and bounds_dict to fit needs
-        uniques = self.param_dyn_df.nunique()
-        for key, val in boundsvaldict.items():
-            # adjust shape of boundary conditions
-            if uniques[key] >= 1 and len(val[0]) == 1:
-                boundsvaldict[key] = (val[0]*uniques[key], val[1]*uniques[key])
-
-        return boundsvaldict
-
-
-    @property
-    def _timescaledict(self):
-        '''
-        a dictionary containing the pandas datetime offset strings to use
-        '''
-
-        timescaledict = {}
-        for key, val in self.defdict.items():
-            if (val[0] is True and val[2] is not None
-                and val[2] != 'manual' and val[2] != 'index'):
-                    timescaledict[key] = self.defdict[key][2]
-        return timescaledict
-
-
-    @property
-    def _manual_dyn_df(self):
-        '''
-        a dictionary containing possible additional temporal dynamics
-        (e.g. in addition to _timescaledict)
-        '''
-
-        manual_dyn_df = pd.DataFrame()
-        for key, val in self.defdict.items():
-            if val[0] is True:
-                # set temporal variability
-                if val[2] == 'manual':
-                    manual_dyn_df = pd.concat([manual_dyn_df, val[4]], axis=1)
-                elif val[2] == 'index':
-                    indexdyn = pd.DataFrame({key:1}, self.dataset.index
-                                            ).groupby(axis=0, level=0
-                                                      ).ngroup().to_frame()
-                    indexdyn.columns = [key]
-                    manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
-                                              axis=1)
-                elif val[2] is not None:
-                    try:
-                        manual_dyn_df = pd.concat([manual_dyn_df, val[4]],
-                                                  axis=1)
-                    except Exception:
-                        pass
-        if manual_dyn_df.empty:
-            return None
-        else:
-            return manual_dyn_df
-
-
-    @property
-    def _param_R_dict(self):
-        param_R = dict(**self._startvaldict, **self.fixed_dict)
-        param_R.pop('omega', None)
-        param_R.pop('tau', None)
-        param_R.pop('NormBRDF', None)
-        param_R.pop('bsf', None)
-
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        try:
-            tausymb = self.V.tau.free_symbols
-        except Exception:
-            tausymb = set()
-        try:
-            omegasymb = self.V.omega.free_symbols
-        except Exception:
-            omegasymb = set()
-        try:
-            Nsymb = self.SRF.NormBRDF.free_symbols
-        except Exception:
-            Nsymb = set()
-
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
-
-        # check of general input-requirements
-        # check if all parameters have been provided
-        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
-
-        paramset = ((set(map(str, self._startvaldict.keys()))
-                     ^ set(map(str, self.fixed_dict.keys())))
-                    - {'tau', 'omega', 'NormBRDF'})
-
-        assert paramset >= (vsymb | srfsymb), (
-            'the parameters ' +
-            str((vsymb | srfsymb) - paramset) +
-            ' must be provided in param_dict')
-
-        # remove also other symbols that are used in the definitions of
-        # tau, omega and NormBRDF
-        for i in set(toNlist - vsymb - srfsymb):
-            param_R.pop(i)
-
-        return param_R
-
-
-    @property
-    #@lru_cache()
-    def R(self):
-
-        #TODO add verbosity as parameter of fits object
-        verbosity = 2
-
-        R = RT1(1., self.inc, self.inc,
-                np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
-                V=self.V, SRF=self.SRF,
-                fn_input=None, _fnevals_input=None,
-                geometry='mono', bsf = self._setdict.get('bsf', 0.),
-                int_Q=self.int_Q,
-                lambda_backend=self.lambda_backend,
-                param_dict=self._param_R_dict,
-                verbosity=verbosity)
-
-        if self.int_Q is True and self._fnevals_input is None:
-            self._fnevals_input = R._fnevals
-        elif self.int_Q is True:
-            # store _fnevals functions in case they have not been provided
-            # as input-arguments explicitly to avoid recalculation for each step
-            R._fnevals_input = self._fnevals_input
-            # set fn_input to any value except None to avoid re-calculation
-            R.fn_input = 1
-
-        return R
-
-
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
