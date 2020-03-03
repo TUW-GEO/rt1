@@ -3,8 +3,7 @@ Test the fits-module by generating a dataset and fitting the model to itself
 
 
 This is the very same test as test_rtfits but it uses the
-rtfits.performfit-wrapper instead of the monofit() function directly
-
+rtfits.performfit-wrapper
 """
 
 import unittest
@@ -162,7 +161,7 @@ class TestRTfits(unittest.TestCase):
             return V, SRF
 
 
-        # specify additional arguments for scipy.least_squares and rtfits.monofit
+        # specify additional arguments for scipy.least_squares
         lsq_kwargs = {
                 'ftol': 1e-8,
                 'gtol': 1e-8,
@@ -243,7 +242,7 @@ class TestRTfits(unittest.TestCase):
         r2 = r_value**2
 
         # check if r^2 between original and fitted data is > 0.95
-        self.assertTrue(r2 > 0.95, msg='r^2 condition not  met')
+        self.assertTrue(r2 > 0.95, msg=f'r^2 condition not  met , R={r2:4f}')
 
         # set mean-error values for the derived parameters
         if sig0 is True and dB is False:

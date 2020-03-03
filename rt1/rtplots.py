@@ -912,7 +912,7 @@ class plot:
         Parameters:
         ------------
         fit : list
-              output of monofit()-function
+              output of performfit()-function
         Other Parameters:
         ------------------
         mima : list
@@ -1390,8 +1390,6 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        # this is done to allow the usage of monofit-outputs as well
-
         if result_selection == 'all':
             result_selection = range(len(fit.data))
 
@@ -1553,8 +1551,8 @@ class plot:
 
         Parameters:
         ------------
-        fit : list
-              output of the monofit()-function
+        fit : rt1.rtfits.Fits object
+              the fit-object to use
         fit_numbers : list
                       a list containing the position of the measurements
                       that should be plotted (starting from 0)
@@ -1696,7 +1694,7 @@ class plot:
                              cmaps=None):
         '''
         a function to plot the intermediate-results
-        (the data is only available if rtfits.monofit has been called with
+        (the data is only available if rtfits.performfit has been called with
         the argument intermediate_results=True!)
 
         Parameters:
@@ -1722,7 +1720,7 @@ class plot:
             fit.intermediate_results
         except AttributeError:
             assert False, ('No intermediate results are found, you must run' +
-                           ' monofit() with intermediate_results=True flag!')
+                           ' performfit() with intermediate_results=True flag!')
 
         if params is None:
             params = fit.res_dict.keys()
@@ -1995,6 +1993,7 @@ class plot:
         if printfullt_0 is True:
             inc = np.deg2rad(np.arange(1, 89, 1))
             newsig0_vals = _evalfit_new(fit, inc)
+
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
                 if key not in newsig0_vals: continue
