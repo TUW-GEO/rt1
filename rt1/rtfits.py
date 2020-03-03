@@ -1727,26 +1727,31 @@ class Fits(Scatter):
         '''
         a dictionary containing the fixed-values to be used
         '''
-        fixed_dict = {}
+        _fixed_dict = {}
         for key, val in self.defdict.items():
             if val[0] is False:
                 # treat parameters that are intended to be constants
                 # if value is provided as a scalar, insert it in the definition
                 if isinstance(val[1], str) and val[1] == 'auxiliary':
-                    fixed_dict[key] = 'auxiliary'
+                    _fixed_dict[key] = 'auxiliary'
                 else:
-                    fixed_dict[key] = val[1]
+                    _fixed_dict[key] = val[1]
 
+        return _fixed_dict
+
+
+    @property
+    def fixed_dict(self):
         # update 'fixed_dict' with timeseries provided via 'dataset'-DataFrame
         # ensure that only parameters that are explicitely mentioned in
         # fixed_dict are passed to the fit-procedure as fixed datasets
         # (additional columns of 'dataset' do not affect the fit)
+        fixed_dict = dict()
         if isinstance(self.dataset, pd.DataFrame):
-            for key, val in fixed_dict.items():
+            for key, val in self._fixed_dict.items():
                 if isinstance(val, str) and val == 'auxiliary':
                     assert key in self._dataset_used, \
                         f"auxiliary data for '{key}' is missing!"
-
                     fixed_dict[key] = rectangularize(self._dataset_used[key])
 
         return fixed_dict
@@ -1840,7 +1845,7 @@ class Fits(Scatter):
 
     @property
     def _param_R_dict(self):
-        param_R = dict(**self._startvaldict, **self._fixed_dict)
+        param_R = dict(**self._startvaldict, **self.fixed_dict)
         param_R.pop('omega', None)
         param_R.pop('tau', None)
         param_R.pop('NormBRDF', None)
@@ -1869,7 +1874,7 @@ class Fits(Scatter):
         srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
 
         paramset = ((set(map(str, self._startvaldict.keys()))
-                     ^ set(map(str, self._fixed_dict.keys())))
+                     ^ set(map(str, self.fixed_dict.keys())))
                     - {'tau', 'omega', 'NormBRDF'})
 
         assert paramset >= (vsymb | srfsymb), (
@@ -1894,7 +1899,7 @@ class Fits(Scatter):
         R = RT1(1., self.inc, self.inc,
                 np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
                 V=self.V, SRF=self.SRF,
-                fn_input=None, _fnevals_input=self._fnevals_input,
+                fn_input=None, _fnevals_input=None,
                 geometry='mono', bsf = self._setdict.get('bsf', 0.),
                 int_Q=self.int_Q,
                 lambda_backend=self.lambda_backend,
