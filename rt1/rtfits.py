@@ -183,7 +183,7 @@ class Fits(Scatter):
     def __init__(self, sig0=False, dB=False, dataset=None,
                  defdict=None, set_V_SRF=None, lsq_kwargs=None, int_Q=True,
                  lambda_backend=None, _fnevals_input=None, interp_vals=None,
-                 **kwargs):
+                 verbose=2, **kwargs):
 
         self.sig0 = sig0
         self.dB = dB
@@ -205,6 +205,8 @@ class Fits(Scatter):
         self.interp_vals = interp_vals
         if self.interp_vals is None:
             self.interp_vals = []
+
+        self.verbose = verbose
 
         # add plotfunctions
         self.plot = rt1_plots(self)
@@ -785,7 +787,6 @@ class Fits(Scatter):
 
 
     @property
-    #@lru_cache()
     def V(self):
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
@@ -799,7 +800,6 @@ class Fits(Scatter):
 
 
     @property
-    #@lru_cache()
     def SRF(self):
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
@@ -812,11 +812,7 @@ class Fits(Scatter):
 
 
     @property
-    #@lru_cache()
     def R(self):
-
-        #TODO add verbosity as parameter of fits object
-        verbosity = 2
 
         R = RT1(1., self.inc, self.inc,
                 np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
@@ -826,7 +822,7 @@ class Fits(Scatter):
                 int_Q=self.int_Q,
                 lambda_backend=self.lambda_backend,
                 param_dict=self._param_R_dict,
-                verbosity=verbosity)
+                verbosity=self.verbose)
 
         if self.int_Q is True and self._fnevals_input is None:
             self._fnevals_input = R._fnevals
@@ -1939,7 +1935,8 @@ class Fits(Scatter):
         if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
             fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
-                                 lsq_kwargs={'max_nfev':0, 'verbose':2},
+                                 lsq_kwargs={'max_nfev':0,
+                                             'verbose':self.verbose},
                                  preprocess=None,
                                  postprocess=None,
                                  exceptfunc=exceptfunc,
