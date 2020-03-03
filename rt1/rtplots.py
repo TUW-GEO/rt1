@@ -222,7 +222,10 @@ def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
     if callable(set_V_SRF):
         V, SRF = set_V_SRF(**params)
     else:
-        V, SRF = fit._init_V_SRF(**fit.set_V_SRF, setdict=params)
+        V = fit._init_V_SRF(**fit.set_V_SRF, setdict=params,
+                            V_SRF_Q='V')
+        SRF = fit._init_V_SRF(**fit.set_V_SRF, setdict=params,
+                              V_SRF_Q='SRF')
 
     R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
             V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
