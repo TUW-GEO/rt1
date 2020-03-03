@@ -276,7 +276,7 @@ class Fits(Scatter):
                 'group_repeats', '_dataset_used', 'index',
                 'fit_index', '_jac_assign_rule',
                 'meandatetimes', 'inc', 'mask', 'weights',
-                'data', 'V', 'SRF']
+                'data', 'V', 'SRF', 'R']
 
     def _clear_cache(self):
         '''
