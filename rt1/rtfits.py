@@ -221,6 +221,8 @@ class Fits(Scatter):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
+        if not hasattr(self, 'verbose'):
+            self.verbose = 2
 
         if hasattr(self, 'fitset'):
             self.lsq_kwargs = self.fitset
