@@ -54,25 +54,96 @@ def _evalfit(fit, inc=None, return_components=True):
 
     if inc is not None:
         # copy initial values
-        orig_fixed_dict = copy.deepcopy(fit.fixed_dict)
-        orig_t_0 = copy.deepcopy(fit.R.t_0)
-        orig_p_0 = copy.deepcopy(fit.R.p_0)
+        fixed_dict = fit._fixed_dict
+        R = copy.deepcopy(fit.R)
         orig_max_rep = copy.deepcopy(fit._max_rep)
+
         assert len(fit.R.t_0) == len(inc), 'inc and fit.R.t_0 must have the ' \
                                             + 'same length to allow correct ' \
                                             + 'array-broadcasting'
-        fit.R.t_0 = inc
-        fit.R.p_0 = np.full_like(inc, 0.)
+
+        R.t_0 = inc
+        R.p_0 = np.full_like(inc, 0.)
         fit._max_rep = inc.shape[1]
 
-        for key, val in fit.fixed_dict.items():
+        newinc = pd.DataFrame(
+            {'inc':np.tile(inc, len(pd.unique(fit.fit_index)))},
+            np.repeat(fit.fit_index, inc.shape[0]))
+
+
+        for key, val in fixed_dict.items():
             if val.shape != inc.shape:
                 print(f'shape {val.shape} of fixed_input for "{key}" does ' +
                       f'not match shape {inc.shape} of "inc" and is updated')
-                fit.fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
-                                                inc.shape[1], axis=1)
+                #fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
+                #                            inc.shape[1], axis=1)
+                fixed_dict[key] = rectangularize(val, dim=inc.shape[1])
+
+    totsurfvolinter = fit._calc_model(return_components=return_components,
+                                      fixed_dict=fixed_dict,
+                                      R=R)
+
+    if return_components is True:
+        totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                   totsurfvolinter))
+    else:
+        totsurfvolinter = dict(tot=totsurfvolinter)
+
+    # get incidence-angles
+    totsurfvolinter['incs'] = R.t_0
+
+    # revert changes to the dicts
+    if inc is not None:
+        fit._max_rep = orig_max_rep
+    return totsurfvolinter
 
 
+def _evalfit_new(fit, inc=None, return_components=True):
+    '''
+    get backscatter timeseries values from a rtfits.Fits object
+    (possibly replace the incidence-angle array by an alternative one)
+    (used in printsig0analysis)
+
+    Parameters
+    ----------
+    fit : rt1.rtfits.Fits object
+        The fit-object whose backscatter should be returned.
+    inc : array-like, optional
+        The incidence-angles at which the backscatter values are intended
+        to be evaluated. If None, the incidence-angles of the provided
+        fit-object will be used (e.g. fit.R.t_0). The default is None.
+    return_components : bool, optional
+        Indicator if all components (tot, surf, vol, inter) or just the total
+        backscatter should be returned. The default is True.
+
+    Returns
+    -------
+    totsurfvolinter : dict
+        A dict with columns 'inc' and 'tot' ('surf','vol','inter')
+        corresponding to the incidence-angles and the backscatter-values
+        respectively.
+    '''
+
+    if inc is not None:
+        # copy initial values
+        #orig_max_rep = copy.deepcopy(fit._max_rep)
+        orig_dataset = copy.deepcopy(fit.dataset)
+
+        newdataset = pd.DataFrame(
+            {'inc':np.tile(inc, len(pd.unique(fit.index)))},
+            np.repeat(fit.index, inc.shape[0])
+            )
+
+        # adjust auxiliary datasets to new incidence-angles
+        aux_keys = [i for i in orig_dataset.keys() if i not in ['inc', 'sig']]
+        if len(aux_keys) > 0:
+            auxdfs = orig_dataset[aux_keys].groupby(
+                orig_dataset.index).mean().to_dict(orient='list')
+
+            for key, val in auxdfs.items():
+                newdataset[key] = pd.DataFrame(val, fit.index)
+
+        fit.dataset = newdataset
 
     totsurfvolinter = fit._calc_model(return_components=return_components)
 
@@ -83,15 +154,15 @@ def _evalfit(fit, inc=None, return_components=True):
         totsurfvolinter = dict(tot=totsurfvolinter)
 
     # get incidence-angles
-    totsurfvolinter['incs'] = fit.R.t_0
+    totsurfvolinter['incs'] = fit.inc
 
     # revert changes to the dicts
     if inc is not None:
-        fit.fixed_dict = orig_fixed_dict
-        fit.R.t_0 = orig_t_0
-        fit.R.p_0 = orig_p_0
-        fit._max_rep = orig_max_rep
+        fit.dataset = orig_dataset
+
     return totsurfvolinter
+
+
 
 
 def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
@@ -1919,8 +1990,8 @@ class plot:
                                                     dB = False, sig0=False,
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
-            inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit._idx_assigns))
-            newsig0_vals = _evalfit(fit, inc)
+            inc = np.deg2rad(np.arange(1, 89, 1))
+            newsig0_vals = _evalfit_new(fit, inc)
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
                 if key not in newsig0_vals: continue
@@ -2060,19 +2131,23 @@ class plot:
                 newincs = np.rad2deg(newsig0_vals['incs'])
 
                 for day in np.arange(0, dayrange, 1):
-                    linesfull += ax.plot(np.rad2deg(newsig0_vals['incs'][day]),
-                                         newsig0_vals['tot'][day],
+
+                    sortp = np.argsort(newincs[day])
+
+                    linesfull += ax.plot(newincs[day][sortp],
+                                         newsig0_vals['tot'][day][sortp],
                                          **styledict_fullt0_dict['tot'])
                     if printcomponents:
-                        linesfull += ax.plot(newincs[day],
-                                             newsig0_vals['surf'][day],
+                        linesfull += ax.plot(newincs[day][sortp],
+                                             newsig0_vals['surf'][day][sortp],
                                              **styledict_fullt0_dict['surf'])
-                        linesfull += ax.plot(newincs[day],
-                                             newsig0_vals['vol'][day],
+                        linesfull += ax.plot(newincs[day][sortp],
+                                             newsig0_vals['vol'][day][sortp],
                                              **styledict_fullt0_dict['vol'])
                         if fit.R.int_Q is True:
                             linesfull += ax.plot(
-                                newincs[day], newsig0_vals['inter'][day],
+                                newincs[day][sortp],
+                                newsig0_vals['inter'][day][sortp],
                                 **styledict_fullt0_dict['inter'])
                 for day in np.arange(0, dayrange, 1):
                     lintot = newsig0_vals_I_linear['tot'][day]
@@ -2082,14 +2157,14 @@ class plot:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
                     lines_frac_full += ax1.plot(
-                        newincs[day], linsurf/lintot,
+                        newincs[day][sortp], (linsurf/lintot)[sortp],
                         **styledict_fullt0_dict['surf'])
-                    lines_frac_full += ax1.plot(newincs[day],
-                                                linvol/lintot,
+                    lines_frac_full += ax1.plot(newincs[day][sortp],
+                                                (linvol/lintot)[sortp],
                                                 **styledict_fullt0_dict['vol'])
                     if fit.R.int_Q is True:
                         lines_frac_full += ax1.plot(
-                            newincs[day], lininter/lintot,
+                            newincs[day][sortp], (lininter/lintot)[sortp],
                             **styledict_fullt0_dict['inter'])
 
             # add unique legend entries
@@ -2243,24 +2318,23 @@ class plot:
             if printfullt_0 is True:
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
+                    day_inc_new = np.rad2deg(newsig0_vals['incs'][day])
+                    sortp = np.argsort(day_inc_new)
+
                     if day >= maxdays: continue
-                    linesfull[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    linesfull[i].set_ydata(newsig0_vals['tot'][day])
+                    linesfull[i].set_xdata(day_inc_new[sortp])
+                    linesfull[i].set_ydata(newsig0_vals['tot'][day][sortp])
                     i += 1
                     if printcomponents:
-                        linesfull[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        linesfull[i].set_ydata(newsig0_vals['surf'][day])
+                        linesfull[i].set_xdata(day_inc_new[sortp])
+                        linesfull[i].set_ydata(newsig0_vals['surf'][day][sortp])
                         i += 1
-                        linesfull[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        linesfull[i].set_ydata(newsig0_vals['vol'][day])
+                        linesfull[i].set_xdata(day_inc_new[sortp])
+                        linesfull[i].set_ydata(newsig0_vals['vol'][day][sortp])
                         if fit.R.int_Q is True:
                             i += 1
-                            linesfull[i].set_xdata(np.rad2deg(
-                                newsig0_vals['incs'][day]))
-                            linesfull[i].set_ydata(newsig0_vals['inter'][day])
+                            linesfull[i].set_xdata(day_inc_new[sortp])
+                            linesfull[i].set_ydata(newsig0_vals['inter'][day][sortp])
                         i += 1
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
@@ -2271,18 +2345,15 @@ class plot:
                     if fit.R.int_Q is True:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
-                    lines_frac_full[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    lines_frac_full[i].set_ydata(linsurf/lintot)
+                    lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                    lines_frac_full[i].set_ydata((linsurf/lintot)[sortp])
                     i += 1
-                    lines_frac_full[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    lines_frac_full[i].set_ydata(linvol/lintot)
+                    lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                    lines_frac_full[i].set_ydata((linvol/lintot)[sortp])
                     if fit.R.int_Q is True:
                         i += 1
-                        lines_frac_full[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        lines_frac_full[i].set_ydata(lininter/lintot)
+                        lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                        lines_frac_full[i].set_ydata((lininter/lintot)[sortp])
                     i += 1
 
             return lines
