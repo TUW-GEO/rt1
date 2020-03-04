@@ -1455,59 +1455,33 @@ class Fits(Scatter):
         res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
-        # store original V and SRF
-        #orig_V = copy.deepcopy(R.V)
-        #orig_SRF = copy.deepcopy(R.SRF)
-
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        # and generate a function to evaluate the symbolic representation
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
+
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -1518,6 +1492,9 @@ class Fits(Scatter):
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
         vsymb = set(map(str, R.V._func.free_symbols)) - angset
         srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -1534,8 +1511,8 @@ class Fits(Scatter):
         # calculate slope-values
         if return_components is True:
             model_slope = [R.tot_slope(sig0=self.sig0, dB=self.dB),
-                          R.surface_slope(sig0=self.sig0, dB=self.dB),
-                          R.volume_slope(sig0=self.sig0, dB=self.dB)]
+                           R.surface_slope(sig0=self.sig0, dB=self.dB),
+                           R.volume_slope(sig0=self.sig0, dB=self.dB)]
         else:
             model_slope = R.tot_slope(sig0=self.sig0, dB=self.dB)
 
@@ -1546,11 +1523,6 @@ class Fits(Scatter):
                           R.volume_curv(sig0=self.sig0, dB=self.dB)]
         else:
             model_curv = R.tot_curv(sig0=self.sig0, dB=self.dB)
-
-
-        # restore V and SRF to original values
-        #R.V = orig_V
-        #R.SRF = orig_SRF
 
         return {'slope' : model_slope,
                 'curv' : model_curv}
