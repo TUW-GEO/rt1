@@ -282,12 +282,16 @@ class Fits(Scatter):
     # a list of the names of the properties that are cached
     @property
     def _cached_props(self):
-        return ['param_dyn_dict', 'param_dyn_df', '_groupindex',
-                'group_repeats', '_dataset_used', 'index',
-                'fit_index', '_jac_assign_rule',
-                'meandatetimes', 'inc', 'mask', 'weights',
-                'data']
+         names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
+                  'group_repeats', '_dataset_used', 'index',
+                  'fit_index', '_jac_assign_rule',
+                  'meandatetimes', 'inc', 'weights',
+                  'data', '_fit_param_dyn_dict']
 
+         for i in ['tau', 'omega', 'N']:
+             names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
+
+         return names
 
     def _clear_cache(self):
         '''
@@ -383,6 +387,16 @@ class Fits(Scatter):
         param_dyn_df.drop(columns='groupindex', inplace=True)
 
         return param_dyn_df
+
+
+    @property
+    @lru_cache()
+    def _fit_param_dyn_dict(self):
+        '''
+        get index to assign grouping (with respect to the fit-index)
+        '''
+        return self.param_dyn_df.to_dict(orient='list')
+
 
     @property
     @lru_cache()
@@ -565,6 +579,14 @@ class Fits(Scatter):
         of each row to fit in length
         '''
         return self.__get_data(prop='sig')
+
+
+    @property
+    def _order(self):
+        # generate a list of the names of the parameters that will be fitted.
+        # (this is necessary to ensure correct broadcasting of values since
+        # dictionarys do)
+        return [i for i, v in self._startvaldict.items() if v is not None]
 
 
     @property
@@ -767,21 +789,7 @@ class Fits(Scatter):
         param_R.pop('NormBRDF', None)
         param_R.pop('bsf', None)
 
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        try:
-            tausymb = self.V.tau.free_symbols
-        except Exception:
-            tausymb = set()
-        try:
-            omegasymb = self.V.omega.free_symbols
-        except Exception:
-            omegasymb = set()
-        try:
-            Nsymb = self.SRF.NormBRDF.free_symbols
-        except Exception:
-            Nsymb = set()
-
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # check of general input-requirements
         # check if all parameters have been provided
@@ -854,6 +862,81 @@ class Fits(Scatter):
             R.fn_input = 1
 
         return R
+
+
+    def __get_V_SRF_symbs(self, V_SRF, prop):
+        try:
+            symbs = list(map(str,
+                             getattr(getattr(self, V_SRF), prop).free_symbols))
+        except Exception:
+            symbs = list()
+        return symbs
+
+
+    def __get_V_SRF_funcs(self, V_SRF, prop):
+        try:
+            func = sp.lambdify(
+                getattr(getattr(self, V_SRF), prop).free_symbols,
+                getattr(getattr(self, V_SRF), prop),
+                modules=['numpy'])
+        except Exception:
+            func = None
+        return func
+
+
+    def __get_V_SRF_diff_funcs(self, V_SRF, prop):
+        d_inner = dict()
+        for param in (self.__get_V_SRF_symbs(V_SRF, prop) &
+                  self.param_dyn_dict.keys()):
+            d_inner[param] = sp.lambdify(
+                self.__get_V_SRF_symbs(V_SRF, prop),
+                sp.diff(getattr(getattr(self, V_SRF), prop),
+                        sp.Symbol(param)),
+                modules=['numpy'])
+        return d_inner
+
+
+    @property
+    @lru_cache()
+    def _tau_symb(self):
+        return self.__get_V_SRF_symbs('V', 'tau')
+    @property
+    @lru_cache()
+    def _tau_func(self):
+        return self.__get_V_SRF_funcs('V', 'tau')
+    @property
+    @lru_cache()
+    def _tau_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('V', 'tau')
+
+
+    @property
+    @lru_cache()
+    def _omega_symb(self):
+        return self.__get_V_SRF_symbs('V', 'omega')
+    @property
+    @lru_cache()
+    def _omega_func(self):
+        return self.__get_V_SRF_funcs('V', 'omega')
+    @property
+    @lru_cache()
+    def _omega_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('V', 'omega')
+
+    @property
+    @lru_cache()
+    def _N_symb(self):
+        return self.__get_V_SRF_symbs('SRF', 'NormBRDF')
+    @property
+    @lru_cache()
+    def _N_func(self):
+        return self.__get_V_SRF_funcs('SRF', 'NormBRDF')
+    @property
+    @lru_cache()
+    def _N_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('SRF', 'NormBRDF')
+
+
 
 
     @property
@@ -963,20 +1046,11 @@ class Fits(Scatter):
         '''
 
         if R is None:
-            try:
-                R = self.R
-            except AttributeError:
-                assert False, 'R is not available and must be provided'
+            R = self.R
         if res_dict is None:
-            try:
-                res_dict = self.res_dict
-            except AttributeError:
-                assert False, 'res_dict is not available and must be provided'
+            res_dict = self.res_dict
         if fixed_dict is None:
-            try:
-                fixed_dict = self._fixed_dict
-            except AttributeError:
-                assert False, 'fixed_dict is not available and must be provided'
+            fixed_dict = self.fixed_dict
 
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
@@ -984,57 +1058,28 @@ class Fits(Scatter):
         res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
-        # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        # and generate a function to evaluate the symbolic representation
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
-
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
@@ -1046,8 +1091,11 @@ class Fits(Scatter):
 
         # symbols used to define the functions
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -1076,14 +1124,11 @@ class Fits(Scatter):
             # convert the calculated results to dB
             model_calc = 10. * np.log10(model_calc)
 
-        # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
-
         return model_calc
 
 
-    def _calc_jac(self, R, res_dict, fixed_dict, param_dyn_dict, order):
+    def _calc_jac(self, R=None, res_dict=None, fixed_dict=None,
+                  param_dyn_dict=None, order=None):
         '''
         function to evaluate the jacobian in the shape as required
         by scipy's least_squares function
@@ -1101,61 +1146,47 @@ class Fits(Scatter):
              the jacobian corresponding to the fit-parameters in the
              shape applicable to scipy's least_squres-function
         '''
+
+        if R is None:
+            R = self.R
+        if res_dict is None:
+            res_dict = self.res_dict
+        if fixed_dict is None:
+            fixed_dict = self.fixed_dict
+        if param_dyn_dict is None:
+            param_dyn_dict = self._fit_param_dyn_dict
+        if order is None:
+            order = self._order
+
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
         #             key, val in self._assignvals(res_dict).items()}
         res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
-        # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
-
-        # set omega, tau and NormBRDF-values to input
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
@@ -1167,8 +1198,11 @@ class Fits(Scatter):
 
         # symbols used in the definitions of the functions
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -1182,20 +1216,19 @@ class Fits(Scatter):
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
 
-        neworder = [o for o in order]
-
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
         # in param_dyn_dict) and replace them by 'omega', 'tau' and 'NormBRDF'
         # so that calling R.jacobian will calculate the "outer" derivative
-        if len(tausymb) != 0:
-            for i in map(str, tausymb) & param_dyn_dict.keys():
+        neworder = [o for o in order]
+        if len(self._tau_symb) != 0:
+            for i in self._tau_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'tau'
-        if len(omegasymb) != 0:
-            for i in map(str, omegasymb) & param_dyn_dict.keys():
+        if len(self._omega_symb) != 0:
+            for i in self._omega_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'omega'
-        if len(Nsymb) != 0:
-            for i in map(str, Nsymb) & param_dyn_dict.keys():
+        if len(self._N_symb) != 0:
+            for i in self._N_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'NormBRDF'
 
         # calculate the jacobian based on neworder
@@ -1229,18 +1262,17 @@ class Fits(Scatter):
                                shape=(max(row_ind) + 1,
                                       max(col_ind) + 1))
                 newjacdict[key] = m
+
         # evaluate jacobians of the functional representations of tau
         # and add them to newjacdict
-        for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
+        for i in self._tau_symb & param_dyn_dict.keys():
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau,
-                                                   sp.Symbol(i)),
-                                  modules=['numpy'])
+            d_inner = self._tau_diff_func[i]
             # evaluate the inner derivative
-            dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
+            dtau_dx = d_inner(**{key:res_dict[key]
+                                   for key in self._tau_symb})
             # calculate the derivative with respect to the parameters
-
             if np.isscalar(dtau_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
             elif isspmatrix(newjacdict[str(i)]):
@@ -1264,11 +1296,10 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
         # same for omega
-        for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega,
-                                                     sp.Symbol(i)),
-                                  modules=['numpy'])
-            domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
+        for i in self._omega_symb & param_dyn_dict.keys():
+            d_inner = self._omega_diff_func[i]
+            domega_dx = d_inner(**{key:res_dict[key]
+                                   for key in self._omega_symb})
 
             if np.isscalar(domega_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
@@ -1293,11 +1324,9 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
         # same for NormBRDF
-        for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF,
-                                                 sp.Symbol(i)),
-                                  modules=['numpy'])
-            dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
+        for i in self._N_symb & param_dyn_dict.keys():
+            d_inner = self._N_diff_func[i]
+            dN_dx = d_inner(**{key:res_dict[key] for key in self._N_symb})
 
             if np.isscalar(dN_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
@@ -1331,10 +1360,6 @@ class Fits(Scatter):
             jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
         else:
             jac_lsq = np.vstack([newjacdict[key] for key in order]).transpose()
-
-        # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
 
         return jac_lsq
 
@@ -1431,8 +1456,8 @@ class Fits(Scatter):
         res_dict.update(fixed_dict)
 
         # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
+        #orig_V = copy.deepcopy(R.V)
+        #orig_SRF = copy.deepcopy(R.SRF)
 
         # check if tau, omega or NormBRDF is given in terms of sympy-symbols
         # and generate a function to evaluate the symbolic representation
@@ -1524,8 +1549,8 @@ class Fits(Scatter):
 
 
         # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
+        #R.V = orig_V
+        #R.SRF = orig_SRF
 
         return {'slope' : model_slope,
                 'curv' : model_curv}
@@ -1623,8 +1648,8 @@ class Fits(Scatter):
         # generate a list of the names of the parameters that will be fitted.
         # (this is necessary to ensure correct broadcasting of values since
         # dictionarys do)
-        order = [i for i, v in self._startvaldict.items() if v is not None]
-
+        #order = [i for i, v in self._startvaldict.items() if v is not None]
+        order = self._order
         # will be used to assign the values to the individual parameters
         # (the returned parameters are given as a concatenated array
         # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
@@ -1634,14 +1659,12 @@ class Fits(Scatter):
         # this procedure is necessary to ensure correct broadcasting in case
         # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
 
-        use_dyndict = self.param_dyn_df.to_dict(orient='list')
-
         # get mean datetime-values for each fitted parameter and a dict
         # that can be used to re-assign the values
         repeatdict = dict()
         for key in order:
             # get the (sorted) unique values and locations in param_dyn_dict
-            dynnr, uniquewhere = np.unique(use_dyndict[key],
+            dynnr, uniquewhere = np.unique(self._fit_param_dyn_dict[key],
                                            return_inverse=True)
             # get value positions and number of repetitions to reconstruct an
             # array indexed like the dataset
@@ -1668,11 +1691,8 @@ class Fits(Scatter):
                 # value positions and consecutive repetitions
                 reloc, rep = repeatdict[key]
                 newdict[key] = (val[reloc], rep)
-
             # calculate the residuals
-            errs = (self._calc_model(res_dict=newdict,
-                                     fixed_dict=self.fixed_dict) - self.data
-                    ).flatten()
+            errs = (self._calc_model(res_dict=newdict) - self.data).flatten()
             # incorporate weighting-matrix to ensure correct treatment
             # of artificially added values
             errs = self.weights * errs
@@ -1699,10 +1719,7 @@ class Fits(Scatter):
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
             # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R=self.R, res_dict=newdict,
-                                 fixed_dict=self.fixed_dict,
-                                 param_dyn_dict=use_dyndict,
-                                 order=order)
+            jac = self._calc_jac(res_dict=newdict)
 
             return jac
 
