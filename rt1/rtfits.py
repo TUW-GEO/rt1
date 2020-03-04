@@ -254,8 +254,7 @@ class Fits(Scatter):
     def __getstate__(self):
         if '_rt1_dump_mini' in self.__dict__:
             # remove unnecessary data to save storage
-            removekeys = ['R', 'fit_output', 'fixed_dict', 'start_dict',
-                          'dataset_used']
+            removekeys = ['fit_output']
 
             delattr(self, '_rt1_dump_mini')
 
