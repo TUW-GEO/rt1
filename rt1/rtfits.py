@@ -1608,6 +1608,10 @@ class Fits(Scatter):
         parameter used to define V and SRF to sets of monostatic measurements.
         '''
 
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
+
         # set the number of repetitions (e.g. the max. number of values
         # encountered in a group)
 
