@@ -54,7 +54,7 @@ class TestCONFIGPARSER(unittest.TestCase):
                        'lambda_backend': 'symengine',
                        'interp_vals': ['tau', 'omega'],
                        '_fnevals_input': None,
-                       'verbosity' : 2}
+                       'verbose' : 2}
 
 
         configdicts = cfg.get_config()
