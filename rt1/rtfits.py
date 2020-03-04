@@ -266,38 +266,51 @@ class Fits(Scatter):
 
     def __setattr__(self, attr, value):
         # TODO write proper setters that do the job
-        if attr in ['dataset', 'defdict', 'set_V_SRF', 'sig0', 'dB',
+        # clear the cache in case it is not empty and a
+        # defining variable is set
+        if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF',
                     'interp_vals']:
-            print(f'{attr} has been set, clearing cache')
-            self._clear_cache()
+            if not all(i == 0 for i in self._cached_arg_number):
+                print(f'{attr} has been set, clearing cache')
+                self._clear_cache()
         super().__setattr__(attr, value)
 
 
     # a list of the names of the properties that are cached
     @property
-    def __cached_props(self):
+    def _cached_props(self):
         return ['param_dyn_dict', 'param_dyn_df', '_groupindex',
                 'group_repeats', '_dataset_used', 'index',
                 'fit_index', '_jac_assign_rule',
                 'meandatetimes', 'inc', 'mask', 'weights',
                 'data']
 
+
     def _clear_cache(self):
         '''
         clear all cached properties
         '''
-        for name in self.__cached_props:
+        for name in self._cached_props:
             getattr(Fits, name).fget.cache_clear()
-
         print('...cache cleared')
+
 
     def _cache_info(self):
         '''
         print the state of the lru_cache for all cached properties
         '''
-        print(*[f'{name:<18}:   {getattr(Fits, name).fget.cache_info()}'
-                for name in self.__cached_props],
+        print(*[(f'{name:<18}:   ' +
+                f'{getattr(Fits, name).fget.cache_info()}')
+                for name in self._cached_props],
               sep='\n')
+
+    @property
+    def _cached_arg_number(self):
+        '''
+        print the state of the lru_cache for all cached properties
+        '''
+        return [getattr(Fits, name).fget.cache_info().currsize
+                for name in self._cached_props]
 
     @property
     @lru_cache()
