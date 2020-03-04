@@ -139,6 +139,10 @@ class Fits(Scatter):
                   instead of using a step-function that assigns the obtained
                   value equally to all observations within the timespan.
                   -> use with care! this might cause unexpected behaviour!
+    verbose : int, optional
+              the verbosity of the print-outputs (also passed to
+              scipy.optimize.least_squares and rt1.RT1)
+
 
     Stored Fit-Attributes:
     -------------------
