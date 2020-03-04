@@ -320,7 +320,7 @@ class Fits(Scatter):
     @lru_cache()
     def param_dyn_dict(self):
         '''
-        get index to assign grouping
+        get index to assign grouping (with respect to the dataset-index)
         '''
 
         # the names of the parameters that will be fitted
@@ -520,7 +520,6 @@ class Fits(Scatter):
 
 
     @property
-    @lru_cache()
     def mask(self):
         '''
         a mask that indicates the artificially added values
