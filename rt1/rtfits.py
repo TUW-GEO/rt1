@@ -328,7 +328,7 @@ class Fits(Scatter):
         '''
 
         # the names of the parameters that will be fitted
-        dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]#self._startvaldict.keys()
+        dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
 
         # set frequencies of fitted parameters
         # (group by similar frequencies)
@@ -865,6 +865,9 @@ class Fits(Scatter):
 
 
     def __get_V_SRF_symbs(self, V_SRF, prop):
+        '''
+        the symbols used to define tau, omega and NormBRDF of V and SRF
+        '''
         try:
             symbs = list(map(str,
                              getattr(getattr(self, V_SRF), prop).free_symbols))
@@ -874,6 +877,10 @@ class Fits(Scatter):
 
 
     def __get_V_SRF_funcs(self, V_SRF, prop):
+        '''
+        the lambdified functions used to define tau, omega and NormBRDF
+        of V and SRF
+        '''
         try:
             func = sp.lambdify(
                 getattr(getattr(self, V_SRF), prop).free_symbols,
@@ -885,6 +892,11 @@ class Fits(Scatter):
 
 
     def __get_V_SRF_diff_funcs(self, V_SRF, prop):
+        '''
+        a dict containing the lambdified partial derivatives of the functions
+        used to define tau, omega and NormBRDF of V and SRF
+        '''
+
         d_inner = dict()
         for param in (self.__get_V_SRF_symbs(V_SRF, prop) &
                   self.param_dyn_dict.keys()):
