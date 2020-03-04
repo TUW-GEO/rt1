@@ -2066,6 +2066,7 @@ class RT1_configparser(object):
 
         self.fitargs_parse_props = dict(section = 'fits_kwargs',
                                         bool_keys = ['sig0', 'dB', 'int_Q'],
+                                        int_keys= ['verbose'],
                                         list_keys = ['interp_vals'])
 
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
@@ -2103,9 +2104,14 @@ class RT1_configparser(object):
             elif key in bool_keys:
                 val = inp.getboolean(key)
             elif key in list_keys:
-                assert inp[key].startswith('['), f'{key}  must start with "[" '
-                assert inp[key].endswith(']'), f'{key} must end with "]" '
-                val = inp[key][1:-1].replace(' ', '').split(',')
+                #assert inp[key].startswith('['), f'{key}  must start with "[" '
+                #assert inp[key].endswith(']'), f'{key} must end with "]" '
+                #val = inp[key][1:-1].replace(' ', '').split(',')
+                if inp[key] is None:
+                    val = []
+                else:
+                    val = inp[key].replace(' ', '').split(',')
+                    val = [i for i in val if len(i) > 0]
             else:
                 val = inp[key]
 
