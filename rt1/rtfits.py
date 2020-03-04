@@ -294,9 +294,10 @@ class Fits(Scatter):
         '''
         clear all cached properties
         '''
-        for name in self._cached_props:
-            getattr(Fits, name).fget.cache_clear()
-        print('...cache cleared')
+        if not all(i == 0 for i in self._cached_arg_number):
+            for name in self._cached_props:
+                getattr(Fits, name).fget.cache_clear()
+            print('...cache cleared')
 
 
     def _cache_info(self):
