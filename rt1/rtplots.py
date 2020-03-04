@@ -2320,10 +2320,10 @@ class plot:
             if printfullt_0 is True:
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
+                    if day >= maxdays: continue
                     day_inc_new = np.rad2deg(newsig0_vals['incs'][day])
                     sortp = np.argsort(day_inc_new)
 
-                    if day >= maxdays: continue
                     linesfull[i].set_xdata(day_inc_new[sortp])
                     linesfull[i].set_ydata(newsig0_vals['tot'][day][sortp])
                     i += 1
@@ -2341,6 +2341,9 @@ class plot:
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
                     if day >= maxdays: continue
+                    day_inc_new = np.rad2deg(newsig0_vals['incs'][day])
+                    sortp = np.argsort(day_inc_new)
+
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
