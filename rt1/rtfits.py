@@ -404,40 +404,12 @@ class Fits(Scatter):
 
         return groupindex.astype(np.int64)
 
-    @property
-    def _max_rep(self):
-        return Counter(self._groupindex).most_common(1)[0][1]
-
 
     @property
     @lru_cache()
     def group_repeats(self):
         return list(map(len, map(set, self._orig_index)))
 
-
-    @property
-    def _orig_index(self):
-        '''
-        a list of the (grouped) index-values
-        '''
-        orig_index = [np.array([k[1] for k in j],
-                               dtype=self.dataset.index.dtype)
-                      for i,j in groupby(zip(self._groupindex,
-                                             self.dataset.index),
-                                         key=itemgetter(0))]
-        return orig_index
-
-
-    @property
-    def _idx_assigns(self):
-        '''
-        a list of ranges that is used to assign values provided as a list
-        with length of the dataset to the shape needed for further processing
-        (e.g. grouped with respect to the temporal dynamics of the parameters)
-        '''
-        return rectangularize([range(*i) for i in
-                               pairwise(accumulate([0, *self.group_repeats]))],
-                              dim=self._max_rep)
 
     @property
     @lru_cache()
@@ -590,6 +562,36 @@ class Fits(Scatter):
         of each row to fit in length
         '''
         return self.__get_data(prop='sig')
+
+
+    @property
+    def _max_rep(self):
+        return Counter(self._groupindex).most_common(1)[0][1]
+
+
+    @property
+    def _orig_index(self):
+        '''
+        a list of the (grouped) index-values
+        '''
+        orig_index = [np.array([k[1] for k in j],
+                               dtype=self.dataset.index.dtype)
+                      for i,j in groupby(zip(self._groupindex,
+                                             self.dataset.index),
+                                         key=itemgetter(0))]
+        return orig_index
+
+
+    @property
+    def _idx_assigns(self):
+        '''
+        a list of ranges that is used to assign values provided as a list
+        with length of the dataset to the shape needed for further processing
+        (e.g. grouped with respect to the temporal dynamics of the parameters)
+        '''
+        return rectangularize([range(*i) for i in
+                               pairwise(accumulate([0, *self.group_repeats]))],
+                              dim=self._max_rep)
 
 
     @property
@@ -879,6 +881,21 @@ class Fits(Scatter):
 
 
     def _assignvals(self, res_dict):
+        '''
+        a function to distribute the fit-values to the actual shape of the
+        dataset. This is done in one of the following ways:
+
+            - if the parameter is provided in the "interp_vals" list,
+              a quadratic interpolation (with respect to the datetime-indices)
+              will be used to assign the values
+            - otherwise, a step-function will be used
+
+        Parameters:
+        -------------
+        res_dict : dict
+            a dict containing the results obtained from a run of performfit()
+
+        '''
         if len(self.interp_vals) > 0:
 
             # get the results and a quadratic interpolation-function
