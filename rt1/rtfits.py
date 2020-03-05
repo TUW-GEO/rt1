@@ -15,6 +15,7 @@ from scipy.interpolate import interp1d
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize, pairwise
+
 from .rtplots import plot as rt1_plots
 
 from . import surface as rt1_s
@@ -192,9 +193,9 @@ class Fits(Scatter):
         self.sig0 = sig0
         self.dB = dB
         self.dataset = dataset
-        self.set_V_SRF = set_V_SRF
+        self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
-        self.lsq_kwargs = lsq_kwargs
+        self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
         if self.lsq_kwargs is None:
             lsq_kwargs = dict()
 
@@ -206,7 +207,7 @@ class Fits(Scatter):
 
         self._fnevals_input = _fnevals_input
 
-        self.interp_vals = interp_vals
+        self.interp_vals = copy.deepcopy(interp_vals)
         if self.interp_vals is None:
             self.interp_vals = []
 
@@ -245,6 +246,7 @@ class Fits(Scatter):
         if not hasattr(self, 'interp_vals'):
             self.interp_vals = []
 
+
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
@@ -279,24 +281,28 @@ class Fits(Scatter):
         super().__setattr__(attr, value)
 
 
-    # a list of the names of the properties that are cached
     @property
     def _cached_props(self):
+         '''
+         a list of the names of the properties that are cached
+         '''
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
-                  'group_repeats', '_dataset_used', 'index',
-                  'fit_index', '_jac_assign_rule',
-                  'meandatetimes', 'inc', 'weights',
-                  'data', '_fit_param_dyn_dict']
+                 '_group_repeats', '_dataset_used', 'index',
+                 'fit_index', '_jac_assign_rule',
+                 'meandatetimes', 'inc', 'weights',
+                 'data', '_fit_param_dyn_dict']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
 
          return names
 
+
     def _clear_cache(self):
         '''
         clear all cached properties
         '''
+
         if not all(i == 0 for i in self._cached_arg_number):
             for name in self._cached_props:
                 getattr(Fits, name).fget.cache_clear()
@@ -307,18 +313,22 @@ class Fits(Scatter):
         '''
         print the state of the lru_cache for all cached properties
         '''
+
         print(*[(f'{name:<18}:   ' +
                 f'{getattr(Fits, name).fget.cache_info()}')
                 for name in self._cached_props],
               sep='\n')
+
 
     @property
     def _cached_arg_number(self):
         '''
         print the state of the lru_cache for all cached properties
         '''
+
         return [getattr(Fits, name).fget.cache_info().currsize
                 for name in self._cached_props]
+
 
     @property
     @lru_cache()
@@ -395,6 +405,7 @@ class Fits(Scatter):
         '''
         get index to assign grouping (with respect to the fit-index)
         '''
+
         return self.param_dyn_df.to_dict(orient='list')
 
 
@@ -425,7 +436,12 @@ class Fits(Scatter):
 
     @property
     @lru_cache()
-    def group_repeats(self):
+    def _group_repeats(self):
+        '''
+        the repetition of each fitted value (in order to distribute it
+        to the fit_index)
+        '''
+
         return list(map(len, map(set, self._orig_index)))
 
 
@@ -475,10 +491,9 @@ class Fits(Scatter):
         '''
         the mean datetime-indexes that correspond to each fit-group
         '''
-        #indexgroups = np.split(self.index, np.cumsum(self.group_repeats))[:-1]
-        #return np.array(list(map(meandatetime, indexgroups)), dtype=self.index.dtype)
 
-        # be careful in case an unsorted grouping is applied !!! (e.g. manual dyn)
+        # be careful in case an unsorted grouping is applied !!!
+        # (e.g. manual dyn)
         return np.array(list(map(meandatetime, self._orig_index)),
                         dtype=self.index.dtype)
 
@@ -486,6 +501,11 @@ class Fits(Scatter):
     @property
     @lru_cache()
     def _jac_assign_rule(self):
+        '''
+        a dict containing the positions of the derivative-values
+        (used in the calculation of the jacobi-determinant to assign
+        a scipy.sparse matrix and avoid memory-overflows)
+        '''
         shape = self.inc.shape
 
         jac_rules = dict()
@@ -513,6 +533,7 @@ class Fits(Scatter):
         a dict of the mean datetime-indexes that correspond to each obtained
         parameter
         '''
+
         dates = dict()
         for key, val in self.param_dyn_df.items():
             grp = groupby(zip(val.values, self.fit_index), key=itemgetter(0))
@@ -530,6 +551,7 @@ class Fits(Scatter):
         provided in the dataset, rectangularized by repeating the last
         values of each row to fit in length.
         '''
+
         return self.__get_data(prop='inc')
 
 
@@ -539,6 +561,7 @@ class Fits(Scatter):
         a mask that indicates the artificially added values
         (see 'inc', 'data' and 'weights' properties for details)
         '''
+
         return self.__get_data(prop='mask')
 
 
@@ -562,8 +585,8 @@ class Fits(Scatter):
         If a column 'data_weights' has been provided in the dataset,
         the obtained weights will additionally be multiplied by the
         values provided as 'data_weights'.
-
         '''
+
         if 'data_weights' in self.dataset:
             return self.__get_data(
                 prop='data_weights') * self.__get_data(prop='weights')
@@ -578,19 +601,27 @@ class Fits(Scatter):
         in the dataset, rectangularized by repeating the last values
         of each row to fit in length
         '''
+
         return self.__get_data(prop='sig')
 
 
     @property
     def _order(self):
-        # generate a list of the names of the parameters that will be fitted.
-        # (this is necessary to ensure correct broadcasting of values since
-        # dictionarys do)
+        '''
+        a list of the names of the parameters that will be fitted.
+        (this is necessary to ensure correct broadcasting of values since
+        dictionarys do)
+        '''
+
         return [i for i, v in self._startvaldict.items() if v is not None]
 
 
     @property
     def _max_rep(self):
+        '''
+        the maximum number of unique objects in the "_groupindex"
+        '''
+
         return Counter(self._groupindex).most_common(1)[0][1]
 
 
@@ -599,6 +630,7 @@ class Fits(Scatter):
         '''
         a list of the (grouped) index-values
         '''
+
         orig_index = [np.array([k[1].value for k in j],
                                dtype=self.dataset.index.dtype)
                       for i,j in groupby(zip(self._groupindex,
@@ -614,8 +646,9 @@ class Fits(Scatter):
         with length of the dataset to the shape needed for further processing
         (e.g. grouped with respect to the temporal dynamics of the parameters)
         '''
+
         return rectangularize([range(*i) for i in
-                               pairwise(accumulate([0, *self.group_repeats]))],
+                               pairwise(accumulate([0, *self._group_repeats]))],
                               dim=self._max_rep)
 
 
@@ -624,8 +657,8 @@ class Fits(Scatter):
         '''
         Generate RT-1 specifications based on the provided "defdict".
         ... used to simplify the model-specification for 'rtfits.performfit()'
-
         '''
+
         # generate RT1 specifications based on defdict
         # initialize empty dicts
         setdict = {}
@@ -665,6 +698,7 @@ class Fits(Scatter):
         '''
         a dictionary containing the fixed-values to be used
         '''
+
         _fixed_dict = {}
         for key, val in self.defdict.items():
             if val[0] is False:
@@ -700,6 +734,7 @@ class Fits(Scatter):
         '''
         a dictionary containing the start-values to be used
         '''
+
         startvaldict = {}
         for key, val in self.defdict.items():
             if val[0] is True:
@@ -783,6 +818,11 @@ class Fits(Scatter):
 
     @property
     def _param_R_dict(self):
+        '''
+        a dict containing the parameter-values that are needed to evaluate
+        the fn-coefficients (as needed for evaluation of the interaction-term)
+        '''
+
         param_R = dict(**self._startvaldict, **self.fixed_dict)
         param_R.pop('omega', None)
         param_R.pop('tau', None)
@@ -816,6 +856,10 @@ class Fits(Scatter):
 
     @property
     def V(self):
+        '''
+        new initialization of the rt1.volume object used
+        '''
+
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
@@ -829,6 +873,10 @@ class Fits(Scatter):
 
     @property
     def SRF(self):
+        '''
+        new initialization of the rt1.surface object used
+        '''
+
         # set V and SRF based on setter-function
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
@@ -841,6 +889,9 @@ class Fits(Scatter):
 
     @property
     def R(self):
+        '''
+        new initialization of the rt1.RT1 object used
+        '''
 
         R = RT1(1., self.inc, self.inc,
                 np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
@@ -949,8 +1000,6 @@ class Fits(Scatter):
         return self.__get_V_SRF_diff_funcs('SRF', 'NormBRDF')
 
 
-
-
     @property
     def res_df(self):
         '''
@@ -971,7 +1020,7 @@ class Fits(Scatter):
                 np.put(a=x, ind=self._idx_assigns, v=val)
                 series.append(pd.Series(x, self.index, name=key))
             else:
-                series.append(pd.Series(np.repeat(val, self.group_repeats),
+                series.append(pd.Series(np.repeat(val, self._group_repeats),
                                         self.index, name=key))
         resdf = pd.concat(series, axis=1).ffill()
 
@@ -1125,6 +1174,7 @@ class Fits(Scatter):
 
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
+
 
         # calculate total backscatter-values
         if return_components is True:
@@ -1379,7 +1429,6 @@ class Fits(Scatter):
             jac_lsq = np.vstack([newjacdict[key] for key in order]).transpose()
 
         return jac_lsq
-
 
 
     def __get_data(self, prop):
@@ -2122,6 +2171,8 @@ class Fits(Scatter):
 
         return res
 
+
+
 class RT1_configparser(object):
     def __init__(self, configpath):
         # setup config (allow empty values -> will result in None)
@@ -2129,6 +2180,7 @@ class RT1_configparser(object):
         # avoid converting uppercase characters
         # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
+
         # read config file
         self.cfg = self.config.read(configpath)
 
