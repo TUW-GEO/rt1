@@ -1037,7 +1037,7 @@ class Fits(Scatter):
 
 
     def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
-                    return_components=False):
+                    interp_vals=None, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -1066,11 +1066,13 @@ class Fits(Scatter):
             res_dict = self.res_dict
         if fixed_dict is None:
             fixed_dict = self.fixed_dict
+        if interp_vals is None:
+            interp_vals = self.interp_vals
 
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
         #             key, val in self._assignvals(res_dict).items()}
-        res_dict = self._assignvals(res_dict)
+        res_dict = self._assignvals(res_dict, interp_vals)
         res_dict.update(fixed_dict)
 
         # update the numeric representations of omega, tau and NormBRDF
