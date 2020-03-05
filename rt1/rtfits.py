@@ -599,7 +599,7 @@ class Fits(Scatter):
         '''
         a list of the (grouped) index-values
         '''
-        orig_index = [np.array([k[1] for k in j],
+        orig_index = [np.array([k[1].value for k in j],
                                dtype=self.dataset.index.dtype)
                       for i,j in groupby(zip(self._groupindex,
                                              self.dataset.index),
