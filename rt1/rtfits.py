@@ -978,7 +978,7 @@ class Fits(Scatter):
         return resdf
 
 
-    def _assignvals(self, res_dict):
+    def _assignvals(self, res_dict, interp_vals=None):
         '''
         a function to distribute the fit-values to the actual shape of the
         dataset. This is done in one of the following ways:
@@ -994,12 +994,15 @@ class Fits(Scatter):
             a dict containing the results obtained from a run of performfit()
 
         '''
-        if len(self.interp_vals) > 0:
+        if interp_vals is None:
+            interp_vals = self.interp_vals
+
+        if len(interp_vals) > 0:
 
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
             for key, val in res_dict.items():
-                if key in self.interp_vals:
+                if key in interp_vals:
                     # generate an interpolaion function
                     # the values at the boundaries are set to the nearest
                     # obtained values to avoid extrapolation
