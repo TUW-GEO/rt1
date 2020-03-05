@@ -8,6 +8,8 @@ Quast & Wagner (2016): doi:10.1364/AO.55.005379
 """
 import numpy as np
 
+from functools import lru_cache
+
 from scipy.special import expi
 from scipy.special import expn
 
@@ -176,6 +178,7 @@ class RT1(object):
         if not isinstance(self.SRF.NormBRDF, sp.Basic):
             assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
                                                  'must be greater than 0')
+
 
 # TODO  fix asserts to allow symbolic parameters
         # check if all parameters have been provided (and also if no
@@ -1356,7 +1359,6 @@ class RT1(object):
             # is identical to 0 (in a symbolic manner)
             fn = np.broadcast_arrays(*self._fnevals(*args))
 
-
         nmax = len(fn)
 
         hlp1 = (np.exp(-self.V.tau / mu1) * np.log(mu1 / (1. - mu1))
@@ -1531,8 +1533,53 @@ class RT1(object):
         return self.SRF.NormBRDF * (I_bs - Isurf)
 
 
-    # define functions that evaluate the derivatives with
-    # respect to the defined parameters
+    @lru_cache()
+    def _d_surface_dummy_lambda(self, key):
+        '''
+        a cached lambda-function for computing
+        the derivative of the surface-function
+        with respect to a given parameter
+
+        Parameters
+        ----------
+        key : str
+            the parameter to use.
+
+        Returns
+        -------
+        dummyd : callable
+            a function that calculates the derivative with respect to key.
+
+        '''
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
+                self.param_dict.keys())
+
+        return sp.lambdify(args, sp.diff(self.SRF._func, sp.Symbol(key)),
+                           modules=["numpy", "sympy"])
+
+
+    @lru_cache()
+    def _d_volume_dummy_lambda(self, key):
+        '''
+        same as _d_surface_dummy_lambda but for volume
+        '''
+        theta_0 = sp.Symbol('theta_0')
+        theta_ex = sp.Symbol('theta_ex')
+        phi_0 = sp.Symbol('phi_0')
+        phi_ex = sp.Symbol('phi_ex')
+
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
+                self.param_dict.keys())
+
+        return sp.lambdify(args, sp.diff(self.V._func, sp.Symbol(key)),
+                           modules=["numpy", "sympy"])
+
+
     def _d_surface_ddummy(self, key):
         '''
         Generation of a function that evaluates the derivative of the
@@ -1548,49 +1595,29 @@ class RT1(object):
         - : array_like(float)
             Numerical value of dIsurf/dkey for the given set of parameters
         '''
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
 
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
-            self.param_dict.keys())
-
-        dummyd = sp.lambdify(args,
-                             sp.diff(self.SRF._func, sp.Symbol(key)),
-                             modules=["numpy", "sympy"])
-
-        dI_bs = (self.I0 * self._mu_0
-                 * dummyd(self.t_0, self.t_ex,
-                                 self.p_0, self.p_ex,
-                                 **self.param_dict))
-
+        dI_bs = (self.I0 * self._mu_0 * self._d_surface_dummy_lambda(key)(
+            self.t_0, self.t_ex, self.p_0, self.p_ex, **self.param_dict))
 
         dI_s = (np.exp(-(self.V.tau / self._mu_0) -
                                   (self.V.tau / self._mu_ex))) * dI_bs
 
         return self.SRF.NormBRDF * ((1. - self.bsf) * dI_s + self.bsf * dI_bs)
 
+
     def _d_volume_ddummy(self, key):
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
-
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
-            self.param_dict.keys())
-
-        dummyd = sp.lambdify(args,
-                             sp.diff(self.V._func, sp.Symbol(key)),
-                             modules=["numpy", "sympy"])
-
+        '''
+        same as d_surface_ddummy but for volume
+        '''
         dIvol = (self.I0 * self.V.omega
                  * self._mu_0 / (self._mu_0 + self._mu_ex)
                  * (1. - np.exp(-(self.V.tau / self._mu_0) -
                                 (self.V.tau / self._mu_ex)))
-                 * dummyd(self.t_0, self.t_ex, self.p_0, self.p_ex,
+                 * self._d_volume_dummy_lambda(key)(self.t_0, self.t_ex,
+                                                    self.p_0, self.p_ex,
                           **self.param_dict))
         return (1. - self.bsf) * dIvol
+
 
     def jacobian(self, dB=False, sig0=False,
                  param_list=['omega', 'tau', 'NormBRDF']):
