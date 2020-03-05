@@ -19,150 +19,12 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 
-from .general_functions import rectangularize, dBsig0convert, meandatetime
+from .general_functions import rectangularize, dBsig0convert, meandatetime, \
+    pairwise
 from rt1.rt1 import RT1
 
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
-
-
-def _evalfit(fit, inc=None, return_components=True):
-    '''
-    get backscatter timeseries values from a rtfits.Fits object
-    (possibly replace the incidence-angle array by an alternative one)
-    (used in printsig0analysis)
-
-    Parameters
-    ----------
-    fit : rt1.rtfits.Fits object
-        The fit-object whose backscatter should be returned.
-    inc : array-like, optional
-        The incidence-angles at which the backscatter values are intended
-        to be evaluated. If None, the incidence-angles of the provided
-        fit-object will be used (e.g. fit.R.t_0). The default is None.
-    return_components : bool, optional
-        Indicator if all components (tot, surf, vol, inter) or just the total
-        backscatter should be returned. The default is True.
-
-    Returns
-    -------
-    totsurfvolinter : dict
-        A dict with columns 'inc' and 'tot' ('surf','vol','inter')
-        corresponding to the incidence-angles and the backscatter-values
-        respectively.
-    '''
-
-    if inc is not None:
-        # copy initial values
-        fixed_dict = fit._fixed_dict
-        R = copy.deepcopy(fit.R)
-        orig_max_rep = copy.deepcopy(fit._max_rep)
-
-        assert len(fit.R.t_0) == len(inc), 'inc and fit.R.t_0 must have the ' \
-                                            + 'same length to allow correct ' \
-                                            + 'array-broadcasting'
-
-        R.t_0 = inc
-        R.p_0 = np.full_like(inc, 0.)
-        fit._max_rep = inc.shape[1]
-
-        newinc = pd.DataFrame(
-            {'inc':np.tile(inc, len(pd.unique(fit.fit_index)))},
-            np.repeat(fit.fit_index, inc.shape[0]))
-
-
-        for key, val in fixed_dict.items():
-            if val.shape != inc.shape:
-                print(f'shape {val.shape} of fixed_input for "{key}" does ' +
-                      f'not match shape {inc.shape} of "inc" and is updated')
-                #fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
-                #                            inc.shape[1], axis=1)
-                fixed_dict[key] = rectangularize(val, dim=inc.shape[1])
-
-    totsurfvolinter = fit._calc_model(return_components=return_components,
-                                      fixed_dict=fixed_dict,
-                                      R=R)
-
-    if return_components is True:
-        totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                   totsurfvolinter))
-    else:
-        totsurfvolinter = dict(tot=totsurfvolinter)
-
-    # get incidence-angles
-    totsurfvolinter['incs'] = R.t_0
-
-    # revert changes to the dicts
-    if inc is not None:
-        fit._max_rep = orig_max_rep
-    return totsurfvolinter
-
-
-def _evalfit_new(fit, inc=None, return_components=True):
-    '''
-    get backscatter timeseries values from a rtfits.Fits object
-    (possibly replace the incidence-angle array by an alternative one)
-    (used in printsig0analysis)
-
-    Parameters
-    ----------
-    fit : rt1.rtfits.Fits object
-        The fit-object whose backscatter should be returned.
-    inc : array-like, optional
-        The incidence-angles at which the backscatter values are intended
-        to be evaluated. If None, the incidence-angles of the provided
-        fit-object will be used (e.g. fit.R.t_0). The default is None.
-    return_components : bool, optional
-        Indicator if all components (tot, surf, vol, inter) or just the total
-        backscatter should be returned. The default is True.
-
-    Returns
-    -------
-    totsurfvolinter : dict
-        A dict with columns 'inc' and 'tot' ('surf','vol','inter')
-        corresponding to the incidence-angles and the backscatter-values
-        respectively.
-    '''
-
-    if inc is not None:
-        # copy initial values
-        #orig_max_rep = copy.deepcopy(fit._max_rep)
-        orig_dataset = copy.deepcopy(fit.dataset)
-
-        newdataset = pd.DataFrame(
-            {'inc':np.tile(inc, len(pd.unique(fit.index)))},
-            np.repeat(fit.index, inc.shape[0])
-            )
-
-        # adjust auxiliary datasets to new incidence-angles
-        aux_keys = [i for i in orig_dataset.keys() if i not in ['inc', 'sig']]
-        if len(aux_keys) > 0:
-            auxdfs = orig_dataset[aux_keys].groupby(
-                orig_dataset.index).mean().to_dict(orient='list')
-
-            for key, val in auxdfs.items():
-                newdataset[key] = pd.DataFrame(val, fit.index)
-
-        fit.dataset = newdataset
-
-    totsurfvolinter = fit._calc_model(return_components=return_components)
-
-    if return_components is True:
-        totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                   totsurfvolinter))
-    else:
-        totsurfvolinter = dict(tot=totsurfvolinter)
-
-    # get incidence-angles
-    totsurfvolinter['incs'] = fit.inc
-
-    # revert changes to the dicts
-    if inc is not None:
-        fit.dataset = orig_dataset
-
-    return totsurfvolinter
-
-
 
 
 def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
@@ -1991,8 +1853,40 @@ class plot:
                                                     dB = False, sig0=False,
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
-            inc = np.deg2rad(np.arange(1, 89, 1))
-            newsig0_vals = _evalfit_new(fit, inc)
+            inc=np.deg2rad(np.arange(1, 89, 1))
+
+            # set parameters and auxiliary datasets
+            param = {key: val.mean(axis=1)
+                     for key, val in fit._assignvals(fit.res_dict).items()}
+            aux_keys = [i for i in fit.dataset.keys() if i not in ['inc',
+                                                                   'sig']]
+            if len(aux_keys) > 0:
+                fixed_param = fit.dataset[aux_keys].groupby(level=0).mean()
+
+                newsig0_vals = fit.calc(
+                    param=fit.res_df.reindex(fit.dataset.index), inc=inc,
+                    fixed_param=fit.dataset[[i for i in fit.dataset.keys()
+                                             if i not in ['inc','sig']]])
+                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                        newsig0_vals))
+
+                newsig0_vals = {key:np.array(
+                    [val[i[0]:i[1]].mean(axis=0) for i in pairwise(
+                        [0, *np.where(np.diff(fit._groupindex))[0].tolist(),
+                        len(fit._groupindex)])])
+                    for key, val in newsig0_vals.items()}
+            else:
+                fixed_param = dict()
+
+                newsig0_vals = fit.calc(param=param,
+                                        inc=inc,
+                                        fixed_param=fixed_param,
+                                        return_components=True)
+                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                        newsig0_vals))
+
+            newsig0_vals['incs'] = np.broadcast_to(inc,
+                                                   newsig0_vals['tot'].shape)
 
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
@@ -2151,7 +2045,7 @@ class plot:
                                 newincs[day][sortp],
                                 newsig0_vals['inter'][day][sortp],
                                 **styledict_fullt0_dict['inter'])
-                for day in np.arange(0, dayrange, 1):
+
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
