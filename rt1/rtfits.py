@@ -2062,6 +2062,66 @@ class Fits(Scatter):
         self.performfit(re_init=True)
 
 
+    def calc(self, param, inc, return_components=True,
+                 fixed_param = None):
+        '''
+        evaluate the model with respect to a given set of parameters
+        and incidence-angles.
+
+        Parameters
+        ----------
+        param : dict
+            a dictionary with the parameter-values to be used, provided in
+            the shape
+
+            >>> params = dict(p1 = [1,2], p2 = [3,4], ...)
+
+        inc : array-like
+            a 1d numpy-array of the incidence-angles (in radians) to use
+
+        return_components : bool, optional
+            indicator if only the total backscatter or also the individual
+            backscatter-contributions should be returned.
+            The default is True.
+        fixed_param : dict, optional
+            a dictionary in the same shape as `params` that will be used to
+            assign the values of parameters that are provided as 'auxiliary'
+            datasets. The default is `None`.
+
+        Returns
+        -------
+        res : array-like
+            the calculated backscatter with respect to the parameters
+            if return_components is True, a set of arrays is return
+            corresponding to the backscatter-contributions:
+
+            >>> res = [total, surface, volume, (interaction)]
+
+            where the interaction-contribution is only returned if the `int_Q`
+            parameter is set to `True`.
+
+            if return_components is False, only the total-contribution is
+            returned
+        '''
+
+        R = self.R
+        R.t_0 = np.atleast_2d(inc)
+        R.p_0 = np.full_like(R.t_0, 0.)
+        res_dict = {key:[[val], 1] for key, val in param.items()}
+
+        if fixed_param is None:
+            fixed_param = dict()
+        else:
+            fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                           key, val in fixed_param.items()}
+
+
+        res = self._calc_model(R=R, res_dict=res_dict, fixed_dict=fixed_param,
+                               interp_vals=[],
+                               return_components=return_components)
+
+        return res
+
 class RT1_configparser(object):
     def __init__(self, configpath):
         # setup config (allow empty values -> will result in None)
