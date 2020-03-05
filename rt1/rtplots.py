@@ -26,7 +26,7 @@ from rt1.rt1 import RT1
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
 
-
+# TODO replace this with the fit.calc() routine (used in analyzemodel() )
 def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
                     dB=True, sig0=True, int_Q = False, return_fnevals=False,
                     **kwargs):
