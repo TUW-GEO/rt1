@@ -20,7 +20,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 
 from .general_functions import rectangularize, dBsig0convert, meandatetime, \
-    pairwise
+    pairwise, split_into
 from rt1.rt1 import RT1
 
 # plot of 3d scattering distribution
@@ -1473,7 +1473,7 @@ class plot:
             return cmap
 
         estimates = fit._calc_model()
-        indexsplits = np.split(fit.index, np.cumsum(fit.group_repeats))[:-1]
+        indexsplits = list(split_into(fit.index, fit._group_repeats))
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
