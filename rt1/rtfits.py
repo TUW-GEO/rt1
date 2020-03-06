@@ -1068,6 +1068,8 @@ class Fits(Scatter):
             interp_vals = self.interp_vals
 
         if len(interp_vals) > 0:
+            firstindex = self.dataset.index[0]
+            lastindex = self.dataset.index[-1]
 
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
@@ -1077,22 +1079,35 @@ class Fits(Scatter):
                     # the values at the boundaries are set to the nearest
                     # obtained values to avoid extrapolation
                     # "deque" is a list-type that supports append on both sides
+
+                    # ensure that the indexes are never the same
+                    # (add a milisecond if they are...)
+                    if firstindex == self.meandatetimes[key][0]:
+                        firstindex += np.timedelta(1, 'ms')
+                    if lastindex == self.meandatetimes[key][-1]:
+                        lastindex -= np.timedelta(1, 'ms')
+
                     useindex = deque(self.meandatetimes[key])
-                    useindex.appendleft(self.dataset.index[0])
-                    useindex.append(self.dataset.index[-1])
+                    useindex.appendleft(firstindex)
+                    useindex.append(lastindex)
                     useindex = np.array(useindex,
                                         dtype='datetime64[ns]').astype(float)
+                    if len(val) >= 2:
+                        usevals = deque(val[0])
+                        usevals.appendleft(val[0][0])
+                        usevals.append(val[0][-1])
 
-                    usevals = deque(val[0])
-                    usevals.appendleft(val[0][0])
-                    usevals.append(val[0][-1])
+                        # interpolate the data to the used timestamps
+                        f = interp1d(useindex.astype(float), usevals,
+                                     fill_value='extrapolate', axis=0,
+                                     kind='quadratic')
 
-                    # interpolate the data to the used timestamps
-                    f = interp1d(useindex.astype(float), usevals,
-                                 fill_value='extrapolate', axis=0,
-                                 kind='quadratic')
-
-                    interpvals = f(np.array(self.index, dtype='datetime64[ns]'))
+                        interpvals = f(np.array(self.index,
+                                                dtype='datetime64[ns]'))
+                    else:
+                        print('warning, interpolation not possible for ({key})'
+                              'because there are less than 2 values')
+                        interpvals = np.repeat(val[0], len(self.index))
 
                     # assign correct shape
                     use_res_dict[key] = np.take(interpvals, self._idx_assigns)
