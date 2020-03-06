@@ -1786,11 +1786,11 @@ class plot:
                                                                    'sig']]
             if len(aux_keys) > 0:
                 fixed_param = fit.dataset[aux_keys].groupby(level=0).mean()
-
+                aux_keys = [key for key, val in fit.defdict.items()
+                            if val[0] is False and val[1] == 'auxiliary']
                 newsig0_vals = fit.calc(
                     param=fit.res_df.reindex(fit.dataset.index), inc=inc,
-                    fixed_param=fit.dataset[[i for i in fit.dataset.keys()
-                                             if i not in ['inc','sig']]])
+                    fixed_param=fit.dataset[aux_keys])
                 newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
                         newsig0_vals))
 
