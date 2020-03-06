@@ -350,44 +350,47 @@ class Fits(Scatter):
         '''
         get index to assign grouping (with respect to the dataset-index)
         '''
+        if self.dataset is None:
+            return dict()
+        else:
 
-        # the names of the parameters that will be fitted
-        dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
+            # the names of the parameters that will be fitted
+            dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
 
-        # set frequencies of fitted parameters
-        # (group by similar frequencies)
-        grps = [[i, [p[0] for p in j]] for i, j in groupby(
-            self._timescaledict.items(), key=itemgetter(1))]
-        freq = [i[0] for i in grps]
-        freqkeys = [i[1] for i in grps]
+            # set frequencies of fitted parameters
+            # (group by similar frequencies)
+            grps = [[i, [p[0] for p in j]] for i, j in groupby(
+                self._timescaledict.items(), key=itemgetter(1))]
+            freq = [i[0] for i in grps]
+            freqkeys = [i[1] for i in grps]
 
-        param_dyn_dict = {}
-        # initialize all parameters as scalar parameters
-        for key in dyn_keys:
-            param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
+            param_dyn_dict = {}
+            # initialize all parameters as scalar parameters
+            for key in dyn_keys:
+                param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
 
-        if freq is not None:
-            for i, f in enumerate(freq):
-                grp_idx = self.dataset.index.to_frame().groupby(
-                                                pd.Grouper(freq=f))
-                # get unique group indices for each datetime-group
-                for key in freqkeys[i]:
-                    grp_data = []
-                    for nval, [_, val] in enumerate(grp_idx):
-                        grp_data += repeat(nval, len(val))
-                    param_dyn_dict[key] = grp_data
+            if freq is not None:
+                for i, f in enumerate(freq):
+                    grp_idx = self.dataset.index.to_frame().groupby(
+                                                    pd.Grouper(freq=f))
+                    # get unique group indices for each datetime-group
+                    for key in freqkeys[i]:
+                        grp_data = []
+                        for nval, [_, val] in enumerate(grp_idx):
+                            grp_data += repeat(nval, len(val))
+                        param_dyn_dict[key] = grp_data
 
-        if self._manual_dyn_df is not None:
-            for key, val in self._manual_dyn_df.astype(str).items():
-                dd1 = np.char.zfill(
-                    np.array(param_dyn_dict[key], dtype='str'),
-                    len(max(np.array(param_dyn_dict[key], dtype='str'),
-                            key=len)))
-                dd2 = val.str.zfill(len(max(val, key=len)))
-                # generate a combined (unique) integer
-                param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
-                                               dtype=int)
-        return param_dyn_dict
+            if self._manual_dyn_df is not None:
+                for key, val in self._manual_dyn_df.astype(str).items():
+                    dd1 = np.char.zfill(
+                        np.array(param_dyn_dict[key], dtype='str'),
+                        len(max(np.array(param_dyn_dict[key], dtype='str'),
+                                key=len)))
+                    dd2 = val.str.zfill(len(max(val, key=len)))
+                    # generate a combined (unique) integer
+                    param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
+                                                   dtype=int)
+            return param_dyn_dict
 
 
     @property
@@ -397,17 +400,17 @@ class Fits(Scatter):
         a data-frame with the individual group-indexes for each parameter
         (with respect to the unique index values of the provided dataset)
         '''
+        if self._groupindex is not None:
+            groupids = [next(j) for i,j in groupby(
+                zip(self._groupindex, *self.param_dyn_dict.values()),
+                key=itemgetter(0))]
 
-        groupids = [next(j) for i,j in groupby(
-            zip(self._groupindex, *self.param_dyn_dict.values()),
-            key=itemgetter(0))]
+            param_dyn_df = pd.DataFrame(groupids,
+                                        columns=['groupindex',
+                                                 *self.param_dyn_dict.keys()])
+            param_dyn_df.drop(columns='groupindex', inplace=True)
 
-        param_dyn_df = pd.DataFrame(groupids,
-                                    columns=['groupindex',
-                                             *self.param_dyn_dict.keys()])
-        param_dyn_df.drop(columns='groupindex', inplace=True)
-
-        return param_dyn_df
+            return param_dyn_df
 
 
     @property
@@ -427,22 +430,23 @@ class Fits(Scatter):
         the index used to group the dataset with respect to the temporal
         dynamics of the parameters
         '''
-        # get final group-indexes
-        groupindex = None
-        for key, val in self.param_dyn_dict.items():
-            dd = np.char.zfill(np.array(val, dtype='str'),
-                               len(max(np.array(val, dtype='str'),
-                                       key=len)))
+        if self.dataset is not None:
+            # get final group-indexes
+            groupindex = None
+            for key, val in self.param_dyn_dict.items():
+                dd = np.char.zfill(np.array(val, dtype='str'),
+                                   len(max(np.array(val, dtype='str'),
+                                           key=len)))
+                if groupindex is None:
+                    groupindex = dd
+                else:
+                    groupindex = np.char.add(groupindex, dd)
+
             if groupindex is None:
-                groupindex = dd
-            else:
-                groupindex = np.char.add(groupindex, dd)
+                _, groupindex = np.unique(self.dataset.index,
+                                          return_inverse=True)
 
-        if groupindex is None:
-            _, groupindex = np.unique(self.dataset.index,
-                                      return_inverse=True)
-
-        return groupindex.astype(np.int64)
+            return groupindex.astype(np.int64)
 
 
     @property
@@ -462,6 +466,8 @@ class Fits(Scatter):
         '''
         group the dataset with respect to the required parameter-groups
         '''
+        if self.dataset is None:
+            return
 
         # prepare dataset
         dataset = pd.concat([self.dataset] +
@@ -747,18 +753,19 @@ class Fits(Scatter):
         '''
         a dictionary containing the start-values to be used
         '''
-
         startvaldict = {}
         for key, val in self.defdict.items():
             if val[0] is True:
                 startvaldict[key] = val[1]
 
-        # re-shape param_dict and bounds_dict to fit needs
-        uniques = self.param_dyn_df.nunique()
-        for key, val in startvaldict.items():
-            # adjust shape of startvalues
-            if uniques[key] >= 1 and np.isscalar(val):
-                startvaldict[key] = [val for i in range(uniques[key])]
+        if self.param_dyn_df is not None:
+
+            # re-shape param_dict and bounds_dict to fit needs
+            uniques = self.param_dyn_df.nunique()
+            for key, val in startvaldict.items():
+                # adjust shape of startvalues
+                if uniques[key] >= 1 and np.isscalar(val):
+                    startvaldict[key] = [val for i in range(uniques[key])]
 
         return startvaldict
 
@@ -772,13 +779,13 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if val[0] is True:
                 boundsvaldict[key] = val[3]
-
-        # re-shape param_dict and bounds_dict to fit needs
-        uniques = self.param_dyn_df.nunique()
-        for key, val in boundsvaldict.items():
-            # adjust shape of boundary conditions
-            if uniques[key] >= 1 and len(val[0]) == 1:
-                boundsvaldict[key] = (val[0]*uniques[key], val[1]*uniques[key])
+        if self.param_dyn_df is not None:
+            # re-shape param_dict and bounds_dict to fit needs
+            uniques = self.param_dyn_df.nunique()
+            for key, val in boundsvaldict.items():
+                # adjust shape of boundary conditions
+                if uniques[key] >= 1 and len(val[0]) == 1:
+                    boundsvaldict[key] = (val[0]*uniques[key], val[1]*uniques[key])
 
         return boundsvaldict
 
@@ -862,7 +869,8 @@ class Fits(Scatter):
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
         for i in set(toNlist - vsymb - srfsymb):
-            param_R.pop(i)
+            if i in param_R:
+                param_R.pop(i)
 
         return param_R
 
