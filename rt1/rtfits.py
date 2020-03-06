@@ -2054,19 +2054,13 @@ class Fits(Scatter):
 
         if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
-            fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
-                                 lsq_kwargs={'max_nfev':0,
-                                             'verbose':self.verbose},
-                                 preprocess=None,
-                                 postprocess=None,
-                                 exceptfunc=exceptfunc,
-                                 preeval_fn=True)
-
-            self._fnevals_input = fit.R._fnevals
+            self._fnevals_input = self.R._fnevals
 
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
+
+
                 # loop over the reader_args
                 res = pool.starmap(self._evalfunc,
                                    zip(repeat(reader),
