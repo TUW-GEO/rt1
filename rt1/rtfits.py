@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize, pairwise
+from .general_functions import meandatetime, rectangularize, pairwise, split_into
 
 from .rtplots import plot as rt1_plots
 
@@ -278,6 +278,7 @@ class Fits(Scatter):
             if not all(i == 0 for i in self._cached_arg_number):
                 print(f'{attr} has been set, clearing cache')
                 self._clear_cache()
+
         super().__setattr__(attr, value)
 
 
@@ -290,7 +291,8 @@ class Fits(Scatter):
                  '_group_repeats', '_dataset_used', 'index',
                  'fit_index', '_jac_assign_rule',
                  'meandatetimes', 'inc', 'weights',
-                 'data', '_fit_param_dyn_dict']
+                 'data', '_fit_param_dyn_dict', '_idx_assigns',
+                 '_repeatdict', '_order']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -302,7 +304,7 @@ class Fits(Scatter):
         '''
         clear all cached properties
         '''
-
+        # only clear the cache if at least one property has been cached
         if not all(i == 0 for i in self._cached_arg_number):
             for name in self._cached_props:
                 getattr(Fits, name).fget.cache_clear()
@@ -313,11 +315,14 @@ class Fits(Scatter):
         '''
         print the state of the lru_cache for all cached properties
         '''
-
-        print(*[(f'{name:<18}:   ' +
-                f'{getattr(Fits, name).fget.cache_info()}')
-                for name in self._cached_props],
-              sep='\n')
+        text = []
+        for name in self._cached_props:
+            try:
+                cinfo = getattr(Fits, name).fget.cache_info()
+                text += [f'{name:<18}:   ' + f'{cinfo}']
+            except:
+                text += [f'{name:<18}:   ' + '???']
+        print(*text, sep='\n')
 
 
     @property
@@ -325,9 +330,18 @@ class Fits(Scatter):
         '''
         print the state of the lru_cache for all cached properties
         '''
-
-        return [getattr(Fits, name).fget.cache_info().currsize
-                for name in self._cached_props]
+        nums = []
+        for name in self._cached_props:
+            try:
+                if '.' in name:
+                    nsplit = name.split('.')
+                    nums.append(getattr(getattr(self, nsplit[0]),
+                                        nsplit[1]).cache_info().currsize)
+                else:
+                    nums.append(getattr(Fits, name).fget.cache_info().currsize)
+            except:
+                pass
+        return nums
 
 
     @property
@@ -350,21 +364,18 @@ class Fits(Scatter):
         param_dyn_dict = {}
         # initialize all parameters as scalar parameters
         for key in dyn_keys:
-            param_dyn_dict[key] = np.ones(len(self.dataset.index),
-                                          dtype=int)
+            param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
 
         if freq is not None:
             for i, f in enumerate(freq):
+                grp_idx = self.dataset.index.to_frame().groupby(
+                                                pd.Grouper(freq=f))
+                # get unique group indices for each datetime-group
                 for key in freqkeys[i]:
-
-                    df = pd.concat([
-                                pd.DataFrame({key:[nval]}, val.index)
-                                for nval, [_, val] in enumerate(
-                                        self.dataset.index.to_frame().groupby(
-                                                pd.Grouper(freq=f)))])
-
-                    param_dyn_dict[key] = np.array(df[key].values,
-                                                   dtype=int).flatten()
+                    grp_data = []
+                    for nval, [_, val] in enumerate(grp_idx):
+                        grp_data += repeat(nval, len(val))
+                    param_dyn_dict[key] = grp_data
 
         if self._manual_dyn_df is not None:
             for key, val in self._manual_dyn_df.astype(str).items():
@@ -606,6 +617,7 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def _order(self):
         '''
         a list of the names of the parameters that will be fitted.
@@ -640,6 +652,7 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def _idx_assigns(self):
         '''
         a list of ranges that is used to assign values provided as a list
@@ -1661,46 +1674,17 @@ class Fits(Scatter):
             SRF = getattr(rt1_s, SRF_props['SRF_name'])(**set_dict)
             return SRF
 
-
-    def performfit(self, re_init=False, clear_cache=True,
-                   intermediate_results=False):
-        '''
-        Perform least-squares fitting of omega, tau, NormBRDF and any
-        parameter used to define V and SRF to sets of monostatic measurements.
-        '''
-
-        # clear the cache (to avoid issues in case re-processing is applied)
-        if clear_cache is True:
-            self._clear_cache()
-
-        # set the number of repetitions (e.g. the max. number of values
-        # encountered in a group)
-
-        # set up the dictionary for storing intermediate results
-        if intermediate_results is True:
-            if not hasattr(self, 'intermediate_results'):
-                self.intermediate_results = {'parameters':[],
-                                             'residuals':[],
-                                             'jacobian':[]}
-
-        # generate a list of the names of the parameters that will be fitted.
-        # (this is necessary to ensure correct broadcasting of values since
-        # dictionarys do)
-        #order = [i for i, v in self._startvaldict.items() if v is not None]
-        order = self._order
-        # will be used to assign the values to the individual parameters
-        # (the returned parameters are given as a concatenated array
-        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
-        # values for each parameter
-        splits = np.cumsum(self.param_dyn_df.nunique()[order].values)
+    @property
+    @lru_cache()
+    def _repeatdict(self):
         # will be used to re-assign the values to the index of the dataset
         # this procedure is necessary to ensure correct broadcasting in case
         # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
 
-        # get mean datetime-values for each fitted parameter and a dict
-        # that can be used to re-assign the values
+        # get and a dict that can be used to re-assign the values for each
+        # fitted parameter
         repeatdict = dict()
-        for key in order:
+        for key in self._order:
             # get the (sorted) unique values and locations in param_dyn_dict
             dynnr, uniquewhere = np.unique(self._fit_param_dyn_dict[key],
                                            return_inverse=True)
@@ -1718,19 +1702,54 @@ class Fits(Scatter):
                 repeats[1] = repeats[1][0]
 
             repeatdict[key] = repeats
+        return repeatdict
+
+    def performfit(self, re_init=False, clear_cache=True,
+                   intermediate_results=False):
+        '''
+        Perform least-squares fitting of omega, tau, NormBRDF and any
+        parameter used to define V and SRF to sets of monostatic measurements.
+        '''
+        # maintain R object during fit
+        R = self.R
+
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
+            R._clear_cache()
+
+        # set the number of repetitions (e.g. the max. number of values
+        # encountered in a group)
+
+        # set up the dictionary for storing intermediate results
+        if intermediate_results is True:
+            if not hasattr(self, 'intermediate_results'):
+                self.intermediate_results = {'parameters':[],
+                                             'residuals':[],
+                                             'jacobian':[]}
+
+        # will be used to assign the values to the individual parameters
+        # (the returned parameters are given as a concatenated array
+        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
+        # values for each parameter
+        splitpos = self.param_dyn_df.nunique()[self._order].to_list()
+
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
         def fun(params):
+
             # generate a dictionary to assign values based on input
-            split_vals = np.split(params, splits)[:-1]
+            split_vals = split_into(params, splitpos)
+
             newdict = dict()
-            for key, val in zip(order, split_vals):
+            for key, val in zip(self._order, split_vals):
                 # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                newdict[key] = (val[reloc], rep)
+                reloc, rep = self._repeatdict[key]
+                newdict[key] = ([val[i] for i in reloc], rep)
             # calculate the residuals
-            errs = (self._calc_model(res_dict=newdict) - self.data).flatten()
+            errs = (self._calc_model(R=R,
+                                     res_dict=newdict) - self.data).flatten()
             # incorporate weighting-matrix to ensure correct treatment
             # of artificially added values
             errs = self.weights * errs
@@ -1747,30 +1766,31 @@ class Fits(Scatter):
         # function to evaluate the jacobian
         def dfun(params):
             # generate a dictionary to assign values based on input
-            split_vals = np.split(params, splits)[:-1]
+            split_vals = split_into(params, splitpos)
             newdict = dict()
-            for key, val in zip(order, split_vals):
+            for key, val in zip(self._order, split_vals):
                 # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                newdict[key] = (val[reloc], rep)
+                reloc, rep = self._repeatdict[key]
+                newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
             # of the artificially added colums must be the same!)
-            jac = self._calc_jac(res_dict=newdict)
+            jac = self._calc_jac(R=R,
+                                 res_dict=newdict)
 
             return jac
 
 
         # generate list of boundary conditions as needed for the fit
         bounds = [[], []]
-        for key in order:
+        for key in self._order:
             bounds[0] = bounds[0] + list(self._boundsvaldict[key][0])
             bounds[1] = bounds[1] + list(self._boundsvaldict[key][1])
 
         # setup the start-value array as needed for the fit
         startvals = []
-        for key in order:
+        for key in self._order:
             if self._startvaldict[key] is not None:
                 if np.isscalar(self._startvaldict[key]):
                     startvals = startvals + [self._startvaldict[key]]
@@ -1795,16 +1815,13 @@ class Fits(Scatter):
             # split concatenated parameter-results given in res_lsq.x
             # (don't use the last array since it is empty)
 
-            split_vals = np.split(res_lsq.x, splits)[:-1]
-            split_startvals = np.split(res_lsq.x, splits)[:-1]
+            split_vals = split_into(res_lsq.x, splitpos)
 
             res_dict = dict()
-            start_dict = dict()
-            for key, val, startval in zip(order, split_vals, split_startvals):
+            for key, val in zip(self._order, split_vals):
                 # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                res_dict[key] = [val[reloc], rep]
-                start_dict[key] = [startval[reloc], rep]
+                reloc, rep = self._repeatdict[key]
+                res_dict[key] = ([val[i] for i in reloc], rep)
 
             self.fit_output = res_lsq
             self.res_dict = res_dict
@@ -1815,6 +1832,7 @@ class Fits(Scatter):
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
+            R._clear_cache()
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
