@@ -221,6 +221,24 @@ class RT1(object):
         return self.__dict__
 
 
+    def _clear_cache(self):
+        self._d_surface_dummy_lambda.cache_clear()
+        self._d_volume_dummy_lambda.cache_clear()
+
+
+    def _cache_info(self):
+        names = ['_d_surface_dummy_lambda', '_d_surface_dummy_lambda']
+        text = []
+        for name in names:
+            try:
+                cinfo = getattr(self, name).cache_info()
+                text += [f'{name:<18}:   ' + f'{cinfo}']
+            except:
+                text += [f'{name:<18}:   ' + '???']
+
+        return print('\n'.join(text))
+
+
     def prv(self, v, msg):
         '''
         function to set print output based on verbosity level v.
@@ -1533,7 +1551,7 @@ class RT1(object):
         return self.SRF.NormBRDF * (I_bs - Isurf)
 
 
-    @lru_cache()
+    @lru_cache(20)
     def _d_surface_dummy_lambda(self, key):
         '''
         a cached lambda-function for computing
@@ -1563,7 +1581,7 @@ class RT1(object):
                            modules=["numpy", "sympy"])
 
 
-    @lru_cache()
+    @lru_cache(20)
     def _d_volume_dummy_lambda(self, key):
         '''
         same as _d_surface_dummy_lambda but for volume
