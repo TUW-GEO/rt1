@@ -26,82 +26,6 @@ from rt1.rt1 import RT1
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
 
-# TODO replace this with the fit.calc() routine (used in analyzemodel() )
-def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
-                    dB=True, sig0=True, int_Q = False, return_fnevals=False,
-                    **kwargs):
-    '''
-    get backscatter values based on given configuration and parameter values
-    (used in analyzemodel)
-
-    Parameters
-    ----------
-    params : dict
-        A dict containing the values for ALL parameters involved.
-    fit : rt1.rtfits.Fits, optional
-        Optionally provide a fits-object from which `set_V_SRF`, `inc` and
-        `params['bsf']` will be retrieved if not provided explicitly.
-        The default is None.
-    set_V_SRF : callable, optional
-        A setter function for V and SRF. (see rt1.rtfits.Fits for details)
-        The default is None.
-    inc : array-like, optional
-        The incidence-angles to be used in the calculation. The default is None
-    dB : bool, optional
-        Indicator if the values should be returned in linear-units or dB.
-        The default is True.
-    sig0 : bool, optional
-        Indicator if intensity- or sigma-0 values should be returned.
-        ( sig0 = 4 pi cos(theta) I ). The default is True.
-    int_Q : bool, optional
-        Indicator if the interaction-term should be evaluated.
-        The default is False.
-    return_fnevals : bool, optional
-        Indicator if the obtained _fnevals functions should be returned.
-        (if true, the returned dict will contain a key '_fnevals' with
-        the fnevals-function). The default is False.
-    **kwargs :
-        kwargs passed to the initialization of the rt1.RT1 object.
-
-    Returns
-    -------
-    tsvi : dict
-           a dict with keys 'tot', ('surf', 'vol', ('inter'), ('_fnevals'))
-
-    '''
-
-    params = params.copy()
-
-    if fit is not None:
-        if set_V_SRF is None: set_V_SRF = fit.set_V_SRF
-        if 'bsf' not in params: params['bsf'] = fit.R.bsf
-        # get incidence-angle from fit if inc is not provided explicitly
-        if inc is None: inc = copy.deepcopy(fit.inc)
-
-    bsf = params.pop('bsf', 0)
-
-    # set V and SRF
-    if callable(set_V_SRF):
-        V, SRF = set_V_SRF(**params)
-    else:
-        V = fit._init_V_SRF(**fit.set_V_SRF, setdict=params,
-                            V_SRF_Q='V')
-        SRF = fit._init_V_SRF(**fit.set_V_SRF, setdict=params,
-                              V_SRF_Q='SRF')
-
-    R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
-            V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
-            int_Q=int_Q, **kwargs)
-    tsvi = dict(zip(['tot','surf','vol','inter'], R.calc()))
-
-    # convert to sig0 and dB if required
-    for key, val in tsvi.items():
-        tsvi[key] = dBsig0convert(tsvi[key], inc, dB, sig0, False, False)
-
-    if return_fnevals is True: tsvi['_fnevals'] = R._fnevals
-
-    return tsvi
-
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
               incBRDF=[15., 35., 55., 75.], pmultip=2., BRDFmultip=1.,
@@ -2364,8 +2288,8 @@ class plot:
             return f, a_slider
 
 
-    def analyzemodel(self, fit=None, set_V_SRF=None, defdict=None, inc=None,
-                     labels = dict(), dB=True, sig0=True, int_Q=False,
+    def analyzemodel(self, fit=None, defdict=None, inc=None,
+                     labels = None, dB=True, sig0=True, int_Q=None,
                      fillcomponents=True):
         '''
         Analyze the range of backscatter for a given model-configuration
@@ -2374,17 +2298,16 @@ class plot:
         Parameters
         ----------
         fit : rt1.rtfits.Fits, optional
-            Optionally provide a fits-object from which `set_V_SRF`, `inc` and
-            `params['bsf']` will be retrieved if not provided explicitly.
-            The default is None.
-        set_V_SRF : callable, optional
-            A setter function for V and SRF. (see rt1.rtfits.Fits for details)
+            the fits-object to use
             The default is None.
         defdict : dict, optional
             A defdict used to define the rt1-configuration.
-            (see rt1.rtfits.Fits for details). The default is None.
+            (see rt1.rtfits.Fits for details). If none, the defdict provided
+            in the fits-object will be used. The default is None.
         inc : array-like, optional
-            The incidence-angles to be used in the calculation. The default is None
+            The incidence-angles to be used in the calculation.
+            If None,  `np.deg2rad(np.linspace(1, 89, 100))` is used
+            The default is None
         labels : dict, optional
             A dict with labels that will be used to replace the parameter-names.
             (e.g. {'parameter' : 'parameter_label', ....})
@@ -2409,23 +2332,23 @@ class plot:
         '''
 
         if fit is None:
-            fit = getattr(self, 'fit', None)
+            fit = self.fit
 
-        if fit is not None:
-            res_dict = getattr(fit, 'res_dict', None)
+        res_dict = getattr(fit, 'res_dict', None)
 
-            _fnevals_input = getattr(fit, '_fnevals_input', None)
+        if defdict is None:
+            defdict = fit.defdict
 
-            if defdict is None:
-                defdict = fit.defdict
+        if inc is None:
+            inc = np.deg2rad(np.linspace(1, 89, 100))
 
-        else:
-            _fnevals_input = None
 
-        # number of measurements
-        N_param = 100
+        if labels is None:
+            labels = dict()
 
-        inc = np.array(np.deg2rad(np.linspace(1, 89, N_param)))
+        if int_Q is None:
+            int_Q = fit.int_Q
+
 
         # get parameter ranges from defdict and fit
         minparams, maxparams, startparams, fixparams = {}, {}, {}, {}
@@ -2461,16 +2384,13 @@ class plot:
             startparams['bsf']  = fit.R.bsf
             fixparams['bsf']  = fit.R.bsf
 
-        modelresult = _getbackscatter(fit=fit,
-                                      set_V_SRF=set_V_SRF,
-                                      int_Q=int_Q,
-                                      inc=inc,
-                                      params=startparams,
-                                      dB=dB, sig0=sig0,
-                                      _fnevals_input = _fnevals_input,
-                                      return_fnevals = True)
+        modelresult = dict(zip(['tot','surf','vol','inter'],
+                                fit.calc(startparams, inc=inc)))
+        # convert to sig0 and dB if required
+        for key, val in modelresult.items():
+            modelresult[key] = dBsig0convert(val[0], inc, dB, sig0,
+                                             fit.dB, fit.sig0)
 
-        _fnevals_input = modelresult.pop('_fnevals')
 
         f = plt.figure(figsize=(12,9))
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
@@ -2492,6 +2412,7 @@ class plot:
 
 
         ax = f.add_subplot(gs[0,0:])
+
         paramaxes = {}
         col = 0
         for i, key in enumerate(minparams):
@@ -2534,9 +2455,8 @@ class plot:
 
 
         if dB is True: ax.set_ylim(-35, 5)
-        ax.set_xticks(np.deg2rad(np.arange(5,95, 10)))
-        ax.set_xticklabels(np.arange(5,95, 10))
-
+        ax.xaxis.set_major_locator(plt.MaxNLocator(10))
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,y: f"{np.rad2deg(x):.1f}"))
         # a legend for the lines
         leg0 = ax.legend(ncol=4, bbox_to_anchor=(.5, 1.1), loc='upper center')
         # add the line-legend as individual artist
@@ -2586,10 +2506,13 @@ class plot:
             #params = copy.deepcopy(startparams)
 
             params[key] = value
-            modelresult = _getbackscatter(fit=fit, set_V_SRF=set_V_SRF,
-                                          int_Q=int_Q, inc=inc,
-                                          params=params, dB=dB, sig0=sig0,
-                                          _fnevals_input = _fnevals_input)
+            modelresult = dict(zip(['tot','surf','vol','inter'],
+                                fit.calc(params, inc=inc)))
+            # convert to sig0 and dB if required
+            for key, val in modelresult.items():
+                modelresult[key] = dBsig0convert(val[0], inc, dB, sig0,
+                                                 fit.dB, fit.sig0)
+
             # update the data
             ltot.set_ydata(modelresult['tot'].T)
             lsurf.set_ydata(modelresult['surf'].T)
@@ -2619,17 +2542,34 @@ class plot:
                     fillparams = params.copy()
                     fillparams[key_i] = minparams[key_i]
 
-                    modelresultmin = _getbackscatter(
-                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
-                        params=fillparams, dB=dB, sig0=sig0,
-                        _fnevals_input = _fnevals_input)
+                    # don't use bsf=1 since no vegetation-term would be present
+                    if fillparams.get('bsf', 0.) == 1.:
+                        fillparams['bsf'] = 0.999
+
+                    modelresultmin = dict(zip(['tot','surf','vol','inter'],
+                                        fit.calc(fillparams, inc=inc)))
+                    # convert to sig0 and dB if required
+                    for key, val in modelresultmin.items():
+                        modelresultmin[key] = dBsig0convert(val[0], inc,
+                                                            dB, sig0,
+                                                            fit.dB, fit.sig0)
+
 
                     fillparams[key_i] = maxparams[key_i]
 
-                    modelresultmax = _getbackscatter(
-                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
-                        params=fillparams, dB=dB, sig0=sig0,
-                        _fnevals_input = _fnevals_input)
+                    # don't use bsf=1 since no vegetation-term would be present
+                    if fillparams.get('bsf', 0.) == 1.:
+                        fillparams['bsf'] = 0.999
+
+                    modelresultmax = dict(zip(['tot','surf','vol','inter'],
+                                        fit.calc(fillparams, inc=inc)))
+                    # convert to sig0 and dB if required
+                    for key, val in modelresultmax.items():
+                        modelresultmax[key] = dBsig0convert(val[0], inc,
+                                                            dB, sig0,
+                                                            fit.dB, fit.sig0)
+
+
 
                     legendhandles += [ax.fill_between(
                         inc, modelresultmax['tot'], modelresultmin['tot'],
