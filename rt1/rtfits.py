@@ -1083,9 +1083,9 @@ class Fits(Scatter):
                     # ensure that the indexes are never the same
                     # (add a milisecond if they are...)
                     if firstindex == self.meandatetimes[key][0]:
-                        firstindex += np.timedelta(1, 'ms')
+                        firstindex += np.timedelta64(1, 'ms')
                     if lastindex == self.meandatetimes[key][-1]:
-                        lastindex -= np.timedelta(1, 'ms')
+                        lastindex -= np.timedelta64(1, 'ms')
 
                     useindex = deque(self.meandatetimes[key])
                     useindex.appendleft(firstindex)
