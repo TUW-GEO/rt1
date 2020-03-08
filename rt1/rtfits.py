@@ -54,20 +54,32 @@ class Fits(Scatter):
          Indicator whether dataset is given in linear units or in dB.
          The applied relation is:    x_dB = 10. * np.log10( x_linear )
     dataset: pandas.DataFrame (default = None)
-             a pandas.DataFrame with columns 'inc' and 'sig' defined
-             where 'inc' referrs to the incidence-angle in radians, and
-             'sig' referrs to the measurement value (corresponding to
+             a pandas.DataFrame with columns `inc` and `sig` defined
+             where `inc` referrs to the incidence-angle in radians, and
+             `sig` referrs to the measurement value (corresponding to
              the assigned sig0 and dB values)
 
-             If a column 'data_weights' is provided, the residuals in the
-             fit-procedure will be weighted accordingly.
-             (e.g. residuals = weights * calculated_residuals )
+             - If a column `data_weights` is provided, the residuals in the
+               fit-procedure will be weighted accordingly.
+               (e.g. residuals = weights * calculated_residuals )
+
+             - If columns `param_dyn` are provided where `param` is the name of
+               a parameter that is intended to be fitted, the entries will be
+               used to assign the dynamics of the corresponding parameter
+               (see defdict 'freq' entry for further details)
+
+             - If columns with names corresponding to parameters are provided
+               and the corresponding entry in the 'val' parameter of defdict
+               is set to 'auxiliary', then the provided data will be used
+               as auxiliary data for the parameter.
+
+
     defdict: dict (default = None)
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
 
-             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max]), dyndf],
-             >>>            'key2' : [fitQ, val, freq, ([min], [max]), dyndf],
+             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
+             >>>            'key2' : [fitQ, val, freq, ([min], [max])],
              >>>            ...}
 
              where all keys required to call set_V_SRF must be defined
@@ -83,33 +95,23 @@ class Fits(Scatter):
                        must be the corresponding variabile-name
                  freq: str or None (only needed if fitQ is True)
                         - if None, a constant value will be fitted
-                        - if 'manual', the DataFrame provided as dyndf will
-                          be used to assign the temporal variability within
-                          the fit
+                        - if 'manual', the DataFrame column "key_dyn" provided
+                          in the dataset will be used to assign the temporal
+                          variability within the fit
+                         - if 'index', a unique value will be fitted to each
+                           unique index of the provided dataset
                         - if freq corresponds to a pandas offset-alias, it
                           will be used together with the dataset-index to
                           assign the temporal variability within the fit
                           (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
-                 min, max: float (only needed if fitQ is True)
+                        - if both a pandas offset-alias and a dataset-column
+                          "key_dyn" is provided, the the provided variability
+                          will be superimposed onto the variability resulting
+                          form the chosen offset-alias
+                min, max: float (only needed if fitQ is True)
                             the boundary-values used within the fit
-                 dyndf: pandas.DataFrame (optional)
-                         - if freq has been set to 'manual', the provided
-                           DataFrame will be used to assign the temporal
-                           variability within the fit (a single value will be
-                           fitted to all measurements where dyndf has the same
-                           value).
-                         - if freq is set to 'index', a unique value will be
-                           fitted to each unique index of the provided
-                           dataset
-                         - if freq is a pandas offset-alias and a dyndf is
-                           provided, the variability of dyndf will be
-                           superimposed onto the variability resulting form
-                           the chosen offset-alias
-                         Notice: The index must coinicide
-                         with the index of the dataset, and the column-name
-                         must be the corresponding variabile-name
-    set_V_SRF: callable (default = None)
-               function with the following structure:
+    set_V_SRF: callable or dict (default = None)
+               either a function with the following structure:
 
                >>> def set_V_SRF(volume-keys, surface-keys):
                >>>     from rt1.volume import 'Volume-function'
@@ -119,6 +121,9 @@ class Fits(Scatter):
                >>>     SRF = Surface-function(surface-keys)
                >>>
                >>>     return V, SRF
+
+               or a dict that will be passed to _init_V_SRF() to initialize
+               the V- and SRF-objects
     lsq_kwargs: dict (default = dict())
                 a dictionary with keyword-arguments passed to
                 scipy.optimize.least_squares
@@ -145,44 +150,65 @@ class Fits(Scatter):
               scipy.optimize.least_squares and rt1.RT1)
 
 
-    Stored Fit-Attributes:
+    Attributes:
     -------------------
 
     index: array-like
-           the resulting index of the obtained fit-results, to be used via:
-                   results = pd.DataFrame(res_dict, index)
+        the unique index values of the provided dataset
+    fit_index: array-like
+        the mean datetime-indexes that correspond to each fit-group
     res_dict: dict
-              a dictionary of the obtained fit-results
-
+        a dictionary of the obtained fit-results
+    res_df: pandas.DataFrame
+        a pandas DataFrame of the obtained fit-results
+    param_dyn_dict: dict
+        a dict of the individual parameter-dynamics
+    param_dyn_df: pandas.DataFrame
+        a pandas DataFrame of the individual parameter-dynamics
+    meandatetimes: dict
+        a dict of the mean datetime-values for each parameter (with respect to
+        the corresponding fit-groups)
     fit_output: scipy.optimize.OptimizeResult
-                 the output of scipy.optimize.least_squares
+        the output of scipy.optimize.least_squares
     R: rt1.RT1 object
        the RT1 object used
+    V: rt1.RT1.volume object
+        the volume-scattering object used
+    SRF: rt1.RT1.surface object
+        the surface-scattering object used
     data: array-like
-          the used measurement malues
+        the used measurement malues
     inc: array-like
-         the used incidence-angles
+        the used incidence-angles
     mask: array-like
-          a mask that indicates the values added to "data" and "inc" in order
-          to obtain a rectangular array
+        a mask that indicates the values added to "data" and "inc" in order
+        to obtain a rectangular array
     weights: array-like
-             a weighting-matrix with values 1/sqrt(value-repetitions) where the
-             value-repetitions correspond to the number of added values needed
-             to obtain a rectangular array
-    start_dict: dict
-                a dictionary of the used start-values
-    fixed_dict: dict
-                a dictionary of the used auxiliary datasets
+        a weighting-matrix with values 1/sqrt(value-repetitions) where the
+        value-repetitions correspond to the number of added values needed
+        to obtain a rectangular array
     dataset_used: pandas.DataFrame
-                  a DataFrame of the used data grouped with respect to the
-                  temporal variations of the parameters that have been fitted
-
+        a DataFrame of the used data grouped with respect to the
+        temporal variations of the parameters that have been fitted
+    fixed_dict: dict
+        a dict of the auxiliary datasets used
     Methods
     ---------
 
-    performfit(fn_input=None, _fnevals_input=None, int_Q=False, **kwargs)
+    performfit(re_init=False, clear_cache=True, intermediate_results=False)
         perform a fit of the defined model to the dataset
 
+    processfunc(ncpu=1, reader=None, reader_args=None,
+                lsq_kwargs=None, preprocess=None, postprocess=None,
+                exceptfunc=None, finaloutput=None, pool_kwargs=None)
+        perform multiple fits of the defined model using multiprocessing
+
+    dump(path, mini=False)
+        dump the fits-object using cloudpickle.dump() to the specified path
+
+    calc(param, inc, return_components=True, fixed_param = None)
+        evaluate the defined model based on a given set of parameters and
+        incidence-angle ranges
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
@@ -355,7 +381,8 @@ class Fits(Scatter):
         else:
 
             # the names of the parameters that will be fitted
-            dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
+            dyn_keys = [key for key, val in self.defdict.items()
+                        if val[0] is True]
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
