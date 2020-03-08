@@ -151,7 +151,8 @@ class TestRTfits(unittest.TestCase):
         dfinc = [j for i, inc_i in enumerate(inc) for j in inc_i[selects[i]]]
         dfsig = [j for i, data_i in enumerate(data) for j in data_i[selects[i]]]
 
-        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig}, index=pd.to_datetime(dfindex, unit='D'))
+        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig},
+                               index=pd.to_datetime(dfindex, unit='D'))
         # ---------------------------------------------------------------------
         # ------------------------------- FITTING -----------------------------
 
@@ -184,14 +185,16 @@ class TestRTfits(unittest.TestCase):
 
         # fit only a single parameter to the datasets that have equal tau
         _, fittau_dyn = np.unique(dataset.index, return_inverse=True)
-        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
-        manual_tau_dyn = pd.DataFrame({'tau':fittau_dyn}, dataset.index)
+        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = \
+            fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
+        # add manual parameter dynamics for tau
+        dataset['tau_dyn'] = fittau_dyn
 
         # specify the treatment of the parameters in the retrieval procedure
         defdict = {
                     't1': [True, tstart, 'D', ([tmin], [tmax])],
                     'N': [False, 'auxiliary'],
-                    'tau': [True, taustart, 'manual', ([taumin], [taumax]), manual_tau_dyn],
+                    'tau': [True, taustart, 'manual', ([taumin], [taumax])],
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
                     }
