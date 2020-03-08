@@ -495,9 +495,12 @@ class Fits(Scatter):
         '''
         if self.dataset is None:
             return
-
+        # don't use keys that are not provided in defdict
+        # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
+        usekeys = ['sig', 'inc'] + [key for key in
+                                    self.defdict if key in self.dataset]
         # prepare dataset
-        dataset = pd.concat([self.dataset] +
+        dataset = pd.concat([self.dataset[usekeys]] +
                             [val for key, val in self._fixed_dict.items() \
                              if isinstance(val, (pd.Series, pd.DataFrame))],
                             axis=1)
@@ -841,22 +844,25 @@ class Fits(Scatter):
         manual_dyn_df = pd.DataFrame()
         for key, val in self.defdict.items():
             if val[0] is True:
-                # set temporal variability
                 if val[2] == 'manual':
-                    manual_dyn_df = pd.concat([manual_dyn_df, val[4]], axis=1)
+                    # set manual parameter dynamics
+                    assert f'{key}_dyn' in self.dataset, (
+                        f'{key}_dyn must be provided in the dataset' +
+                        'if defdict[{key}][2] is set to "manual"')
+
+                    manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
                 elif val[2] == 'index':
                     indexdyn = pd.DataFrame({key:1}, self.dataset.index
                                             ).groupby(axis=0, level=0
                                                       ).ngroup().to_frame()
                     indexdyn.columns = [key]
-                    manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
-                                              axis=1)
+                    manual_dyn_df[f'{key}'] = indexdyn
+
                 elif val[2] is not None:
-                    try:
-                        manual_dyn_df = pd.concat([manual_dyn_df, val[4]],
-                                                  axis=1)
-                    except Exception:
-                        pass
+                    if f'{key}_dyn' in self.dataset:
+                        print(f'parameter dynamics {val[2]} and' +
+                              f'dataset[{key}_dyn] combined')
+                        manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
         if manual_dyn_df.empty:
             return None
         else:
