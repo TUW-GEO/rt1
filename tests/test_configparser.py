@@ -53,7 +53,8 @@ class TestCONFIGPARSER(unittest.TestCase):
                        'int_Q': False,
                        'lambda_backend': 'symengine',
                        'interp_vals': ['tau', 'omega'],
-                       '_fnevals_input': None}
+                       '_fnevals_input': None,
+                       'verbose' : 2}
 
 
         configdicts = cfg.get_config()
@@ -85,7 +86,8 @@ class TestCONFIGPARSER(unittest.TestCase):
 
 
         fit = cfg.get_fitobject()
-        V, SRF = fit._init_V_SRF(**fit.set_V_SRF)
+        V = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='V')
+        SRF = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='SRF')
 
         assert V.t == sp.Symbol('t_v'), 'V.t assigned incorrectly'
         assert V.tau == sp.Symbol('tau') * sp.Symbol('tau_multip'), 'V.tau assigned incorrectly'

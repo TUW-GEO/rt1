@@ -189,3 +189,20 @@ def pairwise(iterable):
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
+
+
+from itertools import islice
+def split_into(iterable, sizes):
+    """
+    a generator that splits the iterable into iterables with the given sizes
+
+    see more_itertools split_into for details:
+    https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.split_into
+    """
+    it = iter(iterable)
+    for size in sizes:
+        if size is None:
+            yield list(it)
+            return
+        else:
+            yield list(islice(it, size))

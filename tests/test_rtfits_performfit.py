@@ -3,8 +3,7 @@ Test the fits-module by generating a dataset and fitting the model to itself
 
 
 This is the very same test as test_rtfits but it uses the
-rtfits.performfit-wrapper instead of the monofit() function directly
-
+rtfits.performfit-wrapper
 """
 
 import unittest
@@ -152,7 +151,8 @@ class TestRTfits(unittest.TestCase):
         dfinc = [j for i, inc_i in enumerate(inc) for j in inc_i[selects[i]]]
         dfsig = [j for i, data_i in enumerate(data) for j in data_i[selects[i]]]
 
-        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig}, index=pd.to_datetime(dfindex, unit='D'))
+        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig},
+                               index=pd.to_datetime(dfindex, unit='D'))
         # ---------------------------------------------------------------------
         # ------------------------------- FITTING -----------------------------
 
@@ -162,7 +162,7 @@ class TestRTfits(unittest.TestCase):
             return V, SRF
 
 
-        # specify additional arguments for scipy.least_squares and rtfits.monofit
+        # specify additional arguments for scipy.least_squares
         lsq_kwargs = {
                 'ftol': 1e-8,
                 'gtol': 1e-8,
@@ -185,17 +185,25 @@ class TestRTfits(unittest.TestCase):
 
         # fit only a single parameter to the datasets that have equal tau
         _, fittau_dyn = np.unique(dataset.index, return_inverse=True)
-        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
-        manual_tau_dyn = pd.DataFrame({'tau':fittau_dyn}, dataset.index)
+        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = \
+            fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
+        # add manual parameter dynamics for tau
+        dataset['tau_dyn'] = fittau_dyn
 
         # specify the treatment of the parameters in the retrieval procedure
         defdict = {
                     't1': [True, tstart, 'D', ([tmin], [tmax])],
-                    'N': [False, pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]],
-                    'tau': [True, taustart, 'manual', ([taumin], [taumax]), manual_tau_dyn],
+                    'N': [False, 'auxiliary'],
+                    'tau': [True, taustart, 'manual', ([taumin], [taumax])],
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
                     }
+
+        # append auxiliary datasets
+
+        N_auxdata = pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]
+        dataset['N'] = N_auxdata
+
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
@@ -237,7 +245,7 @@ class TestRTfits(unittest.TestCase):
         r2 = r_value**2
 
         # check if r^2 between original and fitted data is > 0.95
-        self.assertTrue(r2 > 0.95, msg='r^2 condition not  met')
+        self.assertTrue(r2 > 0.95, msg=f'r^2 condition not  met , R={r2:4f}')
 
         # set mean-error values for the derived parameters
         if sig0 is True and dB is False:

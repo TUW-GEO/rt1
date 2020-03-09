@@ -14,7 +14,8 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize
+from .general_functions import meandatetime, rectangularize, pairwise, split_into
+
 from .rtplots import plot as rt1_plots
 
 from . import surface as rt1_s
@@ -22,8 +23,10 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
-from itertools import repeat
-from functools import partial
+from itertools import repeat, groupby, accumulate
+from functools import lru_cache
+from operator import itemgetter
+
 
 try:
     import cloudpickle
@@ -31,6 +34,9 @@ except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
 
 from configparser import ConfigParser
+from collections import Counter, deque
+
+
 
 class Fits(Scatter):
     '''
@@ -48,20 +54,32 @@ class Fits(Scatter):
          Indicator whether dataset is given in linear units or in dB.
          The applied relation is:    x_dB = 10. * np.log10( x_linear )
     dataset: pandas.DataFrame (default = None)
-             a pandas.DataFrame with columns 'inc' and 'sig' defined
-             where 'inc' referrs to the incidence-angle in radians, and
-             'sig' referrs to the measurement value (corresponding to
+             a pandas.DataFrame with columns `inc` and `sig` defined
+             where `inc` referrs to the incidence-angle in radians, and
+             `sig` referrs to the measurement value (corresponding to
              the assigned sig0 and dB values)
 
-             If a column 'data_weights' is provided, the residuals in the
-             fit-procedure will be weighted accordingly.
-             (e.g. residuals = weights * calculated_residuals )
+             - If a column `data_weights` is provided, the residuals in the
+               fit-procedure will be weighted accordingly.
+               (e.g. residuals = weights * calculated_residuals )
+
+             - If columns `param_dyn` are provided where `param` is the name of
+               a parameter that is intended to be fitted, the entries will be
+               used to assign the dynamics of the corresponding parameter
+               (see defdict 'freq' entry for further details)
+
+             - If columns with names corresponding to parameters are provided
+               and the corresponding entry in the 'val' parameter of defdict
+               is set to 'auxiliary', then the provided data will be used
+               as auxiliary data for the parameter.
+
+
     defdict: dict (default = None)
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
 
-             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max]), dyndf],
-             >>>            'key2' : [fitQ, val, freq, ([min], [max]), dyndf],
+             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
+             >>>            'key2' : [fitQ, val, freq, ([min], [max])],
              >>>            ...}
 
              where all keys required to call set_V_SRF must be defined
@@ -77,33 +95,23 @@ class Fits(Scatter):
                        must be the corresponding variabile-name
                  freq: str or None (only needed if fitQ is True)
                         - if None, a constant value will be fitted
-                        - if 'manual', the DataFrame provided as dyndf will
-                          be used to assign the temporal variability within
-                          the fit
+                        - if 'manual', the DataFrame column "key_dyn" provided
+                          in the dataset will be used to assign the temporal
+                          variability within the fit
+                         - if 'index', a unique value will be fitted to each
+                           unique index of the provided dataset
                         - if freq corresponds to a pandas offset-alias, it
                           will be used together with the dataset-index to
                           assign the temporal variability within the fit
                           (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
-                 min, max: float (only needed if fitQ is True)
+                        - if both a pandas offset-alias and a dataset-column
+                          "key_dyn" is provided, the the provided variability
+                          will be superimposed onto the variability resulting
+                          form the chosen offset-alias
+                min, max: float (only needed if fitQ is True)
                             the boundary-values used within the fit
-                 dyndf: pandas.DataFrame (optional)
-                         - if freq has been set to 'manual', the provided
-                           DataFrame will be used to assign the temporal
-                           variability within the fit (a single value will be
-                           fitted to all measurements where dyndf has the same
-                           value).
-                         - if freq is set to 'index', a unique value will be
-                           fitted to each unique index of the provided
-                           dataset
-                         - if freq is a pandas offset-alias and a dyndf is
-                           provided, the variability of dyndf will be
-                           superimposed onto the variability resulting form
-                           the chosen offset-alias
-                         Notice: The index must coinicide
-                         with the index of the dataset, and the column-name
-                         must be the corresponding variabile-name
-    set_V_SRF: callable (default = None)
-               function with the following structure:
+    set_V_SRF: callable or dict (default = None)
+               either a function with the following structure:
 
                >>> def set_V_SRF(volume-keys, surface-keys):
                >>>     from rt1.volume import 'Volume-function'
@@ -113,16 +121,12 @@ class Fits(Scatter):
                >>>     SRF = Surface-function(surface-keys)
                >>>
                >>>     return V, SRF
+
+               or a dict that will be passed to _init_V_SRF() to initialize
+               the V- and SRF-objects
     lsq_kwargs: dict (default = dict())
                 a dictionary with keyword-arguments passed to
                 scipy.optimize.least_squares
-    setindex: str (default = 'mean')
-              indicator how the datetime-indices of the fit-results
-              should be processed. possible values are:
-                  - 'mean': the center date of the used timespan
-                  - 'first': the first date of the timespan
-                  - 'last': the last date of the timespan
-                  - 'original': return the full list of datetime-objects
     int_Q: bool (default = True)
            indicator if the interaction-term should be evaluated or not.
     lambda_backend: str, optional
@@ -141,63 +145,85 @@ class Fits(Scatter):
                   instead of using a step-function that assigns the obtained
                   value equally to all observations within the timespan.
                   -> use with care! this might cause unexpected behaviour!
+    verbose : int, optional
+              the verbosity of the print-outputs (also passed to
+              scipy.optimize.least_squares and rt1.RT1)
 
-    Stored Fit-Attributes:
+
+    Attributes:
     -------------------
 
     index: array-like
-           the resulting index of the obtained fit-results, to be used via:
-                   results = pd.DataFrame(res_dict, index)
+        the unique index values of the provided dataset
+    fit_index: array-like
+        the mean datetime-indexes that correspond to each fit-group
     res_dict: dict
-              a dictionary of the obtained fit-results
-
+        a dictionary of the obtained fit-results
+    res_df: pandas.DataFrame
+        a pandas DataFrame of the obtained fit-results
+    param_dyn_dict: dict
+        a dict of the individual parameter-dynamics
+    param_dyn_df: pandas.DataFrame
+        a pandas DataFrame of the individual parameter-dynamics
+    meandatetimes: dict
+        a dict of the mean datetime-values for each parameter (with respect to
+        the corresponding fit-groups)
     fit_output: scipy.optimize.OptimizeResult
-                 the output of scipy.optimize.least_squares
+        the output of scipy.optimize.least_squares
     R: rt1.RT1 object
        the RT1 object used
+    V: rt1.RT1.volume object
+        the volume-scattering object used
+    SRF: rt1.RT1.surface object
+        the surface-scattering object used
     data: array-like
-          the used measurement malues
+        the used measurement malues
     inc: array-like
-         the used incidence-angles
+        the used incidence-angles
     mask: array-like
-          a mask that indicates the values added to "data" and "inc" in order
-          to obtain a rectangular array
+        a mask that indicates the values added to "data" and "inc" in order
+        to obtain a rectangular array
     weights: array-like
-             a weighting-matrix with values 1/sqrt(value-repetitions) where the
-             value-repetitions correspond to the number of added values needed
-             to obtain a rectangular array
-    start_dict: dict
-                a dictionary of the used start-values
-    fixed_dict: dict
-                a dictionary of the used auxiliary datasets
+        a weighting-matrix with values 1/sqrt(value-repetitions) where the
+        value-repetitions correspond to the number of added values needed
+        to obtain a rectangular array
     dataset_used: pandas.DataFrame
-                  a DataFrame of the used data grouped with respect to the
-                  temporal variations of the parameters that have been fitted
-
+        a DataFrame of the used data grouped with respect to the
+        temporal variations of the parameters that have been fitted
+    fixed_dict: dict
+        a dict of the auxiliary datasets used
     Methods
     ---------
 
-    performfit(fn_input=None, _fnevals_input=None, int_Q=False,
-               setindex='mean', **kwargs)
+    performfit(re_init=False, clear_cache=True, intermediate_results=False)
         perform a fit of the defined model to the dataset
 
+    processfunc(ncpu=1, reader=None, reader_args=None,
+                lsq_kwargs=None, preprocess=None, postprocess=None,
+                exceptfunc=None, finaloutput=None, pool_kwargs=None)
+        perform multiple fits of the defined model using multiprocessing
+
+    dump(path, mini=False)
+        dump the fits-object using cloudpickle.dump() to the specified path
+
+    calc(param, inc, return_components=True, fixed_param = None)
+        evaluate the defined model based on a given set of parameters and
+        incidence-angle ranges
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
-                 defdict=None, set_V_SRF=None, lsq_kwargs=None,
-                 setindex = 'mean', int_Q=True,
+                 defdict=None, set_V_SRF=None, lsq_kwargs=None, int_Q=True,
                  lambda_backend=None, _fnevals_input=None, interp_vals=None,
-                 **kwargs):
+                 verbose=2, **kwargs):
 
         self.sig0 = sig0
         self.dB = dB
         self.dataset = dataset
-        self.set_V_SRF = set_V_SRF
+        self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
-        self.lsq_kwargs = lsq_kwargs
+        self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
         if self.lsq_kwargs is None:
             lsq_kwargs = dict()
-        self.setindex = setindex
 
         self.int_Q = int_Q
         self.lambda_backend = lambda_backend
@@ -206,7 +232,12 @@ class Fits(Scatter):
             self.lambda_backend = _init_lambda_backend
 
         self._fnevals_input = _fnevals_input
-        self.interp_vals = interp_vals
+
+        self.interp_vals = copy.deepcopy(interp_vals)
+        if self.interp_vals is None:
+            self.interp_vals = []
+
+        self.verbose = verbose
 
         # add plotfunctions
         self.plot = rt1_plots(self)
@@ -216,27 +247,13 @@ class Fits(Scatter):
         '''
         needed for downward compatibility
         '''
-        if (not hasattr(self, 'R') and
-            hasattr(self, 'result') and
-            self.result is not None and len(self.result) == 9):
-            print('... updating attributes')
-            self.fit_output = self.result[0]
-            self.R = self.result[1]
-            self.data = self.result[2]
-            self.inc = self.result[3]
-            self.mask = self.result[4]
-            self.weights = self.result[5]
-            self.res_dict = self.result[6]
-            self.start_dict = self.result[7]
-            self.fixed_dict = self.result[8]
-
-        if not hasattr(self, 'setindex'):
-            self.setindex = 'mean'
 
         if not hasattr(self, 'plot'):
             print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
+        if not hasattr(self, 'verbose'):
+            self.verbose = 2
 
         if hasattr(self, 'fitset'):
             self.lsq_kwargs = self.fitset
@@ -253,7 +270,8 @@ class Fits(Scatter):
                                                       None)
 
         if not hasattr(self, 'interp_vals'):
-            self.interp_vals = None
+            self.interp_vals = []
+
 
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
@@ -264,8 +282,7 @@ class Fits(Scatter):
     def __getstate__(self):
         if '_rt1_dump_mini' in self.__dict__:
             # remove unnecessary data to save storage
-            removekeys = ['R', 'fit_output', 'fixed_dict', 'start_dict',
-                          'dataset_used']
+            removekeys = ['fit_output']
 
             delattr(self, '_rt1_dump_mini')
 
@@ -274,308 +291,871 @@ class Fits(Scatter):
 
             return {key: val for key, val in self.__dict__.items()
                     if key not in removekeys}
-
         else:
             return self.__dict__
 
 
-    def _generatedataset(self, dataset, dyn_keys,
-                         freq=None, freqkeys=[],
-                         manual_dyn_df=None,
-                         fixed_dict=dict()):
+    def __setattr__(self, attr, value):
+        # TODO write proper setters that do the job
+        # clear the cache in case it is not empty and a
+        # defining variable is set
+        if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF',
+                    'interp_vals']:
+            if not all(i == 0 for i in self._cached_arg_number):
+                print(f'{attr} has been set, clearing cache')
+                self._clear_cache()
+
+        super().__setattr__(attr, value)
+
+
+    @property
+    def _cached_props(self):
+         '''
+         a list of the names of the properties that are cached
+         '''
+         names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
+                 '_group_repeats', '_dataset_used', 'index',
+                 'fit_index', '_jac_assign_rule',
+                 'meandatetimes', 'inc', 'weights',
+                 'data', '_fit_param_dyn_dict', '_idx_assigns',
+                 '_repeatdict', '_order']
+
+         for i in ['tau', 'omega', 'N']:
+             names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
+
+         return names
+
+
+    def _clear_cache(self):
         '''
-        a function to group the dataset to arrays based
-        on the provided frequency-keys
+        clear all cached properties
+        '''
+        # only clear the cache if at least one property has been cached
+        if not all(i == 0 for i in self._cached_arg_number):
+            for name in self._cached_props:
+                getattr(Fits, name).fget.cache_clear()
+            #print('...cache cleared')
 
-        Parameters:
-        -----------
-        dataset: pandas.DataFrame
-                 A pandas-DataFrame with columns inc and sig that
-                 correspond to the incidence-angle- and backscatter
-                 values
-        dyn_keys: list of strings
-                  a list of the names of the parameters that are intended
-                  ot be fitted
-        freq: list
-              a list of frequencies that will be assigned to the
-              parameters. For more details check the pandas "DateOffset"
-              https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html
 
-        freqkeys: list
-                  a list of parameter-names to which the corresponding
-                  frequency will be assigned.
+    def _cache_info(self):
+        '''
+        print the state of the lru_cache for all cached properties
+        '''
+        text = []
+        for name in self._cached_props:
+            try:
+                cinfo = getattr(Fits, name).fget.cache_info()
+                text += [f'{name:<18}:   ' + f'{cinfo}']
+            except:
+                text += [f'{name:<18}:   ' + '???']
+        print(*text, sep='\n')
 
-                  e.g. if freq is ['D', 'M'] then freqkeys might look
-                  like [['dayparam1', 'dayparam2'], ['monthparam1']]
 
-        manual_dyn_df: pandas.DataFrame
-                       a pandas-DataFrame with column-names corresponding
-                       to the keys whose temporal grouping will be
-                       assigned based on the values.
+    @property
+    def _cached_arg_number(self):
+        '''
+        print the state of the lru_cache for all cached properties
+        '''
+        nums = []
+        for name in self._cached_props:
+            try:
+                if '.' in name:
+                    nsplit = name.split('.')
+                    nums.append(getattr(getattr(self, nsplit[0]),
+                                        nsplit[1]).cache_info().currsize)
+                else:
+                    nums.append(getattr(Fits, name).fget.cache_info().currsize)
+            except:
+                pass
+        return nums
 
-        fixed_dict: pandas.DataFrame
-                    a pandas-DataFrame with timeseries of parameters
-                    that are intended to be used as auxiliary datasets
-                    -> the index must match with the index of dataset!
+
+    @property
+    @lru_cache()
+    def param_dyn_dict(self):
+        '''
+        get index to assign grouping (with respect to the dataset-index)
+        '''
+        if self.dataset is None:
+            return dict()
+        else:
+
+            # the names of the parameters that will be fitted
+            dyn_keys = [key for key, val in self.defdict.items()
+                        if val[0] is True]
+
+            # set frequencies of fitted parameters
+            # (group by similar frequencies)
+            grps = [[i, [p[0] for p in j]] for i, j in groupby(
+                self._timescaledict.items(), key=itemgetter(1))]
+            freq = [i[0] for i in grps]
+            freqkeys = [i[1] for i in grps]
+
+            param_dyn_dict = {}
+            # initialize all parameters as scalar parameters
+            for key in dyn_keys:
+                param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
+
+            if freq is not None:
+                for i, f in enumerate(freq):
+                    grp_idx = self.dataset.index.to_frame().groupby(
+                                                    pd.Grouper(freq=f))
+                    # get unique group indices for each datetime-group
+                    for key in freqkeys[i]:
+                        grp_data = []
+                        for nval, [_, val] in enumerate(grp_idx):
+                            grp_data += repeat(nval, len(val))
+                        param_dyn_dict[key] = grp_data
+
+            if self._manual_dyn_df is not None:
+                for key, val in self._manual_dyn_df.astype(str).items():
+                    dd1 = np.char.zfill(
+                        np.array(param_dyn_dict[key], dtype='str'),
+                        len(max(np.array(param_dyn_dict[key], dtype='str'),
+                                key=len)))
+                    dd2 = val.str.zfill(len(max(val, key=len)))
+                    # generate a combined (unique) integer
+                    param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
+                                                   dtype=int)
+            return param_dyn_dict
+
+
+    @property
+    @lru_cache()
+    def param_dyn_df(self):
+        '''
+        a data-frame with the individual group-indexes for each parameter
+        (with respect to the unique index values of the provided dataset)
+        '''
+        if self._groupindex is not None:
+            groupids = [next(j) for i,j in groupby(
+                zip(self._groupindex, *self.param_dyn_dict.values()),
+                key=itemgetter(0))]
+
+            param_dyn_df = pd.DataFrame(groupids,
+                                        columns=['groupindex',
+                                                 *self.param_dyn_dict.keys()])
+            param_dyn_df.drop(columns='groupindex', inplace=True)
+
+            return param_dyn_df
+
+
+    @property
+    @lru_cache()
+    def _fit_param_dyn_dict(self):
+        '''
+        get index to assign grouping (with respect to the fit-index)
         '''
 
-        dataset = pd.concat([dataset] +
-                            [val for key, val in fixed_dict.items() \
+        return self.param_dyn_df.to_dict(orient='list')
+
+
+    @property
+    @lru_cache()
+    def _groupindex(self):
+        '''
+        the index used to group the dataset with respect to the temporal
+        dynamics of the parameters
+        '''
+        if self.dataset is not None:
+            # get final group-indexes
+            groupindex = None
+            for key, val in self.param_dyn_dict.items():
+                dd = np.char.zfill(np.array(val, dtype='str'),
+                                   len(max(np.array(val, dtype='str'),
+                                           key=len)))
+                if groupindex is None:
+                    groupindex = dd
+                else:
+                    groupindex = np.char.add(groupindex, dd)
+
+            if groupindex is None:
+                _, groupindex = np.unique(self.dataset.index,
+                                          return_inverse=True)
+
+            return groupindex.astype(np.int64)
+
+
+    @property
+    @lru_cache()
+    def _group_repeats(self):
+        '''
+        the repetition of each fitted value (in order to distribute it
+        to the fit_index)
+        '''
+
+        return list(map(len, map(set, self._orig_index)))
+
+
+    @property
+    @lru_cache()
+    def _dataset_used(self):
+        '''
+        group the dataset with respect to the required parameter-groups
+        '''
+        if self.dataset is None:
+            return
+        # don't use keys that are not provided in defdict
+        # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
+        usekeys = ['sig', 'inc'] + [key for key in
+                                    self.defdict if key in self.dataset]
+        # prepare dataset
+        dataset = pd.concat([self.dataset[usekeys]] +
+                            [val for key, val in self._fixed_dict.items() \
                              if isinstance(val, (pd.Series, pd.DataFrame))],
                             axis=1)
 
-        if manual_dyn_df is not None:
-            manual_dyn_df = copy.deepcopy(manual_dyn_df)
-            # in case multiple measurements have been made on the same day
-            #manual_dyn_df = manual_dyn_df.loc[dataset.index]
-
-        param_dyn_dict = {}
-        # initialize all parameters as scalar parameters
-        for key in dyn_keys:
-            param_dyn_dict[key] = np.ones(len(dataset.index), dtype=int)
-
-        if freq is not None:
-            for i, f in enumerate(freq):
-                for key in freqkeys[i]:
-
-                    df = pd.concat([
-                                pd.DataFrame({key:[nval]}, val.index)
-                                for nval, [_, val] in enumerate(
-                                        dataset.groupby(
-                                                pd.Grouper(freq=f)))])
-
-                    param_dyn_dict[key] = np.array(df[key].values,
-                                                   dtype=int).flatten()
-
-        if manual_dyn_df is not None:
-            for key, val in manual_dyn_df.items():
-                # param_dyn_dict values as strings (zfilled to N digits)
-                dd1 = np.char.zfill(np.array(param_dyn_dict[key],
-                                            dtype='str'),
-                              len(max(np.array(param_dyn_dict[key],
-                                               dtype='str'), key=len)))
-                # manual_dyn_df values as strings (zfilled to N digits)
-                dd2 = np.char.zfill(np.array(val, dtype='str'),
-                              len(max(np.array(val, dtype='str'),
-                                      key=len)))
-                # generate a combined (unique) integer
-                param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
-                                               dtype=int)
-
-        param_dyn_df = pd.DataFrame(param_dyn_dict, index=dataset.index)
-        # get name of parameter with the maximum amount of unique values
-
-        # get final group-indexes
-        groupindex = None
-        for key, val in param_dyn_df.items():
-            dd = np.char.zfill(np.array(val, dtype='str'),
-                               len(max(np.array(val, dtype='str'),
-                                       key=len)))
-            if groupindex is None:
-                groupindex = dd
-            else:
-                groupindex = np.char.add(groupindex, dd)
-
-
-        if groupindex is None:
-            groupindex = dataset.index
-
         dataset['orig_index'] = dataset.index
-        dataset = dataset.set_index(groupindex)
+        dataset = dataset.set_index(self._groupindex)
         groupdf = dataset.groupby(level=0)
 
         # generate new data-frame based on groups
-        new_df = groupdf.agg(pd.Series.tolist)
+        dataset_used = groupdf.agg(pd.Series.tolist)
 
-        param_dyn_df['orig_index'] = param_dyn_df.index
-        param_dyn_df = param_dyn_df.set_index(groupindex)
-        param_dyn_groupdf = param_dyn_df.groupby(level=0)
-
-        index = param_dyn_groupdf['orig_index'].apply(np.array)
-        vals = [param_dyn_groupdf[key].apply(list).apply(np.take, indices=0)
-                for key in param_dyn_df]
-        param_dyn_df = pd.concat([index, *vals], axis=1)
-
-        for key, val in param_dyn_df.items():
-            param_dyn_dict[key] = list(val.values)
-
-        return new_df, param_dyn_dict
+        return dataset_used
 
 
-    def _setindex(self, setindex):
+    @property
+    @lru_cache()
+    def index(self):
         '''
-        set the index-property of the Fits-object
-        (dataset_used must be present, e.g. performfit() must have been run
-         prior to calling this method!)
+        return the unique index-values of the dataset
+        (used to assign the fit-results)
 
-        Parameters:
-        ---------------
-        setindex: str
-                  identifyer how to assign the index of the fitted values
-                  in case timespans longer than 1 measurement are used.
+        - if `dataset` is provided, the unique index-values are used
+        - if `dataset` is not provided but 'dataset_used'
 
-                  possible values are:
-
-                  - 'first': the first index-value will be used
-                  - 'last': the last index-value will be used
-                  - 'mean': the center index-value will be used
-                    (Note: this results in a index that might not have been
-                    present in the input dataset!)
-                  - 'original': the list of indices will be returned without
-                    alteration (Note: without further processing, this index
-                    can not be directly used to generate a pandas DataFrame)
         '''
-        # generate a datetime-index from the given groups
+
+        # get all unique values of each group in _orig_index
+        return np.concatenate([list(dict.fromkeys(i))
+                               for i in self._orig_index])
+
+
+    @property
+    @lru_cache()
+    def fit_index(self):
+        '''
+        the mean datetime-indexes that correspond to each fit-group
+        '''
+
+        # be careful in case an unsorted grouping is applied !!!
+        # (e.g. manual dyn)
+        return np.array(list(map(meandatetime, self._orig_index)),
+                        dtype=self.index.dtype)
+
+
+    @property
+    @lru_cache()
+    def _jac_assign_rule(self):
+        '''
+        a dict containing the positions of the derivative-values
+        (used in the calculation of the jacobi-determinant to assign
+        a scipy.sparse matrix and avoid memory-overflows)
+        '''
+        shape = self.inc.shape
+
+        jac_rules = dict()
+        for key, val in self.param_dyn_df.items():
+            uniques = pd.unique(val)
+
+            row_ind = []  # row-indices where jac is nonzero
+            col_ind = []  # col-indices where jac is nonzero
+            for n_uni, uni in enumerate(uniques):
+                rule = (val == uni).values
+                where_n = np.where(
+                        np.concatenate(np.broadcast_to(rule[:,np.newaxis],
+                                                       shape)))[0]
+
+                col_ind += list(where_n)
+                row_ind += list(np.full_like(where_n, n_uni))
+            jac_rules[key] = [row_ind, col_ind]
+        return jac_rules
+
+
+    @property
+    @lru_cache()
+    def meandatetimes(self):
+        '''
+        a dict of the mean datetime-indexes that correspond to each obtained
+        parameter
+        '''
+
+        dates = dict()
+        for key, val in self.param_dyn_df.items():
+            grp = groupby(zip(val.values, self.fit_index), key=itemgetter(0))
+            dates[key] = np.array(list(map(meandatetime,
+                             [[k[1] for k in j] for i,j in grp])),
+                                  dtype=self.index.dtype)
+        return dates
+
+
+    @property
+    @lru_cache()
+    def inc(self):
+        '''
+        a rectangular array consisting of the incidence-angles as
+        provided in the dataset, rectangularized by repeating the last
+        values of each row to fit in length.
+        '''
+
+        return self.__get_data(prop='inc')
+
+
+    @property
+    def mask(self):
+        '''
+        a mask that indicates the artificially added values
+        (see 'inc', 'data' and 'weights' properties for details)
+        '''
+
+        return self.__get_data(prop='mask')
+
+
+    @property
+    @lru_cache()
+    def weights(self):
+        '''
+        an array of equal shape as inc and data, consisting of the
+        weighting-factors that need to be applied in order to correct
+        for the rectangularization. The weighting-factors for each
+        individual data-element are given by
+            weight_i = 1 / np.sqrt(N_i)
+        where N_i is the number of repetitions of the i'th value
+        that have been added in order to rectangularize the dataset.
+
+        Including the weighting-factors within the least-squares
+        approach will result in a cancellation of the repeated
+        results such that the artificially added values (necessary
+        to have a rectangular array) will have no effect on the fit.
+
+        If a column 'data_weights' has been provided in the dataset,
+        the obtained weights will additionally be multiplied by the
+        values provided as 'data_weights'.
+        '''
+
+        if 'data_weights' in self.dataset:
+            return self.__get_data(
+                prop='data_weights') * self.__get_data(prop='weights')
+        else:
+            return self.__get_data(prop='weights')
+
+    @property
+    @lru_cache()
+    def data(self):
+        '''
+        a rectangular array consisting of the data-values as provided
+        in the dataset, rectangularized by repeating the last values
+        of each row to fit in length
+        '''
+
+        return self.__get_data(prop='sig')
+
+
+    @property
+    @lru_cache()
+    def _order(self):
+        '''
+        a list of the names of the parameters that will be fitted.
+        (this is necessary to ensure correct broadcasting of values since
+        dictionarys do)
+        '''
+
+        return [i for i, v in self._startvaldict.items() if v is not None]
+
+
+    @property
+    def _max_rep(self):
+        '''
+        the maximum number of unique objects in the "_groupindex"
+        '''
+
+        return Counter(self._groupindex).most_common(1)[0][1]
+
+
+    @property
+    def _orig_index(self):
+        '''
+        a list of the (grouped) index-values
+        '''
+
+        orig_index = [np.array([k[1].value for k in j],
+                               dtype=self.dataset.index.dtype)
+                      for i,j in groupby(zip(self._groupindex,
+                                             self.dataset.index),
+                                         key=itemgetter(0))]
+        return orig_index
+
+
+    @property
+    @lru_cache()
+    def _idx_assigns(self):
+        '''
+        a list of ranges that is used to assign values provided as a list
+        with length of the dataset to the shape needed for further processing
+        (e.g. grouped with respect to the temporal dynamics of the parameters)
+        '''
+
+        return rectangularize([range(*i) for i in
+                               pairwise(accumulate([0, *self._group_repeats]))],
+                              dim=self._max_rep)
+
+
+    @property
+    def _setdict(self):
+        '''
+        Generate RT-1 specifications based on the provided "defdict".
+        ... used to simplify the model-specification for 'rtfits.performfit()'
+        '''
+
+        # generate RT1 specifications based on defdict
+        # initialize empty dicts
+        setdict = {}
+        # set parameters
+        for key, val in self.defdict.items():
+            # if parameter is intended to be fitted, assign a sympy-symbol
+            if val[0] is True:
+                # TODO see why this is actually necessary
+                # omega and tau must not be a sympy-symbol name
+                if key not in ['omega', 'tau']:
+                    setdict[key] = sp.var(key)
+                else:
+                    # a dummy value that will be replaced using self._setdict
+                    setdict[key] = 100
+
+            elif val[0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if isinstance(val[1],
+                              (int, float)) and not isinstance(val[1], bool):
+                    setdict[key] = val[1]
+                else:
+                    # if value is provided as array, add it to fixed_dict
+                    if key not in ['omega', 'tau']:
+                        # omega and tau must not be a sympy-symbol name
+                        # TODO same as above ...why is this necessary?
+                        # TODO what about 'NormBRDF'?
+                        setdict[key] = sp.var(key)
+                    else:
+                        # dummy value that will be replaced using self._setdict
+                        setdict[key] = 100
+        return setdict
+
+
+    @property
+    def _fixed_dict(self):
+        '''
+        a dictionary containing the fixed-values to be used
+        '''
+
+        _fixed_dict = {}
+        for key, val in self.defdict.items():
+            if val[0] is False:
+                # treat parameters that are intended to be constants
+                # if value is provided as a scalar, insert it in the definition
+                if isinstance(val[1], str) and val[1] == 'auxiliary':
+                    _fixed_dict[key] = 'auxiliary'
+                else:
+                    _fixed_dict[key] = val[1]
+
+        return _fixed_dict
+
+
+    @property
+    def fixed_dict(self):
+        # update 'fixed_dict' with timeseries provided via 'dataset'-DataFrame
+        # ensure that only parameters that are explicitely mentioned in
+        # fixed_dict are passed to the fit-procedure as fixed datasets
+        # (additional columns of 'dataset' do not affect the fit)
+        fixed_dict = dict()
+        if isinstance(self.dataset, pd.DataFrame):
+            for key, val in self._fixed_dict.items():
+                if isinstance(val, str) and val == 'auxiliary':
+                    assert key in self._dataset_used, \
+                        f"auxiliary data for '{key}' is missing!"
+                    fixed_dict[key] = rectangularize(self._dataset_used[key])
+
+        return fixed_dict
+
+
+    @property
+    def _startvaldict(self):
+        '''
+        a dictionary containing the start-values to be used
+        '''
+        startvaldict = {}
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                startvaldict[key] = val[1]
+
+        if self.param_dyn_df is not None:
+
+            # re-shape param_dict and bounds_dict to fit needs
+            uniques = self.param_dyn_df.nunique()
+            for key, val in startvaldict.items():
+                # adjust shape of startvalues
+                if uniques[key] >= 1 and np.isscalar(val):
+                    startvaldict[key] = [val for i in range(uniques[key])]
+
+        return startvaldict
+
+
+    @property
+    def _boundsvaldict(self):
+        '''
+        a dictionary containing the boundary-values to be used
+        '''
+        boundsvaldict = {}
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                boundsvaldict[key] = val[3]
+        if self.param_dyn_df is not None:
+            # re-shape param_dict and bounds_dict to fit needs
+            uniques = self.param_dyn_df.nunique()
+            for key, val in boundsvaldict.items():
+                # adjust shape of boundary conditions
+                if uniques[key] >= 1 and len(val[0]) == 1:
+                    boundsvaldict[key] = (val[0]*uniques[key], val[1]*uniques[key])
+
+        return boundsvaldict
+
+
+    @property
+    def _timescaledict(self):
+        '''
+        a dictionary containing the pandas datetime offset strings to use
+        '''
+
+        timescaledict = {}
+        for key, val in self.defdict.items():
+            if (val[0] is True and val[2] is not None
+                and val[2] != 'manual' and val[2] != 'index'):
+                    timescaledict[key] = self.defdict[key][2]
+        return timescaledict
+
+
+    @property
+    def _manual_dyn_df(self):
+        '''
+        a dictionary containing possible additional temporal dynamics
+        (e.g. in addition to _timescaledict)
+        '''
+
+        manual_dyn_df = pd.DataFrame()
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                if val[2] == 'manual':
+                    # set manual parameter dynamics
+                    assert f'{key}_dyn' in self.dataset, (
+                        f'{key}_dyn must be provided in the dataset' +
+                        'if defdict[{key}][2] is set to "manual"')
+
+                    manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
+                elif val[2] == 'index':
+                    indexdyn = pd.DataFrame({key:1}, self.dataset.index
+                                            ).groupby(axis=0, level=0
+                                                      ).ngroup().to_frame()
+                    indexdyn.columns = [key]
+                    manual_dyn_df[f'{key}'] = indexdyn
+
+                elif val[2] is not None:
+                    if f'{key}_dyn' in self.dataset:
+                        print(f'parameter dynamics {val[2]} and' +
+                              f'dataset[{key}_dyn] combined')
+                        manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
+        if manual_dyn_df.empty:
+            return None
+        else:
+            return manual_dyn_df
+
+
+    @property
+    def _param_R_dict(self):
+        '''
+        a dict containing the parameter-values that are needed to evaluate
+        the fn-coefficients (as needed for evaluation of the interaction-term)
+        '''
+
+        param_R = dict(**self._startvaldict, **self.fixed_dict)
+        param_R.pop('omega', None)
+        param_R.pop('tau', None)
+        param_R.pop('NormBRDF', None)
+        param_R.pop('bsf', None)
+
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
+
+        # check of general input-requirements
+        # check if all parameters have been provided
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        paramset = ((set(map(str, self._startvaldict.keys()))
+                     ^ set(map(str, self.fixed_dict.keys())))
+                    - {'tau', 'omega', 'NormBRDF'})
+
+        assert paramset >= (vsymb | srfsymb), (
+            'the parameters ' +
+            str((vsymb | srfsymb) - paramset) +
+            ' must be provided in param_dict')
+
+        # remove also other symbols that are used in the definitions of
+        # tau, omega and NormBRDF
+        for i in set(toNlist - vsymb - srfsymb):
+            if i in param_R:
+                param_R.pop(i)
+
+        return param_R
+
+
+    @property
+    def V(self):
+        '''
+        new initialization of the rt1.volume object used
+        '''
+
+        # set V and SRF based on setter-function
+        if callable(self.set_V_SRF):
+            V, _ = self.set_V_SRF(**self._setdict)
+        elif isinstance(self.set_V_SRF, dict):
+            V = self._init_V_SRF(**self.set_V_SRF,
+                                 setdict=self._setdict,
+                                 V_SRF_Q='V')
+
+        return V
+
+
+    @property
+    def SRF(self):
+        '''
+        new initialization of the rt1.surface object used
+        '''
+
+        # set V and SRF based on setter-function
+        if callable(self.set_V_SRF):
+            _, SRF = self.set_V_SRF(**self._setdict)
+        elif isinstance(self.set_V_SRF, dict):
+            SRF = self._init_V_SRF(**self.set_V_SRF,
+                                   setdict=self._setdict,
+                                   V_SRF_Q='SRF')
+        return SRF
+
+
+    @property
+    def R(self):
+        '''
+        new initialization of the rt1.RT1 object used
+        '''
+
+        R = RT1(1., self.inc, self.inc,
+                np.zeros_like(self.inc), np.full_like(self.inc, np.pi),
+                V=self.V, SRF=self.SRF,
+                fn_input=None, _fnevals_input=None,
+                geometry='mono', bsf = self._setdict.get('bsf', 0.),
+                int_Q=self.int_Q,
+                lambda_backend=self.lambda_backend,
+                param_dict=self._param_R_dict,
+                verbosity=self.verbose)
+
+        if self.int_Q is True and self._fnevals_input is None:
+            self._fnevals_input = R._fnevals
+        elif self.int_Q is True:
+            # store _fnevals functions in case they have not been provided
+            # as input-arguments explicitly to avoid recalculation for each step
+            R._fnevals_input = self._fnevals_input
+            # set fn_input to any value except None to avoid re-calculation
+            R.fn_input = 1
+
+        return R
+
+
+    def __get_V_SRF_symbs(self, V_SRF, prop):
+        '''
+        the symbols used to define tau, omega and NormBRDF of V and SRF
+        '''
         try:
-            if setindex == 'first':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(np.take,
-                                                      indices=0).values)
-            elif setindex == 'last':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(np.take,
-                                                      indices=-1).values)
-            elif setindex == 'mean':
-                self.index = pd.to_datetime(
-                        self.dataset_used.orig_index.apply(meandatetime).values)
-            elif setindex == 'original':
-                self.index = self.dataset_used.index
-            else:
-                print('setindex must be  either "first", "last",',
-                      ' "mean" or "original"')
-                raise Exception
-        except:
-            print('index could not be combined... use original index instead')
-            if isinstance(self.dataset_used, pd.DataFrame):
-                self.index = self.dataset_used.index
-            elif isinstance(self.dataset_used, list):
-                self.index = range(len(self.dataset_used))
+            symbs = list(map(str,
+                             getattr(getattr(self, V_SRF), prop).free_symbols))
+        except Exception:
+            symbs = list()
+        return symbs
 
 
-    def _preparedata(self, dataset):
+    def __get_V_SRF_funcs(self, V_SRF, prop):
         '''
-        prepare data such that it is applicable to least_squres fitting
-        - separate incidence-angles and data-values
-        - rectangularize the data-array
-          (this is necessary in order to allow array-processing)
-        - provide weighting-matrix to correct for rectangularization
+        the lambdified functions used to define tau, omega and NormBRDF
+        of V and SRF
+        '''
+        try:
+            func = sp.lambdify(
+                getattr(getattr(self, V_SRF), prop).free_symbols,
+                getattr(getattr(self, V_SRF), prop),
+                modules=['numpy'])
+        except Exception:
+            func = None
+        return func
+
+
+    def __get_V_SRF_diff_funcs(self, V_SRF, prop):
+        '''
+        a dict containing the lambdified partial derivatives of the functions
+        used to define tau, omega and NormBRDF of V and SRF
+        '''
+
+        d_inner = dict()
+        for param in (self.__get_V_SRF_symbs(V_SRF, prop) &
+                  self.param_dyn_dict.keys()):
+            d_inner[param] = sp.lambdify(
+                self.__get_V_SRF_symbs(V_SRF, prop),
+                sp.diff(getattr(getattr(self, V_SRF), prop),
+                        sp.Symbol(param)),
+                modules=['numpy'])
+        return d_inner
+
+
+    @property
+    @lru_cache()
+    def _tau_symb(self):
+        return self.__get_V_SRF_symbs('V', 'tau')
+    @property
+    @lru_cache()
+    def _tau_func(self):
+        return self.__get_V_SRF_funcs('V', 'tau')
+    @property
+    @lru_cache()
+    def _tau_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('V', 'tau')
+
+
+    @property
+    @lru_cache()
+    def _omega_symb(self):
+        return self.__get_V_SRF_symbs('V', 'omega')
+    @property
+    @lru_cache()
+    def _omega_func(self):
+        return self.__get_V_SRF_funcs('V', 'omega')
+    @property
+    @lru_cache()
+    def _omega_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('V', 'omega')
+
+    @property
+    @lru_cache()
+    def _N_symb(self):
+        return self.__get_V_SRF_symbs('SRF', 'NormBRDF')
+    @property
+    @lru_cache()
+    def _N_func(self):
+        return self.__get_V_SRF_funcs('SRF', 'NormBRDF')
+    @property
+    @lru_cache()
+    def _N_diff_func(self):
+        return self.__get_V_SRF_diff_funcs('SRF', 'NormBRDF')
+
+
+    @property
+    def res_df(self):
+        '''
+        return a pandas DataFrame with the obtained parameters from the fit
+        (performfit must be called prior to accessing this property!)
+        '''
+        if not hasattr(self, 'res_dict'):
+            print('you must perform the fit first! ...e.g. call performfit()')
+            return
+
+        series = []
+        for key, val in self._assignvals(self.res_dict).items():
+            if key in self.interp_vals:
+                # re-assign interpolated values to the corresponding indexes
+                # (they are provided as groups corresponding to the fitted
+                # time-periods)
+                x = np.full(len(self.index), -999.)
+                np.put(a=x, ind=self._idx_assigns, v=val)
+                series.append(pd.Series(x, self.index, name=key))
+            else:
+                series.append(pd.Series(np.repeat(val, self._group_repeats),
+                                        self.index, name=key))
+        resdf = pd.concat(series, axis=1).ffill()
+
+        return resdf
+
+
+    def _assignvals(self, res_dict, interp_vals=None):
+        '''
+        a function to distribute the fit-values to the actual shape of the
+        dataset. This is done in one of the following ways:
+
+            - if the parameter is provided in the "interp_vals" list,
+              a quadratic interpolation (with respect to the datetime-indices)
+              will be used to assign the values
+            - otherwise, a step-function will be used
 
         Parameters:
-        ------------
-        dataset: pandas.DataFrame or list
-                 input-dataset as pandas-DataFrame with columns
-                 ['inc', 'sig'] and any number of additional columns that
-                 represent auxiliary datasets
+        -------------
+        res_dict : dict
+            a dict containing the results obtained from a run of performfit()
 
-                 input-dataset as list of the shape:
-                     [[inc_0, data_0], [inc_1, data_2], ...]
-
-
-        Returns:
-        ---------
-        inc: array-like
-             a rectangular array consisting of the incidence-angles as
-             provided in the dataset, rectangularized by repeating the last
-             values of each row to fit in length.
-        data: array-like
-              a rectangular array consisting of the data-values as provided
-              in the dataset, rectangularized by repeating the last values
-              of each row to fit in length
-        weights: array-like
-                 an array of equal shape as inc and data, consisting of the
-                 weighting-factors that need to be applied in order to correct
-                 for the rectangularization. The weighting-factors for each
-                 individual data-element are given by
-                     weight_i = 1 / np.sqrt(N_i)
-                 where N_i is the number of repetitions of the i'th value
-                 that have been added in order to rectangularize the dataset.
-
-                 Including the weighting-factors within the least-squares
-                 approach will result in a cancellation of the repeated
-                 results such that the artificially added values (necessary
-                 to have a rectangular array) will have no effect on the fit.
-
-                 If a column 'data_weights' has been provided in the dataset,
-                 the obtained weights will additionally be multiplied by the
-                 values provided as 'data_weights'.
-        N: int
-           number of measurements that have been provided within the dataset
-
-        mask: array-like
-              a mask that indicates the artificially added values
-
-        new_fixed_dict: dict
-                        a dictionary with the values of the auxiliary-datasets
-                        grouped such that they can be used within the
-                        fitting procedure
         '''
+        if interp_vals is None:
+            interp_vals = self.interp_vals
 
+        if len(interp_vals) > 0:
+            firstindex = self.dataset.index[0]
+            lastindex = self.dataset.index[-1]
 
-        # prepare data to avoid nan-values
-        #      since numpy only supports rectangular arrays, and least_squares
-        #      does neither support masked arrays, nor containing nan-values,
-        #      the problem of missing values within the dataset is currently
-        #      adressed by repeating the values from the nearest available
-        #      neighbour to rectangularize the dataset.
-
-        #      this of course results in an inhomogeneous treatment of the
-        #      measurements since the duplicates have been added artificially!
-        #      -> in order to correct for the added duplicates, a
-        #      weighting-matrix is provided that can be used to correct for
-        #      the unwanted duplicates.
-
-        # this is here for backward-support
-        if isinstance(dataset, list):
-            N = len(dataset)
-            inc, weights, mask = rectangularize([i[0] for i in dataset],
-                                                weights_and_mask = True)
-            data = rectangularize([i[1] for i in dataset])
-            new_fixed_dict = dict()
-
-        elif isinstance(dataset, pd.DataFrame):
-            # save number of datasets
-            N = len(dataset)
-            inc, weights, mask = rectangularize(dataset.inc.values,
-                                                weights_and_mask = True)
-            data = rectangularize(dataset.sig.values)
-
-            new_fixed_dict = dict()
-            for key in dataset:
-                if key not in ['inc', 'sig', 'orig_index']:
-                    new_fixed_dict[key] = rectangularize(dataset[key])
-
-        if 'data_weights' in new_fixed_dict:
-            print('applying data_weights')
-            weights = weights * new_fixed_dict.pop('data_weights')
-
-        return [inc, np.concatenate(data), np.concatenate(weights),
-                N, mask, new_fixed_dict]
-
-
-    def _assignvals(self, res_dict):
-        if self.interp_vals is not None and isinstance(self.interp_vals, list):
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
             for key, val in res_dict.items():
-                if (key in self.interp_vals and len(val[0]) > 2 and
-                    not isinstance(val[1], int)):
+                if key in interp_vals:
                     # generate an interpolaion function
-                    f = interp1d(self.meandatetimes[key].to_julian_date(),
-                                 val[0], fill_value='extrapolate', axis=0,
-                                 kind='quadratic')
-                    # interpolate the data to the used timestamps
-                    use_res_dict[key] = f(self.index.to_julian_date())
+                    # the values at the boundaries are set to the nearest
+                    # obtained values to avoid extrapolation
+                    # "deque" is a list-type that supports append on both sides
+
+                    # ensure that the indexes are never the same
+                    # (add a milisecond if they are...)
+                    if firstindex == self.meandatetimes[key][0]:
+                        firstindex += np.timedelta64(1, 'ms')
+                    if lastindex == self.meandatetimes[key][-1]:
+                        lastindex -= np.timedelta64(1, 'ms')
+
+                    useindex = deque(self.meandatetimes[key])
+                    useindex.appendleft(firstindex)
+                    useindex.append(lastindex)
+                    useindex = np.array(useindex,
+                                        dtype='datetime64[ns]').astype(float)
+                    if len(val) >= 2:
+                        usevals = deque(val[0])
+                        usevals.appendleft(val[0][0])
+                        usevals.append(val[0][-1])
+
+                        # interpolate the data to the used timestamps
+                        f = interp1d(useindex.astype(float), usevals,
+                                     fill_value='extrapolate', axis=0,
+                                     kind='quadratic')
+
+                        interpvals = f(np.array(self.index,
+                                                dtype='datetime64[ns]'))
+                    else:
+                        print('warning, interpolation not possible for ({key})'
+                              'because there are less than 2 values')
+                        interpvals = np.repeat(val[0], len(self.index))
+
+                    # assign correct shape
+                    use_res_dict[key] = np.take(interpvals, self._idx_assigns)
+
                 else:
-                    use_res_dict[key] = np.repeat(*val)
+                    use_res_dict[key] = np.repeat(*val)[:,np.newaxis]
         else:
-            use_res_dict = {key:np.repeat(*val)
+            use_res_dict = {key:np.repeat(*val)[:,np.newaxis]
                             for key, val in res_dict.items()}
+
         return use_res_dict
 
 
     def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
-                    return_components=False,
-                    **kwargs):
+                    interp_vals=None, return_components=False):
         '''
         function to calculate the model-results (intensity or sigma_0) based
         on the provided parameters in linear-units or dB
@@ -599,77 +1179,42 @@ class Fits(Scatter):
         '''
 
         if R is None:
-            try:
-                R = self.R
-            except AttributeError:
-                assert False, 'R is not available and must be provided'
+            R = self.R
         if res_dict is None:
-            try:
-                res_dict = self.res_dict
-            except AttributeError:
-                assert False, 'res_dict is not available and must be provided'
+            res_dict = self.res_dict
         if fixed_dict is None:
-            try:
-                fixed_dict = self.fixed_dict
-            except AttributeError:
-                assert False, 'fixed_dict is not available and must be provided'
+            fixed_dict = self.fixed_dict
+        if interp_vals is None:
+            interp_vals = self.interp_vals
 
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict, interp_vals)
         res_dict.update(fixed_dict)
-
-        # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        # and generate a function to evaluate the symbolic representation
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
@@ -681,8 +1226,11 @@ class Fits(Scatter):
 
         # symbols used to define the functions
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -695,6 +1243,7 @@ class Fits(Scatter):
 
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
+
 
         # calculate total backscatter-values
         if return_components is True:
@@ -711,14 +1260,11 @@ class Fits(Scatter):
             # convert the calculated results to dB
             model_calc = 10. * np.log10(model_calc)
 
-        # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
-
         return model_calc
 
 
-    def _calc_jac(self, R, res_dict, fixed_dict, param_dyn_dict, order):
+    def _calc_jac(self, R=None, res_dict=None, fixed_dict=None,
+                  param_dyn_dict=None, order=None):
         '''
         function to evaluate the jacobian in the shape as required
         by scipy's least_squares function
@@ -736,60 +1282,47 @@ class Fits(Scatter):
              the jacobian corresponding to the fit-parameters in the
              shape applicable to scipy's least_squres-function
         '''
+
+        if R is None:
+            R = self.R
+        if res_dict is None:
+            res_dict = self.res_dict
+        if fixed_dict is None:
+            fixed_dict = self.fixed_dict
+        if param_dyn_dict is None:
+            param_dyn_dict = self._fit_param_dyn_dict
+        if order is None:
+            order = self._order
+
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
-        # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
-
-        # set omega, tau and NormBRDF-values to input
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
@@ -801,8 +1334,11 @@ class Fits(Scatter):
 
         # symbols used in the definitions of the functions
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -816,26 +1352,26 @@ class Fits(Scatter):
         # set the param-dict to the newly generated dict
         R.param_dict = strparam_fn
 
-        neworder = [o for o in order]
-
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
         # in param_dyn_dict) and replace them by 'omega', 'tau' and 'NormBRDF'
         # so that calling R.jacobian will calculate the "outer" derivative
-        if len(tausymb) != 0:
-            for i in map(str, tausymb) & param_dyn_dict.keys():
+        neworder = [o for o in order]
+        if len(self._tau_symb) != 0:
+            for i in self._tau_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'tau'
-        if len(omegasymb) != 0:
-            for i in map(str, omegasymb) & param_dyn_dict.keys():
+        if len(self._omega_symb) != 0:
+            for i in self._omega_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'omega'
-        if len(Nsymb) != 0:
-            for i in map(str, Nsymb) & param_dyn_dict.keys():
+        if len(self._N_symb) != 0:
+            for i in self._N_symb & param_dyn_dict.keys():
                 neworder[neworder.index(i)] = 'NormBRDF'
 
         # calculate the jacobian based on neworder
         # (evaluating only "outer" derivatives with respect to omega,
         # tau and NormBRDF)
         jac = R.jacobian(sig0=self.sig0, dB=self.dB, param_list=neworder)
+        #self.jacshape = jac[0].shape
 
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
@@ -850,61 +1386,29 @@ class Fits(Scatter):
 
             if len(uniques) == 1:
                 newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
-# TODO is it faster to use numpy directly for small arrays ?
-#            elif len(uniques) < 50:
-#                data = np.concatenate(jac[i])
-#                row_ind = []  # row-indices where jac is nonzero
-#                col_ind = []  # col-indices where jac is nonzero
-#                for n_uni, uni in enumerate(uniques):
-#                    rule = (param_dyn_dict[key] == uni)
-#                    where_n = np.where(
-#                            np.concatenate(
-#                                    np.broadcast_arrays(
-#                                            rule[:,np.newaxis], jac[0])[0]))[0]
-#
-#                    col_ind += list(where_n)
-#                    row_ind += list(np.full_like(where_n, n_uni))
-#                # generate a sparse matrix
-#                m = np.full((max(row_ind) + 1,
-#                                      max(col_ind) + 1), 0.)
-#                # fill matrix with values
-#                m[row_ind, col_ind] = data
-#                newjacdict[key] = m
             else:
                 # if too many unique values occur, use scipy sparse matrix
                 # to avoid memory-overflow due to the large number of zeroes...
                 # (this will reduce speed since scipy.sparse does not fully
                 # supprot BLAS and so no proper parallelization is performed)
                 data = np.concatenate(jac[i])
-
-                row_ind = []  # row-indices where jac is nonzero
-                col_ind = []  # col-indices where jac is nonzero
-                for n_uni, uni in enumerate(uniques):
-                    rule = (param_dyn_dict[key] == uni)
-                    where_n = np.where(
-                            np.concatenate(np.broadcast_to(rule[:,np.newaxis],
-                                                           jac[i].shape)))[0]
-
-                    col_ind += list(where_n)
-                    row_ind += list(np.full_like(where_n, n_uni))
-
+                row_ind, col_ind = self._jac_assign_rule[key]
                 # generate a sparse matrix
                 m = csr_matrix((data, (row_ind, col_ind)),
                                shape=(max(row_ind) + 1,
                                       max(col_ind) + 1))
                 newjacdict[key] = m
+
         # evaluate jacobians of the functional representations of tau
         # and add them to newjacdict
-        for i in set(map(str, tausymb)) & set(param_dyn_dict.keys()):
+        for i in self._tau_symb & param_dyn_dict.keys():
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = sp.lambdify(tausymb, sp.diff(orig_V.tau,
-                                                   sp.Symbol(i)),
-                                  modules=['numpy'])
+            d_inner = self._tau_diff_func[i]
             # evaluate the inner derivative
-            dtau_dx = d_inner(*[res_dict[str(i)] for i in tausymb])
+            dtau_dx = d_inner(**{key:res_dict[key]
+                                   for key in self._tau_symb})
             # calculate the derivative with respect to the parameters
-
             if np.isscalar(dtau_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
             elif isspmatrix(newjacdict[str(i)]):
@@ -928,11 +1432,10 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
         # same for omega
-        for i in set(map(str, omegasymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(omegasymb, sp.diff(orig_V.omega,
-                                                     sp.Symbol(i)),
-                                  modules=['numpy'])
-            domega_dx = d_inner(*[res_dict[str(i)] for i in omegasymb])
+        for i in self._omega_symb & param_dyn_dict.keys():
+            d_inner = self._omega_diff_func[i]
+            domega_dx = d_inner(**{key:res_dict[key]
+                                   for key in self._omega_symb})
 
             if np.isscalar(domega_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
@@ -957,11 +1460,9 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
         # same for NormBRDF
-        for i in set(map(str, Nsymb)) & set(param_dyn_dict.keys()):
-            d_inner = sp.lambdify(Nsymb, sp.diff(orig_SRF.NormBRDF,
-                                                 sp.Symbol(i)),
-                                  modules=['numpy'])
-            dN_dx = d_inner(*[res_dict[str(i)] for i in Nsymb])
+        for i in self._N_symb & param_dyn_dict.keys():
+            d_inner = self._N_diff_func[i]
+            dN_dx = d_inner(**{key:res_dict[key] for key in self._N_symb})
 
             if np.isscalar(dN_dx):
                 newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
@@ -996,54 +1497,52 @@ class Fits(Scatter):
         else:
             jac_lsq = np.vstack([newjacdict[key] for key in order]).transpose()
 
-        # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
-
         return jac_lsq
 
-    def __get_res_df(self):
-        '''
-        return a pandas DataFrame with the obtained parameters
-        '''
-        return pd.DataFrame(self._assignvals(self.res_dict), self.index)
-
-    res_df = property(__get_res_df)
 
     def __get_data(self, prop):
-        if not hasattr(self, 'dataset_used'):
+        '''
+        a function to retrieve properties from the provided dataset
+
+        Parameters
+        ----------
+        prop : str
+            the name of the property.
+
+        Returns
+        -------
+        np.array
+            the values of the requested property
+
+        '''
+        if not hasattr(self, '_dataset_used'):
             print('call _reinit() or performfit() to set the data first!')
             return
         else:
 
-            if isinstance(self.dataset_used, pd.DataFrame):
-                if prop in ['inc', 'sig']:
-                    return rectangularize(self.dataset_used[prop].values)
+            if isinstance(self._dataset_used, pd.DataFrame):
+                if prop in ['inc', 'sig', 'data_weights']:
+                    return rectangularize(self._dataset_used[prop].values)
                 elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize(self.dataset_used.inc.values,
+                    _, weights, mask = rectangularize(self._dataset_used.inc.values,
                                                       weights_and_mask=True)
                     if prop == 'weights':
                         return np.concatenate(weights)
                     if prop == 'mask':
                         return mask
-            elif isinstance(self.dataset_used, list):
+            elif isinstance(self._dataset_used, list):
                 if prop == 'inc':
-                    return rectangularize([i[0] for i in self.dataset_used])
+                    return rectangularize([i[0] for i in self._dataset_used])
                 elif prop == 'sig':
-                    return rectangularize([i[1] for i in self.dataset_used])
+                    return rectangularize([i[1] for i in self._dataset_used])
                 elif prop in ['weights', 'mask']:
                     _, weights, mask = rectangularize([i[0] for i in
-                                                       self.dataset_used],
+                                                       self._dataset_used],
                                                       weights_and_mask=True)
                     if prop == 'weights':
                         return np.concatenate(weights)
                     if prop == 'mask':
                         return mask
-
-    data = property(partial(__get_data, prop='sig'))
-    inc = property(partial(__get_data, prop='inc'))
-    weights = property(partial(__get_data, prop='weights'))
-    mask = property(partial(__get_data, prop='mask'))
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1088,63 +1587,36 @@ class Fits(Scatter):
 
 
         # ensure correct array-processing
-        res_dict = {key:val[:,np.newaxis] for
-                    key, val in self._assignvals(res_dict).items()}
+        res_dict = self._assignvals(res_dict)
         res_dict.update(fixed_dict)
 
-        # store original V and SRF
-        orig_V = copy.deepcopy(R.V)
-        orig_SRF = copy.deepcopy(R.SRF)
-
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        # and generate a function to evaluate the symbolic representation
-        try:
-            tausymb = R.V.tau.free_symbols
-            taufunc = sp.lambdify(tausymb, R.V.tau,
-                                  modules=['numpy'])
-        except Exception:
-            tausymb = set()
-            taufunc = None
-        try:
-            omegasymb = R.V.omega.free_symbols
-            omegafunc = sp.lambdify(omegasymb, R.V.omega,
-                                    modules=['numpy'])
-        except Exception:
-            omegasymb = set()
-            omegafunc = None
-        try:
-            Nsymb = R.SRF.NormBRDF.free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
-                                modules=['numpy'])
-        except Exception:
-            Nsymb = set()
-            Nfunc = None
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
 
         # update the numeric representations of omega, tau and NormBRDF
         # based on the values for the used symbols provided in res_dict
-        if omegafunc is None:
+        if self._omega_func is None:
             if 'omega' in res_dict:
                 R.V.omega = res_dict['omega']
         else:
-            R.V.omega = omegafunc(*[res_dict[str(i)] for i in omegasymb])
+            R.V.omega = self._omega_func(
+                **{key:res_dict[key] for key in self._omega_symb})
 
-        if taufunc is None:
+        if self._tau_func is None:
             if 'tau' in res_dict:
                 R.V.tau = res_dict['tau']
         else:
-            R.V.tau = taufunc(*[res_dict[str(i)] for i in tausymb])
+            R.V.tau = self._tau_func(
+                **{key:res_dict[key] for key in self._tau_symb})
 
-        if Nfunc is None:
+        if self._N_func is None:
             if 'NormBRDF' in res_dict:
                 R.SRF.NormBRDF = res_dict['NormBRDF']
         else:
-            R.SRF.NormBRDF = Nfunc(*[res_dict[str(i)] for i in Nsymb])
+            R.SRF.NormBRDF = self._N_func(
+                **{key:res_dict[key] for key in self._N_symb})
 
         if 'bsf' in res_dict:
             R.bsf = res_dict['bsf']
+
 
         # remove all unwanted symbols that are NOT needed for evaluation
         # of the fn-coefficients from res_dict to generate a dict that
@@ -1155,6 +1627,9 @@ class Fits(Scatter):
         angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
         vsymb = set(map(str, R.V._func.free_symbols)) - angset
         srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
 
         # exclude all keys that are not needed to calculate the fn-coefficients
         # vsymb and srfsymb must be subtracted in case the same symbol is used
@@ -1171,8 +1646,8 @@ class Fits(Scatter):
         # calculate slope-values
         if return_components is True:
             model_slope = [R.tot_slope(sig0=self.sig0, dB=self.dB),
-                          R.surface_slope(sig0=self.sig0, dB=self.dB),
-                          R.volume_slope(sig0=self.sig0, dB=self.dB)]
+                           R.surface_slope(sig0=self.sig0, dB=self.dB),
+                           R.volume_slope(sig0=self.sig0, dB=self.dB)]
         else:
             model_slope = R.tot_slope(sig0=self.sig0, dB=self.dB)
 
@@ -1184,16 +1659,12 @@ class Fits(Scatter):
         else:
             model_curv = R.tot_curv(sig0=self.sig0, dB=self.dB)
 
-
-        # restore V and SRF to original values
-        R.V = orig_V
-        R.SRF = orig_SRF
-
         return {'slope' : model_slope,
                 'curv' : model_curv}
 
 
-    def _init_V_SRF(self, V_props, SRF_props, setdict=dict()):
+    def _init_V_SRF(self, V_props, SRF_props, setdict=dict(),
+                    V_SRF_Q='V'):
         '''
         initialize a volume and a surface scattering function based on
         a list of dicts
@@ -1218,11 +1689,14 @@ class Fits(Scatter):
             the used volume-scattering function.
         SRF : a function of rt1.surface
             the used surface-scattering function.
-
         '''
-        V_dict = dict()
-        for key, val in V_props.items():
-            if key == 'V_name': continue
+
+        if V_SRF_Q == 'V': props = V_props
+        elif V_SRF_Q == 'SRF': props = SRF_props
+
+        set_dict = dict()
+        for key, val in props.items():
+            if key == 'V_name' or key == 'SRF_name': continue
 
             # check if val is directly provided in setdict, if yes use it
             if val in setdict:
@@ -1244,247 +1718,31 @@ class Fits(Scatter):
                         replacements[val_i] = setdict[str(val_i)]
                 useval = useval.xreplace(replacements)
 
-            V_dict[key] = useval
+            set_dict[key] = useval
 
-        # same for SRF
-        SRF_dict = dict()
-        for key, val in SRF_props.items():
-            if key == 'SRF_name': continue
-            if str(val) in setdict:
-                useval = setdict[str(val)]
-            elif isinstance(val, (int, float, np.ndarray)):
-                useval = val
-            else:
-                useval = sp.sympify(val, _clash)
-                replacements = dict()
-                for val_i in useval.free_symbols:
-                    if str(val_i) in setdict:
-                        replacements[val_i] = setdict[str(val_i)]
-                useval = useval.xreplace(replacements)
-            SRF_dict[key] = useval
+        if V_SRF_Q == 'V':
+            # initialize the volume-scattering function
+            V = getattr(rt1_v, V_props['V_name'])(**set_dict)
+            return V
 
-        # initialize the volume-scattering function
-        V = getattr(rt1_v, V_props['V_name'])(**V_dict)
-        # initialize the surface-scattering function
-        SRF = getattr(rt1_s, SRF_props['SRF_name'])(**SRF_dict)
+        elif V_SRF_Q == 'SRF':
+            # initialize the surface-scattering function
+            SRF = getattr(rt1_s, SRF_props['SRF_name'])(**set_dict)
+            return SRF
 
-        return V, SRF
-
-
-    def monofit(self, V, SRF, dataset, param_dict, bsf=0.,
-                bounds_dict={}, fixed_dict={}, param_dyn_dict={},
-                fn_input=None, _fnevals_input=None, int_Q=True,
-                lambda_backend=_init_lambda_backend, verbosity=2,
-                intermediate_results=False, re_init=False,
-                lsq_kwargs=dict()):
-        '''
-        Perform least-squares fitting of omega, tau, NormBRDF and any
-        parameter used to define V and SRF to sets of monostatic measurements.
-
-        Parameters:
-        ------------
-        V: RT1.volume class object
-            The volume scattering phase-function used to define the fit-model.
-            Attention: if omega and/or tau are set to None, the values
-            provided by V.omega and/or V.tau are used as constants!
-        SRF: RT1.surface class object
-             The surface BRDF used to define the fit-model
-             Attention if NormBRDF is set to None, the values defined by
-             SRF.NormBRDF will be used as constants!
-        dataset: array-like or pandas.DataFrame
-                 - if array-like:
-                   list of input-data and incidence-angles arranged in the form
-                   [[inc_0, data_0], [inc_1, data_1], ...]
-                   where inc_i denotes the incident zenith-angles in radians
-                   and the data_i denotes the corresponding data-values
-                   (If the dataset provided is not rectangular, it will be
-                    rectangularized using the _preparedata()-function.)
-                 - if pandas.DataFrame
-                   pandas-DataFrame with columns ['inc', 'sig', 'orig_index']
-                   and any number of additional columns that represent
-                   auxiliary datasets. The values must be provided as lists!
-        param_dict: dict
-                    A dictionary containing the names of the parameters that
-                    are intended to be fitted together with the desired
-                    startvalues for the fit.
-
-                    possible keys are:
-                        - 'tau' ... to fit the optical depth
-                        - 'omega' ... to fit the single scattering albedo
-                        - 'NormBRDF' ... to fit the normalization-factor of
-                          the brdf
-                        - any string corresponding to a sympy.Symbol object
-                          that has been used in the definition of V and SRF.
-
-                    possible values are:
-                        - None ... the parameters will be excluded in the fit,
-                          and the values provided in V and SRF will
-                          be used as constants.
-                          (alternatively one can just simply not provide the
-                          corresponding key in param_dict)
-                        - array_like(float) ... the provided array must
-                          have the same length as the dataset used for the fit!
-                          If the value is an array, a unique value for the
-                          parameter will be fitted to each measurement, using
-                          the values of the provided array as startvalues.
-                        - scalar(float) ... a single value will be fitted
-                          to all measurements, using the provided value as
-                          startvalue.
-
-        bounds_dict: dict
-                      A dictionary containing the names of the parameters that
-                      are intended to be fitted together with the desired
-                      boundaries for the fit.
-
-                      optional keys are:
-                          - 'tau', 'omega' and 'NormBRDF'. If the keys are
-                            not provided in bounds_dict (but appear
-                            in param_dict), the boundary-values will be set
-                            to: ([0.], [1.]) for all three parameters.
-
-                      requred keys are:
-                          - any string corresponding to sympy.Symbol objects
-                            that have been used in the definition of V and SRF.
-
-                      possible values are:
-                          - if the corresponding value of param_dict is scalar,
-                            the boundary-conditions must be specified as
-                            bounds_dict[key] = ([lower_bound], [upper_bound])
-                            where lower_bound and upper_bound are scalars.
-                          - if the corresponding value of param_dict is an
-                            array, the boundary-conditions must be specified as
-                            bounds_dict[key] = ([lower_bound], [upper_bound])
-                            where lower_bound and upper_bound are arrays of
-                            the same length as the dataset.
-        param_dyn_dict: dict
-                     A dictionary containing the names of the parameters that
-                     are intended to be fitted together with a list of unique
-                     integers for each key, specifying the number of individual
-                     parameters that shall be fitted.
-
-                     For example (Number of measurements = 4):
-
-                         - param_dyn_dict = {'tau' : [1, 2, 3, 4]}
-                           results in 4 distinct values for tau
-                         - param_dyn_dict = {'tau' : [1, 1, 1, 1]}
-                           results in a single value for tau.
-                         - param_dyn_dict = {'tau' : [1, 2, 2, 1]}
-                           results in two values for tau, where the first
-                           value is used in the fit of the fist and last
-                           measurement, and the second value is used in the
-                           fit of the second and third measurement.
-
-                    If param_dyn_dict is not set explicitly ( = {}),
-                    the number of start-values in param_dict will be used to
-                    generate an appropriate dictionary. i.e.:
-
-                        - param_dict = {'tau' : .3}
-                          results in param_dyn_dict = {'tau' : [1, 1, 1, 1]}
-                        - param_dict = {'tau' : [.2, .2, .2, .2]}
-                          results in param_dyn_dict = {'tau' : [1, 2, 3, 4]}
-
-                          (no distinction between equal and varying
-                          start-values is implemented...)
-
-
-        Other Parameters:
-        ------------------
-        fn_input: array-like
-                  a slot for pre-calculated fn-coefficients. if the same model
-                  has to be fitted to multiple datasets, the fn-coefficients
-                  that are returned in the first fit can be used as input for
-                  the second fit to avoid repeated calculations.
-        _fnevals_input: callable
-                        a slot for pre-compiled function to evaluate the
-                        fn-coefficients. Note that once the _fnevals function
-                        is provided, the fn-coefficients are no longer needed
-                        and have no effect on the calculated results!
-        int_Q: bool (default = True)
-               indicator if interaction-terms should be included
-               (Note: they are always ommitted when calculating the jacobian!)
-        lambda_backend: string
-                        select method for generating the _fnevals functions
-                        if they are not provided explicitly.
-                        The default is 'cse_symengine_sympy' if symengine is
-                        installed and 'cse' otherwise.
-        verbosity: int
-                   set verbosity level of rt1-module
-        intermediate_results: bool (default = False)
-                              indicator if intermediate results should be
-                              stored (for analysis purpose only). If True, a
-                              dictionary will be generated that contains
-                              detailed results for each iteration-step of the
-                              fit-procedure. It is structured as follows:
-
-                                   'jacobian': a list of dicts with the
-                                                jacobians for each fitted
-                                                parameter
-
-                                   'errdict': {'abserr' : list of RMSE,
-                                                'relerr' : list of RMSE/data}
-
-                                   'parameters': list of parameter-result
-                                                  dictionaries for each step
-        re_init: bool (default = False)
-                 if re_init is True, all actions EXCEPT the actual fit will
-                 be executed. This re-initializes the Fits object based on the
-                 input in the state as if the fit has already been performed.
-
-        lsq_kwargs: dict (default = {})
-                keyword arguments passed to scipy's least_squares function
-
-        Returns:
-        ---------
-        res_lsq: dict
-                 output of scipy's least_squares function
-        R: RT1-object
-           the RT1-object used to perform the fit
-        data: array-like
-              used dataset for the fit
-        inc: array-like
-             used incidence-angle data for the fit
-        mask: array-like(bool)
-              the masked that needs to be applied to the rectangularized
-              dataset to get the valid entries (see preparedata-function)
-        weights: array-like
-                 the weighting-matrix that has been applied to correct for the
-                 rectangularization of the dataset (see preparedata-function)
-        res_dict: dict
-                  a dictionary containing the fit-results for the parameters
-        start_dict: dict
-                    a dictionary containing the used start-values
-        fixed_dict: dict
-                    a dictionary containing the parameter-values that have been
-                    used as constants during the fit
-        '''
-        # set up the dictionary for storing intermediate results
-        if intermediate_results is True:
-            if not hasattr(self, 'intermediate_results'):
-                self.intermediate_results = {'parameters':[],
-                                             'residuals':[],
-                                             'jacobian':[]}
-
-        # generate a list of the names of the parameters that will be fitted.
-        # (this is necessary to ensure correct broadcasting of values since
-        # dictionarys do)
-        order = [i for i, v in param_dict.items() if v is not None]
-
-        # will be used to assign the values to the individual parameters
-        # (the returned parameters are given as a concatenated array
-        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
-        # values for each parameter
-        splits = np.cumsum([len(np.unique(param_dyn_dict[key]))
-                            for key in order])
-
+    @property
+    @lru_cache()
+    def _repeatdict(self):
         # will be used to re-assign the values to the index of the dataset
         # this procedure is necessary to ensure correct broadcasting in case
         # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
-        from itertools import groupby
 
+        # get and a dict that can be used to re-assign the values for each
+        # fitted parameter
         repeatdict = dict()
-        for key in order:
+        for key in self._order:
             # get the (sorted) unique values and locations in param_dyn_dict
-            dynnr, uniquewhere = np.unique(param_dyn_dict[key],
+            dynnr, uniquewhere = np.unique(self._fit_param_dyn_dict[key],
                                            return_inverse=True)
             # get value positions and number of repetitions to reconstruct an
             # array indexed like the dataset
@@ -1493,127 +1751,69 @@ class Fits(Scatter):
             for i,j in groupby(uniquewhere):
                 repeats[0].append(i)
                 repeats[1].append(sum(1 for x in j))
+
+            # in case all parameters are repeated by the same amount,
+            # return an integer instead of an array of N time the same value
             if len(set(repeats[1])) == 1:
                 repeats[1] = repeats[1][0]
 
             repeatdict[key] = repeats
+        return repeatdict
 
-        # set index
-        self.dataset_used = dataset
-        # generate a datetime-index from the given groups
-        self._setindex(self.setindex)
-        # get a dict of the mean datetime-values for each parameter
-        try:
-            self.meandatetimes = {
-                param: pd.to_datetime(
-                    [meandatetime(val) for key, val in self.index.groupby(
-                        np.repeat(*param_repeat)).items()])
-                for param, param_repeat in repeatdict.items()}
-        except:
-            pass
-        # preparation of data for fitting
-        [inc, data, weights, Nmeasurements,
-         mask, new_fixed_dict] = self._preparedata(dataset)
+    def performfit(self, re_init=False, clear_cache=True,
+                   intermediate_results=False):
+        '''
+        Perform least-squares fitting of omega, tau, NormBRDF and any
+        parameter used to define V and SRF to sets of monostatic measurements.
+        '''
+        # maintain R object during fit
+        R = self.R
 
-        # update 'fixed_dict' with timeseries provided via 'dataset'
-        # ensure that only parameters that are explicitely mentioned in
-        # fixed_dict are passed to the fit-procedure as fixed datasets
-        # (additional columns of 'dataset' do not affect the fit)
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
+            R._clear_cache()
 
-        for key, val in fixed_dict.items():
-            if isinstance(val, str) and val == 'auxiliary':
-                    assert key in new_fixed_dict, \
-                        f"auxiliary data for '{key}' is missing!"
+        # set the number of repetitions (e.g. the max. number of values
+        # encountered in a group)
 
-            if key in new_fixed_dict:
-                fixed_dict[key] = new_fixed_dict[key]
+        # set up the dictionary for storing intermediate results
+        if intermediate_results is True:
+            if not hasattr(self, 'intermediate_results'):
+                self.intermediate_results = {'parameters':[],
+                                             'residuals':[],
+                                             'jacobian':[]}
 
-        # check if tau, omega or NormBRDF is given in terms of sympy-symbols
-        try:
-            tausymb = V.tau.free_symbols
-        except Exception:
-            tausymb = set()
-        try:
-            omegasymb = V.omega.free_symbols
-        except Exception:
-            omegasymb = set()
-        try:
-            Nsymb = SRF.NormBRDF.free_symbols
-        except Exception:
-            Nsymb = set()
+        # will be used to assign the values to the individual parameters
+        # (the returned parameters are given as a concatenated array
+        # of the shape [*p0, *p1, *p2, ...]) where p1,p2,p3 are a list of
+        # values for each parameter
+        splitpos = self.param_dyn_df.nunique()[self._order].to_list()
 
-        toNlist = set(map(str, list(tausymb) + list(omegasymb) + list(Nsymb)))
-
-        # check of general input-requirements
-        # check if all parameters have been provided
-        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, V._func.free_symbols)) - angset
-        srfsymb = set(map(str, SRF._func.free_symbols)) - angset
-
-        paramset = ((set(map(str, param_dict.keys()))
-                     ^ set(map(str, fixed_dict.keys())))
-                    - {'tau', 'omega', 'NormBRDF'})
-
-        assert paramset >= (vsymb | srfsymb), (
-            'the parameters ' +
-            str((vsymb | srfsymb) - paramset) +
-            ' must be provided in param_dict')
-
-        # generate a dict containing only the parameters needed to evaluate
-        # the fn-coefficients
-        param_R = dict(**param_dict, **fixed_dict)
-        param_R.pop('omega', None)
-        param_R.pop('tau', None)
-        param_R.pop('NormBRDF', None)
-        param_R.pop('bsf', None)
-
-        # remove also other symbols that are used in the definitions of
-        # tau, omega and NormBRDF
-        for i in set(toNlist - vsymb - srfsymb):
-            param_R.pop(i)
-
-        # define rt1-object
-        R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
-                V=V, SRF=SRF, fn_input=fn_input, _fnevals_input=_fnevals_input,
-                geometry='mono', bsf = bsf, param_dict=param_R, int_Q=int_Q,
-                lambda_backend=lambda_backend, verbosity=verbosity)
-        # store _fnevals functions in case they have not been provided
-        # as input-arguments explicitly to avoid recalculation for each step
-        R._fnevals_input = R._fnevals
-        # set fn_input to any value except None to avoid re-calculation
-        R.fn_input = 1
-
-        # if param_dyn_dict is not set explicitly, use the number of
-        # start-values provided in param_dict to assign the dynamics of
-        # the parameters (i.e. either constant or varying for each measurement)
-        if param_dyn_dict == {}:
-            for key in param_dict:
-                param_dyn_dict[key] = np.linspace(
-                    1,
-                    len(np.atleast_1d(param_dict[key])),
-                    Nmeasurements)
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
         def fun(params):
-            # generate a dictionary to assign values based on input
-            split_vals = np.split(params, splits)[:-1]
-            newdict = dict()
-            for key, val in zip(order, split_vals):
-                # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                newdict[key] = (val[reloc], rep)
 
+            # generate a dictionary to assign values based on input
+            split_vals = split_into(params, splitpos)
+
+            newdict = dict()
+            for key, val in zip(self._order, split_vals):
+                # value positions and consecutive repetitions
+                reloc, rep = self._repeatdict[key]
+                newdict[key] = ([val[i] for i in reloc], rep)
             # calculate the residuals
-            errs = self._calc_model(R, newdict, fixed_dict).flatten() - data
+            errs = (self._calc_model(R=R,
+                                     res_dict=newdict) - self.data).flatten()
             # incorporate weighting-matrix to ensure correct treatment
-            # of artificially added values (see _preparedata()-function)
-            errs = weights * errs
+            # of artificially added values
+            errs = self.weights * errs
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
-                           'relerr' : errs/data}
+                           'relerr' : errs/self.data}
                 self.intermediate_results['residuals'] += [errdict]
 
             return errs
@@ -1622,35 +1822,36 @@ class Fits(Scatter):
         # function to evaluate the jacobian
         def dfun(params):
             # generate a dictionary to assign values based on input
-            split_vals = np.split(params, splits)[:-1]
+            split_vals = split_into(params, splitpos)
             newdict = dict()
-            for key, val in zip(order, split_vals):
+            for key, val in zip(self._order, split_vals):
                 # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                newdict[key] = (val[reloc], rep)
+                reloc, rep = self._repeatdict[key]
+                newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the jacobian
             # (no need to include weighting matrix in here since the jacobian
             # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R, newdict, fixed_dict, param_dyn_dict, order)
+            jac = self._calc_jac(R=R,
+                                 res_dict=newdict)
 
             return jac
 
 
         # generate list of boundary conditions as needed for the fit
         bounds = [[], []]
-        for key in order:
-            bounds[0] = bounds[0] + list(bounds_dict[key][0])
-            bounds[1] = bounds[1] + list(bounds_dict[key][1])
+        for key in self._order:
+            bounds[0] = bounds[0] + list(self._boundsvaldict[key][0])
+            bounds[1] = bounds[1] + list(self._boundsvaldict[key][1])
 
         # setup the start-value array as needed for the fit
         startvals = []
-        for key in order:
-            if param_dict[key] is not None:
-                if np.isscalar(param_dict[key]):
-                    startvals = startvals + [param_dict[key]]
+        for key in self._order:
+            if self._startvaldict[key] is not None:
+                if np.isscalar(self._startvaldict[key]):
+                    startvals = startvals + [self._startvaldict[key]]
                 else:
-                    startvals = startvals + list(param_dict[key])
+                    startvals = startvals + list(self._startvaldict[key])
 
         # perform the actual fit
         if re_init is True:
@@ -1662,7 +1863,7 @@ class Fits(Scatter):
         else:
             # perform actual fitting
             res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                    jac=dfun, **lsq_kwargs)
+                                    jac=dfun, **self.lsq_kwargs)
 
         # generate a dictionary to assign values based on fit-results
         # split the obtained result with respect to the individual parameters
@@ -1670,232 +1871,24 @@ class Fits(Scatter):
             # split concatenated parameter-results given in res_lsq.x
             # (don't use the last array since it is empty)
 
-            split_vals = np.split(res_lsq.x, splits)[:-1]
-            split_startvals = np.split(res_lsq.x, splits)[:-1]
+            split_vals = split_into(res_lsq.x, splitpos)
 
             res_dict = dict()
-            start_dict = dict()
-            for key, val, startval in zip(order, split_vals, split_startvals):
+            for key, val in zip(self._order, split_vals):
                 # value positions and consecutive repetitions
-                reloc, rep = repeatdict[key]
-                res_dict[key] = [val[reloc], rep]
-                start_dict[key] = [startval[reloc], rep]
+                reloc, rep = self._repeatdict[key]
+                res_dict[key] = ([val[i] for i in reloc], rep)
 
             self.fit_output = res_lsq
             self.res_dict = res_dict
-            self.start_dict = start_dict
+        else:
+            self.res_dict = dict()
+            self.fit_output = None
 
-        # ------------------------------------------------------------------
-        # ------------ prepare output-data for later convenience -----------
-        self.R = R
-        self.fixed_dict = fixed_dict
-        self.res_dict = getattr(self, 'res_dict', dict())
-        self.start_dict = getattr(self, 'start_dict', dict())
-
-
-        # for downward compatibility
-        return [self.fit_output, self.R, self.data, self.inc, self.mask,
-                self.weights, self.res_dict, self.start_dict,
-                self.fixed_dict]
-
-
-    def _set_performfit_dicts(self, defdict=None):
-        '''
-        Generate RT-1 specifications based on the provided "defdict".
-
-        ... used to simplify the model-specification for 'rtfits.performfit()'
-
-        Parameters
-        ----------
-        defdict : dict
-            see documentation of rt1.rtfits.Fits class
-
-        Returns
-        -------
-        list
-            a list of dicts corresponding to:
-
-            [fixed_dict, setdict, startvaldict,
-            timescaledict, boundsvaldict, manual_dyn_df] .
-
-        '''
-        if defdict is None:
-            defdict = self.defdict
-
-        # generate RT1 specifications based on defdict
-        # initialize empty dicts
-        fixed_dict = {}
-        setdict = {}
-        startvaldict = {}
-        timescaledict = {}
-        boundsvaldict = {}
-        manual_dyn_df = None
-        # set parameters
-        for key in defdict.keys():
-            # if parameter is intended to be fitted, assign a sympy-symbol
-            if defdict[key][0] is True:
-                # TODO see why this is actually necessary
-                # omega and tau must not be a sympy-symbol name
-                if key not in ['omega', 'tau']:
-                    setdict[key] = sp.var(key)
-                else:
-                    # a dummy value that will be replaced in rtfits.monofit
-                    setdict[key] = 100
-
-                # set start-values
-                startvaldict[key] = defdict[key][1]
-
-                # set temporal variability
-                if defdict[key][2] == 'manual':
-                    if manual_dyn_df is None: manual_dyn_df = pd.DataFrame()
-                    manual_dyn_df = pd.concat([manual_dyn_df,
-                                               defdict[key][4]], axis=1)
-                elif defdict[key][2] == 'index':
-                    indexdyn = pd.DataFrame({key:1}, self.dataset.index
-                                            ).groupby(axis=0, level=0
-                                                      ).ngroup().to_frame()
-                    indexdyn.columns = [key]
-                    if manual_dyn_df is None:
-                        manual_dyn_df = pd.DataFrame()
-                    manual_dyn_df = pd.concat([manual_dyn_df, indexdyn],
-                                              axis=1)
-                elif defdict[key][2] is not None:
-
-                    timescaledict[key] = defdict[key][2]
-                    try:
-                        manual_dyn_df = pd.concat([manual_dyn_df,
-                                                   defdict[key][4]], axis=1)
-                    except Exception:
-                        pass
-
-                # set boundaries
-                boundsvaldict[key] = defdict[key][3]
-
-            elif defdict[key][0] is False:
-                # treat parameters that are intended to be constants
-                # if value is provided as a scalar, insert it in the definition
-                if isinstance(defdict[key][1], (int, float)) and not \
-                    isinstance(defdict[key][1], bool):
-                    setdict[key] = defdict[key][1]
-                else:
-                    # if value is provided as array, add it to fixed_dict
-                    if key not in ['omega', 'tau']:
-                        # omega and tau must not be a sympy-symbol name
-                        # TODO same as above ...why is this necessary?
-                        # TODO what about 'NormBRDF'?
-                        setdict[key] = sp.var(key)
-                    else:
-                        # a dummy value that will be replaced by rtfits.monofit
-                        setdict[key] = 100
-
-                    if isinstance(defdict[key][1], str) and \
-                        defdict[key][1] == 'auxiliary':
-                        fixed_dict[key] = 'auxiliary'
-                    else:
-                        fixed_dict[key] = defdict[key][1]
-
-        return [fixed_dict, setdict, startvaldict,
-                timescaledict, boundsvaldict, manual_dyn_df]
-
-
-    def performfit(self, dataset=None, defdict=None, set_V_SRF=None,
-                   lsq_kwargs=None, re_init=False, **kwargs):
-        '''
-        Setup a RT-1 specifications and perform a fit based on the provided
-        inputs (dataset, defdict, set_V_SRF and fitsset).
-
-
-        Parameters
-        -----------
-        dataset: pandas.DataFrame
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        defdict: dict
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        set_V_SRF: callable
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        lsq_kwargs: dict
-                 override the attribute of the parent Fits-object.
-                 see docstring of rtfits.Fits for details
-        re_init: bool (default = False)
-                 if re_init is True, all actions EXCEPT the actual fit will
-                 be executed. This re-initializes the Fits object based on the
-                 input in the state as if the fit has already been performed.
-
-        '''
-
-        assert self.setindex in ['mean','first', 'last', 'original'], \
-            "setindex must be either 'mean', 'first', 'last' or 'original'"
-
-        # TODO change to only using rtfits objects!
-        # (i.e. it is not necessary to manually specify defdict etc.)
-        if dataset is None: dataset = self.dataset
-        if defdict is None: defdict = self.defdict
-        if set_V_SRF is None: set_V_SRF = self.set_V_SRF
-        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
-
-        # get dictionary for initialization of fit
-        [fixed_dict, setdict, startvaldict, timescaledict,
-         boundsvaldict, manual_dyn_df] =self._set_performfit_dicts(defdict)
-
-
-        # set V and SRF based on setter-function
-        if callable(set_V_SRF):
-            V, SRF = set_V_SRF(**setdict)
-        elif isinstance(set_V_SRF, dict):
-            V, SRF = self._init_V_SRF(**set_V_SRF,
-                                      setdict=setdict)
-
-        # set frequencies of fitted parameters
-        freq = []
-        freqkeys = []
-        for key in timescaledict:
-            freq += [timescaledict[key]]
-            freqkeys += [[key]]
-
-        dataset_used, param_dyn_dict = self._generatedataset(
-                dataset=dataset, dyn_keys=startvaldict.keys(),
-                freq=freq, freqkeys=freqkeys, manual_dyn_df=manual_dyn_df,
-                fixed_dict=fixed_dict)
-
-
-        # re-shape param_dict and bounds_dict to fit needs
-        param_dict = {}
-        for key in startvaldict:
-            uniqueparams = len(pd.unique(param_dyn_dict[key]))
-            # adjust shape of startvalues
-            if uniqueparams >= 1 and np.isscalar(startvaldict[key]):
-                param_dict[key] = [startvaldict[key]]*uniqueparams
-            else:
-                param_dict[key] = startvaldict[key]
-
-        bounds_dict = {}
-        for key in boundsvaldict:
-            uniqueparams = len(pd.unique(param_dyn_dict[key]))
-            # adjust shape of boundary conditions
-            if uniqueparams >= 1 and len(boundsvaldict[key][0]) == 1:
-                bounds_dict[key] = (boundsvaldict[key][0]*uniqueparams,
-                                    boundsvaldict[key][1]*uniqueparams)
-            else:
-                bounds_dict[key] = (boundsvaldict[key])
-
-        # perform fit
-        self.monofit(V=V, SRF=SRF,
-                     dataset=dataset_used,
-                     param_dict=param_dict,
-                     bsf = setdict.get('bsf', 0.),
-                     bounds_dict=bounds_dict,
-                     fixed_dict=fixed_dict,
-                     param_dyn_dict=param_dyn_dict,
-                     fn_input=None,
-                     _fnevals_input=self._fnevals_input,
-                     int_Q=self.int_Q,
-                     lambda_backend=self.lambda_backend,
-                     re_init=re_init,
-                     lsq_kwargs=self.lsq_kwargs,
-                     **kwargs)
+        # clear the cache (to avoid issues in case re-processing is applied)
+        if clear_cache is True:
+            self._clear_cache()
+            R._clear_cache()
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
@@ -1983,7 +1976,7 @@ class Fits(Scatter):
             if preeval_fn is True:
                 fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                            set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                           lsq_kwargs=lsq_kwargs, setindex=self.setindex)
+                           lsq_kwargs=lsq_kwargs)
                 fit.performfit(re_init=True)
 
                 return fit
@@ -1991,7 +1984,7 @@ class Fits(Scatter):
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
-                       lsq_kwargs=lsq_kwargs, setindex=self.setindex, int_Q=self.int_Q,
+                       lsq_kwargs=lsq_kwargs, int_Q=self.int_Q,
                        lambda_backend=self.lambda_backend,
                        _fnevals_input=self._fnevals_input,
                        interp_vals=self.interp_vals)
@@ -2109,18 +2102,13 @@ class Fits(Scatter):
 
         if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
-            fit = self._evalfunc(reader=reader, reader_arg=reader_args[0],
-                                 lsq_kwargs={'max_nfev':0, 'verbose':2},
-                                 preprocess=None,
-                                 postprocess=None,
-                                 exceptfunc=exceptfunc,
-                                 preeval_fn=True)
-
-            self._fnevals_input = fit.R._fnevals
+            self._fnevals_input = self.R._fnevals
 
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
+
+
                 # loop over the reader_args
                 res = pool.starmap(self._evalfunc,
                                    zip(repeat(reader),
@@ -2191,6 +2179,68 @@ class Fits(Scatter):
         self.performfit(re_init=True)
 
 
+    def calc(self, param, inc, return_components=True,
+                 fixed_param = None):
+        '''
+        evaluate the model with respect to a given set of parameters
+        and incidence-angles.
+
+        Parameters
+        ----------
+        param : dict
+            a dictionary with the parameter-values to be used, provided in
+            the shape
+
+            >>> params = dict(p1 = [1,2], p2 = [3,4], ...)
+
+        inc : array-like
+            a 1d numpy-array of the incidence-angles (in radians) to use
+
+        return_components : bool, optional
+            indicator if only the total backscatter or also the individual
+            backscatter-contributions should be returned.
+            The default is True.
+        fixed_param : dict, optional
+            a dictionary in the same shape as `params` that will be used to
+            assign the values of parameters that are provided as 'auxiliary'
+            datasets. The default is `None`.
+
+        Returns
+        -------
+        res : array-like
+            the calculated backscatter with respect to the parameters
+            if return_components is True, a set of arrays is return
+            corresponding to the backscatter-contributions:
+
+            >>> res = [total, surface, volume, (interaction)]
+
+            where the interaction-contribution is only returned if the `int_Q`
+            parameter is set to `True`.
+
+            if return_components is False, only the total-contribution is
+            returned
+        '''
+
+        R = self.R
+        R.t_0 = np.atleast_2d(inc)
+        R.p_0 = np.full_like(R.t_0, 0.)
+        res_dict = {key:[[val], 1] for key, val in param.items()}
+
+        if fixed_param is None:
+            fixed_param = dict()
+        else:
+            fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                           key, val in fixed_param.items()}
+
+
+        res = self._calc_model(R=R, res_dict=res_dict, fixed_dict=fixed_param,
+                               interp_vals=[],
+                               return_components=return_components)
+
+        return res
+
+
+
 class RT1_configparser(object):
     def __init__(self, configpath):
         # setup config (allow empty values -> will result in None)
@@ -2198,6 +2248,7 @@ class RT1_configparser(object):
         # avoid converting uppercase characters
         # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
+
         # read config file
         self.cfg = self.config.read(configpath)
 
@@ -2208,6 +2259,7 @@ class RT1_configparser(object):
 
         self.fitargs_parse_props = dict(section = 'fits_kwargs',
                                         bool_keys = ['sig0', 'dB', 'int_Q'],
+                                        int_keys= ['verbose'],
                                         list_keys = ['interp_vals'])
 
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
@@ -2245,9 +2297,14 @@ class RT1_configparser(object):
             elif key in bool_keys:
                 val = inp.getboolean(key)
             elif key in list_keys:
-                assert inp[key].startswith('['), f'{key}  must start with "[" '
-                assert inp[key].endswith(']'), f'{key} must end with "]" '
-                val = inp[key][1:-1].replace(' ', '').split(',')
+                #assert inp[key].startswith('['), f'{key}  must start with "[" '
+                #assert inp[key].endswith(']'), f'{key} must end with "]" '
+                #val = inp[key][1:-1].replace(' ', '').split(',')
+                if inp[key] is None:
+                    val = []
+                else:
+                    val = inp[key].replace(' ', '').split(',')
+                    val = [i for i in val if len(i) > 0]
             else:
                 val = inp[key]
 

@@ -19,150 +19,12 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 
-from .general_functions import rectangularize, dBsig0convert
+from .general_functions import rectangularize, dBsig0convert, meandatetime, \
+    pairwise, split_into
 from rt1.rt1 import RT1
 
 # plot of 3d scattering distribution
 #import mpl_toolkits.mplot3d as plt3d
-
-
-def _evalfit(fit, inc=None, return_components=True):
-    '''
-    get backscatter timeseries values from a rtfits.Fits object
-    (possibly replace the incidence-angle array by an alternative one)
-    (used in printsig0analysis)
-
-    Parameters
-    ----------
-    fit : rt1.rtfits.Fits object
-        The fit-object whose backscatter should be returned.
-    inc : array-like, optional
-        The incidence-angles at which the backscatter values are intended
-        to be evaluated. If None, the incidence-angles of the provided
-        fit-object will be used (e.g. fit.R.t_0). The default is None.
-    return_components : bool, optional
-        Indicator if all components (tot, surf, vol, inter) or just the total
-        backscatter should be returned. The default is True.
-
-    Returns
-    -------
-    totsurfvolinter : dict
-        A dict with columns 'inc' and 'tot' ('surf','vol','inter')
-        corresponding to the incidence-angles and the backscatter-values
-        respectively.
-    '''
-
-    if inc is not None:
-        # copy initial values
-        orig_fixed_dict = copy.deepcopy(fit.fixed_dict)
-        orig_t_0 = copy.deepcopy(fit.R.t_0)
-        orig_p_0 = copy.deepcopy(fit.R.p_0)
-
-        assert len(fit.R.t_0) == len(inc), 'inc and fit.R.t_0 must have the ' \
-                                            + 'same length to allow correct ' \
-                                            + 'array-broadcasting'
-
-        fit.R.t_0 = inc
-        fit.R.p_0 = np.full_like(inc, 0.)
-
-        for key, val in fit.fixed_dict.items():
-            if val.shape != inc.shape:
-                print(f'shape {val.shape} of fixed_input for "{key}" does ' +
-                      f'not match shape {inc.shape} of "inc" and is updated')
-                fit.fixed_dict[key] = np.repeat(np.mean(val, axis=1)[:,np.newaxis],
-                                                inc.shape[1], axis=1)
-
-    totsurfvolinter = fit._calc_model(return_components=return_components)
-    if return_components is True:
-        totsurfvolinter = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                   totsurfvolinter))
-    else:
-        totsurfvolinter = dict(tot=totsurfvolinter)
-
-    # get incidence-angles
-    totsurfvolinter['incs'] = fit.R.t_0
-
-    # revert changes to the dicts
-    if inc is not None:
-        fit.fixed_dict = orig_fixed_dict
-        fit.R.t_0 = orig_t_0
-        fit.R.p_0 = orig_p_0
-
-    return totsurfvolinter
-
-
-def _getbackscatter(params=dict(), fit=None, set_V_SRF=None, inc=None,
-                    dB=True, sig0=True, int_Q = False, return_fnevals=False,
-                    **kwargs):
-    '''
-    get backscatter values based on given configuration and parameter values
-    (used in analyzemodel)
-
-    Parameters
-    ----------
-    params : dict
-        A dict containing the values for ALL parameters involved.
-    fit : rt1.rtfits.Fits, optional
-        Optionally provide a fits-object from which `set_V_SRF`, `inc` and
-        `params['bsf']` will be retrieved if not provided explicitly.
-        The default is None.
-    set_V_SRF : callable, optional
-        A setter function for V and SRF. (see rt1.rtfits.Fits for details)
-        The default is None.
-    inc : array-like, optional
-        The incidence-angles to be used in the calculation. The default is None
-    dB : bool, optional
-        Indicator if the values should be returned in linear-units or dB.
-        The default is True.
-    sig0 : bool, optional
-        Indicator if intensity- or sigma-0 values should be returned.
-        ( sig0 = 4 pi cos(theta) I ). The default is True.
-    int_Q : bool, optional
-        Indicator if the interaction-term should be evaluated.
-        The default is False.
-    return_fnevals : bool, optional
-        Indicator if the obtained _fnevals functions should be returned.
-        (if true, the returned dict will contain a key '_fnevals' with
-        the fnevals-function). The default is False.
-    **kwargs :
-        kwargs passed to the initialization of the rt1.RT1 object.
-
-    Returns
-    -------
-    tsvi : dict
-           a dict with keys 'tot', ('surf', 'vol', ('inter'), ('_fnevals'))
-
-    '''
-
-    params = params.copy()
-
-    if fit is not None:
-        if set_V_SRF is None: set_V_SRF = fit.set_V_SRF
-        if 'bsf' not in params: params['bsf'] = fit.R.bsf
-        # get incidence-angle from fit if inc is not provided explicitly
-        if inc is None: inc = copy.deepcopy(fit.inc)
-
-    bsf = params.pop('bsf', 0)
-
-    # set V and SRF
-    if callable(set_V_SRF):
-        V, SRF = set_V_SRF(**params)
-    else:
-        V, SRF = fit._init_V_SRF(**fit.set_V_SRF, setdict=params)
-
-    R = RT1(1., inc, inc, np.zeros_like(inc), np.full_like(inc, np.pi),
-            V=V, SRF=SRF, geometry='mono', bsf = bsf, param_dict=params,
-            int_Q=int_Q, **kwargs)
-
-    tsvi = dict(zip(['tot','surf','vol','inter'], R.calc()))
-
-    # convert to sig0 and dB if required
-    for key, val in tsvi.items():
-        tsvi[key] = dBsig0convert(tsvi[key], inc, dB, sig0, False, False)
-
-    if return_fnevals is True: tsvi['_fnevals'] = R._fnevals
-
-    return tsvi
 
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
@@ -836,7 +698,7 @@ class plot:
         Parameters:
         ------------
         fit : list
-              output of monofit()-function
+              output of performfit()-function
         Other Parameters:
         ------------------
         mima : list
@@ -982,24 +844,20 @@ class plot:
         #     return val
 
         # calculate individual contributions
-        contrib_array = fit._calc_model(R=fit.R,
-                                        res_dict=fit.res_dict,
-                                        fixed_dict=fit.fixed_dict,
-                                        return_components=True)
+        contrib_array = fit._calc_model(return_components=True)
 
         # apply mask and convert to pandas dataframe
-        contrib_array = [np.ma.masked_array(con,
-                                            fit.mask) for con in contrib_array]
+        contrib_array = [np.ma.masked_array(con, fit.mask)
+                         for con in contrib_array]
 
-        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                contrib_array))
+        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'], contrib_array))
 
         contrib['$\\sigma_0$ dataset'] = data
         contrib['inc'] = inc_array
 
-        contrib = {key:pd.DataFrame(val, fit.index).stack().droplevel(1)
-                        for key, val in contrib.items()}
-        contrib = pd.DataFrame(contrib)
+        contrib = pd.DataFrame({key:val.compressed()
+                                for key, val in contrib.items()},
+                               fit.dataset.index)
 
         # convert units
         complist = [i for i in contrib.keys() if i not in ['inc']]
@@ -1318,8 +1176,6 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        # this is done to allow the usage of monofit-outputs as well
-
         if result_selection == 'all':
             result_selection = range(len(fit.data))
 
@@ -1474,15 +1330,15 @@ class plot:
 
     def single_results(self, fit=None, fit_numbers=None, fit_indexes=None,
                     hexbinQ=True, hexbinargs={},
-                    convertTodB=False):
+                    convertTodB=False, datetime_unit='h'):
         '''
         a function to investigate the quality of the individual fits
 
 
         Parameters:
         ------------
-        fit : list
-              output of the monofit()-function
+        fit : rt1.rtfits.Fits object
+              the fit-object to use
         fit_numbers : list
                       a list containing the position of the measurements
                       that should be plotted (starting from 0)
@@ -1511,9 +1367,15 @@ class plot:
         if fit_numbers is not None and fit_indexes is not None:
             assert False, 'please provide EITHER fit_numbers OR fit_indexes!'
         elif fit_indexes is not None:
-            fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
+            #fit_numbers = np.where(fit.index.isin(fit_indexes))[0]
+            fit_numbers = np.argmin(
+                np.abs(fit.fit_index -
+                       np.expand_dims(np.atleast_1d(
+                           np.array(fit_indexes, dtype=fit.index.dtype)),-1)),
+                axis=1)
+
         elif fit_numbers is None and fit_indexes is None:
-            fit_numbers = range(len(fit.index))
+            fit_numbers = [1]
 
         # function to generate colormap that fades between colors
         def CustomCmap(from_rgb, to_rgb):
@@ -1534,7 +1396,8 @@ class plot:
             cmap = LinearSegmentedColormap('custom_cmap', cdict)
             return cmap
 
-        estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+        estimates = fit._calc_model()
+        indexsplits = list(split_into(fit.index, fit._group_repeats))
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1547,7 +1410,19 @@ class plot:
                 y = estimates[m][~fit.mask[m]]
 
             # plot data
-            label = fit.index[m]
+            nindexes = len(indexsplits[m])
+            if nindexes > 1:
+                mindate = np.datetime_as_string(indexsplits[m][0],
+                                                unit=datetime_unit)
+                maxdate = np.datetime_as_string(indexsplits[m][-1],
+                                                unit=datetime_unit)
+                if mindate == maxdate:
+                    label = f'{mindate} [{nindexes}]'
+                else:
+                    label = f'({mindate} - {maxdate}) [{nindexes}]'
+            else:
+                label = np.datetime_as_string(indexsplits[m][0],
+                                              unit=datetime_unit)
 
             xdata = np.rad2deg(fit.inc[m][~fit.mask[m]])
 
@@ -1605,7 +1480,7 @@ class plot:
                              cmaps=None):
         '''
         a function to plot the intermediate-results
-        (the data is only available if rtfits.monofit has been called with
+        (the data is only available if rtfits.performfit has been called with
         the argument intermediate_results=True!)
 
         Parameters:
@@ -1631,10 +1506,15 @@ class plot:
             fit.intermediate_results
         except AttributeError:
             assert False, ('No intermediate results are found, you must run' +
-                           ' monofit() with intermediate_results=True flag!')
+                           ' performfit() with intermediate_results=True flag!')
 
         if params is None:
             params = fit.res_dict.keys()
+
+        # constant parameters
+        constparams = [key for key in params if len(fit.res_dict[key][0]) == 1]
+        # timeseries-parameters
+        tsparams = [i for i in params if i not in constparams]
 
 
         if cmaps is None:
@@ -1646,9 +1526,9 @@ class plot:
         for i, valdict in enumerate(fit.intermediate_results['parameters']):
             for key, val in valdict.items():
                 if key in interparams:
-                    interparams[key] += [[i, np.mean(val)]]
+                    interparams[key] += [[i, np.mean(val[0])]]
                 else:
-                    interparams[key] = [[i, np.mean(val)]]
+                    interparams[key] = [[i, np.mean(val[0])]]
         intererrs = {}
         for i, valdict in enumerate(fit.intermediate_results['residuals']):
             for key, val in valdict.items():
@@ -1670,8 +1550,8 @@ class plot:
 
         interres_params = {}
         for key in params:
-            interres_p = pd.concat([pd.DataFrame(valdict[key],
-                                                 fit.index.drop_duplicates(),
+            interres_p = pd.concat([pd.DataFrame(valdict[key][0],
+                                                 fit.meandatetimes[key],
                                     columns=[i])
                                     for i, valdict in enumerate(
                                             fit.intermediate_results[
@@ -1694,8 +1574,10 @@ class plot:
             jacaxes += [plt.subplot(gs[3,i])]
 
         smhandles, smlabels = [],[]
-        for nparam, [parameter, paramdf] in enumerate(interres_params.items()):
-
+        nparam = 0
+        for [parameter, paramdf] in interres_params.items():
+            # plot only temporally varying parameters as timeseries
+            if parameter not in tsparams: continue
             cmap = plt.get_cmap(cmaps[nparam])
 
             for key, val in paramdf.items():
@@ -1717,35 +1599,58 @@ class plot:
                 boundaries = [0] + cbbounds + [cbbounds[-1]+1],
                 spacing='proportional',
                 norm=mpl.colors.BoundaryNorm(cbbounds, cmap.N))
+            axcb.text(0.51, 0.5, parameter, rotation=90, fontsize=8,
+                      horizontalalignment='center',
+                      verticalalignment='center')
             if nparam > 0: cb.set_ticks([])
 
             smhandles += [mpl.lines.Line2D([],[], color=cmap(.9))]
             smlabels += [parameter]
+            nparam += 1
+
         axsm.legend(handles=smhandles, labels=smlabels, loc='upper left')
 
         axsmbounds = list(axsm.get_position().bounds)
-        axsmbounds[2] = axsmbounds[2] - 0.015*len(interres_params)
+        axsmbounds[2] = axsmbounds[2] - 0.015*nparam
         axsm.set_position(axsmbounds)
 
         for [pax, jax, [key, val]] in zip(paramaxes, jacaxes,
                                           interparams.items()):
             if key not in interjacs: continue
-            pax.plot(*val, label=key, marker='.', ms=3, lw=0.5)
+
+            if key in tsparams:
+                label = f'{key} (mean)'
+            else:
+                label = key
+
+            pax.plot(*val, label=label, marker='.', ms=3, lw=0.5)
             pax.legend(loc='upper center')
-            jax.plot(interjacs[key][0], interjacs[key][1], label=key,
+            jax.plot(interjacs[key][0], interjacs[key][1], label=label,
                      marker='.', ms=3, lw=0.5)
             jax.legend(loc='upper center')
 
+        paramaxes[-1].text(1.03, .5, 'Parameter estimates', rotation=90,
+                           fontweight='bold',
+                           horizontalalignment='left',
+                           verticalalignment='center',
+                           transform=paramaxes[-1].transAxes)
+        jacaxes[-1].text(1.03, .5, 'Jacobi determinant', rotation=90,
+                           fontweight='bold',
+                           horizontalalignment='left',
+                           verticalalignment='center',
+                           transform=jacaxes[-1].transAxes)
+
         for key, val in intererrs.items():
             if key == 'abserr':
-                axerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.',
+                axerr.semilogy(val[0],np.abs(val[1]), label='absolute error', marker='.',
                                ms=3, lw=0.5, c='r')
                 axerr.legend(ncol=5, loc='upper left')
             if key == 'relerr':
                 axrelerr = axerr.twinx()
-                axrelerr.semilogy(val[0],np.abs(val[1]), label=key, marker='.',
+                axrelerr.semilogy(val[0],np.abs(val[1]), label='relative error', marker='.',
                                   ms=3, lw=0.5, c='g')
                 axrelerr.legend(ncol=5, loc='upper right')
+
 
         return f
 
@@ -1842,13 +1747,22 @@ class plot:
         mask = fit.mask
         sig0_vals = fit._calc_model(return_components=True)
 
+
         # apply mask and convert to pandas dataframe
         sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
         sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
 
         sig0_vals['data'] = np.ma.masked_array(data, mask)
         sig0_vals['incs'] = np.ma.masked_array(fit.R.t_0, mask)
-        sig0_vals['indexes'] = fit.index
+
+
+        indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
+        np.take(fit.index, fit._idx_assigns, out=indexes)
+        indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
+        indexes = [meandatetime(i.compressed()) for i in indexes]
+
+        sig0_vals['indexes'] = pd.to_datetime(indexes)#pd.to_datetime(fit.index)
+
 
         # convert to sig0 and dB if necessary
         sig0_vals_I_linear = dict()
@@ -1863,8 +1777,41 @@ class plot:
                                                     dB = False, sig0=False,
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
-            inc = np.array([np.deg2rad(np.arange(1, 89, 1))]*len(fit.index))
-            newsig0_vals = _evalfit(fit, inc)
+            inc=np.deg2rad(np.arange(1, 89, 1))
+
+            # set parameters and auxiliary datasets
+            param = {key: val.mean(axis=1)
+                     for key, val in fit._assignvals(fit.res_dict).items()}
+            aux_keys = [i for i in fit.dataset.keys() if i not in ['inc',
+                                                                   'sig']]
+            if len(aux_keys) > 0:
+                fixed_param = fit.dataset[aux_keys].groupby(level=0).mean()
+                aux_keys = [key for key, val in fit.defdict.items()
+                            if val[0] is False and val[1] == 'auxiliary']
+                newsig0_vals = fit.calc(
+                    param=fit.res_df.reindex(fit.dataset.index), inc=inc,
+                    fixed_param=fit.dataset[aux_keys])
+                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                        newsig0_vals))
+
+                newsig0_vals = {key:np.array(
+                    [val[i[0]:i[1]].mean(axis=0) for i in pairwise(
+                        [0, *np.where(np.diff(fit._groupindex))[0].tolist(),
+                        len(fit._groupindex)])])
+                    for key, val in newsig0_vals.items()}
+            else:
+                fixed_param = dict()
+
+                newsig0_vals = fit.calc(param=param,
+                                        inc=inc,
+                                        fixed_param=fixed_param,
+                                        return_components=True)
+                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                        newsig0_vals))
+
+            newsig0_vals['incs'] = np.broadcast_to(inc,
+                                                   newsig0_vals['tot'].shape)
+
             newsig0_vals_I_linear = dict()
             for key in ['tot', 'surf', 'vol', 'inter']:
                 if key not in newsig0_vals: continue
@@ -2004,21 +1951,25 @@ class plot:
                 newincs = np.rad2deg(newsig0_vals['incs'])
 
                 for day in np.arange(0, dayrange, 1):
-                    linesfull += ax.plot(np.rad2deg(newsig0_vals['incs'][day]),
-                                         newsig0_vals['tot'][day],
+
+                    sortp = np.argsort(newincs[day])
+
+                    linesfull += ax.plot(newincs[day][sortp],
+                                         newsig0_vals['tot'][day][sortp],
                                          **styledict_fullt0_dict['tot'])
                     if printcomponents:
-                        linesfull += ax.plot(newincs[day],
-                                             newsig0_vals['surf'][day],
+                        linesfull += ax.plot(newincs[day][sortp],
+                                             newsig0_vals['surf'][day][sortp],
                                              **styledict_fullt0_dict['surf'])
-                        linesfull += ax.plot(newincs[day],
-                                             newsig0_vals['vol'][day],
+                        linesfull += ax.plot(newincs[day][sortp],
+                                             newsig0_vals['vol'][day][sortp],
                                              **styledict_fullt0_dict['vol'])
                         if fit.R.int_Q is True:
                             linesfull += ax.plot(
-                                newincs[day], newsig0_vals['inter'][day],
+                                newincs[day][sortp],
+                                newsig0_vals['inter'][day][sortp],
                                 **styledict_fullt0_dict['inter'])
-                for day in np.arange(0, dayrange, 1):
+
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
@@ -2026,14 +1977,14 @@ class plot:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
                     lines_frac_full += ax1.plot(
-                        newincs[day], linsurf/lintot,
+                        newincs[day][sortp], (linsurf/lintot)[sortp],
                         **styledict_fullt0_dict['surf'])
-                    lines_frac_full += ax1.plot(newincs[day],
-                                                linvol/lintot,
+                    lines_frac_full += ax1.plot(newincs[day][sortp],
+                                                (linvol/lintot)[sortp],
                                                 **styledict_fullt0_dict['vol'])
                     if fit.R.int_Q is True:
                         lines_frac_full += ax1.plot(
-                            newincs[day], lininter/lintot,
+                            newincs[day][sortp], (lininter/lintot)[sortp],
                             **styledict_fullt0_dict['inter'])
 
             # add unique legend entries
@@ -2104,11 +2055,11 @@ class plot:
 
             styledict_dict = dict(zip(['tot', 'surf', 'vol', 'inter',
                                        'data', 'indicator'],
-                                  [styletot, stylevol, stylesurf, styleinter,
+                                  [styletot, stylesurf, stylevol, styleinter,
                                    styledata, styleindicator]))
             styledict_fullt0_dict = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                      [stylefullt0tot, stylefullt0vol,
-                                       stylefullt0surf, stylefullt0inter]))
+                                      [stylefullt0tot, stylefullt0surf,
+                                       stylefullt0vol, stylefullt0inter]))
 
             lines2, lines_frac2, linesfull2, lines_frac_full2 = plotlines(
                 dayrange2, printcomponents2, printfullt_0, styledict_dict,
@@ -2188,45 +2139,44 @@ class plot:
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
                     if day >= maxdays: continue
-                    linesfull[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    linesfull[i].set_ydata(newsig0_vals['tot'][day])
+                    day_inc_new = np.rad2deg(newsig0_vals['incs'][day])
+                    sortp = np.argsort(day_inc_new)
+
+                    linesfull[i].set_xdata(day_inc_new[sortp])
+                    linesfull[i].set_ydata(newsig0_vals['tot'][day][sortp])
                     i += 1
                     if printcomponents:
-                        linesfull[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        linesfull[i].set_ydata(newsig0_vals['surf'][day])
+                        linesfull[i].set_xdata(day_inc_new[sortp])
+                        linesfull[i].set_ydata(newsig0_vals['surf'][day][sortp])
                         i += 1
-                        linesfull[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        linesfull[i].set_ydata(newsig0_vals['vol'][day])
+                        linesfull[i].set_xdata(day_inc_new[sortp])
+                        linesfull[i].set_ydata(newsig0_vals['vol'][day][sortp])
                         if fit.R.int_Q is True:
                             i += 1
-                            linesfull[i].set_xdata(np.rad2deg(
-                                newsig0_vals['incs'][day]))
-                            linesfull[i].set_ydata(newsig0_vals['inter'][day])
+                            linesfull[i].set_xdata(day_inc_new[sortp])
+                            linesfull[i].set_ydata(newsig0_vals['inter'][day][sortp])
                         i += 1
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
                     if day >= maxdays: continue
+                    day_inc_new = np.rad2deg(newsig0_vals['incs'][day])
+                    sortp = np.argsort(day_inc_new)
+
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
                     if fit.R.int_Q is True:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
-                    lines_frac_full[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    lines_frac_full[i].set_ydata(linsurf/lintot)
+                    lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                    lines_frac_full[i].set_ydata((linsurf/lintot)[sortp])
                     i += 1
-                    lines_frac_full[i].set_xdata(np.rad2deg(
-                        newsig0_vals['incs'][day]))
-                    lines_frac_full[i].set_ydata(linvol/lintot)
+                    lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                    lines_frac_full[i].set_ydata((linvol/lintot)[sortp])
                     if fit.R.int_Q is True:
                         i += 1
-                        lines_frac_full[i].set_xdata(np.rad2deg(
-                            newsig0_vals['incs'][day]))
-                        lines_frac_full[i].set_ydata(lininter/lintot)
+                        lines_frac_full[i].set_xdata(day_inc_new[sortp])
+                        lines_frac_full[i].set_ydata((lininter/lintot)[sortp])
                     i += 1
 
             return lines
@@ -2257,7 +2207,7 @@ class plot:
         a_slider = Slider(slider_ax,            # axes object for the slider
                           'solid lines',        # name of the slider parameter
                           0,                    # minimal value of parameter
-                          len(fit.index) - 1,   # maximal value of parameter
+                          len(fit._idx_assigns) - 1,   # maximal value of parameter
                           valinit=0,            # initial value of parameter
                           valfmt="%i",          # print slider-value as integer
                           valstep=1,
@@ -2296,7 +2246,7 @@ class plot:
             b_slider = Slider(slider_bx,         # axes object for the slider
                               'dashed lines',    # name of the slider parameter
                               0,                 # minimal value of parameter
-                              len(fit.index) - 1,# maximal value of parameter
+                              len(fit._idx_assigns) - 1,# maximal value of parameter
                               valinit=0,         # initial value of parameter
                               valfmt="%i",
                               valstep=1,
@@ -2338,8 +2288,8 @@ class plot:
             return f, a_slider
 
 
-    def analyzemodel(self, fit=None, set_V_SRF=None, defdict=None, inc=None,
-                     labels = dict(), dB=True, sig0=True, int_Q=False,
+    def analyzemodel(self, fit=None, defdict=None, inc=None,
+                     labels = None, dB=True, sig0=True, int_Q=None,
                      fillcomponents=True):
         '''
         Analyze the range of backscatter for a given model-configuration
@@ -2348,17 +2298,16 @@ class plot:
         Parameters
         ----------
         fit : rt1.rtfits.Fits, optional
-            Optionally provide a fits-object from which `set_V_SRF`, `inc` and
-            `params['bsf']` will be retrieved if not provided explicitly.
-            The default is None.
-        set_V_SRF : callable, optional
-            A setter function for V and SRF. (see rt1.rtfits.Fits for details)
+            the fits-object to use
             The default is None.
         defdict : dict, optional
             A defdict used to define the rt1-configuration.
-            (see rt1.rtfits.Fits for details). The default is None.
+            (see rt1.rtfits.Fits for details). If none, the defdict provided
+            in the fits-object will be used. The default is None.
         inc : array-like, optional
-            The incidence-angles to be used in the calculation. The default is None
+            The incidence-angles to be used in the calculation.
+            If None,  `np.deg2rad(np.linspace(1, 89, 100))` is used
+            The default is None
         labels : dict, optional
             A dict with labels that will be used to replace the parameter-names.
             (e.g. {'parameter' : 'parameter_label', ....})
@@ -2383,23 +2332,23 @@ class plot:
         '''
 
         if fit is None:
-            fit = getattr(self, 'fit', None)
+            fit = self.fit
 
-        if fit is not None:
-            res_dict = getattr(fit, 'res_dict', None)
+        res_dict = getattr(fit, 'res_dict', None)
 
-            _fnevals_input = getattr(fit, '_fnevals_input', None)
+        if defdict is None:
+            defdict = fit.defdict
 
-            if defdict is None:
-                defdict = fit.defdict
+        if inc is None:
+            inc = np.deg2rad(np.linspace(1, 89, 100))
 
-        else:
-            _fnevals_input = None
 
-        # number of measurements
-        N_param = 100
+        if labels is None:
+            labels = dict()
 
-        inc = np.array(np.deg2rad(np.linspace(1, 89, N_param)))
+        if int_Q is None:
+            int_Q = fit.int_Q
+
 
         # get parameter ranges from defdict and fit
         minparams, maxparams, startparams, fixparams = {}, {}, {}, {}
@@ -2435,16 +2384,13 @@ class plot:
             startparams['bsf']  = fit.R.bsf
             fixparams['bsf']  = fit.R.bsf
 
-        modelresult = _getbackscatter(fit=fit,
-                                      set_V_SRF=set_V_SRF,
-                                      int_Q=int_Q,
-                                      inc=inc,
-                                      params=startparams,
-                                      dB=dB, sig0=sig0,
-                                      _fnevals_input = _fnevals_input,
-                                      return_fnevals = True)
+        modelresult = dict(zip(['tot','surf','vol','inter'],
+                                fit.calc(startparams, inc=inc)))
+        # convert to sig0 and dB if required
+        for key, val in modelresult.items():
+            modelresult[key] = dBsig0convert(val[0], inc, dB, sig0,
+                                             fit.dB, fit.sig0)
 
-        _fnevals_input = modelresult.pop('_fnevals')
 
         f = plt.figure(figsize=(12,9))
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
@@ -2466,6 +2412,7 @@ class plot:
 
 
         ax = f.add_subplot(gs[0,0:])
+
         paramaxes = {}
         col = 0
         for i, key in enumerate(minparams):
@@ -2508,9 +2455,8 @@ class plot:
 
 
         if dB is True: ax.set_ylim(-35, 5)
-        ax.set_xticks(np.deg2rad(np.arange(5,95, 10)))
-        ax.set_xticklabels(np.arange(5,95, 10))
-
+        ax.xaxis.set_major_locator(plt.MaxNLocator(10))
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x,y: f"{np.rad2deg(x):.1f}"))
         # a legend for the lines
         leg0 = ax.legend(ncol=4, bbox_to_anchor=(.5, 1.1), loc='upper center')
         # add the line-legend as individual artist
@@ -2560,10 +2506,13 @@ class plot:
             #params = copy.deepcopy(startparams)
 
             params[key] = value
-            modelresult = _getbackscatter(fit=fit, set_V_SRF=set_V_SRF,
-                                          int_Q=int_Q, inc=inc,
-                                          params=params, dB=dB, sig0=sig0,
-                                          _fnevals_input = _fnevals_input)
+            modelresult = dict(zip(['tot','surf','vol','inter'],
+                                fit.calc(params, inc=inc)))
+            # convert to sig0 and dB if required
+            for key, val in modelresult.items():
+                modelresult[key] = dBsig0convert(val[0], inc, dB, sig0,
+                                                 fit.dB, fit.sig0)
+
             # update the data
             ltot.set_ydata(modelresult['tot'].T)
             lsurf.set_ydata(modelresult['surf'].T)
@@ -2593,17 +2542,34 @@ class plot:
                     fillparams = params.copy()
                     fillparams[key_i] = minparams[key_i]
 
-                    modelresultmin = _getbackscatter(
-                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
-                        params=fillparams, dB=dB, sig0=sig0,
-                        _fnevals_input = _fnevals_input)
+                    # don't use bsf=1 since no vegetation-term would be present
+                    if fillparams.get('bsf', 0.) == 1.:
+                        fillparams['bsf'] = 0.999
+
+                    modelresultmin = dict(zip(['tot','surf','vol','inter'],
+                                        fit.calc(fillparams, inc=inc)))
+                    # convert to sig0 and dB if required
+                    for key, val in modelresultmin.items():
+                        modelresultmin[key] = dBsig0convert(val[0], inc,
+                                                            dB, sig0,
+                                                            fit.dB, fit.sig0)
+
 
                     fillparams[key_i] = maxparams[key_i]
 
-                    modelresultmax = _getbackscatter(
-                        fit=fit, set_V_SRF=set_V_SRF, int_Q=int_Q, inc=inc,
-                        params=fillparams, dB=dB, sig0=sig0,
-                        _fnevals_input = _fnevals_input)
+                    # don't use bsf=1 since no vegetation-term would be present
+                    if fillparams.get('bsf', 0.) == 1.:
+                        fillparams['bsf'] = 0.999
+
+                    modelresultmax = dict(zip(['tot','surf','vol','inter'],
+                                        fit.calc(fillparams, inc=inc)))
+                    # convert to sig0 and dB if required
+                    for key, val in modelresultmax.items():
+                        modelresultmax[key] = dBsig0convert(val[0], inc,
+                                                            dB, sig0,
+                                                            fit.dB, fit.sig0)
+
+
 
                     legendhandles += [ax.fill_between(
                         inc, modelresultmax['tot'], modelresultmin['tot'],
