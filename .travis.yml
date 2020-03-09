@@ -47,6 +47,7 @@ install:
   - source activate test-environment
   - conda install -c conda-forge python-symengine
   - conda install cloudpickle
+  - conda install pytables
   - conda install -c conda-forge coveralls
   # before the actual installation we test first if existing
   # installation mechanism using PIP and CONDA work
