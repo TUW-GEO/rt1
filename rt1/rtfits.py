@@ -857,8 +857,8 @@ class Fits(Scatter):
                 elif val[2] == 'index':
                     indexdyn = pd.DataFrame({key:1}, self.dataset.index
                                             ).groupby(axis=0, level=0
-                                                      ).ngroup().to_frame()
-                    indexdyn.columns = [key]
+                                                      ).ngroup()
+                    indexdyn.name = key
                     manual_dyn_df[f'{key}'] = indexdyn
 
                 else:
@@ -2257,7 +2257,8 @@ class Fits(Scatter):
                 name = f'{key:<13}'
                 star = f'{val[1]:.10}'.ljust(13)
 
-                if val[2] != 'manual' and f'{key}_dyn' in self.dataset:
+                if (val[2] != 'manual' and self.dataset is not None and
+                    f'{key}_dyn' in self.dataset):
                     vari = f'{str(val[2])} & manual'.ljust(14)
                 elif val[2] is not None:
                     vari = f'{str(val[2]):<14}'

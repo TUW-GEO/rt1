@@ -34,8 +34,8 @@ class rt1_processing_config(object):
         Returns
         -------
         filename : str
-            the file-name that will be used to save the fit dump-files in case the
-            processing was successful
+            the file-name that will be used to save the fit dump-files in case
+            the processing was successful
         error_filename : str
             the file-name that will be used to save the error files in case an
             error occured
