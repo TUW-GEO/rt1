@@ -213,7 +213,7 @@ class Fits(Scatter):
 
     def __init__(self, sig0=False, dB=False, dataset=None,
                  defdict=None, set_V_SRF=None, lsq_kwargs=None, int_Q=True,
-                 lambda_backend=None, _fnevals_input=None, interp_vals=None,
+                 lambda_backend=None, _fnevals_input=None,
                  verbose=2, **kwargs):
 
         self.sig0 = sig0
@@ -232,10 +232,6 @@ class Fits(Scatter):
             self.lambda_backend = _init_lambda_backend
 
         self._fnevals_input = _fnevals_input
-
-        self.interp_vals = copy.deepcopy(interp_vals)
-        if self.interp_vals is None:
-            self.interp_vals = []
 
         self.verbose = verbose
 
@@ -269,10 +265,6 @@ class Fits(Scatter):
             self._fnevals_input = self.lsq_kwargs.pop('_fnevals_input',
                                                       None)
 
-        if not hasattr(self, 'interp_vals'):
-            self.interp_vals = []
-
-
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
@@ -299,8 +291,7 @@ class Fits(Scatter):
         # TODO write proper setters that do the job
         # clear the cache in case it is not empty and a
         # defining variable is set
-        if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF',
-                    'interp_vals']:
+        if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
                 print(f'{attr} has been set, clearing cache')
                 self._clear_cache()
@@ -318,7 +309,7 @@ class Fits(Scatter):
                  'fit_index', '_jac_assign_rule',
                  'meandatetimes', 'inc', 'weights',
                  'data', '_fit_param_dyn_dict', '_idx_assigns',
-                 '_repeatdict', '_order']
+                 '_repeatdict', '_order', 'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -372,6 +363,13 @@ class Fits(Scatter):
 
     @property
     @lru_cache()
+    def interp_vals(self):
+        return [key for key, val in self.defdict.items()
+                if val[0] is True and len(val) == 5 and val[4] is True]
+
+
+    @property
+    @lru_cache()
     def param_dyn_dict(self):
         '''
         get index to assign grouping (with respect to the dataset-index)
@@ -390,16 +388,20 @@ class Fits(Scatter):
                 self._timescaledict.items(), key=itemgetter(1))]
             freq = [i[0] for i in grps]
             freqkeys = [i[1] for i in grps]
-
             param_dyn_dict = {}
             # initialize all parameters as scalar parameters
             for key in dyn_keys:
                 param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
-
             if freq is not None:
                 for i, f in enumerate(freq):
-                    grp_idx = self.dataset.index.to_frame().groupby(
-                                                    pd.Grouper(freq=f))
+                    try:
+                        grp_idx = self.dataset.index.to_frame().groupby(
+                                                        pd.Grouper(freq=f))
+                    except ValueError:
+                        raise ValueError(f'The provided frequency ({f}) of ' +
+                                         f'{freqkeys[i]} is not a valid ' +
+                                         'pandas datetime-offset string. ' +
+                                         'Check the assignments in defdict!')
                     # get unique group indices for each datetime-group
                     for key in freqkeys[i]:
                         grp_data = []
@@ -407,8 +409,9 @@ class Fits(Scatter):
                             grp_data += repeat(nval, len(val))
                         param_dyn_dict[key] = grp_data
 
-            if self._manual_dyn_df is not None:
-                for key, val in self._manual_dyn_df.astype(str).items():
+            manual_dyn_df = self._manual_dyn_df
+            if manual_dyn_df is not None:
+                for key, val in manual_dyn_df.astype(str).items():
                     dd1 = np.char.zfill(
                         np.array(param_dyn_dict[key], dtype='str'),
                         len(max(np.array(param_dyn_dict[key], dtype='str'),
@@ -858,10 +861,10 @@ class Fits(Scatter):
                     indexdyn.columns = [key]
                     manual_dyn_df[f'{key}'] = indexdyn
 
-                elif val[2] is not None:
+                else:
                     if f'{key}_dyn' in self.dataset:
-                        print(f'parameter dynamics {val[2]} and' +
-                              f'dataset[{key}_dyn] combined')
+                        print(f'parameter dynamics ({val[2]}) and ' +
+                              f'"dataset[{key}_dyn]" combined')
                         manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
         if manual_dyn_df.empty:
             return None
@@ -2239,6 +2242,82 @@ class Fits(Scatter):
 
         return res
 
+    @property
+    def model_definition(self):
+
+        fitted, auxiliary, fixed = '', [], []
+
+        fitted += ('     NAME'.ljust(14) + '|     START'.ljust(15) +
+                   '|  VARIABILITY'.ljust(16) + '|    BOUNDS'.ljust(15) +
+                   '| INTERPOLATION'.ljust(15)) + ' |'
+        fitted += '\n'
+
+        for key, val in self.defdict.items():
+            if val[0] is True:
+                name = f'{key:<13}'
+                star = f'{val[1]:<13}'
+
+                if val[2] != 'manual' and f'{key}_dyn' in self.dataset:
+                    vari = f'{str(val[2])} & manual'.ljust(14)
+                elif val[2] is not None:
+                    vari = f'{str(val[2]):<14}'
+                else:
+                    vari = '      -       '
+
+
+                boun = (str(val[3][0][0]) + " - " +
+                        str(val[3][1][0])).ljust(13)
+                try:
+                    inte = f'{str(val[4]):<14}'
+                except:
+                    IndexError
+                    inte = 'False'.ljust(14)
+
+                fitted += (f' {name}| {star}| {vari}| {boun}| {inte}|\n')
+
+            if val[0] is False:
+                if val[1] is 'auxiliary':
+                    auxiliary += [f'| {key}']
+                elif isinstance(val[1], (int, float)):
+                    fixed += [f' {key:<13}= {val[1]}']
+
+        try:
+            vname = self.V.__class__.__name__
+        except Exception:
+            vname = '?'
+        try:
+            srfname = self.SRF.__class__.__name__
+        except Exception:
+            srfname = '?'
+
+        outstr = '-'*77 + '\n'
+        outstr += '# SCATTERING FUNCTIONS ' + '\n'
+
+        outstr += f' Volume: {vname}'.ljust(37) + '|'
+        outstr += f' Surface: {srfname}' + '\n\n'
+        outstr += f'# Interaction-contribution?      {self.int_Q}'+'\n\n'
+
+        outstr += '-'*29 + ' FITTED PARAMETERS ' + '-'*29 + '\n'
+        outstr += fitted + '\n'
+        outstr += ('-'*9 +' FIXED PARAMETERS ' + '-'*10 + '|' +
+                   '-'*10 + ' AUXILIARY DATASETS ' + '-'*9) + '\n'
+
+        naux = len(max([auxiliary, fixed], key=len))
+        for i in range(naux):
+            try:
+                outstr += fixed[i].ljust(37)
+            except IndexError:
+                outstr += ''.ljust(37)
+
+            try:
+                outstr += auxiliary[i].ljust(38)
+            except IndexError:
+                outstr += ''.ljust(38)
+            outstr += '\n'
+        outstr += '-'*77
+
+
+        print(outstr)
 
 
 class RT1_configparser(object):
@@ -2260,7 +2339,7 @@ class RT1_configparser(object):
         self.fitargs_parse_props = dict(section = 'fits_kwargs',
                                         bool_keys = ['sig0', 'dB', 'int_Q'],
                                         int_keys= ['verbose'],
-                                        list_keys = ['interp_vals'])
+                                        list_keys = [])
 
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
                     list_keys=[]):
@@ -2367,6 +2446,16 @@ class RT1_configparser(object):
 
                 parsed_val += [([float(val[3])],
                                 [float(val[4])])]
+
+                try:
+                    interp_Q = val[5]
+                    if val[5] == 'True':
+                        parsed_val += [True]
+                    else:
+                        parsed_val += [False]
+                except:
+                    parsed_val += [False]
+
 
             parsed_dict[key] = parsed_val
 
