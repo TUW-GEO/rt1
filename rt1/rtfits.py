@@ -2255,7 +2255,7 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if val[0] is True:
                 name = f'{key:<13}'
-                star = f'{val[1]:<13}'
+                star = f'{val[1]:.10}'.ljust(13)
 
                 if val[2] != 'manual' and f'{key}_dyn' in self.dataset:
                     vari = f'{str(val[2])} & manual'.ljust(14)
@@ -2265,8 +2265,8 @@ class Fits(Scatter):
                     vari = '      -       '
 
 
-                boun = (str(val[3][0][0]) + " - " +
-                        str(val[3][1][0])).ljust(13)
+                boun = (f'{val[3][0][0]:.5}' + "-" +
+                        f'{val[3][1][0]:.5}').ljust(13)
                 try:
                     inte = f'{str(val[4]):<14}'
                 except:

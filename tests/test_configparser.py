@@ -29,12 +29,12 @@ class TestCONFIGPARSER(unittest.TestCase):
                       'tr_solver': 'lsmr',
                       'x_scale': 'jac'}
 
-        defdict = {'omega': [True, 0.05, '2M', ([0.01], [0.5])],
-                   't_v': [True, 0.25, None, ([0.01], [0.5])],
-                    't_s': [True, 0.25, None, ([0.01], [0.5])],
-                    'N': [True, 0.1, 'index', ([0.01], [0.2])],
-                    'tau': [True, 0.5, '3M', ([0.01], [1.5])],
-                    'bsf': [True, 0.05, 'A', ([0.01], [1.0])],
+        defdict = {'omega': [True, 0.05, '2M', ([0.01], [0.5]), True],
+                   't_v': [True, 0.25, None, ([0.01], [0.5]), False],
+                    't_s': [True, 0.25, None, ([0.01], [0.5]), False],
+                    'N': [True, 0.1, 'index', ([0.01], [0.2]), False],
+                    'tau': [True, 0.5, '3M', ([0.01], [1.5]), True],
+                    'bsf': [True, 0.05, 'A', ([0.01], [1.0]), False],
                     'tau_multip': [False, 0.5]}
 
         set_V_SRF = {'V_props': {'V_name': 'HenyeyGreenstein',
@@ -49,10 +49,8 @@ class TestCONFIGPARSER(unittest.TestCase):
 
         fits_kwargs = {'sig0': True,
                        'dB': False,
-                       'setindex': 'first',
                        'int_Q': False,
                        'lambda_backend': 'symengine',
-                       'interp_vals': ['tau', 'omega'],
                        '_fnevals_input': None,
                        'verbose' : 2}
 
@@ -64,13 +62,9 @@ class TestCONFIGPARSER(unittest.TestCase):
             assert val == configdicts['lsq_kwargs'][key], f'error in lsq_kwargs {key}'
 
         for key, val in defdict.items():
-            assert key in configdicts['defdict'], f'error in defdict {key}'
-            for i, val_i in enumerate(val[:3]):
-                if len(val) <= 2: continue
+            assert key in configdicts['defdict'], f'{key} not in defdict'
+            for i, val_i in enumerate(val):
                 assert val_i == configdicts['defdict'][key][i], f'error in defdict {key}'
-            if len(val) == 4:
-                assert val[-1][0][0] == configdicts['defdict'][key][-1][0][0], f'error in defdict {key}'
-                assert val[-1][1][0] == configdicts['defdict'][key][-1][1][0], f'error in defdict {key}'
 
         for key, val in set_V_SRF.items():
             assert key in configdicts['set_V_SRF'], f'error in set_V_SRF {key}'
