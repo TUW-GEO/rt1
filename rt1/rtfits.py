@@ -334,7 +334,7 @@ class Fits(Scatter):
         if not all(i == 0 for i in self._cached_arg_number):
             for name in self._cached_props:
                 getattr(Fits, name).fget.cache_clear()
-            print('...cache cleared')
+            #print('...cache cleared')
 
 
     def _cache_info(self):
