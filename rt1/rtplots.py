@@ -209,9 +209,9 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                               fc=color, ec=color, lw=1, alpha=0.3)
 
                 polarax.fill_between(thetass, rad, alpha=0.2, color=color)
-                polarax.set_xticklabels(['$0^\circ$', '$45^\circ$',
-                                         '$90^\circ$', '$135^\circ$',
-                                         '$180^\circ$'])
+                polarax.set_xticklabels([r'$0^\circ$', r'$45^\circ$',
+                                         r'$90^\circ$', r'$135^\circ$',
+                                         r'$180^\circ$'])
                 polarax.set_yticklabels([])
                 polarax.set_rmax(pmax * 1.2)
                 polarax.set_title(plabel + '\n')
@@ -223,9 +223,9 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 color = colors[i]
                 legend_lines += [mlines.Line2D(
                     [], [], color=color,
-                    label='$\\theta_0$ = ' + str(
+                    label=r'$\theta_0$ = ' + str(
                         np.round_(np.rad2deg(ti),
-                                  decimals=1)) + '${}^\circ$')]
+                                  decimals=1)) + r'${}^\circ$')]
                 i = i + 1
 
             if paprox is True:
@@ -321,9 +321,9 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                               ec=color, lw=1, alpha=0.3)
 
                 polarax.fill_between(thetass, rad, alpha=0.2, color=color)
-                polarax.set_xticklabels(['$0^\circ$',
-                                         '$45^\circ$',
-                                         '$90^\circ$'])
+                polarax.set_xticklabels([r'$0^\circ$',
+                                         r'$45^\circ$',
+                                         r'$90^\circ$'])
                 polarax.set_yticklabels([])
                 polarax.set_rmax(brdfmax * 1.2)
                 polarax.set_title(BRDFlabel + '\n')
@@ -335,9 +335,9 @@ def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
                 color = colors[i]
                 legend_lines += [
                     mlines.Line2D([], [], color=color,
-                                  label='$\\theta_0$ = ' + str(
+                                  label=r'$\theta_0$ = ' + str(
                         np.round_(np.rad2deg(ti), decimals=1)) +
-                        '${}^\circ$')]
+                        r'${}^\circ$')]
                 i = i + 1
             if BRDFaprox is True:
                 legend_lines += [mlines.Line2D([], [], color='k',
