@@ -23,8 +23,9 @@ For a basic install, the following line should be fine:
 
     pip install rt1
 
-In order to get a speedup in the symbolic computations,
-the module can be installed with the optional symengine-dependency, i.e.:
+In order to get a significant speedup in the symbolic computations,
+it is recommended to install the module with the optional
+symengine-dependency, i.e.:
 
     pip install rt1[symengine]
 
