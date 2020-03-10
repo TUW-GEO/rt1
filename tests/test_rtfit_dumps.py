@@ -53,12 +53,15 @@ class TestDUMPS(unittest.TestCase):
 
             for function_name in method_list:
                 print(f'... {function_name}')
-                f = fit.plot.__getattribute__(function_name)()
                 if function_name == 'printsig0analysis':
+                    f = fit.plot.__getattribute__(function_name)(
+                        secondslider=True, dayrange2=1)
                     plt.close(f[0])
                 elif function_name == 'analyzemodel':
+                    f = fit.plot.__getattribute__(function_name)()
                     plt.close(f[0])
                 else:
+                    f = fit.plot.__getattribute__(function_name)()
                     plt.close(f)
 
     def test_performfit(self):
