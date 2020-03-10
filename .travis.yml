@@ -67,7 +67,7 @@ install:
 script:
 #  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
-  - coverage run --concurrency=multiprocessing -m pytest
+  - coverage run -m pytest
 
 after_success:
   - coveralls
