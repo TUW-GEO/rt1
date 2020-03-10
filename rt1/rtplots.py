@@ -566,8 +566,8 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         BRDF = R.SRF.brdf
 
         try:
-            Nsymb = R.SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF[0],
+            Nsymb = R.SRF.NormBRDF.free_symbols
+            Nfunc = sp.lambdify(Nsymb, R.SRF.NormBRDF,
                                 modules=['numpy'])
             NormBRDF = Nfunc(*[param_dict[str(i)] for i in Nsymb])
         except Exception:
@@ -576,7 +576,7 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         BRDF = SRF.brdf
         try:
             Nsymb = SRF.NormBRDF[0].free_symbols
-            Nfunc = sp.lambdify(Nsymb, SRF.NormBRDF[0],
+            Nfunc = sp.lambdify(Nsymb, SRF.NormBRDF,
                                 modules=['numpy'])
             NormBRDF = Nfunc(*[param_dict[str(i)] for i in Nsymb])
         except Exception:
@@ -630,12 +630,12 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
         if len(sol.shape) > 1:
             for i, sol in enumerate(sol):
                 axnum.plot(incnum, sol,
-                           label='NormBRDF = ' + str(NormBRDF[i][0]))
+                           label='NormBRDF = ' + str(NormBRDF[i]))
                 if showpoints is True:
                     axnum.plot(incnum, sol, 'r.')
         else:
             axnum.plot(incnum, sol, 'k',
-                       label='NormBRDF = ' + str(NormBRDF[0]))
+                       label='NormBRDF = ' + str(NormBRDF))
             if showpoints is True:
                 axnum.plot(incnum, sol, 'r.')
 

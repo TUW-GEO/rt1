@@ -8,6 +8,7 @@ import sys
 sys.path.append('..')
 from rt1.volume import Volume
 from rt1.volume import Rayleigh,HenyeyGreenstein
+import matplotlib.pyplot as plt
 
 
 class TestVolume(unittest.TestCase):
@@ -45,6 +46,11 @@ class TestVolume(unittest.TestCase):
         self.assertEqual(V._get_legcoef(0),1./(4.*np.pi))
         self.assertEqual(V._get_legcoef(1),3.*0.7/(4.*np.pi))
 
+
+    def test_polarplot_V(self):
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        pl = V.polarplot()
+        plt.close(pl)
 
 if __name__ == "__main__":
     unittest.main()

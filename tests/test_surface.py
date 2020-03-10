@@ -12,7 +12,7 @@ sys.path.append('..')
 from rt1.surface import Isotropic, CosineLobe, HenyeyGreenstein
 from scipy import special as sc
 # import sympy as sp
-
+import matplotlib.pyplot as plt
 
 class TestSurface(unittest.TestCase):
 
@@ -114,6 +114,15 @@ class TestSurface(unittest.TestCase):
             H = HenyeyGreenstein(t=0, ncoefs=5)
             self.assertTrue(np.allclose(H.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
+
+
+    def test_hemreflect_polarplot_SRF(self):
+        SRF = HenyeyGreenstein(t=0.5, ncoefs=15, NormBRDF=.3)
+        pl = SRF.polarplot()
+        plt.close(pl)
+
+        pl = SRF.hemreflect()
+        plt.close(pl)
 
 
 if __name__ == "__main__":
