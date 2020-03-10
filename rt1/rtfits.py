@@ -133,7 +133,7 @@ class Fits(Scatter):
                     select method for generating the _fnevals functions
                     if they are not provided explicitly and int_Q is True
                     The default is 'symengine' if symengine is installed and
-                    'cse' otherwise.
+                    'sympy' otherwise.
     _fnevals_input: callable, optional
                     pre-evaluated functions used for evaluating the
                     interaction-term
