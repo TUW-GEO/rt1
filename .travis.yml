@@ -65,7 +65,7 @@ install:
   # - conda uninstall -c conda-forge rt1
 
 script:
-  - nosetests -v --nocapture --with-coverage --cover-package=rt1  # -s to see print-output from nosetests
+  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
 after_success:
   - coveralls
