@@ -7,7 +7,7 @@ test examples given in paper by comparison against reference solution
 from __future__ import print_function
 
 
-from nose.tools import nottest
+#from nose.tools import nottest
 
 import unittest
 import numpy as np
@@ -34,7 +34,7 @@ class TestExamples(unittest.TestCase):
         #~ self.cc = x[:,4]
         self.step = 1
 
-    @nottest
+    #@nottest
     def test_example1_fn(self):
         S = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)  # somehow this is only working for ncoefs=1 at the moment!
         V = Rayleigh(tau=0.7, omega=0.3)
@@ -73,7 +73,7 @@ class TestExamples(unittest.TestCase):
 
                 #~ todo hier weiter
 
-    @nottest
+    #@nottest
     def test_example1_Fint(self):
         # backscatter case
         S = CosineLobe(ncoefs=10, i=5, NormBRDF = np.pi)
