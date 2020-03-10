@@ -68,6 +68,6 @@ script:
 #  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
   - coverage run -m pytest
-  - coverage combine # combine coverage reports from multiprocessing
+  #- coverage combine --append || true # combine coverage reports from multiprocessing
 after_success:
   - coveralls
