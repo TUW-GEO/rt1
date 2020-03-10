@@ -43,7 +43,7 @@ install:
 
   # nose must be installed explicitly to ensure that the virtual conda-environment is used within the tests
   # (otherwise import-errors will occur for non-standard packages like scipy sympy and symengine)
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib pytest numpy sympy scipy pandas
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib pytest pytest-cov numpy sympy scipy pandas
   - source activate test-environment
   - conda install -c conda-forge python-symengine
   - conda install cloudpickle
@@ -67,7 +67,6 @@ install:
 script:
 #  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
-  - coverage run -m pytest
-  - coverage combine --append || true # combine coverage reports from multiprocessing
+  - pytest --cov=rt1 tests/
 after_success:
   - coveralls
