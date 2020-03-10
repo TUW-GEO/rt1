@@ -67,6 +67,6 @@ install:
 script:
 #  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
-  - pytest --cov=rt1 tests/
+  - pytest --cov=rt1
 after_success:
   - coveralls
