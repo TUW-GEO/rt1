@@ -33,6 +33,7 @@ install:
     fi
   - bash miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
+  - export PYTHONPATH="."
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
 
@@ -43,7 +44,7 @@ install:
 
   # nose must be installed explicitly to ensure that the virtual conda-environment is used within the tests
   # (otherwise import-errors will occur for non-standard packages like scipy sympy and symengine)
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib nose numpy sympy scipy pandas
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION matplotlib pytest pytest-cov numpy sympy scipy pandas
   - source activate test-environment
   - conda install -c conda-forge python-symengine
   - conda install cloudpickle
@@ -65,7 +66,8 @@ install:
   # - conda uninstall -c conda-forge rt1
 
 script:
-  - nosetests -v --nocapture --with-coverage --cover-package=rt1  # -s to see print-output from nosetests
+#  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
 
+  - pytest --cov=rt1
 after_success:
   - coveralls
