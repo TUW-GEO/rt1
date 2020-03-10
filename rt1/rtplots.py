@@ -2520,7 +2520,7 @@ class plot:
             if int_Q is True: lint.set_ydata(modelresult['inter'].T)
 
             # poverprint boundaries
-            hatches = ['//', '\\\ ', '+', 'oo', '--', '..']
+            hatches = [r'//', r'\\ ', '+', 'oo', '--', '..']
             colors = ['C' + str(i) for i in range(10)]
             ax.collections.clear()
             legendhandles = []
