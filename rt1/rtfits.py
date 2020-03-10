@@ -2120,7 +2120,8 @@ class Fits(Scatter):
                                        repeat(preprocess),
                                        repeat(postprocess),
                                        repeat(exceptfunc)))
-
+                pool.close()  # Marks the pool as closed.
+                pool.join()   # Waits for workers to exit.
         else:
             print('start of single-core evaluation')
             res = []
