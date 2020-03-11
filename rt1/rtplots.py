@@ -21,8 +21,6 @@ from matplotlib.gridspec import GridSpecFromSubplotSpec
 
 from .general_functions import rectangularize, dBsig0convert, meandatetime, \
     pairwise, split_into
-from rt1.rt1 import RT1
-
 
 
 def polarplot(R=None, SRF=None, V=None, incp=[15., 35., 55., 75.],
