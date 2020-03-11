@@ -7,3 +7,6 @@ global-include *.md
 global-include setup.cfg
 prune doc
 prune tests
+
+prune _additional_and_old_scripts
+prune rt1/rtread

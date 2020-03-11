@@ -10,19 +10,15 @@ from setuptools import setup
 from setuptools import find_packages
 
 
-def get_packages():
-    find_packages(exclude=['contrib', 'docs', 'tests*']),
-    return find_packages()
-
-
 setup(name='rt1',
 
       version='v0.0.4',
 
       description='RT1 - bistatic single scattering radiative transfer model',
 
-      packages=get_packages(),
+      packages=['rt1'],
       package_dir={'rt1': 'rt1'},
+      include_package_data=False,
 
       author="Raphael Quast",
       author_email='raphael.quast@geo.tuwien.ac.at',
