@@ -2318,6 +2318,16 @@ class Fits(Scatter):
             outstr += '\n'
         outstr += '-'*77
 
+        # write least-squares keywords (maintain order)
+        lsqkw = self.lsq_kwargs
+        keys = [*lsqkw.keys()]
+        if len(lsqkw) > 0:
+            outstr += '\n# LSQ PARAMETERS ' + '\n'
+            for key1, key2 in zip(keys[:(len(keys) + 1)//2],
+                                  keys[(len(keys) + 1)//2:]):
+                outstr += f' {key1:<15}= {lsqkw[key1]}'.ljust(37) + \
+                          f'  {key2:<15}= {lsqkw[key2]}' + '\n'
+            outstr += '-'*77
 
         print(outstr)
 
