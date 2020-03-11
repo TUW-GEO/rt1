@@ -37,8 +37,8 @@ setup(name='rt1',
                         'parameter-inversion of incidence-angle dependent ' +
                         'backscatter observations based on a first-order ' +
                         'radiative-transfer model describing a rough surface' +
-                        ' covered by a homogeneous layer of scattering media.'
-                        ),
+                        'covered by a homogeneous layer of scattering' +
+                        'media.'),
 
       install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2",
                         "pandas>=0.24", "matplotlib>=3.0"],
