@@ -110,6 +110,10 @@ class TestDUMPS(unittest.TestCase):
             fit = self.load_data(path)
             fit.lsq_kwargs = lsq_kwargs
             old_results = copy.deepcopy(fit.res_dict)
+
+            # print model definition
+            fit.model_definition
+
             print('testing performfit')
             fit.performfit()
 

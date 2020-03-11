@@ -211,6 +211,10 @@ class TestRTfits(unittest.TestCase):
                        setindex='mean',
                        int_Q=True, verbose=2)
 
+        # print model definition
+        testfit.model_definition
+
+        # perform the fit
         testfit.performfit()
 
         # check if _calc_slope_curv is working
