@@ -365,7 +365,7 @@ class Fits(Scatter):
     @lru_cache()
     def interp_vals(self):
         return [key for key, val in self.defdict.items()
-                if val[0] is True and len(val) == 5 and val[4] is True]
+                if val[0] is True and len(val) >= 5 and val[4] is True]
 
 
     @property
