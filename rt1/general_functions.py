@@ -6,6 +6,7 @@ helper functions that are used both in rtfits and rtplots
 import numpy as np
 import pandas as pd
 import datetime
+from itertools import tee
 
 def rectangularize(array, weights_and_mask=False, dim=None,
                    return_masked=False):
@@ -112,12 +113,96 @@ def meandatetime(datetimes):
               the center-date
     '''
 
-    if np.count_nonzero(datetimes) == 1:
+    if len(datetimes) == 1:
         return datetimes[0]
 
-    x = pd.to_datetime(datetimes)
+    #x = pd.to_datetime(datetimes)
+    x = datetimes
     deltas = (x[0] - x[1:])/len(x)
-    meandelta = sum(deltas, datetime.timedelta(0))
+    #meandelta = sum(deltas, datetime.timedelta(0))
+    meandelta = sum(deltas)
     meandate = x[0] - meandelta
     return meandate
 
+
+def dBsig0convert(val, inc,
+                  dB, sig0,
+                  fitdB, fitsig0):
+    '''
+    A convenience-function to convert an array of measurements (and it's
+    associated incidence-angles).
+        - between linear- and dB units   `( val_dB = 10 * log10(val_linear) )`
+        - between sigma0 and intensity   `( sig0 = 4 * pi * cos(inc) * I )`
+
+    Parameters:
+    ----------------
+
+    val: array-like
+         the backscatter-values that should be converted
+    inc: array-like
+         the associated incidence-angle values (in radians)
+    dB: bool
+        indicator if the output-dataset should be in dB or not
+    sig0: bool
+          indicator if the output-values should be intensity or sigma_0
+    fitdB: bool
+           indicator if the input-values have been provided in linear-units
+           or in dB
+    fitsig0: bool
+           indicator if the input-values are given as sigma0 or intensity
+
+    Returns:
+    ---------
+    val : array-like
+          the converted values
+
+    '''
+
+    if sig0 is not fitsig0:
+        # if results are provided in dB convert them to linear units before
+        # applying the sig0-intensity conversion
+        if fitdB is True:
+            val = 10**(val/10.)
+        # convert sig0 to intensity
+        if sig0 is False and fitsig0 is True:
+            val = val/(4.*np.pi*np.cos(inc))
+        # convert intensity to sig0
+        if sig0 is True and fitsig0 is False:
+            val = 4.*np.pi*np.cos(inc)*val
+        # convert back to dB if required
+        if dB is True:
+            val = 10.*np.log10(val)
+    elif dB is not fitdB:
+        # if dB output is required, convert to dB
+        if dB is True and fitdB is False:
+            val = 10.*np.log10(val)
+        # if linear output is required, convert to linear units
+        if dB is False and fitdB is True:
+            val = 10**(val/10.)
+
+
+    return val
+
+# taken from https://docs.python.org/3.7/library/itertools.html
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+
+from itertools import islice
+def split_into(iterable, sizes):
+    """
+    a generator that splits the iterable into iterables with the given sizes
+
+    see more_itertools split_into for details:
+    https://more-itertools.readthedocs.io/en/stable/api.html#more_itertools.split_into
+    """
+    it = iter(iterable)
+    for size in sizes:
+        if size is None:
+            yield list(it)
+            return
+        else:
+            yield list(islice(it, size))

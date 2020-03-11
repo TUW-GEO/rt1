@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/TUW-GEO/rt1.svg?branch=master)](https://travis-ci.org/TUW-GEO/rt1) [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/)
+[![Build Status](https://travis-ci.org/TUW-GEO/rt1.svg?branch=dev)](https://travis-ci.org/TUW-GEO/rt1) [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/) [![Coverage Status](https://coveralls.io/repos/github/TUW-GEO/rt1/badge.svg?branch=dev)](https://coveralls.io/github/TUW-GEO/rt1?branch=dev)
 
 # RT1 - bistatic scattering model for first order scattering of random media
 
@@ -23,8 +23,9 @@ For a basic install, the following line should be fine:
 
     pip install rt1
 
-In order to get a speedup in the symbolic computations,
-the module can be installed with the optional symengine-dependency, i.e.:
+In order to get a significant speedup in the symbolic computations,
+it is recommended to install the module with the optional
+symengine-dependency, i.e.:
 
     pip install rt1[symengine]
 

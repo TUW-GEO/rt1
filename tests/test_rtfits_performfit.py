@@ -3,8 +3,7 @@ Test the fits-module by generating a dataset and fitting the model to itself
 
 
 This is the very same test as test_rtfits but it uses the
-rtfits.performfit-wrapper instead of the monofit() function directly
-
+rtfits.performfit-wrapper
 """
 
 import unittest
@@ -152,7 +151,8 @@ class TestRTfits(unittest.TestCase):
         dfinc = [j for i, inc_i in enumerate(inc) for j in inc_i[selects[i]]]
         dfsig = [j for i, data_i in enumerate(data) for j in data_i[selects[i]]]
 
-        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig}, index=pd.to_datetime(dfindex, unit='D'))
+        dataset = pd.DataFrame({'inc':dfinc, 'sig':dfsig},
+                               index=pd.to_datetime(dfindex, unit='D'))
         # ---------------------------------------------------------------------
         # ------------------------------- FITTING -----------------------------
 
@@ -162,20 +162,15 @@ class TestRTfits(unittest.TestCase):
             return V, SRF
 
 
-        # specify additional arguments for scipy.least_squares and rtfits.monofit
-        fitset = {
-                'int_Q': True,
-                '_fnevals_input': None,
-                'verbose': 2,
+        # specify additional arguments for scipy.least_squares
+        lsq_kwargs = {
                 'ftol': 1e-8,
                 'gtol': 1e-8,
                 'xtol': 1e-8,
                 'max_nfev': 500,
                 'method': 'trf',
                 'tr_solver': 'lsmr',
-                'x_scale': 'jac',
-                'intermediate_results':False,
-                'setindex' : 'mean'}
+                'x_scale': 'jac'}
 
 
 
@@ -190,24 +185,42 @@ class TestRTfits(unittest.TestCase):
 
         # fit only a single parameter to the datasets that have equal tau
         _, fittau_dyn = np.unique(dataset.index, return_inverse=True)
-        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
-        manual_tau_dyn = pd.DataFrame({'tau':fittau_dyn}, dataset.index)
+        fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)] = \
+            fittau_dyn[np.isin(fittau_dyn, equal_tau_selects)][0]
+        # add manual parameter dynamics for tau
+        dataset['tau_dyn'] = fittau_dyn
 
         # specify the treatment of the parameters in the retrieval procedure
         defdict = {
                     't1': [True, tstart, 'D', ([tmin], [tmax])],
-                    'N': [False, pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]],
-                    'tau': [True, taustart, 'manual', ([taumin], [taumax]), manual_tau_dyn],
+                    'N': [False, 'auxiliary'],
+                    'tau': [True, taustart, 'manual', ([taumin], [taumax])],
                     'omega': [True, ostart, None, ([omin], [omax])],
                     'bsf':[False, 0.]
                     }
+
+        # append auxiliary datasets
+
+        N_auxdata = pd.DataFrame({'N':rdata}, pd.unique(dataset.index)).loc[dataset.index]
+        dataset['N'] = N_auxdata
+
         # initialize fit-class
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
-                       set_V_SRF=set_V_SRF,)
+                       set_V_SRF=set_V_SRF, lsq_kwargs=lsq_kwargs,
+                       setindex='mean',
+                       int_Q=True, verbose=2)
 
-        testfit.performfit(**fitset)
+        # print model definition
+        testfit.model_definition
 
+        # perform the fit
+        testfit.performfit()
+
+        # check if _calc_slope_curv is working
+        # TODO this only tests if a result is obtained, not if the result
+        # is actually correct !!
+        slops, curvs = testfit._calc_slope_curv()
 
         # provide true-values for comparison of fitted results
         truevals = {'tau': taudata,
@@ -222,7 +235,6 @@ class TestRTfits(unittest.TestCase):
         # sicne fit[0].fun gives the residuals weighted with respect to
         # weights, the model calculation can be gained via
         # estimates = fit[0].fun/weights + measurements
-
         estimates = np.reshape(
                     testfit.fit_output.fun/testfit.weights, testfit.data.shape)
 
@@ -237,7 +249,7 @@ class TestRTfits(unittest.TestCase):
         r2 = r_value**2
 
         # check if r^2 between original and fitted data is > 0.95
-        self.assertTrue(r2 > 0.95, msg='r^2 condition not  met')
+        self.assertTrue(r2 > 0.95, msg=f'r^2 condition not  met , R={r2:4f}')
 
         # set mean-error values for the derived parameters
         if sig0 is True and dB is False:
@@ -261,7 +273,7 @@ class TestRTfits(unittest.TestCase):
                        't1': 0.09}
 
         for key in truevals:
-            err = abs(testfit.res_dict[key] - truevals[key]).mean()
+            err = abs(np.repeat(*testfit.res_dict[key]) - truevals[key]).mean()
             self.assertTrue(
                 err < errdict[key],
                 msg='derived error' + str(err) + 'too high for ' + str(key))
