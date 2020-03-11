@@ -9,10 +9,13 @@ sys.path.append('..')
 # from rt1.volume import Rayleigh
 # from rt1.rt1 import RT1
 
-from rt1.surface import Isotropic, CosineLobe, HenyeyGreenstein
+from rt1.surface import Isotropic, CosineLobe, HenyeyGreenstein, LinCombSRF, \
+    HG_nadirnorm
 from scipy import special as sc
 # import sympy as sp
 import matplotlib.pyplot as plt
+from scipy.integrate import simps
+from itertools import product
 
 class TestSurface(unittest.TestCase):
 
@@ -114,6 +117,36 @@ class TestSurface(unittest.TestCase):
             H = HenyeyGreenstein(t=0, ncoefs=5)
             self.assertTrue(np.allclose(H.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
+
+
+            LCH = LinCombSRF([[.5, HenyeyGreenstein(t=0, ncoefs=5)],
+                              [.5, HenyeyGreenstein(t=0, ncoefs=5)]])
+            self.assertTrue(np.allclose(LCH.brdf(t_0[i], t_ex[i], p_0, p_ex),
+                                        1. / np.pi))
+
+    def test_HGnadirnorm_norm(self):
+
+        def hemreflect(theta_0, phi_0, BRDF, simps_N=100):
+            x = np.linspace(0., np.pi / 2., simps_N)
+            y = np.linspace(0., 2 * np.pi, simps_N)
+
+            def integfunkt(theta_s, phi_s):
+                return np.sin(theta_s) * np.cos(theta_s) * BRDF(
+                    theta_0, theta_s, phi_0, phi_s)
+            # evaluate the integral using Simpson's Rule twice
+            z = integfunkt(x[:, None], y)
+            return simps(simps(z, y), x)
+
+
+        for t in [.1,.2,.3,.4,.5,.6,.7]:
+            H_nad = HG_nadirnorm(t=t, ncoefs=10)
+
+            nadirnorm = hemreflect(0, 0, H_nad.brdf)
+
+            self.assertTrue(np.allclose(nadirnorm, 1.))
+
+
+
 
 
     def test_hemreflect_polarplot_SRF(self):
