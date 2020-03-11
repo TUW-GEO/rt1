@@ -2278,11 +2278,10 @@ class Fits(Scatter):
                 fitted += (f' {name}| {star}| {vari}| {boun}| {inte}|\n')
 
             if val[0] is False:
-                if val[1] is 'auxiliary':
+                if val[1] == 'auxiliary':
                     auxiliary += [f'| {key}']
                 elif isinstance(val[1], (int, float)):
                     fixed += [f' {key:<13}= {val[1]}']
-
         try:
             vname = self.V.__class__.__name__
         except Exception:
