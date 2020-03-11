@@ -7,7 +7,7 @@ import sys
 
 sys.path.append('..')
 from rt1.volume import Volume
-from rt1.volume import Rayleigh, HenyeyGreenstein, HGRayleigh
+from rt1.volume import Rayleigh, HenyeyGreenstein, HGRayleigh, LinCombV
 import matplotlib.pyplot as plt
 from scipy.integrate import simps
 from itertools import product
@@ -77,7 +77,11 @@ class TestVolume(unittest.TestCase):
         V2 = HGRayleigh(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         V3 = Rayleigh(omega=0.2, tau=1.7)
 
-        for V in [V1,V2,V3]:
+        V4 = LinCombV([[.5, Rayleigh()],
+                      [.5, HenyeyGreenstein(t=0.7,ncoefs=20)]],
+                     omega=0.2, tau=1.7)
+
+        for V in [V1,V2,V3,V4]:
             # set incident (zenith-angle) directions for which the integral
             # should be evaluated!
             incnum = np.linspace(0, np.pi, 5)
@@ -104,7 +108,33 @@ class TestVolume(unittest.TestCase):
                 z = integfunkt(x[:, None], y)
                 sol += [simps(simps(z, y), x)]
 
-            self.assertTrue(np.allclose(sol, 1.))
+                self.assertTrue(np.allclose(sol, 1.))
+
+
+
+    def test_LinCombV(self):
+        Vr= Rayleigh(omega=0.2, tau=1.7)
+        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+
+        V = LinCombV([[.5, Vr],
+                      [.5, Vhg]], omega=0.2, tau=1.7)
+
+
+        Vr= Rayleigh(omega=0.2, tau=1.7)
+        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+
+        incnum = np.linspace(0, np.pi, 3)
+        pincnum = np.linspace(0, 2*np.pi, 3)
+
+        for t_0, t_ex, p_0, p_ex in product(incnum, pincnum,
+                                            incnum, pincnum):
+
+            p = V.p(t_0, t_ex, p_0, p_ex)
+            phg = Vhg.p(t_0, t_ex, p_0, p_ex)
+            pr = Vr.p(t_0, t_ex, p_0, p_ex)
+
+            self.assertAlmostEqual(p, .5*(phg + pr),10)
+
 
 
 if __name__ == "__main__":
