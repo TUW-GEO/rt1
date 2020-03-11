@@ -54,12 +54,41 @@ class TestDUMPS(unittest.TestCase):
             for function_name in method_list:
                 print(f'... {function_name}')
                 if function_name == 'printsig0analysis':
-                    f = fit.plot.__getattribute__(function_name)(
-                        secondslider=True, dayrange2=1)
-                    plt.close(f[0])
+                    f, s1, s2 = fit.plot.__getattribute__(function_name)(
+                            secondslider=True, dayrange2=1)
+                    # check update functions
+                    s1.set_val(1)
+                    s2.set_val(1)
+
+                    plt.close(f)
                 elif function_name == 'analyzemodel':
-                    f = fit.plot.__getattribute__(function_name)()
-                    plt.close(f[0])
+                    f, sliders, txt_but = fit.plot.__getattribute__(
+                        function_name)()
+
+                    # check update functions
+                    for key, s in sliders.items():
+                        s.set_val((s.valmax - s.valmin)/2.)
+
+                    for key, b in txt_but.items():
+                        if key == 'buttons':
+                            # the initial status is ALL OFF
+                            stat = b.get_status()
+                            for i in range(len(stat)):
+                                b.set_active(i)
+                            # now all should be ON
+                            self.assertTrue(np.all(b.get_status()))
+                            for i in range(len(stat)):
+                                b.set_active(i)
+                            # now all should be OFF again
+                            self.assertTrue(~np.all(b.get_status()))
+                        else:
+                            # set the boundaries of the parameters
+                            if 'min' in key:
+                                b.set_val(0.02)
+                            if 'max' in key:
+                                b.set_val(0.99)
+
+                    plt.close(f)
                 else:
                     f = fit.plot.__getattribute__(function_name)()
                     plt.close(f)
