@@ -1816,7 +1816,7 @@ class Fits(Scatter):
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
-                           'relerr' : errs/self.data}
+                           'relerr' : errs/self.data.flatten()}
                 self.intermediate_results['residuals'] += [errdict]
 
             return errs
