@@ -60,9 +60,9 @@ def rectangularize(array, return_mask=False, dim=None,
         mask = np.array(mask, dtype=bool)
 
         if return_masked is True:
-            newarray = np.ma.masked_array(newarray, mask)
-
-        return [newarray, mask]
+            return np.ma.masked_array(newarray, mask)
+        else:
+            return [newarray, mask]
     else:
         newarray = []
         for s in array:
