@@ -303,8 +303,8 @@ class Fits(Scatter):
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
                  '_group_repeats', '_dataset_used', 'index',
                  'fit_index', '_jac_assign_rule',
-                 'meandatetimes', 'inc',
-                 'data', '_fit_param_dyn_dict', '_idx_assigns',
+                 'meandatetimes', 'inc', 'data', 'data_weights',
+                 '_fit_param_dyn_dict', '_idx_assigns',
                  '_repeatdict', '_order', 'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
@@ -498,6 +498,8 @@ class Fits(Scatter):
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
         usekeys = ['sig', 'inc'] + [key for key in
                                     self.defdict if key in self.dataset]
+        if 'data_weights' in self.dataset:
+            usekeys += ['data_weights']
         # prepare dataset
         dataset = pd.concat([self.dataset[usekeys]] +
                             [val for key, val in self._fixed_dict.items() \
@@ -1790,8 +1792,9 @@ class Fits(Scatter):
                 newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the residuals and incorporate data-weighting
-            errs = self.data_weights * (
-                self._calc_model(R=R, res_dict=newdict) - self.data)[~self.mask]
+            errs = (self.data_weights *
+                    (self._calc_model(R=R, res_dict=newdict) - self.data)
+                    )[~self.mask]
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
