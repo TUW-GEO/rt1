@@ -562,8 +562,7 @@ class plot:
         ax = fig.add_subplot(111)
 
         # get the residuals and apply mask
-        residuals = np.reshape(fit.fit_output.fun, fit.data.shape)
-        residuals = np.ma.masked_array(residuals, fit.mask)
+        residuals = np.ma.masked_array(fit._calc_model() - fit.data, fit.mask)
         # prepare measurements
         measures = fit.data[~fit.mask]
         # calculate estimates
