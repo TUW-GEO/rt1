@@ -183,10 +183,6 @@ class Fits(Scatter):
     mask: array-like
         a mask that indicates the values added to "data" and "inc" in order
         to obtain a rectangular array
-    weights: array-like
-        a weighting-matrix with values 1/sqrt(value-repetitions) where the
-        value-repetitions correspond to the number of added values needed
-        to obtain a rectangular array
     dataset_used: pandas.DataFrame
         a DataFrame of the used data grouped with respect to the
         temporal variations of the parameters that have been fitted
@@ -293,7 +289,7 @@ class Fits(Scatter):
         # defining variable is set
         if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
-                print(f'{attr} has been set, clearing cache')
+                #print(f'{attr} has been set, clearing cache')
                 self._clear_cache()
 
         super().__setattr__(attr, value)
@@ -307,8 +303,8 @@ class Fits(Scatter):
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
                  '_group_repeats', '_dataset_used', 'index',
                  'fit_index', '_jac_assign_rule',
-                 'meandatetimes', 'inc', 'weights',
-                 'data', '_fit_param_dyn_dict', '_idx_assigns',
+                 'meandatetimes', 'inc', 'data', 'data_weights',
+                 '_fit_param_dyn_dict', '_idx_assigns',
                  '_repeatdict', '_order', 'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
@@ -502,6 +498,8 @@ class Fits(Scatter):
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
         usekeys = ['sig', 'inc'] + [key for key in
                                     self.defdict if key in self.dataset]
+        if 'data_weights' in self.dataset:
+            usekeys += ['data_weights']
         # prepare dataset
         dataset = pd.concat([self.dataset[usekeys]] +
                             [val for key, val in self._fixed_dict.items() \
@@ -609,39 +607,11 @@ class Fits(Scatter):
     def mask(self):
         '''
         a mask that indicates the artificially added values
-        (see 'inc', 'data' and 'weights' properties for details)
+        (see 'inc', and 'data' properties for details)
         '''
 
         return self.__get_data(prop='mask')
 
-
-    @property
-    @lru_cache()
-    def weights(self):
-        '''
-        an array of equal shape as inc and data, consisting of the
-        weighting-factors that need to be applied in order to correct
-        for the rectangularization. The weighting-factors for each
-        individual data-element are given by
-            weight_i = 1 / np.sqrt(N_i)
-        where N_i is the number of repetitions of the i'th value
-        that have been added in order to rectangularize the dataset.
-
-        Including the weighting-factors within the least-squares
-        approach will result in a cancellation of the repeated
-        results such that the artificially added values (necessary
-        to have a rectangular array) will have no effect on the fit.
-
-        If a column 'data_weights' has been provided in the dataset,
-        the obtained weights will additionally be multiplied by the
-        values provided as 'data_weights'.
-        '''
-
-        if 'data_weights' in self.dataset:
-            return self.__get_data(
-                prop='data_weights') * self.__get_data(prop='weights')
-        else:
-            return self.__get_data(prop='weights')
 
     @property
     @lru_cache()
@@ -654,6 +624,19 @@ class Fits(Scatter):
 
         return self.__get_data(prop='sig')
 
+    @property
+    @lru_cache()
+    def data_weights(self):
+        '''
+        If a column 'data_weights' has been provided in the dataset,
+        the residuals in the fit-procedure will be multiplied by the
+        values provided as 'data_weights'.
+        '''
+
+        if 'data_weights' in self.dataset:
+            return self.__get_data(prop='data_weights')
+        else:
+            return 1.
 
     @property
     @lru_cache()
@@ -1492,9 +1475,16 @@ class Fits(Scatter):
         if hasattr(self, 'intermediate_results'):
             self.intermediate_results['jacobian'] += [newjacdict]
 
+        sparse = False
+        for key, val in newjacdict.items():
+            if isspmatrix(val):
+                newjacdict[key] = val.tocsc()[:,np.ravel(~self.mask)]
+                sparse = True
+            else:
+                newjacdict[key] = val[:,np.ravel(~self.mask)]
 
         # return the transposed jacobian as needed by scipy's least_squares
-        if np.any([isspmatrix(newjacdict[key]) for key in order]):
+        if sparse:#np.any([isspmatrix(newjacdict[key]) for key in order]):
             # in case sparse matrices have been used, use scipy to vstack them
             jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
         else:
@@ -1526,11 +1516,9 @@ class Fits(Scatter):
             if isinstance(self._dataset_used, pd.DataFrame):
                 if prop in ['inc', 'sig', 'data_weights']:
                     return rectangularize(self._dataset_used[prop].values)
-                elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize(self._dataset_used.inc.values,
-                                                      weights_and_mask=True)
-                    if prop == 'weights':
-                        return np.concatenate(weights)
+                elif prop == 'mask':
+                    _, mask = rectangularize(self._dataset_used.inc.values,
+                                             return_mask=True)
                     if prop == 'mask':
                         return mask
             elif isinstance(self._dataset_used, list):
@@ -1538,12 +1526,9 @@ class Fits(Scatter):
                     return rectangularize([i[0] for i in self._dataset_used])
                 elif prop == 'sig':
                     return rectangularize([i[1] for i in self._dataset_used])
-                elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize([i[0] for i in
-                                                       self._dataset_used],
-                                                      weights_and_mask=True)
-                    if prop == 'weights':
-                        return np.concatenate(weights)
+                elif prop == 'mask':
+                    _, mask = rectangularize([i[0] for i in self._dataset_used]
+                                             , return_mask=True)
                     if prop == 'mask':
                         return mask
 
@@ -1782,10 +1767,9 @@ class Fits(Scatter):
 
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
-            if not hasattr(self, 'intermediate_results'):
-                self.intermediate_results = {'parameters':[],
-                                             'residuals':[],
-                                             'jacobian':[]}
+            self.intermediate_results = {'parameters':[],
+                                         'residuals':[],
+                                         'jacobian':[]}
 
         # will be used to assign the values to the individual parameters
         # (the returned parameters are given as a concatenated array
@@ -1806,17 +1790,16 @@ class Fits(Scatter):
                 # value positions and consecutive repetitions
                 reloc, rep = self._repeatdict[key]
                 newdict[key] = ([val[i] for i in reloc], rep)
-            # calculate the residuals
-            errs = (self._calc_model(R=R,
-                                     res_dict=newdict) - self.data).flatten()
-            # incorporate weighting-matrix to ensure correct treatment
-            # of artificially added values
-            errs = self.weights * errs
+
+            # calculate the residuals and incorporate data-weighting
+            errs = (self.data_weights *
+                    (self._calc_model(R=R, res_dict=newdict) - self.data)
+                    )[~self.mask]
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
-                           'relerr' : errs/self.data.flatten()}
+                           'relerr' : errs/self.data[~self.mask]}
                 self.intermediate_results['residuals'] += [errdict]
 
             return errs
@@ -1833,10 +1816,7 @@ class Fits(Scatter):
                 newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the jacobian
-            # (no need to include weighting matrix in here since the jacobian
-            # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R=R,
-                                 res_dict=newdict)
+            jac = self._calc_jac(R=R, res_dict=newdict)
 
             return jac
 
@@ -1866,7 +1846,8 @@ class Fits(Scatter):
         else:
             # perform actual fitting
             res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                    jac=dfun, **self.lsq_kwargs)
+                                    jac=dfun,
+                                    **self.lsq_kwargs)
 
         # generate a dictionary to assign values based on fit-results
         # split the obtained result with respect to the individual parameters

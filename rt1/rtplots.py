@@ -529,7 +529,7 @@ class plot:
         self.fit = fit
 
     def scatter(self, fit=None, mima=None, pointsize=0.5,
-                regression=True, newcalc=True,  **kwargs):
+                regression=True, **kwargs):
         '''
         geerate a scatterplot of modelled vs. original backscatter data
 
@@ -561,21 +561,12 @@ class plot:
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        if newcalc is True:
-            estimates = fit._calc_model()
-
-            # apply mask
-            estimates = estimates[~fit.mask]
-            measures = fit.data[~fit.mask]
-
-        else:
-            # get the residuals and apply mask
-            residuals = np.reshape(fit.fit_output.fun, fit.data.shape)
-            residuals = np.ma.masked_array(residuals, fit.mask)
-            # prepare measurements
-            measures = fit.data[~fit.mask]
-            # calculate estimates
-            estimates = residuals[~fit.mask] + measures
+        # get the residuals and apply mask
+        residuals = np.ma.masked_array(fit._calc_model() - fit.data, fit.mask)
+        # prepare measurements
+        measures = fit.data[~fit.mask]
+        # calculate estimates
+        estimates = residuals[~fit.mask] + measures
 
         if mima is None:
             mi = np.min((measures, estimates))
@@ -809,7 +800,7 @@ class plot:
         return f
 
 
-    def fit_errors(self, fit=None, newcalc=False, relative=False,
+    def fit_errors(self, fit=None, relative=False,
                    result_selection='all'):
         '''
         a function to quickly print residuals for each measurement
@@ -819,16 +810,6 @@ class plot:
         ------------
         fit : list
             output of performfit()-function
-        newcalc : bool (default = False)
-                  indicator whether the residuals shall be re-calculated
-                  or not.
-
-                  True:
-                      the residuals are calculated using R, inc, mask,
-                      res_dict and fixed_dict from the fit-argument
-                  False:
-                      the residuals are taken from the output of
-                      res_lsq from the fit-argument
         relative : bool (default = False)
                    indicator if relative (True) or absolute (False) residuals
                    shall be plotted
@@ -845,33 +826,20 @@ class plot:
         if result_selection == 'all':
             result_selection = range(len(fit.data))
 
-        if newcalc is False:
-            # get residuals from fit into desired shape for plotting
-            # Attention -> incorporate weights and mask !
-            res = np.ma.masked_array(np.reshape(fit.fit_output.fun,
-                                                fit.data.shape), fit.mask)
+        # Calculate the residuals (based on R, inc and res_dict)
 
-            if relative is True:
-                res = np.ma.abs(res / (res + np.ma.masked_array(fit.data,
-                                                                fit.mask)))
-            else:
-                res = np.ma.abs(res)
-        else:
-            # Alternative way of calculating the residuals
-            # (based on R, inc and res_dict)
+        fit.R.t_0 = fit.inc
+        fit.R.p_0 = np.zeros_like(fit.inc)
 
-            fit.R.t_0 = fit.inc
-            fit.R.p_0 = np.zeros_like(fit.inc)
+        estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+        # calculate the residuals based on masked arrays
+        masked_estimates = np.ma.masked_array(estimates, mask=fit.mask)
+        masked_data = np.ma.masked_array(fit.data, mask=fit.mask)
 
-            estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
-            # calculate the residuals based on masked arrays
-            masked_estimates = np.ma.masked_array(estimates, mask=fit.mask)
-            masked_data = np.ma.masked_array(fit.data, mask=fit.mask)
+        res = np.ma.sqrt((masked_estimates - masked_data)**2)
 
-            res = np.ma.sqrt((masked_estimates - masked_data)**2)
-
-            if relative is True:
-                res = res / masked_estimates
+        if relative is True:
+            res = res / masked_estimates
 
         # apply mask to data and incidence-angles (and convert to degree)
         inc = np.ma.masked_array(np.rad2deg(fit.inc), mask=fit.mask)
