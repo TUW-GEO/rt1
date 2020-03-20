@@ -5,7 +5,7 @@ os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
-from rt1.rtfits import RT1_configparser
+from rt1.configparser import RT1_configparser
 from rt1.processing_config import rt1_processing_config
 
 import pandas as pd
