@@ -1816,10 +1816,7 @@ class Fits(Scatter):
                 newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the jacobian
-            # (no need to include weighting matrix in here since the jacobian
-            # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R=R,
-                                 res_dict=newdict)
+            jac = self._calc_jac(R=R, res_dict=newdict)
 
             return jac
 
