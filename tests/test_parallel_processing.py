@@ -1,10 +1,5 @@
 import unittest
 from pathlib import Path
-import sys
-sys.path.append(str(Path('H:/python_modules/rt_model_python/rt1')))
-
-
-
 from rt1.configparser import RT1_configparser
 
 class TestRTfits(unittest.TestCase):
@@ -20,6 +15,7 @@ class TestRTfits(unittest.TestCase):
         run(config_path=config_path,
             reader_args=reader_args,
             ncpu=ncpu)
+
 
 if __name__ == "__main__":
     unittest.main()

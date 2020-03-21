@@ -28,6 +28,7 @@ class RT1_configparser(object):
                                         int_keys= ['verbose'],
                                         list_keys = [])
 
+
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
                     list_keys=[]):
         '''
@@ -76,6 +77,7 @@ class RT1_configparser(object):
 
             parsed_dict[key] = val
         return parsed_dict
+
 
     def _parse_V_SRF(self, section):
 
@@ -215,6 +217,7 @@ class RT1_configparser(object):
             processmodules[dict_key] = foo
 
         return processmodules
+
 
     def get_process_specs(self):
         inp = self.config['PROCESS_SPECS']
