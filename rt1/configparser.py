@@ -186,8 +186,23 @@ class RT1_configparser(object):
         '''
 
         processmodules = dict()
-        for key in self.config['LOAD_MODULES']:
-            location = Path(self.config['LOAD_MODULES'].get(key))
+        for key, val in self.config['LOAD_MODULES'].items():
+            if key.startswith('relative__'):
+                dict_key = key[10:]
+                if '..' in val.strip():
+                    try:
+                        location = (Path(self.configpath).parent
+                                    / Path(val.strip())).resolve()
+                    except Exception as ex:
+                        print(f'{key} could not be resolved:', ex)
+                        location = (Path(self.configpath).parent
+                                    / Path(val.strip()))
+                else:
+                        location = (Path(self.configpath).parent
+                                    / Path(val.strip()))
+            else:
+                dict_key = key
+                location = Path(val.strip())
 
             assert location.suffix == '.py', f'{location} is not a .py file!'
             spec = importlib.util.spec_from_file_location(name=location.stem,
@@ -197,7 +212,7 @@ class RT1_configparser(object):
             sys.modules[spec.name] = foo
             spec.loader.exec_module(foo)
 
-            processmodules[key] = foo
+            processmodules[dict_key] = foo
 
         return processmodules
 
