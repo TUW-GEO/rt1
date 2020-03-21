@@ -8,6 +8,7 @@ from .rtfits import Fits
 
 class RT1_configparser(object):
     def __init__(self, configpath):
+        self.configpath = configpath
         # setup config (allow empty values -> will result in None)
         self.config = RawConfigParser(allow_no_value=True)
         # avoid converting uppercase characters
@@ -15,7 +16,7 @@ class RT1_configparser(object):
         self.config.optionxform = str
 
         # read config file
-        self.cfg = self.config.read(configpath)
+        self.cfg = self.config.read(self.configpath)
 
         # keys that will be converted to int, float or bool
         self.lsq_parse_props = dict(section = 'least_squares_kwargs',
@@ -220,6 +221,25 @@ class RT1_configparser(object):
 
             elif key.startswith('path__'):
                 process_specs[key[6:]] = Path(val.strip())
+            elif key.startswith('path_relative__'):
+                # resolve the path in case .. syntax is used to traverse dirs
+                if '..' in val.strip():
+                    try:
+                        process_specs[key[15:]] = (Path(self.configpath).parent
+                                                   / Path(val.strip())
+                                                   ).resolve()
+                    except Exception as ex:
+                        print(f'{key} could not be resolved:' ,
+                              ex)
+                        process_specs[key[15:]] = (Path(self.configpath).parent
+                                                   / Path(val.strip())
+                                                   )
+                else:
+                        process_specs[key[15:]] = (Path(self.configpath).parent
+                                                   / Path(val.strip()))
+
+
+
             elif key.startswith('bool__'):
                 process_specs[key[6:]] = inp.getboolean(key)
             elif key.startswith('float__'):
