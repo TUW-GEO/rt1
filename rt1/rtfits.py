@@ -697,13 +697,7 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             # if parameter is intended to be fitted, assign a sympy-symbol
             if val[0] is True:
-                # TODO see why this is actually necessary
-                # omega and tau must not be a sympy-symbol name
-                if key not in ['omega', 'tau']:
-                    setdict[key] = sp.var(key)
-                else:
-                    # a dummy value that will be replaced using self._setdict
-                    setdict[key] = 100
+                setdict[key] = sp.var(key)
 
             elif val[0] is False:
                 # treat parameters that are intended to be constants
@@ -713,14 +707,7 @@ class Fits(Scatter):
                     setdict[key] = val[1]
                 else:
                     # if value is provided as array, add it to fixed_dict
-                    if key not in ['omega', 'tau']:
-                        # omega and tau must not be a sympy-symbol name
-                        # TODO same as above ...why is this necessary?
-                        # TODO what about 'NormBRDF'?
-                        setdict[key] = sp.var(key)
-                    else:
-                        # dummy value that will be replaced using self._setdict
-                        setdict[key] = 100
+                    setdict[key] = sp.var(key)
         return setdict
 
 
