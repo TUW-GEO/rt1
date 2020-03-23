@@ -3,9 +3,6 @@ Define general object for scattering calculations
 This is the basis object for any Surface and Vollume objects
 """
 
-# python2/3 compatability
-from __future__ import print_function
-
 # general other imports
 import sympy as sp
 
