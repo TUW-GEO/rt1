@@ -9,17 +9,81 @@ from .rtfits import Fits
 
 class RT1_configparser(object):
     '''
+    A configparser that can be used to fully specify a RT1-processing routine
 
-    extended interpolation is used -> variables can be addressed within the
-    config-file by using "${class:variable}"
+    Extended interpolation is used -> variables can be addressed within the
+    config-file by using:
 
-    # [fits_kwargs]
-    # [least_squares_kwargs]
-    # [defdict]
-    # [RT1_V]
-    # [RT1_SRF]
-    # [CONFIGFILES]
-    # [PROCESS_SPECS]
+        >>> [class1]
+        >>> var1 = asdf
+        >>> var2 = ${var1} bsdf
+        >>>
+        >>> [class2]
+        >>> var3 = asdf
+        >>> var4 = ${class1:var1} bsdf
+
+
+    The sections are interpreted as follows:
+
+    [fits_kwargs]
+    -------------
+    keyword-arguments passed to the `rt1.rtfits.Fits()` object
+
+    [defdict]
+    -------------
+    the defdict passed to the `rt1.rtfits.Fits()` object
+
+    [RT1_V]
+    -------------
+    the specifications of the `rt1.volume` object passed to the
+    `rt1.rtfits.Fits()` object
+
+    [RT1_SRF]
+    -------------
+    the specifications of the `rt1.surface` object passed to the
+    `rt1.rtfits.Fits()` object
+
+    [least_squares_kwargs]
+    -------------
+    keyword-arguments passed to the call of `scipy.stats.least_squares()`
+
+    [CONFIGFILES]
+    -------------
+    - any passed argument starting with `module__NAME` will be interpreted as the
+      location of a python-module that is intended to be imported.
+
+      the `.get_modules()` function returns a dict:  {NAME : imported module}
+
+    - if `copy = path to a folder` is provided, both the .ini file as well
+      as any file imported via `module__` arguments will be copied to the
+      specified folder. All modules will be imported from the files within
+      the specified folder.
+
+    [PROCESS_SPECS]
+    -------------
+    additional properties needed to specify the process
+
+    - any passed argument starting with `int__NAME` will be passed as
+      `integer` with the name `NAME`
+    - any passed argument starting with `float__NAME` will be passed as
+      `float` with the name `NAME`
+    - any passed argument starting with `bool__NAME` will be passed as
+      `bool` with the name `NAME`
+    - any passed argument starting with `path__NAME` will be passed as
+      `pathlib.Path` with the name `NAME`
+    - any passed argument starting with `datetime__NAME` will be passed as
+      `datetime.datetime` with the name `NAME` as follows:
+
+          >>> datetime__NAME = datetime-string, datetime-format
+
+          for example:
+
+          >>> datetime_d1 = 1.1.2018, %d%m%Y
+
+
+
+
+
 
     '''
     def __init__(self, configpath):
