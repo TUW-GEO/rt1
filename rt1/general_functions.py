@@ -182,3 +182,27 @@ def split_into(iterable, sizes):
             return
         else:
             yield list(islice(it, size))
+
+
+def scale(x, out_range=(0, 1),
+          domainfuncs=(np.nanmin, np.nanmax)):
+    '''
+    scale an array between out_range = (min, max) where the range of the
+    array is evaluated via the domainfuncs (min-function, max-funcion)
+
+    useful domainfuncs are:
+
+        >>> np.nanmin()
+        >>> np.nanmax()
+
+        >>> from itertools import partial
+        >>> partial(np.percentile, q=95)
+
+    Notice: using functions like np.percentile might result in values that
+    exceed the specified `out_range`!  (e.g. if the out-range is (0,1),
+    a min-function of np.percentile(q=5) might result in negative values!)
+    '''
+    domain = domainfuncs[0](x), domainfuncs[1](x)
+    #domain = np.nanpercentile(x, 1), np.nanpercentile(x, 99)
+    y = (x - (domain[1] + domain[0]) / 2) / (domain[1] - domain[0])
+    return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
