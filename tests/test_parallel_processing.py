@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from rt1.configparser import RT1_configparser
+from rt1.rtparse import RT1_configparser
 
 class TestRTfits(unittest.TestCase):
     def test_parallel_processing(self):

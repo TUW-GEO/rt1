@@ -7,7 +7,7 @@ a quick check if a standard config-file is read correctly
 
 import unittest
 import os
-from rt1.configparser import RT1_configparser
+from rt1.rtparse import RT1_configparser
 import sympy as sp
 
 

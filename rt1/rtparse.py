@@ -174,7 +174,6 @@ class RT1_configparser(object):
 
         return rt1_fits
 
-
     def get_modules(self):
         '''
         programmatically import a module as described here:
