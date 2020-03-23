@@ -218,9 +218,10 @@ class Fits(Scatter):
         self.dataset = dataset
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
-        self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
-        if self.lsq_kwargs is None:
-            lsq_kwargs = dict()
+        if lsq_kwargs is None:
+            self.lsq_kwargs = dict()
+        else:
+            self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
 
         self.int_Q = int_Q
         self.lambda_backend = lambda_backend
