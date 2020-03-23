@@ -4,11 +4,12 @@ test configparser
 
 a quick check if a standard config-file is read correctly
 """
-
 import unittest
 import os
-from rt1.rtfits import RT1_configparser
+from rt1.rtparse import RT1_configparser
 import sympy as sp
+from pathlib import Path
+from datetime import datetime
 
 
 class TestCONFIGPARSER(unittest.TestCase):
@@ -20,6 +21,7 @@ class TestCONFIGPARSER(unittest.TestCase):
     def test_load_cfg(self):
         cfg = RT1_configparser(self.configpath)
 
+        #----------------------------------------- check parsed configdicts
         lsq_kwargs = {'verbose': 2,
                       'ftol': 0.0001,
                       'gtol': 0.0001,
@@ -54,7 +56,6 @@ class TestCONFIGPARSER(unittest.TestCase):
                        '_fnevals_input': None,
                        'verbose' : 2}
 
-
         configdicts = cfg.get_config()
 
         for key, val in lsq_kwargs.items():
@@ -78,6 +79,41 @@ class TestCONFIGPARSER(unittest.TestCase):
             assert key in configdicts['fits_kwargs'], f'error in fits_kwargs {key}'
             assert val == configdicts['fits_kwargs'][key], f'error in fits_kwargs {key}'
 
+        #----------------------------------------- check parsed process_specs
+
+        process_specs = {'finalout_name' : 'results.h5',
+                         'dumpfolder' : 'dump01',
+                         'save_path' : Path('proc_test'),
+                         'f0' : 1245.,
+                         'f1' : 5.4,
+                         'i0' : 1,
+                         'i1' : 5,
+                         'b0' : False,
+                         'b1' : True,
+                         'd0' : datetime(2020,3,23),
+                         'd1' : datetime(2017,1,22,12,34)}
+
+        process_specs_parsed = cfg.get_process_specs()
+
+        for key, val in process_specs.items():
+
+            parsedval = process_specs_parsed[key]
+
+            assert key in process_specs_parsed, f'error in PROCESS_SPECS {key}'
+            assert val == parsedval, f'error in PROCESS_SPECS {key} ({val} != {parsedval})'
+
+            if key in ['f0', 'f1']:
+                assert isinstance(parsedval, float), f'{key} = {parsedval} is not parsed as float!'
+            if key in ['i0', 'i1']:
+                assert isinstance(parsedval, int), f'{key} = {parsedval} is not parsed as int!'
+            if key in ['b0', 'b1']:
+                assert isinstance(parsedval, bool), f'{key} = {parsedval} is not parsed as bool!'
+            if key in ['d0', 'd1']:
+                assert isinstance(parsedval, datetime), f'{key} = {parsedval} is not parsed as datetime!'
+
+
+
+        #----------------------------------------- check fitobjects
 
         fit = cfg.get_fitobject()
         V = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='V')
@@ -88,6 +124,21 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert V.omega == sp.Symbol('omega'), 'V.omega assigned incorrectly'
         assert SRF.t == sp.Symbol('t_s'), 'SRF.t assigned incorrectly'
         assert SRF.NormBRDF == sp.Symbol('N'), 'SRF.NormBRDF assigned incorrectly'
+
+
+
+        #----------------------------------------- check imported module
+        cfg_module_dict = cfg.get_modules()
+        assert 'processfuncs' in cfg_module_dict, 'modules not correctly parsed'
+        cfg_module = cfg_module_dict['processfuncs']
+
+        assert hasattr(cfg_module, 'processing_cfg'), 'modules not correctly parsed'
+        assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
+
+        #----------------------------------------- check if files have been copied
+        assert Path('cfg').exists(), 'copying did not work'
+        assert Path('cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":
