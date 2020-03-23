@@ -180,26 +180,6 @@ class RT1(object):
                                                  'must be greater than 0')
 
 
-# TODO  fix asserts to allow symbolic parameters
-        # check if all parameters have been provided (and also if no
-        # unused parameter has been specified)
-
-#        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
-#                            tuple(map(str, self.param_dict.keys()))))
-#
-#        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
-#
-#        if refset <= funcset:
-#            errdict = ' in the definition of V and SRF'
-#        elif refset >= funcset:
-#            errdict = ' in the definition of param_dict'
-#        else:
-#            errdict = ' in the definition of V, SRF and param_dict'
-#
-#        assert (funcset == refset), ('false parameter-specification, please ' +
-#                                     'check assignment of the parameters '
-#                                     + str(refset ^ funcset) + errdict)
-
     def __getstate__(self):
         # this is required since functions created by
         # symengine are currently not pickleable!
@@ -975,21 +955,6 @@ class RT1(object):
                         + (1 -
                            np.exp(-(2 * self.V.tau / self._mu_0))
                            ) * p_curv )
-
-
-
-#
-#        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
-#                np.exp(-(2 * self.V.tau / self._mu_0)) * (
-#                        4. * self.V.tau * np.sin(self.t_0) / self._mu_0**2 * p_slope
-#                        +
-#                        (1. + 2. * np.sin(self.t_0)**2 / self._mu_0**2
-#                         - 2. * self.V.tau * np.sin(self.t_0)**2 / self._mu_0**3) *
-#                         2. * self.V.tau / self._mu_0 * p_val
-#                        )
-#                + (1. - np.exp(-(2 * self.V.tau / self._mu_0))) * p_curv
-#                )
-
 
 
         if sig0 is False and dB is False:
