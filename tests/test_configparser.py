@@ -9,6 +9,8 @@ import os
 from rt1.rtparse import RT1_configparser
 import sympy as sp
 from pathlib import Path
+from datetime import datetime
+
 
 class TestCONFIGPARSER(unittest.TestCase):
     def setUp(self):
@@ -87,7 +89,10 @@ class TestCONFIGPARSER(unittest.TestCase):
                          'i0' : 1,
                          'i1' : 5,
                          'b0' : False,
-                         'b1' : True}
+                         'b1' : True,
+                         'd0' : datetime(2020,3,23),
+                         'd1' : datetime(2017,1,22,12,34)}
+
         process_specs_parsed = cfg.get_process_specs()
 
         for key, val in process_specs.items():
@@ -95,7 +100,7 @@ class TestCONFIGPARSER(unittest.TestCase):
             parsedval = process_specs_parsed[key]
 
             assert key in process_specs_parsed, f'error in PROCESS_SPECS {key}'
-            assert val == parsedval, f'error in PROCESS_SPECS {key}'
+            assert val == parsedval, f'error in PROCESS_SPECS {key} ({val} != {parsedval})'
 
             if key in ['f0', 'f1']:
                 assert isinstance(parsedval, float), f'{key} = {parsedval} is not parsed as float!'
@@ -103,6 +108,9 @@ class TestCONFIGPARSER(unittest.TestCase):
                 assert isinstance(parsedval, int), f'{key} = {parsedval} is not parsed as int!'
             if key in ['b0', 'b1']:
                 assert isinstance(parsedval, bool), f'{key} = {parsedval} is not parsed as bool!'
+            if key in ['d0', 'd1']:
+                assert isinstance(parsedval, datetime), f'{key} = {parsedval} is not parsed as datetime!'
+
 
 
         #----------------------------------------- check fitobjects
