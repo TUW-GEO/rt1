@@ -4,9 +4,7 @@ helper functions that are used both in rtfits and rtplots
 """
 
 import numpy as np
-import pandas as pd
-import datetime
-from itertools import tee
+from itertools import tee, islice
 
 def rectangularize(array, return_mask=False, dim=None,
                    return_masked=False):
@@ -91,10 +89,8 @@ def meandatetime(datetimes):
     if len(datetimes) == 1:
         return datetimes[0]
 
-    #x = pd.to_datetime(datetimes)
     x = datetimes
     deltas = (x[0] - x[1:])/len(x)
-    #meandelta = sum(deltas, datetime.timedelta(0))
     meandelta = sum(deltas)
     meandate = x[0] - meandelta
     return meandate
@@ -158,15 +154,20 @@ def dBsig0convert(val, inc,
 
     return val
 
-# taken from https://docs.python.org/3.7/library/itertools.html
+
 def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    """
+    a generator to return consecutive pairs from an iterable, e.g.:
+
+        s -> (s0,s1), (s1,s2), (s2, s3), ...
+
+    taken from https://docs.python.org/3.7/library/itertools.html
+    """
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
 
 
-from itertools import islice
 def split_into(iterable, sizes):
     """
     a generator that splits the iterable into iterables with the given sizes
