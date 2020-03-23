@@ -267,7 +267,12 @@ class RT1_configparser(object):
         '''
 
         if 'copy' in self.config['CONFIGFILES']:
-            copy = Path(self.config['CONFIGFILES'].pop('copy'))
+            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
+            if '..' in copy_val:
+                copy = Path(copy_val).resolve()
+            else:
+                copy = Path(copy_val)
+
             if not copy.exists():
                 print(f'creating config-dir {copy}')
                 copy.mkdir(parents=True)
@@ -325,23 +330,11 @@ class RT1_configparser(object):
                     process_specs[key[10:]] = val.strip()
 
             elif key.startswith('path__'):
-                process_specs[key[6:]] = Path(val.strip())
-            elif key.startswith('path_relative__'):
                 # resolve the path in case .. syntax is used to traverse dirs
                 if '..' in val.strip():
-                    try:
-                        process_specs[key[15:]] = (Path(self.configpath).parent
-                                                   / Path(val.strip())
-                                                   ).resolve()
-                    except Exception as ex:
-                        print(f'{key} could not be resolved:' ,
-                              ex)
-                        process_specs[key[15:]] = (Path(self.configpath).parent
-                                                   / Path(val.strip())
-                                                   )
+                    process_specs[key[6:]] = Path(val.strip()).resolve()
                 else:
-                        process_specs[key[15:]] = (Path(self.configpath).parent
-                                                   / Path(val.strip()))
+                    process_specs[key[6:]] = Path(val.strip())
 
             elif key.startswith('bool__'):
                 process_specs[key[6:]] = inp.getboolean(key)
