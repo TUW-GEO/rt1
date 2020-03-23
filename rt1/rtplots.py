@@ -522,19 +522,6 @@ class plot:
         # get input dataset
         data = np.ma.masked_array(fit.data, fit.mask)
 
-        # def dBsig0convert(val):
-        #     # if results are provided in dB convert them to linear units
-        #     if fit.dB is True: val = 10**(val/10.)
-        #     # convert sig0 to intensity
-        #     if sig0 is False and fit.sig0 is True:
-        #         val = val/(4.*np.pi*np.cos(inc))
-        #     # convert intensity to sig0
-        #     if sig0 is True and fit.sig0 is False:
-        #         val = 4.*np.pi*np.cos(inc)*val
-        #     # if dB output is required, convert to dB
-        #     if dB is True: val = 10.*np.log10(val)
-        #     return val
-
         # calculate individual contributions
         contrib_array = fit._calc_model(return_components=True)
 
