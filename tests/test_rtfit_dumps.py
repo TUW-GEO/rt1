@@ -47,7 +47,7 @@ class TestDUMPS(unittest.TestCase):
                 print(f'... {function_name}')
                 if function_name == 'printsig0analysis':
                     f, s1, s2 = fit.plot.__getattribute__(function_name)(
-                            secondslider=True, dayrange2=1)
+                            range2=2, range1=1)
                     # check update functions
                     s1.set_val(1)
                     s2.set_val(1)
