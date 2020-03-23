@@ -74,8 +74,8 @@ class Fits(Scatter):
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
 
-             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
-             >>>            'key2' : [fitQ, val, freq, ([min], [max])],
+             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max]), interp],
+             >>>            'key2' : [fitQ, val, freq, ([min], [max]), interp],
              >>>            ...}
 
              where all keys required to call set_V_SRF must be defined
@@ -106,6 +106,11 @@ class Fits(Scatter):
                           form the chosen offset-alias
                 min, max: float (only needed if fitQ is True)
                             the boundary-values used within the fit
+                interp: bool
+                        indicator if the obtained values should be interpoalted
+                        (using a quadratic interpolation function) or if a
+                        step-function should be used.
+                        (only effects dynamic parameters)
     set_V_SRF: callable or dict (default = None)
                either a function with the following structure:
 
