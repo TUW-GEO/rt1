@@ -22,6 +22,34 @@ class RT1_configparser(object):
         >>> var3 = asdf
         >>> var4 = ${class1:var1} bsdf
 
+    Functions:
+    -----------
+    - .get_config():
+      get a dict of the following structure:
+
+        >>> {fits_kwargs : parsed args from "[fits_kwargs]",
+        >>>  lsq_kwargs  : parsed args from "[lsq_kwargs]",
+        >>>  defdict     : parsed args from "[defdict]",
+        >>>  set_V_SRF   : parsed args from "[set_V_SRF]"}
+
+    - .get_fitobject():
+      get the rt1.rtfits.Fits() object
+
+    - .get_modules():
+      get a dict of the following structure:
+
+        >>> {module_name1 : reference to imported module1 from "[CONFIGFILES]",
+        >>>  module_name2 : reference to imported module2 from "[CONFIGFILES]"}
+
+    - .get_process_specs():
+      get a dict of the following structure:
+
+        >>> {name1 : parsed value1 from "[PROCESS_SPECS]",
+        >>>  name2 : parsed value2 from "[PROCESS_SPECS]",
+             ...}
+
+
+
 
     The sections are interpreted as follows:
 
@@ -79,13 +107,9 @@ class RT1_configparser(object):
           for example:
 
           >>> datetime_d1 = 1.1.2018, %d%m%Y
-
-
-
-
-
-
     '''
+
+
     def __init__(self, configpath):
         self.configpath = Path(configpath)
         # setup config (allow empty values -> will result in None)
