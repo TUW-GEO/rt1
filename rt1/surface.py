@@ -23,7 +23,7 @@ class Surface(Scatter):
 
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
         #quick way for visualizing the functions as polarplot
-        self.polarplot = partial(polarplot, SRF=self)
+        self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
         #quick way for visualizing the associated hemispherical reflectance
         self.hemreflect = partial(hemreflect, SRF=self)
