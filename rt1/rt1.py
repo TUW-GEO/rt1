@@ -14,7 +14,6 @@ from scipy.special import expi
 from scipy.special import expn
 
 import sympy as sp
-# import time
 
 try:
     # if symengine is available, use it to perform series-expansions
@@ -95,19 +94,17 @@ class RT1(object):
     param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
-    lambda_backend : str (default = 'cse')
+    lambda_backend : str (default = 'symengine' if possible, else 'sympy')
                      indicator to select the module that shall be used
                      to compile a function for numerical evaluation of the
                      fn-coefficients.
 
-                     TODO(update this) possible values are:
+                     possible values are:
                          - 'sympy' :  sympy.lambdify is used to compile
                            the _fnevals function
                          - 'symengine' : symengine.LambdifyCSE is used to
                            compile the _fnevals function. This results in
                            considerable speedup for long fn-coefficients
-                         - 'cse' : sympy.lambdify is used together with
-                           sympy.cse to generate a fast evaluation-function
     int_Q : bool (default = True)
             indicator whether the interaction-term should be calculated or not
     verbosity : int
