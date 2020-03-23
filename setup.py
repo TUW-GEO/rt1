@@ -7,12 +7,12 @@ For COPYING and LICENSE details, please refer to the LICENSE file
 """
 
 from setuptools import setup
-from setuptools import find_packages
-
+#from setuptools import find_packages
+from rt1 import __version__
 
 setup(name='rt1',
 
-      version='v0.0.4',
+      version=__version__,
 
       description='RT1 - bistatic single scattering radiative transfer model',
 

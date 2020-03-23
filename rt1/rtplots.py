@@ -513,8 +513,8 @@ class plot:
         as defined by the frequencies of the fitted parameters
 
     - intermediate_results
-        !!! only available if *performfit* has been called with
-        *intermediate_results = True*
+        only available if *performfit* has been called with
+        *intermediate_results = True* !
 
         generate a plot showing the development of the fitted parameters
         and the residuals for each fit-iteration
@@ -950,7 +950,7 @@ class plot:
         return fig
 
 
-    def results(self, fit=None, truevals=None, startvals=False,
+    def results(self, fit=None, startvals=False,
                  legends=False, result_selection='all'):
         '''
         a function to quickly print the fit-results and the gained parameters
@@ -992,19 +992,6 @@ class plot:
         # reset incidence-angles in case they have been altered beforehand
         fit.R.t_0 = fit.inc
         fit.R.p_0 = np.zeros_like(fit.inc)
-
-        # evaluate number of measurements
-        Nmeasurements = len(fit.inc)
-
-        if truevals is not None:
-            truevals = {**truevals}
-
-            # generate a dictionary to assign values based on input
-            for key in truevals:
-                if np.isscalar(truevals[key]):
-                    truevals[key] = np.array([truevals[key]] * Nmeasurements)
-                else:
-                    truevals[key] = truevals[key]
 
         # generate figure
         fig = plt.figure(figsize=(14, 10))
@@ -1071,33 +1058,6 @@ class plot:
         ax2.set_title('Estimated parameters')
 
 
-        # if truevals is not None:
-
-        #     # plot actual values
-        #     for key in truevals:
-        #         ax2.plot(fit.index, truevals[key],
-        #                  '--', alpha=0.75, color=colordict[key])
-        #     for key in truevals:
-        #         ax2.plot(fit.index, truevals[key], 'o',
-        #                  color=colordict[key])
-
-        #     param_errs = {}
-        #     for key in truevals:
-        #         param_errs[key] = fit.res_dict[key] - truevals[key]
-
-        #     for key in truevals:
-        #         ax2.plot(fit.index, param_errs[key],
-        #                  ':', alpha=.25, color=colordict[key])
-        #     for key in truevals:
-        #         ax2.plot(fit.index, param_errs[key],
-        #                  '.', alpha=.25, color=colordict[key])
-
-        #     h2 = mlines.Line2D([], [], color='black', label='data',
-        #                        linestyle='--', alpha=0.75, marker='o')
-        #     h3 = mlines.Line2D([], [], color='black', label='errors',
-        #                        linestyle=':', alpha=0.5, marker='.')
-
-
         # plot fitted values
         for key, val in fit.res_df.items():
             ax2.plot(val, alpha=1., label=key, color=colordict[key])
@@ -1115,19 +1075,13 @@ class plot:
                            linestyle='-', alpha=0.75, marker='.')
 
         handles, labels = ax2.get_legend_handles_labels()
-        if truevals is None:
-            plt.legend(handles=handles + [h1], loc=1)
-        else:
-            plt.legend(handles=handles + [h1, h2, h3], loc=1)
+        plt.legend(handles=handles + [h1], loc=1)
 
         # set ticks
         if isinstance(fit.index[0], datetime.datetime):
             fig.autofmt_xdate()
 
-        if truevals is None:
-            plt.ylabel('Parameters')
-        else:
-            plt.ylabel('Parameters / Errors')
+        plt.ylabel('Parameters')
 
         fig.tight_layout()
 
@@ -1462,15 +1416,14 @@ class plot:
 
 
     def printsig0analysis(self, fit=None,
-                          dayrange1=10,
-                          dayrange2=1,
-                          printcomponents1=True,
-                          printcomponents2=True,
-                          secondslider=False,
+                          range1=1,
+                          range2=None,
                           printfullt_0=True,
                           printfulldata=True,
                           dB = True,
                           sig0=True,
+                          printcomponents1=True,
+                          printcomponents2=True,
                           printparamnames=None):
         '''
         A widget to analyze the results of a rt1.rtfits.Fits object.
@@ -1482,14 +1435,12 @@ class plot:
         ----------
         fit : rt1.rtfits.Fits object
             The used fit-object.
-        dayrange1, dayrange2 : int, optional
+        range1, range2 : int, optional
             The number of consecutive measurements considered by the
-            first/second slider. The default is (10 / 1).
+            first/second slider. The default is (1 / None).
         printcomponents1, printcomponents2 : bool, optional
             Indicator if individual backscatter contributions (surface, volume,
             interaction) should be plotted or not. The default is (True, True).
-        secondslider : bool, optional
-            Indicator if a second slider should be added. The default is False.
         printfullt_0 : bool, optional
             Indicator if backscatter-contributions should be evaluated over the
             full incidence-angle range or just over the range coverd by the
@@ -1541,7 +1492,7 @@ class plot:
 
         # add slider axes
         slider_ax = f.add_subplot(gs2[0])
-        if secondslider:
+        if range2 is not None:
             slider_bx = f.add_subplot(gs2[1])
 
         ax.grid()
@@ -1835,12 +1786,12 @@ class plot:
                                    stylefullt0vol, stylefullt0inter]))
 
         lines, lines_frac, linesfull, lines_frac_full = plotlines(
-            dayrange1, printcomponents1, printfullt_0, styledict_dict,
+            range1, printcomponents1, printfullt_0, styledict_dict,
             styledict_fullt0_dict)
 
 
 
-        if secondslider:
+        if range2 is not None:
             # plot second set of lines
             styletot       = {'lw':1, 'marker':'o', 'ms':3, 'color':'r',
                               'dashes':[5, 5],  'markerfacecolor':'none'}
@@ -1868,7 +1819,7 @@ class plot:
                                        stylefullt0vol, stylefullt0inter]))
 
             lines2, lines_frac2, linesfull2, lines_frac_full2 = plotlines(
-                dayrange2, printcomponents2, printfullt_0, styledict_dict,
+                range2, printcomponents2, printfullt_0, styledict_dict,
                 styledict_fullt0_dict)
 
 
@@ -2038,7 +1989,7 @@ class plot:
                                     linesfull=linesfull,
                                     lines_frac = lines_frac,
                                     lines_frac_full = lines_frac_full,
-                                    dayrange=dayrange1,
+                                    dayrange=range1,
                                     printcomponents=printcomponents1,
                                     label=label))
 
@@ -2046,7 +1997,7 @@ class plot:
         ax2.callbacks.connect('xlim_changed', partial(updatesliderboundary,
                                                       slider=a_slider))
 
-        if secondslider:
+        if range2 is not None:
 
             # here we create the slider
             b_slider = Slider(slider_bx,         # axes object for the slider
@@ -2078,7 +2029,7 @@ class plot:
                                         linesfull=linesfull2,
                                         lines_frac = lines_frac2,
                                         lines_frac_full = lines_frac_full2,
-                                        dayrange=dayrange2,
+                                        dayrange=range2,
                                         printcomponents=printcomponents2,
                                         label=label2))
 
@@ -2086,9 +2037,9 @@ class plot:
                                                           slider=b_slider))
 
 
-        # !!! a reference to the sliders must be returned in order to
-        # !!! remain interactive
-        if secondslider:
+        # a reference to the sliders must be returned in order to
+        # remain interactive
+        if range2 is not None:
             return f, a_slider, b_slider
         else:
             return f, a_slider
