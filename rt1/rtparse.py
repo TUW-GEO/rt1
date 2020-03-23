@@ -1,16 +1,32 @@
-from configparser import RawConfigParser
+from configparser import ConfigParser, ExtendedInterpolation
 from datetime import datetime
 import sys
 import importlib.util
 from pathlib import Path
+import shutil
 from .rtfits import Fits
 
 
 class RT1_configparser(object):
+    '''
+
+    extended interpolation is used -> variables can be addressed within the
+    config-file by using "${class:variable}"
+
+    # [fits_kwargs]
+    # [least_squares_kwargs]
+    # [defdict]
+    # [RT1_V]
+    # [RT1_SRF]
+    # [CONFIGFILES]
+    # [PROCESS_SPECS]
+
+    '''
     def __init__(self, configpath):
-        self.configpath = configpath
+        self.configpath = Path(configpath)
         # setup config (allow empty values -> will result in None)
-        self.config = RawConfigParser(allow_no_value=True)
+        self.config = ConfigParser(allow_no_value=True,
+                                   interpolation=ExtendedInterpolation())
         # avoid converting uppercase characters
         # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
@@ -186,26 +202,34 @@ class RT1_configparser(object):
 
         '''
 
+        if 'copy' in self.config['CONFIGFILES']:
+            copy = Path(self.config['CONFIGFILES'].pop('copy'))
+            if not copy.exists():
+                print(f'creating config-dir {copy}')
+                copy.mkdir(parents=True)
+            shutil.copy(self.configpath, copy)
+            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
+        else:
+            copy = False
+
         processmodules = dict()
-        for key, val in self.config['LOAD_MODULES'].items():
-            if key.startswith('relative__'):
-                dict_key = key[10:]
-                if '..' in val.strip():
-                    try:
-                        location = (Path(self.configpath).parent
-                                    / Path(val.strip())).resolve()
-                    except Exception as ex:
-                        print(f'{key} could not be resolved:', ex)
-                        location = (Path(self.configpath).parent
-                                    / Path(val.strip()))
-                else:
-                        location = (Path(self.configpath).parent
-                                    / Path(val.strip()))
-            else:
-                dict_key = key
-                location = Path(val.strip())
+        for key, val in self.config['CONFIGFILES'].items():
+            if not key.startswith('module__'):
+                continue
+
+            dict_key = key[8:]
+            location = Path(val.strip())
 
             assert location.suffix == '.py', f'{location} is not a .py file!'
+            # copy the file and use the copied one for the import
+            if copy is not False:
+                copypath = copy / location.name
+                shutil.copy(location, copypath)
+
+                location = copypath
+
+                print(f'"{location.name}" copied to \n    "{copy}"')
+
             spec = importlib.util.spec_from_file_location(name=location.stem,
                                                           location=location)
 
@@ -254,8 +278,6 @@ class RT1_configparser(object):
                 else:
                         process_specs[key[15:]] = (Path(self.configpath).parent
                                                    / Path(val.strip()))
-
-
 
             elif key.startswith('bool__'):
                 process_specs[key[6:]] = inp.getboolean(key)
