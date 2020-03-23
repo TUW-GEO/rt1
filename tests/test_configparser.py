@@ -83,7 +83,7 @@ class TestCONFIGPARSER(unittest.TestCase):
 
         process_specs = {'finalout_name' : 'results.h5',
                          'dumpfolder' : 'dump01',
-                         'save_path' : Path('proc_test'),
+                         'save_path' : Path('tests/proc_test'),
                          'f0' : 1245.,
                          'f1' : 5.4,
                          'i0' : 1,
@@ -136,9 +136,9 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
         #----------------------------------------- check if files have been copied
-        assert Path('cfg').exists(), 'copying did not work'
-        assert Path('cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('cfg/parallel_processing_config.py').exists(), 'copying did not work'
+        assert Path('tests/cfg').exists(), 'copying did not work'
+        assert Path('tests/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":
