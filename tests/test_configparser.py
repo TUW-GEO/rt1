@@ -136,9 +136,9 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
         #----------------------------------------- check if files have been copied
-        assert Path('tests/cfg').exists(), 'copying did not work'
-        assert Path('tests/cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('tests/cfg/parallel_processing_config.py').exists(), 'copying did not work'
+        assert Path('tests/proc_test/cfg').exists(), 'copying did not work'
+        assert Path('tests/proc_test/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/proc_test/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":
