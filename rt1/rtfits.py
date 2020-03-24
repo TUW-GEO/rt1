@@ -1,7 +1,6 @@
 """
 Class to perform least_squares fitting of RT-1 models to given datasets.
 """
-
 import numpy as np
 import sympy as sp
 from sympy.abc import _clash
@@ -14,7 +13,8 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize, pairwise, split_into
+from .general_functions import meandatetime, rectangularize, pairwise, \
+    split_into, dt_to_hms, update_progress
 
 from .rtplots import plot as rt1_plots
 
@@ -23,16 +23,18 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
-from itertools import repeat, groupby, accumulate
+from itertools import repeat, groupby, accumulate, count
 from functools import lru_cache
 from operator import itemgetter
 from collections import Counter, deque
+
+from timeit import default_timer as tick
+from datetime import timedelta
 
 try:
     import cloudpickle
 except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
-
 
 class Fits(Scatter):
     '''
@@ -1738,7 +1740,7 @@ class Fits(Scatter):
         return repeatdict
 
     def performfit(self, re_init=False, clear_cache=True,
-                   intermediate_results=False):
+                   intermediate_results=False, print_progress=False):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -1766,10 +1768,20 @@ class Fits(Scatter):
         # values for each parameter
         splitpos = self.param_dyn_df.nunique()[self._order].to_list()
 
+        if print_progress:
+            update_cnt = count(1)
+            if 'max_nfev' in self.lsq_kwargs:
+                max_cnt = self.lsq_kwargs['max_nfev']
+            else:
+                max_cnt = 1000
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
         def fun(params):
+            if print_progress:
+                update_progress(next(update_cnt), max_cnt,
+                                title="function evaluations: ",
+                                finalmsg=f"max_nfev ({max_cnt}) reached!")
 
             # generate a dictionary to assign values based on input
             split_vals = split_into(params, splitpos)
@@ -1863,10 +1875,16 @@ class Fits(Scatter):
             self._clear_cache()
             R._clear_cache()
 
+        if print_progress:
+            if next(update_cnt) - 1 < max_cnt:
+                update_progress(max_cnt, max_cnt,
+                                finalmsg=f'Done! ({res_lsq.message})')
+
+
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
                   preprocess=None, postprocess=None, exceptfunc=None,
-                  preeval_fn=False):
+                  process_cnt=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -1917,7 +1935,8 @@ class Fits(Scatter):
         -------
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
-
+        if process_cnt is not None:
+            start = tick()
         try:
             # call preprocess function if provided
             if callable(preprocess):
@@ -1946,13 +1965,13 @@ class Fits(Scatter):
 
 
             # pre-evaluate fn-coefficients
-            if preeval_fn is True:
-                fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                           set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                           lsq_kwargs=lsq_kwargs)
-                fit.performfit(re_init=True)
+            # if preeval_fn is True:
+            #     fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
+            #                set_V_SRF=self.set_V_SRF, defdict=self.defdict,
+            #                lsq_kwargs=lsq_kwargs)
+            #     fit.performfit(re_init=True)
 
-                return fit
+            #     return fit
 
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
@@ -1971,11 +1990,50 @@ class Fits(Scatter):
             # if a post-processing function is provided, return its output,
             # else return the fit-object directly
             if callable(postprocess):
-                return postprocess(fit, reader_arg)
+                ret = postprocess(fit, reader_arg)
             else:
-                return fit
+                ret = fit
+
+            if process_cnt is not None:
+                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+                end = tick()
+                # increase the total counter
+                p_totcnt.value += 1
+
+                # update the estimate of the mean time needed to process a site
+                p_time.value = (p_meancnt.value * p_time.value
+                                + (end - start)) / (p_meancnt.value + 1)
+                # increase the mean counter
+                p_meancnt.value += 1
+                # get the remaining time and update the progressbar
+                remain = timedelta(
+                    seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
+                d,h,m,s = dt_to_hms(remain)
+                update_progress(p_totcnt.value, p_max,
+                                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
+                                finalmsg=f"finished! ({p_max} fits)")
+
+            return ret
 
         except Exception as ex:
+            if process_cnt is not None:
+                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+                # increase the counter
+                p_totcnt.value += 1
+                if p_meancnt.value == 0:
+                    title=f"{'estimating time ...':<28}"
+                else:
+                    # get the remaining time and update the progressbar
+                    remain = timedelta(
+                        seconds = (p_max - p_totcnt.value
+                                   ) / p_ncpu * p_time.value)
+                    d,h,m,s = dt_to_hms(remain)
+                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
+
+                update_progress(p_totcnt.value, p_max,
+                                title=title,
+                                finalmsg=f"finished! ({p_max} fits)")
+
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
             else:
@@ -2077,30 +2135,42 @@ class Fits(Scatter):
             # pre-evaluate the fn-coefficients if interaction terms are used
             self._fnevals_input = self.R._fnevals
 
+        manager = mp.Manager()
+        import ctypes
+        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_time = manager.Value(ctypes.c_float, 0)
+        process_cnt = [p_totcnt, p_meancnt, len(reader_args),
+                       p_time, ncpu]
+
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
 
 
                 # loop over the reader_args
-                res = pool.starmap(self._evalfunc,
-                                   zip(repeat(reader),
-                                       reader_args,
-                                       repeat(lsq_kwargs),
-                                       repeat(preprocess),
-                                       repeat(postprocess),
-                                       repeat(exceptfunc)))
+                res_async = pool.starmap_async(self._evalfunc,
+                                               zip(repeat(reader),
+                                                   reader_args,
+                                                   repeat(lsq_kwargs),
+                                                   repeat(preprocess),
+                                                   repeat(postprocess),
+                                                   repeat(exceptfunc),
+                                                   repeat(process_cnt)))
                 pool.close()  # Marks the pool as closed.
                 pool.join()   # Waits for workers to exit.
+                res = res_async.get()
         else:
             print('start of single-core evaluation')
             res = []
             for reader_arg in reader_args:
-                res.append(self._evalfunc(reader=reader, reader_arg=reader_arg,
+                res.append(self._evalfunc(reader=reader,
+                                          reader_arg=reader_arg,
                                           lsq_kwargs=lsq_kwargs,
                                           preprocess=preprocess,
                                           postprocess=postprocess,
-                                          exceptfunc=exceptfunc))
+                                          exceptfunc=exceptfunc,
+                                          process_cnt=process_cnt))
 
         if callable(finaloutput):
             return finaloutput(res)
