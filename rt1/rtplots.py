@@ -25,7 +25,7 @@ from .general_functions import rectangularize, dBsig0convert, meandatetime, \
 def polarplot(X=None,
               inc=[15., 35., 55., 75.],
               multip=2.,
-              label='Volume-Scattering Phase Function', aprox=True,
+              label=None, aprox=True,
               legend=True, legpos=(0.75, 0.5), groundcolor="none",
               param_dict = [{}],
               polarax=None):
@@ -85,8 +85,6 @@ def polarplot(X=None,
         'polarplot must be a list'
     assert isinstance(multip, float), 'Error: plotrange-multiplier ' + \
         'for polarplot must be a floating-point number'
-    assert isinstance(label, str), 'Error: plabel of polarplot must ' + \
-        'be a string'
 
     if X is None:
         assert False, 'Error: You must provide a volume- or surface object!'
@@ -98,6 +96,8 @@ def polarplot(X=None,
         assert polarax.name == 'polar', 'you must provide a polar-axes!'
 
     if '.surface.' in str(X.__class__):
+        if label is None:
+            label = 'Surface-Scattering Phase Function'
         funcname = 'brdf'
         angs = ['theta_ex', 'theta_s', 'phi_ex', 'phi_s']
         def angsub(ti):
@@ -114,6 +114,9 @@ def polarplot(X=None,
 
 
     if '.volume.' in str(X.__class__):
+        if label is None:
+            label = 'Volume-Scattering Phase Function'
+
         funcname = 'p'
         angs = ['theta_0', 'theta_s', 'phi_0', 'phi_s']
         def angsub(ti):
