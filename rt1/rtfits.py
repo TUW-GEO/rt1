@@ -2116,6 +2116,12 @@ class Fits(Scatter):
             >>> mp.Pool(ncpu, **pool_kwargs)
         print_progress : bool
             indicator if a progress-bar should be printed to stdout or not
+            that looks like this:
+
+            >>> approx. 0 00:00:02 remaining ################------ 3 (2) / 4
+            >>>
+            >>> (estimated time day HH:MM:SS)(     progress bar   )( counts )
+            >>> ( counts ) = finished fits [actually fitted] / total
 
         Returns
         -------

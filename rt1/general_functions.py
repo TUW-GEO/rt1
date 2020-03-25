@@ -221,7 +221,7 @@ def update_progress(progress, max_prog=100,
     block = int(round(length*progress/max_prog))
     if progress2 is not None:
         msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
-              f' {progress} ({progress2}) / {max_prog}')
+              f' {progress} [{progress2}] / {max_prog}')
     else:
         msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
                f' {progress} / {max_prog}')
