@@ -195,7 +195,8 @@ class Fits(Scatter):
     Methods
     ---------
 
-    performfit(re_init=False, clear_cache=True, intermediate_results=False)
+    performfit(clear_cache=True, intermediate_results=False,
+               print_progress=False)
         perform a fit of the defined model to the dataset
 
     processfunc(ncpu=1, reader=None, reader_args=None,
@@ -203,7 +204,7 @@ class Fits(Scatter):
                 exceptfunc=None, finaloutput=None, pool_kwargs=None)
         perform multiple fits of the defined model using multiprocessing
 
-    dump(path, mini=False)
+    dump(path, mini=True)
         dump the fits-object using cloudpickle.dump() to the specified path
 
     calc(param, inc, return_components=True, fixed_param = None)
@@ -274,16 +275,16 @@ class Fits(Scatter):
 
     def __getstate__(self):
         if '_rt1_dump_mini' in self.__dict__:
-            # remove unnecessary data to save storage
-            removekeys = ['fit_output']
-
+            # remove the dummy-attribute that indicates that we do a mini-dump
             delattr(self, '_rt1_dump_mini')
 
-            # remove pre-evaluated fn-evals functions
-            self._fnevals_input = None
+            # remove unnecessary data to save storage
+            removekeys = ['fit_output', '_fnevals_input']
+            returndict = {key: val for key, val in self.__dict__.items()}
+            for key in removekeys:
+                returndict[key] = None
 
-            return {key: val for key, val in self.__dict__.items()
-                    if key not in removekeys}
+            return returndict
         else:
             return self.__dict__
 
@@ -1500,29 +1501,24 @@ class Fits(Scatter):
             the values of the requested property
 
         '''
-        if not hasattr(self, '_dataset_used'):
-            print('call _reinit() or performfit() to set the data first!')
-            return
-        else:
-
-            if isinstance(self._dataset_used, pd.DataFrame):
-                if prop in ['inc', 'sig', 'data_weights']:
-                    return rectangularize(self._dataset_used[prop].values)
-                elif prop == 'mask':
-                    _, mask = rectangularize(self._dataset_used.inc.values,
-                                             return_mask=True)
-                    if prop == 'mask':
-                        return mask
-            elif isinstance(self._dataset_used, list):
-                if prop == 'inc':
-                    return rectangularize([i[0] for i in self._dataset_used])
-                elif prop == 'sig':
-                    return rectangularize([i[1] for i in self._dataset_used])
-                elif prop == 'mask':
-                    _, mask = rectangularize([i[0] for i in self._dataset_used]
-                                             , return_mask=True)
-                    if prop == 'mask':
-                        return mask
+        if isinstance(self._dataset_used, pd.DataFrame):
+            if prop in ['inc', 'sig', 'data_weights']:
+                return rectangularize(self._dataset_used[prop].values)
+            elif prop == 'mask':
+                _, mask = rectangularize(self._dataset_used.inc.values,
+                                         return_mask=True)
+                if prop == 'mask':
+                    return mask
+        elif isinstance(self._dataset_used, list):
+            if prop == 'inc':
+                return rectangularize([i[0] for i in self._dataset_used])
+            elif prop == 'sig':
+                return rectangularize([i[1] for i in self._dataset_used])
+            elif prop == 'mask':
+                _, mask = rectangularize([i[0] for i in self._dataset_used]
+                                         , return_mask=True)
+                if prop == 'mask':
+                    return mask
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1740,8 +1736,8 @@ class Fits(Scatter):
             repeatdict[key] = repeats
         return repeatdict
 
-    def performfit(self, re_init=False, clear_cache=True,
-                   intermediate_results=False, print_progress=False):
+    def performfit(self, clear_cache=True, intermediate_results=False,
+                   print_progress=False):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -1839,17 +1835,8 @@ class Fits(Scatter):
                     startvals = startvals + list(self._startvaldict[key])
 
         # perform the actual fit
-        if re_init is True:
-            if getattr(self, 'fit_output', None) is not None:
-                res_lsq = self.fit_output
-            else:
-                res_lsq = None
-                self.fit_output = None
-        else:
-            # perform actual fitting
-            res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                    jac=dfun,
-                                    **self.lsq_kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                jac=dfun, **self.lsq_kwargs)
 
         # generate a dictionary to assign values based on fit-results
         # split the obtained result with respect to the individual parameters
@@ -2183,16 +2170,22 @@ class Fits(Scatter):
             return res
 
 
-    def dump(self, path, mini=False):
+    def dump(self, path, mini=True):
         '''
         Save the rt1.rtfits.Fits object using cloudpickle.dump()
 
-        The generated (platform and environment-specific) file can be loaded
-        via:
+        The generated file can be loaded via:
 
         >>> import cloudpickle
             with open(--path-to-file--, 'rb') as file
                 fit = cloudpickle.load(file)
+
+        In order to avoid platform and environment-specific issues, the
+        "mini=True" option removes any pre-evaluated "fit._fnevals_input"
+        functions (since symengine LLVM lambdas are platform-specific)
+        as well as "fit.fit_output" (it contains the residuals, the final
+        jacobian etc. which might take up a lot of space)
+
 
         Parameters
         ----------
@@ -2201,11 +2194,8 @@ class Fits(Scatter):
         mini : bool, optional
             Indicator if unnecessary attributes should be removed before
             pickling or not (to avoid storing duplicated data).
-            To re-create the attributes, run
 
-            >>> fit.performfit(re_init=True)
-
-            The default is False.
+            The default is True.
         '''
 
         if mini is True:
@@ -2218,14 +2208,6 @@ class Fits(Scatter):
 
         with open(path, 'wb') as file:
             cloudpickle.dump(self, file)
-
-
-    def _reinit(self):
-        '''
-        re-initialize a fit-object based on the provided input without
-        performing the actual fit
-        '''
-        self.performfit(re_init=True)
 
 
     def calc(self, param, inc, return_components=True,
