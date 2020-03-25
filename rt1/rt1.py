@@ -25,7 +25,8 @@ except ImportError:
 
 
 class RT1(object):
-    """ Main class to perform RT-simulations
+    """
+    Main class to perform RT-simulations
 
     Parameters
     ----------
@@ -75,9 +76,9 @@ class RT1(object):
             t_0, t_ex, p_0, p_ex
 
         - 'f' indicates that the angle is treated 'fixed'
-        (i.e. as a numerical constant)
+          (i.e. as a numerical constant)
         - 'v' indicates that the angle is treated 'variable'
-        (i.e. as a sympy-variable)
+          (i.e. as a sympy-variable)
         - Passing  geometry = 'mono'  indicates a monstatic geometry
           (i.e.:  t_ex = t_0, p_ex = p_0 + pi)
           If monostatic geometry is used, the input-values of t_ex and p_ex
@@ -231,10 +232,18 @@ class RT1(object):
         '''
         function to set print output based on verbosity level v.
         possible values for v:
+
             - 0 : print nothing
             - 1 : print some infos during runtime
             - 2 : print more
             - >=3 : print all
+
+        Parameters
+        ----------
+        v : int
+            the verbosity.
+        msg : str
+            the message to be printed.
         '''
         if self.verbosity >= v:
             print(msg)
@@ -694,7 +703,7 @@ class RT1(object):
         Numerical evaluation of the slope (dI_s/dt_0) of the
         (!monostatic!) surface-contribution
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -754,7 +763,7 @@ class RT1(object):
         Numerical evaluation of the curvature (d^2I_s/dt_0^2)
         of the (!monostatic!) surface-contribution
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -850,7 +859,7 @@ class RT1(object):
         Numerical evaluation of the slope (dI_v/dt_0) of the
         (!monostatic!) volume-contribution
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -906,7 +915,7 @@ class RT1(object):
         Numerical evaluation of the curvature (d^2I_s/dt_0^2)
         of the (!monostatic!) volume-contribution
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -977,7 +986,7 @@ class RT1(object):
         numerical value of the (!monostatic!) slope of total
         contribution (surface + volume)
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -1015,7 +1024,7 @@ class RT1(object):
         numerical value of the (!monostatic!) curvature of
         total contribution (surface + volume)
 
-        Parameter
+        Parameters
         ----------
         dB : bool (default = False)
              indicator if the derivative is calculated for
@@ -1391,12 +1400,12 @@ class RT1(object):
         Generation of a function that evaluates the derivative of the
         surface-contribution with respect to the provided key
 
-        Parameters:
+        Parameters
         ------------
         key : string
 
 
-        Returns:
+        Returns
         --------
         - : array_like(float)
             Numerical value of dIsurf/dkey for the given set of parameters
@@ -1439,7 +1448,7 @@ class RT1(object):
             The contribution of the interaction-term is currently
             not considered in the calculation of the jacobian!
 
-        Parameters:
+        Parameters
         -------------
         dB : boolean (default = False)
              Indicator whether linear or dB units are used.
@@ -1464,7 +1473,7 @@ class RT1(object):
                      any string corresponding to a sympy.Symbol used in the
                      definition of V or SRF
 
-        Returns:
+        Returns
         ---------
         jac : array-like(float)
               The jacobian of the total backscatter with respect to

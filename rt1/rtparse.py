@@ -22,91 +22,79 @@ class RT1_configparser(object):
         >>> var3 = asdf
         >>> var4 = ${class1:var1} bsdf
 
-    Functions:
-    -----------
-    - .get_config():
-      get a dict of the following structure:
+    Methods
+    --------
+    get_config():
+        get a dict of the following structure:
 
         >>> {fits_kwargs : parsed args from "[fits_kwargs]",
         >>>  lsq_kwargs  : parsed args from "[lsq_kwargs]",
         >>>  defdict     : parsed args from "[defdict]",
         >>>  set_V_SRF   : parsed args from "[set_V_SRF]"}
 
-    - .get_fitobject():
-      get the rt1.rtfits.Fits() object
+    get_fitobject():
+        get the rt1.rtfits.Fits() object
 
-    - .get_modules():
-      get a dict of the following structure:
+    get_modules():
+        get a dict of the following structure:
 
         >>> {module_name1 : reference to imported module1 from "[CONFIGFILES]",
         >>>  module_name2 : reference to imported module2 from "[CONFIGFILES]"}
 
-    - .get_process_specs():
-      get a dict of the following structure:
+    get_process_specs():
+        get a dict of the following structure:
 
         >>> {name1 : parsed value1 from "[PROCESS_SPECS]",
         >>>  name2 : parsed value2 from "[PROCESS_SPECS]",
              ...}
 
-
-
-
+    Notes
+    -----
     The sections are interpreted as follows:
 
-    [fits_kwargs]
-    -------------
-    keyword-arguments passed to the `rt1.rtfits.Fits()` object
+    - [fits_kwargs]
+        keyword-arguments passed to the `rt1.rtfits.Fits()` object
+    - [defdict]
+        the defdict passed to the `rt1.rtfits.Fits()` object
+    - [RT1_V]
+        the specifications of the `rt1.volume` object passed to the
+        `rt1.rtfits.Fits()` object
+    - [RT1_SRF]
+        the specifications of the `rt1.surface` object passed to the
+        `rt1.rtfits.Fits()` object
+    - [least_squares_kwargs]
+        keyword-arguments passed to the call of `scipy.stats.least_squares()`
+    - [CONFIGFILES]
 
-    [defdict]
-    -------------
-    the defdict passed to the `rt1.rtfits.Fits()` object
+        - any passed argument starting with `module__NAME` will be interpreted as the
+          location of a python-module that is intended to be imported.
 
-    [RT1_V]
-    -------------
-    the specifications of the `rt1.volume` object passed to the
-    `rt1.rtfits.Fits()` object
+          the `.get_modules()` function returns a dict:  {NAME : imported module}
 
-    [RT1_SRF]
-    -------------
-    the specifications of the `rt1.surface` object passed to the
-    `rt1.rtfits.Fits()` object
+        - if `copy = path to a folder` is provided, both the .ini file as well
+          as any file imported via `module__` arguments will be copied to the
+          specified folder. All modules will be imported from the files within
+          the specified folder.
 
-    [least_squares_kwargs]
-    -------------
-    keyword-arguments passed to the call of `scipy.stats.least_squares()`
+    - [PROCESS_SPECS]
+        additional properties needed to specify the process
 
-    [CONFIGFILES]
-    -------------
-    - any passed argument starting with `module__NAME` will be interpreted as the
-      location of a python-module that is intended to be imported.
+        - any passed argument starting with `int__NAME` will be passed as
+          `integer` with the name `NAME`
+        - any passed argument starting with `float__NAME` will be passed as
+          `float` with the name `NAME`
+        - any passed argument starting with `bool__NAME` will be passed as
+          `bool` with the name `NAME`
+        - any passed argument starting with `path__NAME` will be passed as
+          `pathlib.Path` with the name `NAME`
+        - any passed argument starting with `datetime__NAME` will be passed as
+          `datetime.datetime` with the name `NAME` as follows:
 
-      the `.get_modules()` function returns a dict:  {NAME : imported module}
+              >>> datetime__NAME = datetime-string, datetime-format
 
-    - if `copy = path to a folder` is provided, both the .ini file as well
-      as any file imported via `module__` arguments will be copied to the
-      specified folder. All modules will be imported from the files within
-      the specified folder.
+              for example:
 
-    [PROCESS_SPECS]
-    -------------
-    additional properties needed to specify the process
-
-    - any passed argument starting with `int__NAME` will be passed as
-      `integer` with the name `NAME`
-    - any passed argument starting with `float__NAME` will be passed as
-      `float` with the name `NAME`
-    - any passed argument starting with `bool__NAME` will be passed as
-      `bool` with the name `NAME`
-    - any passed argument starting with `path__NAME` will be passed as
-      `pathlib.Path` with the name `NAME`
-    - any passed argument starting with `datetime__NAME` will be passed as
-      `datetime.datetime` with the name `NAME` as follows:
-
-          >>> datetime__NAME = datetime-string, datetime-format
-
-          for example:
-
-          >>> datetime_d1 = 1.1.2018, %d%m%Y
+              >>> datetime_d1 = 1.1.2018, %d%m%Y
     '''
 
 
@@ -368,6 +356,5 @@ class RT1_configparser(object):
                 process_specs[key[5:]] = inp.getint(key)
             else:
                 process_specs[key] = val
-
 
         return process_specs

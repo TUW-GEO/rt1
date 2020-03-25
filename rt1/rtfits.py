@@ -42,16 +42,18 @@ class Fits(Scatter):
     Class to perform nonlinear least-squares fits to data.
 
 
-    Attributes:
+    Parameters
     ------------
     sig0: boolean (default = False)
-           Indicator whether dataset is given as sigma_0-values (sig_0) or as
-           intensity-values (I). The applied relation is:
-               sig_0 = 4. * np.pi * np.cos(inc) * I
-           where inc is the corresponding incident zenith-angle.
+          Indicator whether dataset is given as sigma_0-values (sig_0) or as
+          intensity-values (I). The applied relation is:
+
+              sig_0 = 4. * np.pi * np.cos(inc) * I
+
+          where inc is the corresponding incident zenith-angle.
     dB: boolean (default = False)
-         Indicator whether dataset is given in linear units or in dB.
-         The applied relation is:    x_dB = 10. * np.log10( x_linear )
+        Indicator whether dataset is given in linear units or in dB.
+        The applied relation is:    x_dB = 10. * np.log10( x_linear )
     dataset: pandas.DataFrame (default = None)
              a pandas.DataFrame with columns `inc` and `sig` defined
              where `inc` referrs to the incidence-angle in radians, and
@@ -61,17 +63,14 @@ class Fits(Scatter):
              - If a column `data_weights` is provided, the residuals in the
                fit-procedure will be weighted accordingly.
                (e.g. residuals = weights * calculated_residuals )
-
              - If columns `param_dyn` are provided where `param` is the name of
                a parameter that is intended to be fitted, the entries will be
                used to assign the dynamics of the corresponding parameter
                (see defdict 'freq' entry for further details)
-
              - If columns with names corresponding to parameters are provided
                and the corresponding entry in the 'val' parameter of defdict
                is set to 'auxiliary', then the provided data will be used
                as auxiliary data for the parameter.
-
 
     defdict: dict (default = None)
              a dictionary of the following structure:
@@ -83,37 +82,46 @@ class Fits(Scatter):
 
              where all keys required to call set_V_SRF must be defined
              and the values are defined via:
-                 fitQ: bool
-                       indicator if the quantity should be fitted (True)
-                       or used as a constant during the fit (False)
-                 val: float or pandas.DataFrame
-                       - if fitQ is True, val will be used as start-value
-                       - if fitQ is False, val will be used as constant.
-                       Notice: if val is a DataFrame, the index must coinicide
-                       with the index of the dataset, and the column-name
-                       must be the corresponding variabile-name
-                 freq: str or None (only needed if fitQ is True)
-                        - if None, a constant value will be fitted
-                        - if 'manual', the DataFrame column "key_dyn" provided
-                          in the dataset will be used to assign the temporal
-                          variability within the fit
-                         - if 'index', a unique value will be fitted to each
-                           unique index of the provided dataset
-                        - if freq corresponds to a pandas offset-alias, it
-                          will be used together with the dataset-index to
-                          assign the temporal variability within the fit
-                          (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
-                        - if both a pandas offset-alias and a dataset-column
-                          "key_dyn" is provided, the the provided variability
-                          will be superimposed onto the variability resulting
-                          form the chosen offset-alias
+
+                fitQ: bool
+                      indicator if the quantity should be fitted (True)
+                      or used as a constant during the fit (False)
+
+                val: float or pandas.DataFrame
+
+                      - if fitQ is True, val will be used as start-value
+                      - if fitQ is False, val will be used as constant.
+
+                      Notice: if val is a DataFrame, the index must coinicide
+                      with the index of the dataset, and the column-name
+                      must be the corresponding variabile-name
+
+                freq: str or None (only needed if fitQ is True)
+
+                       - if None, a constant value will be fitted
+                       - if 'manual', the DataFrame column "key_dyn" provided
+                         in the dataset will be used to assign the temporal
+                         variability within the fit
+                       - if 'index', a unique value will be fitted to each
+                         unique index of the provided dataset
+                       - if freq corresponds to a pandas offset-alias, it
+                         will be used together with the dataset-index to
+                         assign the temporal variability within the fit
+                         (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
+                       - if both a pandas offset-alias and a dataset-column
+                         "key_dyn" is provided, the the provided variability
+                         will be superimposed onto the variability resulting
+                         form the chosen offset-alias
+
                 min, max: float (only needed if fitQ is True)
-                            the boundary-values used within the fit
+                          the boundary-values used within the fit
+
                 interp: bool
                         indicator if the obtained values should be interpoalted
                         (using a quadratic interpolation function) or if a
                         step-function should be used.
                         (only effects dynamic parameters)
+
     set_V_SRF: callable or dict (default = None)
                either a function with the following structure:
 
@@ -154,8 +162,8 @@ class Fits(Scatter):
               scipy.optimize.least_squares and rt1.RT1)
 
 
-    Attributes:
-    -------------------
+    Attributes
+    -----------
 
     index: array-like
         the unique index values of the provided dataset
@@ -192,15 +200,16 @@ class Fits(Scatter):
         temporal variations of the parameters that have been fitted
     fixed_dict: dict
         a dict of the auxiliary datasets used
+
     Methods
     ---------
 
-    performfit(clear_cache=True, intermediate_results=False,
+    performfit(clear_cache=True, intermediate_results=False,\
                print_progress=False)
         perform a fit of the defined model to the dataset
 
-    processfunc(ncpu=1, reader=None, reader_args=None,
-                lsq_kwargs=None, preprocess=None, postprocess=None,
+    processfunc(ncpu=1, reader=None, reader_args=None,\
+                lsq_kwargs=None, preprocess=None, postprocess=None,\
                 exceptfunc=None, finaloutput=None, pool_kwargs=None)
         perform multiple fits of the defined model using multiprocessing
 
@@ -210,6 +219,7 @@ class Fits(Scatter):
     calc(param, inc, return_components=True, fixed_param = None)
         evaluate the defined model based on a given set of parameters and
         incidence-angle ranges
+
     '''
 
     def __init__(self, sig0=False, dB=False, dataset=None,
@@ -1741,6 +1751,22 @@ class Fits(Scatter):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
+
+
+        Parameters
+        ----------
+        clear_cache : bool, optional
+            indicator if the cache should be cleared prior to performing
+            the fit. Disable this only if you know exactly what you're doing!.
+            The default is True.
+        intermediate_results : bool, optional
+            indicator if intermedite results should be stored or not.
+            This might generate a lot of additional output and is only
+            required for the plotfunction `fit.plot.intermediate_results()`
+            The default is False.
+        print_progress : bool, optional
+            indicator if a progress-bar should be printed to stdout or not.
+            The default is False.
         '''
         # maintain R object during fit
         R = self.R

@@ -3,8 +3,8 @@ Introduction
 
 The `RT1` package implements a bistatic first order scattering radiative transfer model that might be used for generic purposes. Unique features of this model are
 
-* analytical solution of the radiative transfer equation with flexible BRDF and volume phase function specifications.
-* representation of surface BRDF and volume phase functions through Legendre-polynomials
+* analytical solution of the radiative transfer equation up to first order with flexible BRDF and volume phase function specifications.
+* extensive nonlinear least-squares fit module for parameter estimation
 * thoroughly tested model code
 
 
@@ -15,10 +15,10 @@ Credits and References
 
 The developers would very much appreciate to receive feedback how the model is used. Also contributions and suggestions for further improvements are highly welcome.
 
-When you are using `RT1` as part of your publications, please give the developers credit by giving reference to the following papers:
+When you are using `RT1` as part of your publications, please give the developers credit by giving reference to the GitHub repository and to the following papers:
 
 * R.Quast and W.Wagner, `Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media`, Appl.Opt.55, 5379-5386 (2016)
-* xxxx
+* R.Quast, C.Albergel, J.C.Calvet, W.Wagner, `A Generic First-Order Radiative Transfer Modelling Approach for the Inversion of Soil and Vegetation Parameters from Scatterometer Observations`,  doi:10.3390/rs11030285
 
 
 

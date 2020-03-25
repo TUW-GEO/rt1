@@ -8,16 +8,23 @@ RT1-module
    :undoc-members:
    :show-inheritance:
 
-RTplots-module
+rtplots-module
 ---------------
 .. automodule:: rt1.rtplots
    :members:
    :undoc-members:
    :show-inheritance:
 
-RTfits-module
+rtfits-module
 --------------
 .. automodule:: rt1.rtfits
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+rtparse-module
+--------------
+.. automodule:: rt1.rtparse
    :members:
    :undoc-members:
    :show-inheritance:
@@ -39,6 +46,13 @@ Surface-module
 Volume-module
 --------------
 .. automodule:: rt1.volume
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+processing_config
+------------------
+.. automodule:: rt1.processing_config
    :members:
    :undoc-members:
    :show-inheritance:

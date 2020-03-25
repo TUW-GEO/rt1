@@ -25,7 +25,7 @@ from .general_functions import rectangularize, dBsig0convert, meandatetime, \
 def polarplot(X=None,
               inc=[15., 35., 55., 75.],
               multip=2.,
-              label='Volume-Scattering Phase Function', aprox=True,
+              label=None, aprox=True,
               legend=True, legpos=(0.75, 0.5), groundcolor="none",
               param_dict = [{}],
               polarax=None):
@@ -85,8 +85,6 @@ def polarplot(X=None,
         'polarplot must be a list'
     assert isinstance(multip, float), 'Error: plotrange-multiplier ' + \
         'for polarplot must be a floating-point number'
-    assert isinstance(label, str), 'Error: plabel of polarplot must ' + \
-        'be a string'
 
     if X is None:
         assert False, 'Error: You must provide a volume- or surface object!'
@@ -98,6 +96,8 @@ def polarplot(X=None,
         assert polarax.name == 'polar', 'you must provide a polar-axes!'
 
     if '.surface.' in str(X.__class__):
+        if label is None:
+            label = 'Surface-Scattering Phase Function'
         funcname = 'brdf'
         angs = ['theta_ex', 'theta_s', 'phi_ex', 'phi_s']
         def angsub(ti):
@@ -114,6 +114,9 @@ def polarplot(X=None,
 
 
     if '.volume.' in str(X.__class__):
+        if label is None:
+            label = 'Volume-Scattering Phase Function'
+
         funcname = 'p'
         angs = ['theta_0', 'theta_s', 'phi_0', 'phi_s']
         def angsub(ti):
@@ -225,10 +228,12 @@ def hemreflect(R=None, SRF=None, phi_0=0., t_0_step=5., t_0_min=0.,
     R : RT1-class object
         definition of the brdf-function to be evaluated
         (either R or SRF  must be provided) The BRDf is defined via:
+
             BRDF = R.SRF.NormBRDF * R.SRF.brdf()
     SRF : Surface-class object
           definition of the brdf-function to be evaluated
           (either R or SRF must be provided) The BRDf is defined via:
+
               BRDF = SRF.NormBRDF * SRF.brdf()
 
     Other Parameters
@@ -396,11 +401,11 @@ class plot:
         '''
         geerate a scatterplot of modelled vs. original backscatter data
 
-        Parameters:
-        ------------
+        Parameters
+        -----------
         fit : list
               output of performfit()-function
-        Other Parameters:
+        Other Parameters
         ------------------
         mima : list
                manual definition plot-boundaries via mima = [min, max]
@@ -412,8 +417,8 @@ class plot:
         kwargs : -
                  kwargs passed to matplotlib.pyplot.scatter()
 
-        Returns:
-        --------------
+        Returns
+        -------
         fig : matplotlib.figure
             the used matplotlib figure instance
         '''
@@ -481,7 +486,7 @@ class plot:
         Print individual contributions, resulting parameters and the
         reference dataset of an rt1.rtfits object as timeseries.
 
-        Parameters:
+        Parameters
         -------------
         fit : rtfits object
               the rtfits-object containing the fit-results
@@ -506,7 +511,7 @@ class plot:
                    indicator if the incidence-angle dependency should be
                    plotted (in a separate plot alongside the timeseries)
 
-        Returns:
+        Returns
         --------------
         f : matplotlib.figure
             the used matplotlib figure instance
@@ -656,7 +661,7 @@ class plot:
         a function to quickly print residuals for each measurement
         and for each incidence-angle value
 
-        Parametsrs:
+        Parameters
         ------------
         fit : list
             output of performfit()-function
@@ -664,7 +669,7 @@ class plot:
                    indicator if relative (True) or absolute (False) residuals
                    shall be plotted
 
-        Returns:
+        Returns
         --------------
         fig : matplotlib.figure
             the used matplotlib figure instance
@@ -806,7 +811,7 @@ class plot:
         '''
         a function to quickly print the fit-results and the gained parameters
 
-        Parametsrs:
+        Parameters
         ------------
         fit : list
               output of performfit()-function
@@ -826,7 +831,7 @@ class plot:
                            a list of the measurement-numbers that should be
                            plotted (indexed starting from 0) or 'all' in case
                            all measurements should be plotted
-        Returns:
+        Returns
         --------------
         fig : matplotlib.figure
               the used matplotlib figure instance
@@ -921,7 +926,7 @@ class plot:
         a function to investigate the quality of the individual fits
 
 
-        Parameters:
+        Parameters
         ------------
         fit : rt1.rtfits.Fits object
               the fit-object to use
@@ -932,7 +937,7 @@ class plot:
                       a list containing the index-values of the measurements
                       that should be plotted
 
-        Other Parameters:
+        Other Parameters
         ------------------
         hexbinQ : bool (default = False)
                   indicator if a hexbin-plot should be underlayed
@@ -942,7 +947,7 @@ class plot:
         convertTodB : bool (default=False)
                       if set to true, the datasets will be converted to dB
 
-        Returns:
+        Returns
         --------------
         fig : matplotlib.figure
               the used matplotlib figure instance
@@ -1069,8 +1074,8 @@ class plot:
         (the data is only available if rtfits.performfit has been called with
         the argument intermediate_results=True!)
 
-        Parameters:
-        -------------
+        Parameters
+        -----------
         fit : rtfits object
               the rtfits-object containing the fit-results
         params : list
@@ -1079,8 +1084,8 @@ class plot:
         cmaps : list
             a list of the colormaps used to plot the parameter variations
 
-        Returns:
-        --------------
+        Returns
+        -------
         f : matplotlib.figure
             the used matplotlib figure instance
         '''

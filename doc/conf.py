@@ -22,7 +22,7 @@ numfig = True
 
 # Enable equation-numbering
 math_number_all = True
-
+numpydoc_show_class_members = False
 # define a function that adds custom css stylesheet (used to override window-width restrictions)
 # basic idea taken from:  https://samnicholls.net/2016/06/15/how-to-sphinx-readthedocs/
 def setup(app):
@@ -30,9 +30,13 @@ def setup(app):
 
 
 MOCK_MODULES = [
-'numpy', 'scipy', 'scipy.special', 'scipy.optimize', 'scipy.linalg',
-'sympy', 'symengine', 'matplotlib', 'matplotlib.pyplot',
-'matplotlib.lines', 'mpl_toolkits', 'mpl_toolkits.mplot3d',
+'numpy', 'pandas',
+'scipy', 'scipy.special', 'scipy.optimize', 'scipy.linalg', 'scipy.sparse', 'scipy.interpolate',
+'sympy', 'sympy.abc',
+'symengine',
+'matplotlib', 'matplotlib.pyplot', 'matplotlib.colors', 'matplotlib.lines', 'matplotlib.widgets',
+'matplotlib.gridspec',
+'mpl_toolkits', 'mpl_toolkits.mplot3d',
 ]
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
@@ -52,7 +56,8 @@ sys.path.insert(0, os.path.abspath('..') + os.sep)
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.mathjax', 'sphinx.ext.autodoc', 'sphinx.ext.napoleon'
+    'sphinx.ext.mathjax', 'sphinx.ext.autodoc', 'sphinx.ext.napoleon', 'numpydoc',
+	'sphinx.ext.autosummary'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
