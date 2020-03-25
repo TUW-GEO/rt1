@@ -9,7 +9,7 @@ for random volume over ground as documented in *Quast & Wagner (2016)* and
 The documentation of the package is found [here](http://rt1.readthedocs.io/).
 (Note that the documentation is still under construction.)
 
-- **rt1.RT1**
+- **rt1.rt1**
 
   - generic implementation of radiative transfer calculations for a random
     volume over ground
