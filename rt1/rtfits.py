@@ -1,7 +1,6 @@
 """
 Class to perform least_squares fitting of RT-1 models to given datasets.
 """
-
 import numpy as np
 import sympy as sp
 from sympy.abc import _clash
@@ -14,7 +13,8 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize, pairwise, split_into
+from .general_functions import meandatetime, rectangularize, pairwise, \
+    split_into, dt_to_hms, update_progress
 
 from .rtplots import plot as rt1_plots
 
@@ -23,20 +23,19 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
-from itertools import repeat, groupby, accumulate
+import ctypes
+from itertools import repeat, groupby, accumulate, count
 from functools import lru_cache
 from operator import itemgetter
+from collections import Counter, deque
 
+from timeit import default_timer as tick
+from datetime import timedelta
 
 try:
     import cloudpickle
 except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
-
-from configparser import ConfigParser
-from collections import Counter, deque
-
-
 
 class Fits(Scatter):
     '''
@@ -78,8 +77,8 @@ class Fits(Scatter):
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
 
-             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max])],
-             >>>            'key2' : [fitQ, val, freq, ([min], [max])],
+             >>> defdict = {'key1' : [fitQ, val, freq, ([min], [max]), interp],
+             >>>            'key2' : [fitQ, val, freq, ([min], [max]), interp],
              >>>            ...}
 
              where all keys required to call set_V_SRF must be defined
@@ -110,6 +109,11 @@ class Fits(Scatter):
                           form the chosen offset-alias
                 min, max: float (only needed if fitQ is True)
                             the boundary-values used within the fit
+                interp: bool
+                        indicator if the obtained values should be interpoalted
+                        (using a quadratic interpolation function) or if a
+                        step-function should be used.
+                        (only effects dynamic parameters)
     set_V_SRF: callable or dict (default = None)
                either a function with the following structure:
 
@@ -183,10 +187,6 @@ class Fits(Scatter):
     mask: array-like
         a mask that indicates the values added to "data" and "inc" in order
         to obtain a rectangular array
-    weights: array-like
-        a weighting-matrix with values 1/sqrt(value-repetitions) where the
-        value-repetitions correspond to the number of added values needed
-        to obtain a rectangular array
     dataset_used: pandas.DataFrame
         a DataFrame of the used data grouped with respect to the
         temporal variations of the parameters that have been fitted
@@ -195,7 +195,8 @@ class Fits(Scatter):
     Methods
     ---------
 
-    performfit(re_init=False, clear_cache=True, intermediate_results=False)
+    performfit(clear_cache=True, intermediate_results=False,
+               print_progress=False)
         perform a fit of the defined model to the dataset
 
     processfunc(ncpu=1, reader=None, reader_args=None,
@@ -203,7 +204,7 @@ class Fits(Scatter):
                 exceptfunc=None, finaloutput=None, pool_kwargs=None)
         perform multiple fits of the defined model using multiprocessing
 
-    dump(path, mini=False)
+    dump(path, mini=True)
         dump the fits-object using cloudpickle.dump() to the specified path
 
     calc(param, inc, return_components=True, fixed_param = None)
@@ -221,9 +222,10 @@ class Fits(Scatter):
         self.dataset = dataset
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
-        self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
-        if self.lsq_kwargs is None:
-            lsq_kwargs = dict()
+        if lsq_kwargs is None:
+            self.lsq_kwargs = dict()
+        else:
+            self.lsq_kwargs = copy.deepcopy(lsq_kwargs)
 
         self.int_Q = int_Q
         self.lambda_backend = lambda_backend
@@ -273,16 +275,16 @@ class Fits(Scatter):
 
     def __getstate__(self):
         if '_rt1_dump_mini' in self.__dict__:
-            # remove unnecessary data to save storage
-            removekeys = ['fit_output']
-
+            # remove the dummy-attribute that indicates that we do a mini-dump
             delattr(self, '_rt1_dump_mini')
 
-            # remove pre-evaluated fn-evals functions
-            self._fnevals_input = None
+            # remove unnecessary data to save storage
+            removekeys = ['fit_output', '_fnevals_input']
+            returndict = {key: val for key, val in self.__dict__.items()}
+            for key in removekeys:
+                returndict[key] = None
 
-            return {key: val for key, val in self.__dict__.items()
-                    if key not in removekeys}
+            return returndict
         else:
             return self.__dict__
 
@@ -293,7 +295,7 @@ class Fits(Scatter):
         # defining variable is set
         if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
-                print(f'{attr} has been set, clearing cache')
+                #print(f'{attr} has been set, clearing cache')
                 self._clear_cache()
 
         super().__setattr__(attr, value)
@@ -307,8 +309,8 @@ class Fits(Scatter):
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
                  '_group_repeats', '_dataset_used', 'index',
                  'fit_index', '_jac_assign_rule',
-                 'meandatetimes', 'inc', 'weights',
-                 'data', '_fit_param_dyn_dict', '_idx_assigns',
+                 'meandatetimes', 'inc', 'data', 'data_weights',
+                 '_fit_param_dyn_dict', '_idx_assigns',
                  '_repeatdict', '_order', 'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
@@ -365,7 +367,7 @@ class Fits(Scatter):
     @lru_cache()
     def interp_vals(self):
         return [key for key, val in self.defdict.items()
-                if val[0] is True and len(val) == 5 and val[4] is True]
+                if val[0] is True and len(val) >= 5 and val[4] is True]
 
 
     @property
@@ -502,6 +504,8 @@ class Fits(Scatter):
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
         usekeys = ['sig', 'inc'] + [key for key in
                                     self.defdict if key in self.dataset]
+        if 'data_weights' in self.dataset:
+            usekeys += ['data_weights']
         # prepare dataset
         dataset = pd.concat([self.dataset[usekeys]] +
                             [val for key, val in self._fixed_dict.items() \
@@ -609,39 +613,11 @@ class Fits(Scatter):
     def mask(self):
         '''
         a mask that indicates the artificially added values
-        (see 'inc', 'data' and 'weights' properties for details)
+        (see 'inc', and 'data' properties for details)
         '''
 
         return self.__get_data(prop='mask')
 
-
-    @property
-    @lru_cache()
-    def weights(self):
-        '''
-        an array of equal shape as inc and data, consisting of the
-        weighting-factors that need to be applied in order to correct
-        for the rectangularization. The weighting-factors for each
-        individual data-element are given by
-            weight_i = 1 / np.sqrt(N_i)
-        where N_i is the number of repetitions of the i'th value
-        that have been added in order to rectangularize the dataset.
-
-        Including the weighting-factors within the least-squares
-        approach will result in a cancellation of the repeated
-        results such that the artificially added values (necessary
-        to have a rectangular array) will have no effect on the fit.
-
-        If a column 'data_weights' has been provided in the dataset,
-        the obtained weights will additionally be multiplied by the
-        values provided as 'data_weights'.
-        '''
-
-        if 'data_weights' in self.dataset:
-            return self.__get_data(
-                prop='data_weights') * self.__get_data(prop='weights')
-        else:
-            return self.__get_data(prop='weights')
 
     @property
     @lru_cache()
@@ -654,6 +630,19 @@ class Fits(Scatter):
 
         return self.__get_data(prop='sig')
 
+    @property
+    @lru_cache()
+    def data_weights(self):
+        '''
+        If a column 'data_weights' has been provided in the dataset,
+        the residuals in the fit-procedure will be multiplied by the
+        values provided as 'data_weights'.
+        '''
+
+        if 'data_weights' in self.dataset:
+            return self.__get_data(prop='data_weights')
+        else:
+            return 1.
 
     @property
     @lru_cache()
@@ -718,13 +707,7 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             # if parameter is intended to be fitted, assign a sympy-symbol
             if val[0] is True:
-                # TODO see why this is actually necessary
-                # omega and tau must not be a sympy-symbol name
-                if key not in ['omega', 'tau']:
-                    setdict[key] = sp.var(key)
-                else:
-                    # a dummy value that will be replaced using self._setdict
-                    setdict[key] = 100
+                setdict[key] = sp.var(key)
 
             elif val[0] is False:
                 # treat parameters that are intended to be constants
@@ -734,14 +717,7 @@ class Fits(Scatter):
                     setdict[key] = val[1]
                 else:
                     # if value is provided as array, add it to fixed_dict
-                    if key not in ['omega', 'tau']:
-                        # omega and tau must not be a sympy-symbol name
-                        # TODO same as above ...why is this necessary?
-                        # TODO what about 'NormBRDF'?
-                        setdict[key] = sp.var(key)
-                    else:
-                        # dummy value that will be replaced using self._setdict
-                        setdict[key] = 100
+                    setdict[key] = sp.var(key)
         return setdict
 
 
@@ -1492,9 +1468,16 @@ class Fits(Scatter):
         if hasattr(self, 'intermediate_results'):
             self.intermediate_results['jacobian'] += [newjacdict]
 
+        sparse = False
+        for key, val in newjacdict.items():
+            if isspmatrix(val):
+                newjacdict[key] = val.tocsc()[:,np.ravel(~self.mask)]
+                sparse = True
+            else:
+                newjacdict[key] = val[:,np.ravel(~self.mask)]
 
         # return the transposed jacobian as needed by scipy's least_squares
-        if np.any([isspmatrix(newjacdict[key]) for key in order]):
+        if sparse:#np.any([isspmatrix(newjacdict[key]) for key in order]):
             # in case sparse matrices have been used, use scipy to vstack them
             jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
         else:
@@ -1518,34 +1501,24 @@ class Fits(Scatter):
             the values of the requested property
 
         '''
-        if not hasattr(self, '_dataset_used'):
-            print('call _reinit() or performfit() to set the data first!')
-            return
-        else:
-
-            if isinstance(self._dataset_used, pd.DataFrame):
-                if prop in ['inc', 'sig', 'data_weights']:
-                    return rectangularize(self._dataset_used[prop].values)
-                elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize(self._dataset_used.inc.values,
-                                                      weights_and_mask=True)
-                    if prop == 'weights':
-                        return np.concatenate(weights)
-                    if prop == 'mask':
-                        return mask
-            elif isinstance(self._dataset_used, list):
-                if prop == 'inc':
-                    return rectangularize([i[0] for i in self._dataset_used])
-                elif prop == 'sig':
-                    return rectangularize([i[1] for i in self._dataset_used])
-                elif prop in ['weights', 'mask']:
-                    _, weights, mask = rectangularize([i[0] for i in
-                                                       self._dataset_used],
-                                                      weights_and_mask=True)
-                    if prop == 'weights':
-                        return np.concatenate(weights)
-                    if prop == 'mask':
-                        return mask
+        if isinstance(self._dataset_used, pd.DataFrame):
+            if prop in ['inc', 'sig', 'data_weights']:
+                return rectangularize(self._dataset_used[prop].values)
+            elif prop == 'mask':
+                _, mask = rectangularize(self._dataset_used.inc.values,
+                                         return_mask=True)
+                if prop == 'mask':
+                    return mask
+        elif isinstance(self._dataset_used, list):
+            if prop == 'inc':
+                return rectangularize([i[0] for i in self._dataset_used])
+            elif prop == 'sig':
+                return rectangularize([i[1] for i in self._dataset_used])
+            elif prop == 'mask':
+                _, mask = rectangularize([i[0] for i in self._dataset_used]
+                                         , return_mask=True)
+                if prop == 'mask':
+                    return mask
 
 
     def _calc_slope_curv(self, R=None, res_dict=None, fixed_dict=None,
@@ -1763,8 +1736,8 @@ class Fits(Scatter):
             repeatdict[key] = repeats
         return repeatdict
 
-    def performfit(self, re_init=False, clear_cache=True,
-                   intermediate_results=False):
+    def performfit(self, clear_cache=True, intermediate_results=False,
+                   print_progress=False):
         '''
         Perform least-squares fitting of omega, tau, NormBRDF and any
         parameter used to define V and SRF to sets of monostatic measurements.
@@ -1782,10 +1755,9 @@ class Fits(Scatter):
 
         # set up the dictionary for storing intermediate results
         if intermediate_results is True:
-            if not hasattr(self, 'intermediate_results'):
-                self.intermediate_results = {'parameters':[],
-                                             'residuals':[],
-                                             'jacobian':[]}
+            self.intermediate_results = {'parameters':[],
+                                         'residuals':[],
+                                         'jacobian':[]}
 
         # will be used to assign the values to the individual parameters
         # (the returned parameters are given as a concatenated array
@@ -1793,10 +1765,20 @@ class Fits(Scatter):
         # values for each parameter
         splitpos = self.param_dyn_df.nunique()[self._order].to_list()
 
+        if print_progress:
+            update_cnt = count(1)
+            if 'max_nfev' in self.lsq_kwargs:
+                max_cnt = self.lsq_kwargs['max_nfev']
+            else:
+                max_cnt = 1000
 
         # define a function that evaluates the model in the shape as needed
         # for scipy's least_squares function
         def fun(params):
+            if print_progress:
+                update_progress(next(update_cnt), max_cnt,
+                                title="function evaluations: ",
+                                finalmsg=f"max_nfev ({max_cnt}) reached!")
 
             # generate a dictionary to assign values based on input
             split_vals = split_into(params, splitpos)
@@ -1806,17 +1788,16 @@ class Fits(Scatter):
                 # value positions and consecutive repetitions
                 reloc, rep = self._repeatdict[key]
                 newdict[key] = ([val[i] for i in reloc], rep)
-            # calculate the residuals
-            errs = (self._calc_model(R=R,
-                                     res_dict=newdict) - self.data).flatten()
-            # incorporate weighting-matrix to ensure correct treatment
-            # of artificially added values
-            errs = self.weights * errs
+
+            # calculate the residuals and incorporate data-weighting
+            errs = (self.data_weights *
+                    (self._calc_model(R=R, res_dict=newdict) - self.data)
+                    )[~self.mask]
 
             if intermediate_results is True:
                 self.intermediate_results['parameters'] += [newdict]
                 errdict = {'abserr' : errs,
-                           'relerr' : errs/self.data}
+                           'relerr' : errs/self.data[~self.mask]}
                 self.intermediate_results['residuals'] += [errdict]
 
             return errs
@@ -1833,10 +1814,7 @@ class Fits(Scatter):
                 newdict[key] = ([val[i] for i in reloc], rep)
 
             # calculate the jacobian
-            # (no need to include weighting matrix in here since the jacobian
-            # of the artificially added colums must be the same!)
-            jac = self._calc_jac(R=R,
-                                 res_dict=newdict)
+            jac = self._calc_jac(R=R, res_dict=newdict)
 
             return jac
 
@@ -1857,16 +1835,8 @@ class Fits(Scatter):
                     startvals = startvals + list(self._startvaldict[key])
 
         # perform the actual fit
-        if re_init is True:
-            if getattr(self, 'fit_output', None) is not None:
-                res_lsq = self.fit_output
-            else:
-                res_lsq = None
-                self.fit_output = None
-        else:
-            # perform actual fitting
-            res_lsq = least_squares(fun, startvals, bounds=bounds,
-                                    jac=dfun, **self.lsq_kwargs)
+        res_lsq = least_squares(fun, startvals, bounds=bounds,
+                                jac=dfun, **self.lsq_kwargs)
 
         # generate a dictionary to assign values based on fit-results
         # split the obtained result with respect to the individual parameters
@@ -1893,10 +1863,16 @@ class Fits(Scatter):
             self._clear_cache()
             R._clear_cache()
 
+        if print_progress:
+            if next(update_cnt) - 1 < max_cnt:
+                update_progress(max_cnt, max_cnt,
+                                finalmsg=f'Done! ({res_lsq.message})')
+
+
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
                   preprocess=None, postprocess=None, exceptfunc=None,
-                  preeval_fn=False):
+                  process_cnt=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -1947,7 +1923,8 @@ class Fits(Scatter):
         -------
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
-
+        if process_cnt is not None:
+            start = tick()
         try:
             # call preprocess function if provided
             if callable(preprocess):
@@ -1974,16 +1951,6 @@ class Fits(Scatter):
                 raise TypeError('the first return-value of reader function ' +
                                 'must be a pandas DataFrame')
 
-
-            # pre-evaluate fn-coefficients
-            if preeval_fn is True:
-                fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                           set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-                           lsq_kwargs=lsq_kwargs)
-                fit.performfit(re_init=True)
-
-                return fit
-
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
@@ -2001,11 +1968,54 @@ class Fits(Scatter):
             # if a post-processing function is provided, return its output,
             # else return the fit-object directly
             if callable(postprocess):
-                return postprocess(fit, reader_arg)
+                ret = postprocess(fit, reader_arg)
             else:
-                return fit
+                ret = fit
+
+            if process_cnt is not None:
+                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+                end = tick()
+                # increase the total counter
+                p_totcnt.value += 1
+
+                # update the estimate of the mean time needed to process a site
+                p_time.value = (p_meancnt.value * p_time.value
+                                + (end - start)) / (p_meancnt.value + 1)
+                # increase the mean counter
+                p_meancnt.value += 1
+                # get the remaining time and update the progressbar
+                remain = timedelta(
+                    seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
+                d,h,m,s = dt_to_hms(remain)
+                update_progress(
+                    p_totcnt.value, p_max,
+                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
+                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    progress2=p_meancnt.value)
+
+            return ret
 
         except Exception as ex:
+            if process_cnt is not None:
+                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+                # only increase the total counter
+                p_totcnt.value += 1
+                if p_meancnt.value == 0:
+                    title=f"{'estimating time ...':<28}"
+                else:
+                    # get the remaining time and update the progressbar
+                    remain = timedelta(
+                        seconds = (p_max - p_totcnt.value
+                                   ) / p_ncpu * p_time.value)
+                    d,h,m,s = dt_to_hms(remain)
+                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
+
+                update_progress(
+                    p_totcnt.value, p_max,
+                    title=title,
+                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    progress2=p_meancnt.value)
+
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
             else:
@@ -2014,7 +2024,8 @@ class Fits(Scatter):
 
     def processfunc(self, ncpu=1, reader=None, reader_args=None,
                     lsq_kwargs=None, preprocess=None, postprocess=None,
-                    exceptfunc=None, finaloutput=None, pool_kwargs=None):
+                    exceptfunc=None, finaloutput=None, pool_kwargs=None,
+                    print_progress=True):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -2090,7 +2101,14 @@ class Fits(Scatter):
             initialization of the multiprocessing-pool via:
 
             >>> mp.Pool(ncpu, **pool_kwargs)
+        print_progress : bool
+            indicator if a progress-bar should be printed to stdout or not
+            that looks like this:
 
+            >>> approx. 0 00:00:02 remaining ################------ 3 (2) / 4
+            >>>
+            >>> (estimated time day HH:MM:SS)(     progress bar   )( counts )
+            >>> ( counts ) = finished fits [actually fitted] / total
 
         Returns
         -------
@@ -2107,30 +2125,44 @@ class Fits(Scatter):
             # pre-evaluate the fn-coefficients if interaction terms are used
             self._fnevals_input = self.R._fnevals
 
+        if print_progress is True:
+            # initialize shared values that will be used to track the number
+            # of completed processes and the mean time to complete a process
+            manager = mp.Manager()
+            p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+            p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+            p_time = manager.Value(ctypes.c_float, 0)
+            process_cnt = [p_totcnt, p_meancnt, len(reader_args),
+                           p_time, ncpu]
+        else:
+            process_cnt = None
+
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
-
-
                 # loop over the reader_args
-                res = pool.starmap(self._evalfunc,
-                                   zip(repeat(reader),
-                                       reader_args,
-                                       repeat(lsq_kwargs),
-                                       repeat(preprocess),
-                                       repeat(postprocess),
-                                       repeat(exceptfunc)))
+                res_async = pool.starmap_async(self._evalfunc,
+                                               zip(repeat(reader),
+                                                   reader_args,
+                                                   repeat(lsq_kwargs),
+                                                   repeat(preprocess),
+                                                   repeat(postprocess),
+                                                   repeat(exceptfunc),
+                                                   repeat(process_cnt)))
                 pool.close()  # Marks the pool as closed.
                 pool.join()   # Waits for workers to exit.
+                res = res_async.get()
         else:
             print('start of single-core evaluation')
             res = []
             for reader_arg in reader_args:
-                res.append(self._evalfunc(reader=reader, reader_arg=reader_arg,
+                res.append(self._evalfunc(reader=reader,
+                                          reader_arg=reader_arg,
                                           lsq_kwargs=lsq_kwargs,
                                           preprocess=preprocess,
                                           postprocess=postprocess,
-                                          exceptfunc=exceptfunc))
+                                          exceptfunc=exceptfunc,
+                                          process_cnt=process_cnt))
 
         if callable(finaloutput):
             return finaloutput(res)
@@ -2138,16 +2170,22 @@ class Fits(Scatter):
             return res
 
 
-    def dump(self, path, mini=False):
+    def dump(self, path, mini=True):
         '''
         Save the rt1.rtfits.Fits object using cloudpickle.dump()
 
-        The generated (platform and environment-specific) file can be loaded
-        via:
+        The generated file can be loaded via:
 
         >>> import cloudpickle
             with open(--path-to-file--, 'rb') as file
                 fit = cloudpickle.load(file)
+
+        In order to avoid platform and environment-specific issues, the
+        "mini=True" option removes any pre-evaluated "fit._fnevals_input"
+        functions (since symengine LLVM lambdas are platform-specific)
+        as well as "fit.fit_output" (it contains the residuals, the final
+        jacobian etc. which might take up a lot of space)
+
 
         Parameters
         ----------
@@ -2156,11 +2194,8 @@ class Fits(Scatter):
         mini : bool, optional
             Indicator if unnecessary attributes should be removed before
             pickling or not (to avoid storing duplicated data).
-            To re-create the attributes, run
 
-            >>> fit.performfit(re_init=True)
-
-            The default is False.
+            The default is True.
         '''
 
         if mini is True:
@@ -2173,14 +2208,6 @@ class Fits(Scatter):
 
         with open(path, 'wb') as file:
             cloudpickle.dump(self, file)
-
-
-    def _reinit(self):
-        '''
-        re-initialize a fit-object based on the provided input without
-        performing the actual fit
-        '''
-        self.performfit(re_init=True)
 
 
     def calc(self, param, inc, return_components=True,
@@ -2278,11 +2305,10 @@ class Fits(Scatter):
                 fitted += (f' {name}| {star}| {vari}| {boun}| {inte}|\n')
 
             if val[0] is False:
-                if val[1] is 'auxiliary':
+                if val[1] == 'auxiliary':
                     auxiliary += [f'| {key}']
                 elif isinstance(val[1], (int, float)):
                     fixed += [f' {key:<13}= {val[1]}']
-
         try:
             vname = self.V.__class__.__name__
         except Exception:
@@ -2330,170 +2356,3 @@ class Fits(Scatter):
             outstr += '-'*77
 
         print(outstr)
-
-
-class RT1_configparser(object):
-    def __init__(self, configpath):
-        # setup config (allow empty values -> will result in None)
-        self.config = ConfigParser(allow_no_value=True)
-        # avoid converting uppercase characters
-        # (see https://stackoverflow.com/a/19359720/9703451)
-        self.config.optionxform = str
-
-        # read config file
-        self.cfg = self.config.read(configpath)
-
-        # keys that will be converted to int, float or bool
-        self.lsq_parse_props = dict(section = 'least_squares_kwargs',
-                                    int_keys = ['verbose', 'max_nfev'],
-                                    float_keys = ['ftol', 'gtol', 'xtol'])
-
-        self.fitargs_parse_props = dict(section = 'fits_kwargs',
-                                        bool_keys = ['sig0', 'dB', 'int_Q'],
-                                        int_keys= ['verbose'],
-                                        list_keys = [])
-
-    def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
-                    list_keys=[]):
-        '''
-        a function to convert the parsed string values to int, float or bool
-        (any additional values will be left unchanged)
-
-        Parameters
-        ----------
-        section : str
-            the name of the section in the config-file.
-        int_keys : list
-            keys that should be converted to int.
-        float_keys : list
-            keys that should be converted to float.
-        bool_keys : list
-            keys that should be converted to bool.
-
-        Returns
-        -------
-        parsed_dict : dict
-            a dict with the converted values.
-
-        '''
-
-        inp = self.config[section]
-
-        parsed_dict = dict()
-        for key in inp:
-            if key in float_keys:
-                val = inp.getfloat(key)
-            elif key in int_keys:
-                val = inp.getint(key)
-            elif key in bool_keys:
-                val = inp.getboolean(key)
-            elif key in list_keys:
-                #assert inp[key].startswith('['), f'{key}  must start with "[" '
-                #assert inp[key].endswith(']'), f'{key} must end with "]" '
-                #val = inp[key][1:-1].replace(' ', '').split(',')
-                if inp[key] is None:
-                    val = []
-                else:
-                    val = inp[key].replace(' ', '').split(',')
-                    val = [i for i in val if len(i) > 0]
-            else:
-                val = inp[key]
-
-            parsed_dict[key] = val
-        return parsed_dict
-
-    def _parse_V_SRF(self, section):
-
-        inp = self.config[section]
-
-        parsed_dict = dict()
-        for key in inp:
-            val = None
-            if key == 'ncoefs':
-                val = inp.getint(key)
-            else:
-                # try to convert floats, if it fails return the string
-                try:
-                    val = inp.getfloat(key)
-                except:
-                    val = inp[key]
-
-            parsed_dict[key] = val
-
-        return parsed_dict
-
-
-    def _parse_defdict(self, section):
-        inp = self.config[section]
-
-        parsed_dict = dict()
-        for key in inp:
-            val = inp[key]
-
-            if val.startswith('[') and val.endswith(']'):
-                val = val[1:-1].replace(' ', '').split(',')
-            else:
-                assert False, f'the passed defdict for {key} is not a list'
-
-            # convert values
-            parsed_val = []
-            if val[0] == 'True':
-                parsed_val += [True]
-            elif val[0] == 'False':
-                parsed_val += [False]
-            else:
-                assert False, (f'the passed first defdict-argument of {key} ' +
-                               f'({val[0]}) must be either "True" or "False"')
-
-            if val[1] == 'auxiliary':
-                parsed_val += [val[1]]
-            else:
-                parsed_val += [float(val[1])]
-
-            if len(val) > 2:
-                if val[2] == 'None':
-                    parsed_val += [None]
-                else:
-                    parsed_val += [val[2]]
-
-                parsed_val += [([float(val[3])],
-                                [float(val[4])])]
-
-                try:
-                    interp_Q = val[5]
-                    if val[5] == 'True':
-                        parsed_val += [True]
-                    else:
-                        parsed_val += [False]
-                except:
-                    parsed_val += [False]
-
-
-            parsed_dict[key] = parsed_val
-
-        return parsed_dict
-
-
-    def get_config(self):
-        lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
-
-        fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
-        defdict = self._parse_defdict('defdict')
-        set_V_SRF = dict(V_props = self._parse_V_SRF('RT1_V'),
-                         SRF_props = self._parse_V_SRF('RT1_SRF'))
-
-        return dict(lsq_kwargs=lsq_kwargs,
-                    defdict=defdict,
-                    set_V_SRF=set_V_SRF,
-                    fits_kwargs=fits_kwargs)
-
-
-    def get_fitobject(self):
-        cfg = self.get_config()
-
-        rt1_fits = Fits(dataset=None, defdict=cfg['defdict'],
-                        set_V_SRF=cfg['set_V_SRF'],
-                        lsq_kwargs=cfg['lsq_kwargs'], **cfg['fits_kwargs'])
-
-        return rt1_fits
-

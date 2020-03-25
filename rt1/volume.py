@@ -21,7 +21,7 @@ class Volume(Scatter):
         self.a = getattr(self, 'a', [-1., 1., 1.])
 
         #add a quick way for visualizing the functions as polarplot
-        self.polarplot = partial(polarplot, V=self)
+        self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
 
 

@@ -2,13 +2,11 @@
 """
 helper functions that are used both in rtfits and rtplots
 """
-
+import sys
 import numpy as np
-import pandas as pd
-import datetime
-from itertools import tee
+from itertools import tee, islice
 
-def rectangularize(array, weights_and_mask=False, dim=None,
+def rectangularize(array, return_mask=False, dim=None,
                    return_masked=False):
     '''
     return a rectangularized version of the input-array by repeating the
@@ -25,8 +23,8 @@ def rectangularize(array, weights_and_mask=False, dim=None,
     ------------
     array: list of lists
            the input-data that is intended to be rectangularized
-    weights_and_mask: bool (default = False)
-                     indicator if weights and mask should be evaluated or not
+    return_mask: bool (default = False)
+              	 indicator if weights and mask should be evaluated or not
     dim: int (default = None)
          the dimension of the rectangularized array
          if None, the shortest length of all sub-lists will be used
@@ -37,10 +35,6 @@ def rectangularize(array, weights_and_mask=False, dim=None,
     ----------
     new_array: array-like
                a rectangularized version of the input-array
-    weights: array-like (only if 'weights_and_mask' is True)
-             a weighting-matrix whose entries are 1/sqrt(number of repetitions)
-             (the square-root is used since this weighting will be applied to
-             a sum of squares)
     mask: array-like (only if 'weights_and_mask' is True)
           a mask indicating the added values
 
@@ -49,30 +43,7 @@ def rectangularize(array, weights_and_mask=False, dim=None,
         # get longest dimension of sub-arrays
         dim  = len(max(array, key=len))
 
-    if weights_and_mask is True:
-        newarray, weights, mask = [], [], []
-        for s in array:
-            adddim = dim - len(s)
-            w = np.full_like(s, 1)
-            m = np.full_like(s, False)
-            if adddim > 0:
-                s = np.append(s, np.full(adddim, s[-1]))
-                w = np.append(w, np.full(adddim, 1/np.sqrt(adddim)))
-                m = np.append(m, np.full(adddim, True))
-            newarray += [s]
-            weights  += [w]
-            mask     += [m]
-
-        newarray = np.array(newarray)
-        weights = np.array(weights)
-        mask = np.array(mask, dtype=bool)
-
-        if return_masked is True:
-            newarray = np.ma.masked_array(newarray, mask)
-
-        return [newarray, weights, mask]
-
-    elif return_masked is True:
+    if return_mask is True or return_masked is True:
         newarray, mask = [], []
         for s in array:
             adddim = dim - len(s)
@@ -83,11 +54,13 @@ def rectangularize(array, weights_and_mask=False, dim=None,
             newarray += [s]
             mask     += [m]
 
-        mask = np.array(mask, dtype=bool)
         newarray = np.array(newarray)
+        mask = np.array(mask, dtype=bool)
 
-        return np.ma.masked_array(newarray, mask)
-
+        if return_masked is True:
+            return np.ma.masked_array(newarray, mask)
+        else:
+            return [newarray, mask]
     else:
         newarray = []
         for s in array:
@@ -116,10 +89,8 @@ def meandatetime(datetimes):
     if len(datetimes) == 1:
         return datetimes[0]
 
-    #x = pd.to_datetime(datetimes)
     x = datetimes
     deltas = (x[0] - x[1:])/len(x)
-    #meandelta = sum(deltas, datetime.timedelta(0))
     meandelta = sum(deltas)
     meandate = x[0] - meandelta
     return meandate
@@ -180,18 +151,22 @@ def dBsig0convert(val, inc,
         if dB is False and fitdB is True:
             val = 10**(val/10.)
 
-
     return val
 
-# taken from https://docs.python.org/3.7/library/itertools.html
+
 def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    """
+    a generator to return consecutive pairs from an iterable, e.g.:
+
+        s -> (s0,s1), (s1,s2), (s2, s3), ...
+
+    taken from https://docs.python.org/3.7/library/itertools.html
+    """
     a, b = tee(iterable)
     next(b, None)
     return zip(a, b)
 
 
-from itertools import islice
 def split_into(iterable, sizes):
     """
     a generator that splits the iterable into iterables with the given sizes
@@ -206,3 +181,61 @@ def split_into(iterable, sizes):
             return
         else:
             yield list(islice(it, size))
+
+
+def scale(x, out_range=(0, 1),
+          domainfuncs=(np.nanmin, np.nanmax)):
+    '''
+    scale an array between out_range = (min, max) where the range of the
+    array is evaluated via the domainfuncs (min-function, max-funcion)
+
+    useful domainfuncs are:
+
+        >>> np.nanmin()
+        >>> np.nanmax()
+
+        >>> from itertools import partial
+        >>> partial(np.percentile, q=95)
+
+    Notice: using functions like np.percentile might result in values that
+    exceed the specified `out_range`!  (e.g. if the out-range is (0,1),
+    a min-function of np.percentile(q=5) might result in negative values!)
+    '''
+    domain = domainfuncs[0](x), domainfuncs[1](x)
+    #domain = np.nanpercentile(x, 1), np.nanpercentile(x, 99)
+    y = (x - (domain[1] + domain[0]) / 2) / (domain[1] - domain[0])
+    return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
+
+
+
+def update_progress(progress, max_prog=100,
+                    title="", finalmsg=" DONE\r\n",
+                    progress2 = None):
+    '''
+    print a progress-bar
+
+    adapted from: https://blender.stackexchange.com/a/30739
+    '''
+
+    length = 25 # the length of the progress bar
+    block = int(round(length*progress/max_prog))
+    if progress2 is not None:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+              f' {progress} [{progress2}] / {max_prog}')
+    else:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+               f' {progress} / {max_prog}')
+
+
+    if progress >= max_prog: msg = f'\r{finalmsg:<79}\n'
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+
+
+def dt_to_hms(td):
+    '''
+    convert a datetime.timedelta object into days, hours, minutes and seconds
+    '''
+    days, hours, minutes  = td.days, td.seconds // 3600, td.seconds %3600//60
+    seconds = td.seconds - hours*3600 - minutes*60
+    return days, hours, minutes, seconds

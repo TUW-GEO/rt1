@@ -14,7 +14,6 @@ from scipy.special import expi
 from scipy.special import expn
 
 import sympy as sp
-# import time
 
 try:
     # if symengine is available, use it to perform series-expansions
@@ -95,19 +94,17 @@ class RT1(object):
     param_dict : dict (default = {})
                  a dictionary to assign numerical values to sympy.Symbols
                  appearing in the definitions of V and SRF.
-    lambda_backend : str (default = 'cse')
+    lambda_backend : str (default = 'symengine' if possible, else 'sympy')
                      indicator to select the module that shall be used
                      to compile a function for numerical evaluation of the
                      fn-coefficients.
 
-                     TODO(update this) possible values are:
+                     possible values are:
                          - 'sympy' :  sympy.lambdify is used to compile
                            the _fnevals function
                          - 'symengine' : symengine.LambdifyCSE is used to
                            compile the _fnevals function. This results in
                            considerable speedup for long fn-coefficients
-                         - 'cse' : sympy.lambdify is used together with
-                           sympy.cse to generate a fast evaluation-function
     int_Q : bool (default = True)
             indicator whether the interaction-term should be calculated or not
     verbosity : int
@@ -179,26 +176,6 @@ class RT1(object):
             assert np.any(self.SRF.NormBRDF >= 0.), ('NormBRDF ' +
                                                  'must be greater than 0')
 
-
-# TODO  fix asserts to allow symbolic parameters
-        # check if all parameters have been provided (and also if no
-        # unused parameter has been specified)
-
-#        refset = set(sp.var(('theta_0', 'phi_0', 'theta_ex', 'phi_ex') +
-#                            tuple(map(str, self.param_dict.keys()))))
-#
-#        funcset = self.V._func.free_symbols | self.SRF._func.free_symbols
-#
-#        if refset <= funcset:
-#            errdict = ' in the definition of V and SRF'
-#        elif refset >= funcset:
-#            errdict = ' in the definition of param_dict'
-#        else:
-#            errdict = ' in the definition of V, SRF and param_dict'
-#
-#        assert (funcset == refset), ('false parameter-specification, please ' +
-#                                     'check assignment of the parameters '
-#                                     + str(refset ^ funcset) + errdict)
 
     def __getstate__(self):
         # this is required since functions created by
@@ -975,21 +952,6 @@ class RT1(object):
                         + (1 -
                            np.exp(-(2 * self.V.tau / self._mu_0))
                            ) * p_curv )
-
-
-
-#
-#        I_curv = (1. - self.bsf) * self.I0 * self.V.omega / 2. * (
-#                np.exp(-(2 * self.V.tau / self._mu_0)) * (
-#                        4. * self.V.tau * np.sin(self.t_0) / self._mu_0**2 * p_slope
-#                        +
-#                        (1. + 2. * np.sin(self.t_0)**2 / self._mu_0**2
-#                         - 2. * self.V.tau * np.sin(self.t_0)**2 / self._mu_0**3) *
-#                         2. * self.V.tau / self._mu_0 * p_val
-#                        )
-#                + (1. - np.exp(-(2 * self.V.tau / self._mu_0))) * p_curv
-#                )
-
 
 
         if sig0 is False and dB is False:

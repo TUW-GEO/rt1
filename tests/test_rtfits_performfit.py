@@ -215,7 +215,7 @@ class TestRTfits(unittest.TestCase):
         testfit.model_definition
 
         # perform the fit
-        testfit.performfit()
+        testfit.performfit(print_progress=True)
 
         # check if _calc_slope_curv is working
         # TODO this only tests if a result is obtained, not if the result
@@ -235,12 +235,10 @@ class TestRTfits(unittest.TestCase):
         # sicne fit[0].fun gives the residuals weighted with respect to
         # weights, the model calculation can be gained via
         # estimates = fit[0].fun/weights + measurements
-        estimates = np.reshape(
-                    testfit.fit_output.fun/testfit.weights, testfit.data.shape)
 
         # apply mask
         measures = testfit.data[~testfit.mask]
-        estimates = estimates[~testfit.mask] + measures
+        estimates = testfit.fit_output.fun + measures
 
         # evaluate linear regression to get r-value etc.
         slope, intercept, r_value, p_value, std_err = linregress(estimates,

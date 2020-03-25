@@ -2,19 +2,18 @@
 a class providing convenient default functions for processing
 '''
 
-import os
 import sys
 import pandas as pd
 from datetime import datetime
 import traceback
 import cloudpickle
-
+from pathlib import Path
 
 class rt1_processing_config(object):
     def __init__(self, save_path=None, dumpfolder=None,
                  error_dumpfolder=None, finalout_name=None):
 
-        self.save_path = save_path
+        self.save_path = Path(save_path)
         self.dumpfolder = dumpfolder
         self.error_dumpfolder = error_dumpfolder
         self.finalout_name = finalout_name
@@ -68,21 +67,21 @@ class rt1_processing_config(object):
         '''
         if self.save_path is not None and self.dumpfolder is not None:
             # generate "save_path" directory if it does not exist
-            if not os.path.exists(self.save_path):
+            if not self.save_path.exists():
                 print(self.save_path, 'does not exist... creating directory')
-                os.mkdir(self.save_path)
+                self.save_path.mkdir()
             # generate "dumpfolder" directory if it does not exist
-            dumppath = os.path.join(self.save_path, self.dumpfolder)
-            if not os.path.exists(dumppath):
+            dumppath = self.save_path / self.dumpfolder
+            if not dumppath.exists():
                 print(dumppath, 'does not exist... creating directory')
-                os.mkdir(dumppath)
+                dumppath.mkdir()
 
             # obtain the path where the dump-file would be stored
             _, filename, _ = self.get_names_ids(reader_arg)
-            dumppath = os.path.join(self.save_path, self.dumpfolder, filename)
+            dumppath = self.save_path.joinpath(self.dumpfolder, filename)
 
             # raise a file already exists error
-            if os.path.exists(dumppath):
+            if dumppath.exists():
                 raise Exception('rt1_file_already_exists')
 
 
@@ -120,13 +119,13 @@ class rt1_processing_config(object):
         feature_id, fname, error_fname = self.get_names_ids(reader_arg)
 
         if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = os.path.join(self.save_path, self.dumpfolder, fname)
+            dumppath = self.save_path.joinpath(self.dumpfolder, fname)
 
             # if no dump exists, dump it, else load the existing dump
-            if not os.path.exists(dumppath):
+            if not dumppath.exists():
                 fit.dump(dumppath, mini=True)
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'finished', feature_id)
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'finished', feature_id)
 
         # get resulting parameter DataFrame
         df = fit.res_df
@@ -140,7 +139,7 @@ class rt1_processing_config(object):
         return df
 
 
-    def finaloutput(self, res, hdf_key=None):
+    def finaloutput(self, res, hdf_key=None, format='table'):
         '''
         A function that is called after ALL sites are processed:
 
@@ -188,8 +187,8 @@ class rt1_processing_config(object):
                     hdf_key = 'result'
 
             # create (or append) results to a HDF-store
-            res.to_hdf(os.path.join(self.save_path, self.finalout_name),
-                       key=hdf_key, format='table', complevel=5)
+            res.to_hdf(self.save_path / self.finalout_name,
+                       key=hdf_key, format=format, complevel=5)
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
@@ -228,19 +227,19 @@ class rt1_processing_config(object):
                   'otherwise exceptions will be raised')
             raise ex
         else:
-            dumppath = os.path.join(self.save_path, self.dumpfolder, fname)
-            error_dump = os.path.join(self.save_path, self.error_dumpfolder,
-                                      error_fname)
+            dumppath = self.save_path.joinpath(self.dumpfolder, fname)
+            error_dump = self.save_path.joinpath(self.error_dumpfolder,
+                                                 error_fname)
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      '... skipping', feature_id)
-
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      '... skipping', feature_id)
+                pass
             elif 'rt1_file_already_exists' in ex.args:
                 # if the fit-dump file already exists, try loading the existing
                 # file and apply post-processing if possible
-                print('file already exists')
+                #print('file already exists')
 
                 try:
                     with open(dumppath, 'rb') as file:
@@ -248,18 +247,19 @@ class rt1_processing_config(object):
 
                     return self.postprocess(fit, reader_arg)
                 except Exception:
-                    print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                          'the file', dumppath, 'seems to be corrupted')
-
+                    #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                    #      'the file', dumppath, 'seems to be corrupted')
+                    pass
 
             elif 'rt1_data_error' in ex.args:
                 # if no data is found, ignore and continue
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'there was no data for ', feature_id, '   ...passing on')
+                pass
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'there was no data for ', feature_id, '   ...passing on')
             else:
                 # dump the encountered exception to a file
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'there was an exception for ', feature_id)
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'there was an exception for ', feature_id)
                 with open(error_dump, 'w') as file:
                     file.write(traceback.format_exc())
 
