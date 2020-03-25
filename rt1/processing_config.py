@@ -82,7 +82,7 @@ class rt1_processing_config(object):
                  error_dumpfolder=None, finalout_name=None):
         self.save_path = Path(save_path)
         self.dumpfolder = dumpfolder
-        if self.error_dumpfolder is None and self.dumpfolder is not None:
+        if error_dumpfolder is None and self.dumpfolder is not None:
             self.error_dumpfolder = self.dumpfolder
         else:
             self.error_dumpfolder = error_dumpfolder
