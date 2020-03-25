@@ -2,7 +2,7 @@
 """
 helper functions that are used both in rtfits and rtplots
 """
-
+import sys
 import numpy as np
 from itertools import tee, islice
 
@@ -151,7 +151,6 @@ def dBsig0convert(val, inc,
         if dB is False and fitdB is True:
             val = 10**(val/10.)
 
-
     return val
 
 
@@ -208,11 +207,16 @@ def scale(x, out_range=(0, 1),
     return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
 
 
-import sys
 
 def update_progress(progress, max_prog=100,
                     title="",
                     finalmsg=" DONE\r\n"):
+    '''
+    print a progress-bar
+
+    adapted from: https://blender.stackexchange.com/a/30739
+    '''
+
     length = 30 # modify this to change the length
     block = int(round(length*progress/max_prog))
     msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
