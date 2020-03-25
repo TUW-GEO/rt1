@@ -11,26 +11,26 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 
 ### rt1.RT1
 
-    - generic implementation of radiative transfer calculations for a random
-      volume over ground
+- generic implementation of radiative transfer calculations for a random
+  volume over ground
 
-    - symbolic evaluation of first-order interaction contribution estimates
-      as documented in *Quast & Wagner (2016)*
+- symbolic evaluation of first-order interaction contribution estimates
+  as documented in *Quast & Wagner (2016)*
 
 ### rt1.rtfits
 
-    - a flexible interface for (parallelized) least-squares fitting
+- a flexible interface for (parallelized) least-squares fitting
 
-    - integrates with a set of pre-defined plot-functions and interactive
-      widgets that can be used to quickly analyze the obtained results
+- integrates with a set of pre-defined plot-functions and interactive
+  widgets that can be used to quickly analyze the obtained results
 
 ### rt1.rtparse.RT1_configparser
 
-    - a configparser to set up processing-routines via .ini files
+- a configparser to set up processing-routines via .ini files
 
 ### rt1.volume and rt1.surface
 
-    - a collection of useful surface- and volume scattering phase-functions
+- a collection of useful surface- and volume scattering phase-functions
 
 
 
