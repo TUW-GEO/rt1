@@ -9,7 +9,7 @@ for random volume over ground as documented in *Quast & Wagner (2016)* and
 The documentation of the package is found [here](http://rt1.readthedocs.io/).
 (Note that the documentation is still under construction.)
 
-### rt1.RT1
+**rt1.RT1**
 
 - generic implementation of radiative transfer calculations for a random
   volume over ground
@@ -17,18 +17,18 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 - symbolic evaluation of first-order interaction contribution estimates
   as documented in *Quast & Wagner (2016)*
 
-### rt1.rtfits
+**rt1.rtfits**
 
 - a flexible interface for (parallelized) least-squares fitting
 
 - integrates with a set of pre-defined plot-functions and interactive
   widgets that can be used to quickly analyze the obtained results
 
-### rt1.rtparse.RT1_configparser
+**rt1.rtparse**
 
 - a configparser to set up processing-routines via .ini files
 
-### rt1.volume and rt1.surface
+**rt1.volume** and **rt1.surface**
 
 - a collection of useful surface- and volume scattering phase-functions
 
