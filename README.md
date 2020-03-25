@@ -15,7 +15,6 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
   volume over ground
 
 - symbolic evaluation of first-order interaction contribution estimates
-  as documented in *Quast & Wagner (2016)*
 
 **rt1.rtfits**
 
