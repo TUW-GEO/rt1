@@ -2,7 +2,7 @@
 """
 helper functions that are used both in rtfits and rtplots
 """
-
+import sys
 import numpy as np
 from itertools import tee, islice
 
@@ -151,7 +151,6 @@ def dBsig0convert(val, inc,
         if dB is False and fitdB is True:
             val = 10**(val/10.)
 
-
     return val
 
 
@@ -206,3 +205,37 @@ def scale(x, out_range=(0, 1),
     #domain = np.nanpercentile(x, 1), np.nanpercentile(x, 99)
     y = (x - (domain[1] + domain[0]) / 2) / (domain[1] - domain[0])
     return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
+
+
+
+def update_progress(progress, max_prog=100,
+                    title="", finalmsg=" DONE\r\n",
+                    progress2 = None):
+    '''
+    print a progress-bar
+
+    adapted from: https://blender.stackexchange.com/a/30739
+    '''
+
+    length = 25 # the length of the progress bar
+    block = int(round(length*progress/max_prog))
+    if progress2 is not None:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+              f' {progress} [{progress2}] / {max_prog}')
+    else:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+               f' {progress} / {max_prog}')
+
+
+    if progress >= max_prog: msg = f'\r{finalmsg:<79}\n'
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+
+
+def dt_to_hms(td):
+    '''
+    convert a datetime.timedelta object into days, hours, minutes and seconds
+    '''
+    days, hours, minutes  = td.days, td.seconds // 3600, td.seconds %3600//60
+    seconds = td.seconds - hours*3600 - minutes*60
+    return days, hours, minutes, seconds

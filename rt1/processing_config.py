@@ -124,8 +124,8 @@ class rt1_processing_config(object):
             # if no dump exists, dump it, else load the existing dump
             if not dumppath.exists():
                 fit.dump(dumppath, mini=True)
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'finished', feature_id)
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'finished', feature_id)
 
         # get resulting parameter DataFrame
         df = fit.res_df
@@ -233,13 +233,13 @@ class rt1_processing_config(object):
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      '... skipping', feature_id)
-
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      '... skipping', feature_id)
+                pass
             elif 'rt1_file_already_exists' in ex.args:
                 # if the fit-dump file already exists, try loading the existing
                 # file and apply post-processing if possible
-                print('file already exists')
+                #print('file already exists')
 
                 try:
                     with open(dumppath, 'rb') as file:
@@ -247,18 +247,19 @@ class rt1_processing_config(object):
 
                     return self.postprocess(fit, reader_arg)
                 except Exception:
-                    print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                          'the file', dumppath, 'seems to be corrupted')
-
+                    #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                    #      'the file', dumppath, 'seems to be corrupted')
+                    pass
 
             elif 'rt1_data_error' in ex.args:
                 # if no data is found, ignore and continue
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'there was no data for ', feature_id, '   ...passing on')
+                pass
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'there was no data for ', feature_id, '   ...passing on')
             else:
                 # dump the encountered exception to a file
-                print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                      'there was an exception for ', feature_id)
+                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
+                #      'there was an exception for ', feature_id)
                 with open(error_dump, 'w') as file:
                     file.write(traceback.format_exc())
 

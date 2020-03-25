@@ -801,7 +801,8 @@ class plot:
 
 
     def results(self, fit=None, startvals=False,
-                 legends=False, result_selection='all'):
+                 legend=False, result_selection='all',
+                 legend_fmt='%d.%m.%Y %H:%M:%S'):
         '''
         a function to quickly print the fit-results and the gained parameters
 
@@ -817,8 +818,10 @@ class plot:
         startvals : bool (default = False)
                     if True, the model-results using the start-values are
                     plotted as black lines
-        legends : bool (default = True)
+        legend : bool (default = True)
                   indicator if legends should be plotted
+        legend_fmt : str (default = '%d.%m.%Y %H:%M:%S')
+                     the datetime-format to use when printing a legend
         result_selection : list-like or 'all'
                            a list of the measurement-numbers that should be
                            plotted (indexed starting from 0) or 'all' in case
@@ -835,46 +838,32 @@ class plot:
         if result_selection == 'all':
             result_selection = range(len(fit.data))
 
-        # assign colors
-        colordict = {key:f'C{i%10}' for
-                     i, key in enumerate(fit.res_dict.keys())}
-
-        # reset incidence-angles in case they have been altered beforehand
-        fit.R.t_0 = fit.inc
-        fit.R.p_0 = np.zeros_like(fit.inc)
 
         # generate figure
         fig = plt.figure(figsize=(14, 10))
         ax = fig.add_subplot(211)
         ax.set_title('Fit-results')
 
-        # plot datapoints
-        for i, j in enumerate(np.ma.masked_array(fit.data,
-                                                 fit.mask)[result_selection]):
-            ax.plot(fit.inc[result_selection[i]], j, '.')
-
-        # reset color-cycle
-        plt.gca().set_prop_cycle(None)
-
-        # define incidence-angle range for plotting
-#        incplot = np.array([np.linspace(np.min(inc), np.max(inc), 100)]
-#                           * Nmeasurements)
-        incplot = fit.inc
-        # set new incidence-angles
-        fit.R.t_0 = incplot
-        fit.R.p_0 = np.zeros_like(incplot)
-
         # calculate results
-        fitplot = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+        fitplot = fit._calc_model()
+        # get masked data
+        masked_data = np.ma.masked_array(fit.data, fit.mask)
+        # get labels
+        try:
+            labels = pd.to_datetime(fit.fit_index
+                                    ).strftime(legend_fmt)[result_selection]
+        except:
+            labels = result_selection
 
-        # generate a mask that hides all measurements where no data has
-        # been provided (i.e. whose parameter-results are still the startvals)
-        newmask = np.ones_like(incplot) * np.all(fit.mask, axis=1)[:,
-                                                                   np.newaxis]
-        fitplot = np.ma.masked_array(fitplot, newmask)
+        for i in result_selection:
+            l, = ax.plot(fit.inc[i], fitplot[i], alpha=0.4, label=labels[i])
+            ax.plot(fit.inc[i], masked_data[i], '.', c=l.get_color())
 
-        for i, val in enumerate(fitplot[result_selection]):
-            ax.plot(incplot[i], val, alpha=0.4, label=result_selection[i])
+        if legend is True:
+            if len(result_selection) > 20:
+                print('more than 20 lines are plotted... legend is disabled')
+            else:
+                ax.legend(loc=1)
 
         # ----------- plot start-values ------------
         if startvals is True:
@@ -884,31 +873,32 @@ class plot:
                     label = 'fitstart'
                 else:
                     label = ''
-                ax.plot(incplot[result_selection[i]], val, 'k--', linewidth=1,
+                ax.plot(fit.inc[result_selection[i]], val, 'k--', linewidth=1,
                         alpha=0.5, label=label)
 
-        if legends is True:
-            ax.legend(loc=1)
+        if fit.sig0 is False:
+            label = '$I^{tot}$'
+        elif fit.sig0 is True:
+            label= r'$\sigma_0^{tot}$'
 
-        mintic = np.round(np.rad2deg(np.min(fit.inc)) + 4.9, -1)
-        if mintic < 0.:
-            mintic = 0.
-        maxtic = np.round(np.rad2deg(np.max(fit.inc)) + 4.9, -1)
-        if maxtic > 360.:
-            maxtic = 360.
+        if fit.dB is True:
+            label += ' [dB]'
 
-        ticks = np.arange(np.rad2deg(np.min(fit.inc)),
-                          np.rad2deg(np.max(fit.inc)) + 1.,
-                          (maxtic - mintic) / 10.)
-        plt.xticks(np.deg2rad(ticks), np.array(ticks, dtype=int))
-        plt.xlabel('$\\theta_0$ [deg]')
-        plt.ylabel('$I_{tot}$')
+        ax.set_ylabel(label)
+        ax.set_xlabel('$\\theta_0$')
+
 
         ax2 = fig.add_subplot(212)
         ax2.set_title('Estimated parameters')
+        ax2.set_ylabel('Parameters')
 
 
         # plot fitted values
+        # assign colors
+        colordict = {key:f'C{i%10}' for
+                     i, key in enumerate(fit.res_dict.keys())}
+
+
         for key, val in fit.res_df.items():
             ax2.plot(val, alpha=1., label=key, color=colordict[key])
 
@@ -918,17 +908,9 @@ class plot:
                          ax2.get_ylim()[1]*.9,
                          resid,
                          bbox=dict(facecolor=f'C{i}', alpha=0.5))
-
         ax2.legend(loc=1)
 
-        # set ticks
-        if isinstance(fit.index[0], datetime.datetime):
-            fig.autofmt_xdate()
-
-        plt.ylabel('Parameters')
-
         fig.tight_layout()
-
         return fig
 
 
