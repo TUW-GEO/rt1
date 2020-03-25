@@ -209,18 +209,23 @@ def scale(x, out_range=(0, 1),
 
 
 def update_progress(progress, max_prog=100,
-                    title="",
-                    finalmsg=" DONE\r\n"):
+                    title="", finalmsg=" DONE\r\n",
+                    progress2 = None):
     '''
     print a progress-bar
 
     adapted from: https://blender.stackexchange.com/a/30739
     '''
 
-    length = 30 # modify this to change the length
+    length = 25 # the length of the progress bar
     block = int(round(length*progress/max_prog))
-    msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
-           f' {progress:>5} / {max_prog}')
+    if progress2 is not None:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+              f' {progress} ({progress2}) / {max_prog}')
+    else:
+        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
+               f' {progress} / {max_prog}')
+
 
     if progress >= max_prog: msg = f'\r{finalmsg:<79}\n'
     sys.stdout.write(msg)

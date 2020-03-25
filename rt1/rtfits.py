@@ -23,6 +23,7 @@ from . import volume as rt1_v
 
 import copy
 import multiprocessing as mp
+import ctypes
 from itertools import repeat, groupby, accumulate, count
 from functools import lru_cache
 from operator import itemgetter
@@ -1963,16 +1964,6 @@ class Fits(Scatter):
                 raise TypeError('the first return-value of reader function ' +
                                 'must be a pandas DataFrame')
 
-
-            # pre-evaluate fn-coefficients
-            # if preeval_fn is True:
-            #     fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-            #                set_V_SRF=self.set_V_SRF, defdict=self.defdict,
-            #                lsq_kwargs=lsq_kwargs)
-            #     fit.performfit(re_init=True)
-
-            #     return fit
-
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
@@ -2009,16 +2000,18 @@ class Fits(Scatter):
                 remain = timedelta(
                     seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
                 d,h,m,s = dt_to_hms(remain)
-                update_progress(p_totcnt.value, p_max,
-                                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                                finalmsg=f"finished! ({p_max} fits)")
+                update_progress(
+                    p_totcnt.value, p_max,
+                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
+                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    progress2=p_meancnt.value)
 
             return ret
 
         except Exception as ex:
             if process_cnt is not None:
                 p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                # increase the counter
+                # only increase the total counter
                 p_totcnt.value += 1
                 if p_meancnt.value == 0:
                     title=f"{'estimating time ...':<28}"
@@ -2030,9 +2023,11 @@ class Fits(Scatter):
                     d,h,m,s = dt_to_hms(remain)
                     title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
 
-                update_progress(p_totcnt.value, p_max,
-                                title=title,
-                                finalmsg=f"finished! ({p_max} fits)")
+                update_progress(
+                    p_totcnt.value, p_max,
+                    title=title,
+                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    progress2=p_meancnt.value)
 
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
@@ -2042,7 +2037,8 @@ class Fits(Scatter):
 
     def processfunc(self, ncpu=1, reader=None, reader_args=None,
                     lsq_kwargs=None, preprocess=None, postprocess=None,
-                    exceptfunc=None, finaloutput=None, pool_kwargs=None):
+                    exceptfunc=None, finaloutput=None, pool_kwargs=None,
+                    print_progress=True):
         """
         Evaluate a RT-1 model on a single core or in parallel using either
             - a list of datasets or
@@ -2118,7 +2114,8 @@ class Fits(Scatter):
             initialization of the multiprocessing-pool via:
 
             >>> mp.Pool(ncpu, **pool_kwargs)
-
+        print_progress : bool
+            indicator if a progress-bar should be printed to stdout or not
 
         Returns
         -------
@@ -2135,19 +2132,21 @@ class Fits(Scatter):
             # pre-evaluate the fn-coefficients if interaction terms are used
             self._fnevals_input = self.R._fnevals
 
-        manager = mp.Manager()
-        import ctypes
-        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_time = manager.Value(ctypes.c_float, 0)
-        process_cnt = [p_totcnt, p_meancnt, len(reader_args),
-                       p_time, ncpu]
+        if print_progress is True:
+            # initialize shared values that will be used to track the number
+            # of completed processes and the mean time to complete a process
+            manager = mp.Manager()
+            p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+            p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+            p_time = manager.Value(ctypes.c_float, 0)
+            process_cnt = [p_totcnt, p_meancnt, len(reader_args),
+                           p_time, ncpu]
+        else:
+            process_cnt = None
 
         if ncpu > 1:
             print('start of parallel evaluation')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
-
-
                 # loop over the reader_args
                 res_async = pool.starmap_async(self._evalfunc,
                                                zip(repeat(reader),

@@ -215,7 +215,7 @@ class TestRTfits(unittest.TestCase):
         testfit.model_definition
 
         # perform the fit
-        testfit.performfit()
+        testfit.performfit(print_progress=True)
 
         # check if _calc_slope_curv is working
         # TODO this only tests if a result is obtained, not if the result
