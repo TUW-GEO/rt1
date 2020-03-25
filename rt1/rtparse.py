@@ -369,5 +369,4 @@ class RT1_configparser(object):
             else:
                 process_specs[key] = val
 
-
         return process_specs
