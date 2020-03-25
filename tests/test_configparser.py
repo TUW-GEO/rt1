@@ -22,7 +22,7 @@ class TestCONFIGPARSER(unittest.TestCase):
         cfg = RT1_configparser(self.configpath)
 
         #----------------------------------------- check parsed configdicts
-        lsq_kwargs = {'verbose': 2,
+        lsq_kwargs = {'verbose': 0,
                       'ftol': 0.0001,
                       'gtol': 0.0001,
                       'xtol': 0.0001,
@@ -51,10 +51,10 @@ class TestCONFIGPARSER(unittest.TestCase):
 
         fits_kwargs = {'sig0': True,
                        'dB': False,
-                       'int_Q': False,
+                       'int_Q': True,
                        'lambda_backend': 'symengine',
                        '_fnevals_input': None,
-                       'verbose' : 2}
+                       'verbose' : 1}
 
         configdicts = cfg.get_config()
 
