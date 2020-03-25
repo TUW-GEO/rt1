@@ -51,7 +51,7 @@ Volume-module
    :show-inheritance:
 
 processing_config
---------------
+------------------
 .. automodule:: rt1.processing_config
    :members:
    :undoc-members:

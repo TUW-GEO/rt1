@@ -209,12 +209,13 @@ class rt1_processing_config(object):
         return df
 
 
-    def finaloutput(self, res, hdf_key=None, format='table'):
+    def finaloutput(self, res, hdf_key=None, format='fixed'):
         '''
         A function that is called after ALL sites are processed:
 
-        - first, the obtained parameter-dataframes returned by the
-          `postprocess()` function are concatenated
+        First, the obtained parameter-dataframes returned by the
+        `postprocess()` function are concatenated, then:
+
             - if `"save_path"` is defined, the resulting dataframe will be
               saved (or appended) to a hdf-store.
               the used key will be either the value of `"hdf_key"` or
@@ -234,7 +235,12 @@ class rt1_processing_config(object):
             The key used in the hdf-file. If None, the dumpfolder name will
             be used. If dumpfolder is not provided, 'result' is used.
             The default is None.
+        format: str
+            the format used when exporting the hdf-file.
 
+            Notice: if there are more than 2000 entries, the 'table' format
+            will not work and the 'fixed' format must be used!
+            The default is 'fixed'
         Returns
         -------
         res: pandas.DataFrame
@@ -269,17 +275,16 @@ class rt1_processing_config(object):
         a error-catch function that handles the following errors:
 
         - 'rt1_skip'
-            - exceptions are ignored and the next site is processed
+            exceptions are ignored and the next site is processed
         - 'rt1_data_error'
-            - exceptions are ignored and the next site is processed
+            exceptions are ignored and the next site is processed
         - 'rt1_file_already_exists'
-            - the already existing dump-file is loaded, the postprocess()
+            the already existing dump-file is loaded, the postprocess()
             function is applied and the result is returned
         - for any other exceptions:
-            - if 'save_path' and 'error_dumpfolder' are specified
-              a dump of the exception-message is saved and the exception
-              is ignored. otherwise the exception will be raised.
-
+            if `save_path` and `dumpfolder`or `error_dumpfolder` are specified
+            a dump of the exception-message is saved and the exception
+            is ignored. otherwise the exception will be raised.
 
         Parameters
         ----------
