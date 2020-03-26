@@ -2474,6 +2474,6 @@ class plot:
                 cb.set_label(
                     r'Relative error   $\frac{(x_{fit} - x_{data})}{x_{data}}$')
 
-        return ax
+        return fig
 
 
