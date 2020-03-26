@@ -18,6 +18,7 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
+import matplotlib.ticker as ticker
 
 from .general_functions import rectangularize, dBsig0convert, meandatetime, \
     pairwise, split_into
@@ -1097,7 +1098,7 @@ class plot:
             fit.intermediate_results
         except AttributeError:
             assert False, ('No intermediate results are found, you must run' +
-                           ' performfit() with intermediate_results=True flag!')
+                           ' performfit() with intermediate_results=True!')
 
         if params is None:
             params = fit.res_dict.keys()
@@ -2263,3 +2264,216 @@ class plot:
         textboxes_buttons['buttons'] = buttons
 
         return f, paramslider, textboxes_buttons
+
+
+    def intermediate_residuals(self, fit=None, grp='M', err='relerr',
+                              label_formatter=None, plottype='3D',
+                              iter_slice=slice(2,None), f_gs=None,
+                              colorbar=True, project_contour=False,
+                              fmt='%d.%m.%y %H:%M:%S'):
+        '''
+        generate a 2D or 3D  plot of the intermediate residuals during the fit
+
+        Parameters
+        ----------
+        fit : rt1.rtfits.Fits object
+            the rtfits object to use.
+        grp : `str` or `tuple`
+            the grouping to use
+
+            - if `str` it will be interpreted as a pandas datetime offset
+              string (e.g. like 'D', 'M', '10D' etc.)
+            - if `tuple`, it is interpreted as (key, values or bins) where the
+              key must correspond to a column in fit.dataset or fit.res_df and
+              the second entry is one of the following (see pandas.cut)
+                  - `int`, e.g. the number of bins to use
+                  - `array-like` e.g. the group-boundaries to use
+              Note that only dynamic parameters can be used here since
+              a constant can not be grouped!
+
+            The default is 'M'
+        err : str, optional
+            - 'abserr' for absolute errors
+            - 'relerr' for relative errors.
+
+            The default is 'relerr'.
+        label_formatter : callable, optional
+            A formatter that will be applied to the group-column.
+            See "matplotlib.ticker.FuncFormatter" for details.
+            The default is None.
+        plottype : str, optional
+            either '2D' or '3D'. The default is '3D'.
+        iter_slice : slice, optional
+            a slice to display only a part of the iterations.
+            The default is slice(2, None).
+        f_gs : (matplotlib.figure, matpltolib.gridspec), optional
+            a figure and gridspec object to be used instead of generating a new
+            figure. The default is None.
+        colorbar : bool, optional
+            indicator if a colorbar should be generated. The default is True.
+        project_contour : bool, optional
+            only if plottype = '3D'. Indicator if the surface should be
+            projected to the bottom or not.
+            The default is False.
+        fmt : str, optional
+            only if grp is `str`. the datetime-format used for the labels
+            The default is '%d.%m.%y %H:%M:%S'.
+
+        Returns
+        -------
+        ax : matplotlib.axes
+            the matplotlib axes used
+
+        '''
+        if fit is None:
+            fit = self.fit
+        try:
+            fit.intermediate_results
+        except AttributeError:
+            assert False, ('No intermediate results are found, you must run' +
+                           ' performfit() with intermediate_results=True!')
+
+
+        # get the step size of the iterator to correctly assign the labels
+        if iter_slice and iter_slice.step:
+            iterstep = iter_slice.step
+        else:
+            iterstep = 1
+
+
+        if isinstance(grp, tuple):
+            if grp[0] in fit.res_df:
+                grps = pd.cut(fit.res_df[grp[0]].reindex(fit.dataset.index),
+                              grp[1], include_lowest=True)
+            elif grp[0] in fit.dataset:
+                grps = pd.cut(fit.dataset[grp[0]], grp[1], include_lowest=True)
+            grpvals = grps.cat.categories.mid.values
+            ymin, ymax = grps.min().left, grps.max().right
+
+            # group the residuals with respect to the defined group
+            resarr = np.abs(
+                [pd.DataFrame(i[err], fit.dataset.index).groupby(
+                    grps).mean().values.flatten()
+                 for i in fit.intermediate_results['residuals'][iter_slice]]
+                )
+
+        elif isinstance(grp, str):
+            # group the residuals with respect to the defined group
+            grplabels = pd.DataFrame(
+                fit.intermediate_results['residuals'][0][err],
+                fit.dataset.index).groupby(pd.Grouper(freq=grp)
+                                           ).mean().index
+
+            resarr = np.abs(
+                [pd.DataFrame(i[err], fit.dataset.index).groupby(
+                    pd.Grouper(freq=grp)).mean().values.flatten()
+                 for i in fit.intermediate_results['residuals'][iter_slice]]
+                )
+            grpvals = np.arange(resarr.shape[1])
+            ymin, ymax = grpvals.min() - .5, grpvals.max() + .5
+
+
+            def label_formatter(x, pos=None):
+                if x in grpvals:
+                    return grplabels[int(x)].strftime(fmt)
+
+                else:
+                    return ''
+
+        # mask for nan-values
+        resarr = np.ma.masked_array(resarr, np.isnan(resarr))
+
+        xvals = np.arange(1,
+                          len(fit.intermediate_results['residuals']
+                              ) + 1)[iter_slice]
+        yvals = np.sort(pd.unique(grpvals))
+
+        if plottype == '3D':
+            # generate a 3D surface plot
+
+            Y, X = np.meshgrid(yvals, xvals)
+            if f_gs is None:
+                fig = plt.figure(figsize=(10,8))
+                ax = fig.add_subplot(111, projection='3d')
+            else:
+                fig = f_gs[0]
+                ax = fig.add_subplot(f_gs[1], projection='3d')
+            ax.grid()
+            for a in (ax.w_xaxis, ax.w_yaxis, ax.w_zaxis):
+                a.pane.set_color('none')
+
+            if project_contour:
+                # project a contour-plot to the bottom
+                ax.contourf(
+                    X, Y, resarr,
+                    zdir='z',
+                    offset=-(np.nanmax(resarr) - np.nanmin(resarr))*.1,
+                    cmap=plt.cm.coolwarm, alpha=0.5,
+                    extent=[xvals.min() - iterstep, xvals.max() ,
+                            ymin, ymax],
+                    origin='lower')
+
+                ax.set_zlim(np.nanmin(resarr) -
+                            (np.nanmax(resarr) - np.nanmin(resarr))*.1,
+                            np.nanmax(resarr))
+
+            # plot a 3D surface
+            surf = ax.plot_surface(X,Y, resarr,
+                                    cmap=plt.cm.coolwarm,
+                                    linewidth=0, antialiased=False,
+                                    vmin=np.nanmin(resarr),
+                                    vmax=np.nanmax(resarr),
+                                    rcount=500,
+                                    ccount=500,
+                                    alpha=1)
+
+            # incorporate the ticker if provided
+            if label_formatter is not None:
+                ax.yaxis.set_major_formatter(
+                    ticker.FuncFormatter(label_formatter))
+
+        elif plottype == '2D':
+            # generate a 2D imshow plot
+            if f_gs is None:
+                fig = plt.figure(figsize=(10,8))
+                ax = fig.add_subplot(111)
+            else:
+                ax = f_gs[0].add_subplot(f_gs[1])
+
+            surf = ax.imshow(resarr.T,
+                             cmap=plt.cm.coolwarm,
+                             vmin=np.nanmin(resarr),
+                             vmax=np.nanmax(resarr),
+                             extent=[xvals.min() - .5*iterstep,
+                                     xvals.max() + .5*iterstep,
+                                     ymin, ymax],
+                             origin='lower',
+                             aspect='auto'
+                             )
+
+            def xformatter(x, pos=None):
+                if x in xvals:
+                    return int(x)
+                else:
+                    return ''
+
+            # show only relevant tick-labels on x-axis
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(xformatter))
+            ax.set_ylim(ymin, ymax)
+
+            if label_formatter is not None:
+                ax.yaxis.set_major_formatter(
+                    ticker.FuncFormatter(label_formatter))
+
+        if colorbar is True:
+            cb = plt.colorbar(surf)
+            if err == 'abserr':
+                cb.set_label(
+                    r'Absolute error   $(x_{fit} - x_{data})$')
+            if err == 'relerr':
+                cb.set_label(
+                    r'Relative error   $\frac{(x_{fit} - x_{data})}{x_{data}}$')
+
+        return ax
+
+
