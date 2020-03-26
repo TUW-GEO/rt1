@@ -2267,7 +2267,7 @@ class plot:
 
 
     def intermediate_residuals(self, fit=None, grp='M', err='relerr',
-                              label_formatter=None, plottype='3D',
+                              label_formatter=None, plottype='2D',
                               iter_slice=slice(2,None), f_gs=None,
                               colorbar=True, project_contour=False,
                               fmt='%d.%m.%y %H:%M:%S'):
