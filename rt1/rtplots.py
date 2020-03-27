@@ -2271,7 +2271,7 @@ class plot:
 
 
     def intermediate_residuals(self, fit=None, grp='M', err='relerr',
-                              label_formatter=None, plottype='2D',
+                              label_formatter=None, plottype='3D',
                               iter_slice=slice(2,None), f_gs=None,
                               colorbar=True, project_contour=False,
                               fmt='%d.%m.%y %H:%M:%S',
@@ -2287,8 +2287,9 @@ class plot:
         grp : `str` or `tuple`
             the grouping to use
 
-            - if `str` it will be interpreted as a pandas datetime offset
-              string (e.g. like 'D', 'M', '10D' etc.)
+            - if you provide a string, it will be interpreted as a pandas
+              datetime offset string (e.g. like 'D', 'M', '10D' etc.)
+            - if 'all', the fit-index will be used to group the values
             - if `tuple`, it is interpreted as (key, values or bins) where the
               key must correspond to a column in fit.dataset or fit.res_df and
               the second entry is one of the following (see pandas.cut)
@@ -2322,7 +2323,7 @@ class plot:
             projected to the bottom or not.
             The default is False.
         fmt : str, optional
-            only if grp is `str`. the datetime-format used for the labels
+            only if grp is a string. the datetime-format used for the labels
             The default is '%d.%m.%y %H:%M:%S'.
         axtitle : str, optional
             The axes-label (if None, the provided key will be used)
@@ -2370,29 +2371,47 @@ class plot:
                 use_label = axtitle
 
         elif isinstance(grp, str):
-            # group the residuals with respect to the defined group
-            grplabels = pd.DataFrame(
-                fit.intermediate_results['residuals'][0][err],
-                fit.dataset.index).groupby(pd.Grouper(freq=grp)
-                                           ).mean().index
+            if grp == 'all':
+                # group the residuals with respect to the defined group
+                grplabels = pd.to_datetime(fit.fit_index)
+                resarr = np.abs(
+                    [pd.DataFrame(i[err], fit.dataset.index).groupby(
+                        fit._groupindex).mean().values.flatten()
+                     for i in fit.intermediate_results['residuals'][iter_slice]]
+                    )
+                grpvals = np.arange(resarr.shape[1])
+                ymin, ymax = grpvals.min() - .5, grpvals.max() + .5
+                def label_formatter(x, pos=None):
+                    if x in grpvals:
+                        return grplabels[int(x)].strftime(fmt)
+                    else:
+                        return ''
 
-            resarr = np.abs(
-                [pd.DataFrame(i[err], fit.dataset.index).groupby(
-                    pd.Grouper(freq=grp)).mean().values.flatten()
-                 for i in fit.intermediate_results['residuals'][iter_slice]]
-                )
-            grpvals = np.arange(resarr.shape[1])
-            ymin, ymax = grpvals.min() - .5, grpvals.max() + .5
+                use_label = ''
+            else:
+                # group the residuals with respect to the defined group
+                grplabels = pd.DataFrame(
+                    fit.intermediate_results['residuals'][0][err],
+                    fit.dataset.index).groupby(pd.Grouper(freq=grp)
+                                               ).mean().index
+
+                resarr = np.abs(
+                    [pd.DataFrame(i[err], fit.dataset.index).groupby(
+                        pd.Grouper(freq=grp)).mean().values.flatten()
+                     for i in fit.intermediate_results['residuals'][iter_slice]]
+                    )
+                grpvals = np.arange(resarr.shape[1])
+                ymin, ymax = grpvals.min() - .5, grpvals.max() + .5
 
 
-            def label_formatter(x, pos=None):
-                if x in grpvals:
-                    return grplabels[int(x)].strftime(fmt)
+                def label_formatter(x, pos=None):
+                    if x in grpvals:
+                        return grplabels[int(x)].strftime(fmt)
 
-                else:
-                    return ''
+                    else:
+                        return ''
 
-            use_label = ''
+                use_label = ''
 
         # mask for nan-values
         resarr = np.ma.masked_array(resarr, np.isnan(resarr))
