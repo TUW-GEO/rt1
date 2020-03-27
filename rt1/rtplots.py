@@ -19,6 +19,10 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 import matplotlib.ticker as ticker
+try:
+    from mpl_toolkits.mplot3d import Axes3D
+except:
+    pass
 
 from .general_functions import rectangularize, dBsig0convert, meandatetime, \
     pairwise, split_into
@@ -2270,7 +2274,9 @@ class plot:
                               label_formatter=None, plottype='2D',
                               iter_slice=slice(2,None), f_gs=None,
                               colorbar=True, project_contour=False,
-                              fmt='%d.%m.%y %H:%M:%S'):
+                              fmt='%d.%m.%y %H:%M:%S',
+                              axtitle=None,
+                              cmap='coolwarm'):
         '''
         generate a 2D or 3D  plot of the intermediate residuals during the fit
 
@@ -2318,7 +2324,9 @@ class plot:
         fmt : str, optional
             only if grp is `str`. the datetime-format used for the labels
             The default is '%d.%m.%y %H:%M:%S'.
-
+        axtitle : str, optional
+            The axes-label (if None, the provided key will be used)
+            The default is None
         Returns
         -------
         ax : matplotlib.axes
@@ -2356,6 +2364,10 @@ class plot:
                     grps).mean().values.flatten()
                  for i in fit.intermediate_results['residuals'][iter_slice]]
                 )
+            if axtitle is None:
+                use_label = grp[0]
+            else:
+                use_label = axtitle
 
         elif isinstance(grp, str):
             # group the residuals with respect to the defined group
@@ -2379,6 +2391,8 @@ class plot:
 
                 else:
                     return ''
+
+            use_label = ''
 
         # mask for nan-values
         resarr = np.ma.masked_array(resarr, np.isnan(resarr))
@@ -2418,19 +2432,44 @@ class plot:
                             np.nanmax(resarr))
 
             # plot a 3D surface
-            surf = ax.plot_surface(X,Y, resarr,
-                                    cmap=plt.cm.coolwarm,
-                                    linewidth=0, antialiased=False,
+            surf = ax.plot_surface(X, Y, resarr,
+                                    cmap=cmap,
+                                    linewidth=0, antialiased=True,
                                     vmin=np.nanmin(resarr),
                                     vmax=np.nanmax(resarr),
                                     rcount=500,
                                     ccount=500,
                                     alpha=1)
 
+            # find points that are surrounded by a mask and
+            # plot a connection-line and scatterpoints
+            maskp = [i == (True, False, True)
+                     for i in pairwise(
+                             [True, *np.all(resarr.mask, axis=0), True], 3)]
+
+            for i in np.arange(len(maskp))[maskp]:
+                ax.plot_wireframe(X.T[[i]], Y.T[[i]],
+                                  resarr.T[[i]],
+                                  linewidth=.25,
+                                  antialiased=False,
+                                  linestyle=(0, (10,10)),
+                                  alpha=.25,
+                                  color='k')
+
+                surf = ax.scatter(X.T[i],
+                                  Y.T[i],
+                                  resarr.T[i],
+                                  c=resarr.T[i],
+                                  cmap=cmap,
+                                  vmin=np.nanmin(resarr),
+                                  vmax=np.nanmax(resarr))
+
+
             # incorporate the ticker if provided
             if label_formatter is not None:
                 ax.yaxis.set_major_formatter(
                     ticker.FuncFormatter(label_formatter))
+
 
         elif plottype == '2D':
             # generate a 2D imshow plot
@@ -2438,10 +2477,11 @@ class plot:
                 fig = plt.figure(figsize=(10,8))
                 ax = fig.add_subplot(111)
             else:
+                fig = f_gs[0]
                 ax = f_gs[0].add_subplot(f_gs[1])
 
             surf = ax.imshow(resarr.T,
-                             cmap=plt.cm.coolwarm,
+                             cmap=cmap,
                              vmin=np.nanmin(resarr),
                              vmax=np.nanmax(resarr),
                              extent=[xvals.min() - .5*iterstep,
@@ -2459,11 +2499,14 @@ class plot:
 
             # show only relevant tick-labels on x-axis
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(xformatter))
-            ax.set_ylim(ymin, ymax)
+
 
             if label_formatter is not None:
                 ax.yaxis.set_major_formatter(
                     ticker.FuncFormatter(label_formatter))
+
+            ax.set_ylim(ymin, ymax)
+
 
         if colorbar is True:
             cb = plt.colorbar(surf)
@@ -2473,6 +2516,9 @@ class plot:
             if err == 'relerr':
                 cb.set_label(
                     r'Relative error   $\frac{(x_{fit} - x_{data})}{x_{data}}$')
+
+        ax.set_ylabel(use_label)
+        ax.set_xlabel('# fit-iteration')
 
         return fig
 
