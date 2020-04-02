@@ -1303,11 +1303,6 @@ class plot:
         if fit is None:
             fit = self.fit
 
-        # deepcopy the fit-object to avoid altering data
-        # TODO avoid copying if possible!
-        fit = copy.deepcopy(fit)
-        #int_Q = fit.R.int_Q
-
         if printparamnames is None:
             printparamnames = fit.res_dict.keys()
 
@@ -1332,31 +1327,27 @@ class plot:
         ax.grid()
         ax1.grid()
 
+        # get the indexes
+        indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
+        np.take(fit.dataset.index.to_numpy(), fit._idx_assigns, out=indexes)
+        indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
+        indexes = np.array([meandatetime(i.compressed()) for i in indexes])
 
-        # calculate backscatter values
-        data = fit.data
+        # calculate backscatter values and ensure correct index-order
+        # ( in case a unordered dyn-dict is used)
         mask = fit.mask
+
         sig0_vals = fit._calc_model(return_components=True)
-
-
         # apply mask and convert to pandas dataframe
         sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
         sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
 
-        sig0_vals['data'] = np.ma.masked_array(data, mask)
+        sig0_vals['data'] = np.ma.masked_array(fit.data, mask)
         sig0_vals['incs'] = np.ma.masked_array(fit.inc, mask)
 
 
-        indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
-        np.take(fit.dataset.index.to_numpy(), fit._idx_assigns, out=indexes)
-        indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
-        indexes = [meandatetime(i.compressed()) for i in indexes]
 
         sig0_vals['indexes'] = pd.to_datetime(indexes)
-
-        # ensure correct index-order ( in case a unordered dyn-dict is used)
-        for key, val in sig0_vals.items():
-            sig0_vals[key] = val[np.argsort(indexes)]
 
         # convert to sig0 and dB if necessary
         sig0_vals_I_linear = dict()
@@ -1379,7 +1370,6 @@ class plot:
             aux_keys = [i for i in fit.dataset.keys() if i not in ['inc',
                                                                    'sig']]
             if len(aux_keys) > 0:
-                fixed_param = fit.dataset[aux_keys].groupby(level=0).mean()
                 aux_keys = [key for key, val in fit.defdict.items()
                             if val[0] is False and val[1] == 'auxiliary']
                 newsig0_vals = fit.calc(
@@ -1387,13 +1377,11 @@ class plot:
                     fixed_param=fit.dataset[aux_keys])
                 newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
                         newsig0_vals))
-
-                # get the mean-value for each group
+                # # get the mean-value for each group
                 newsig0_vals = {key: np.array(
-                    [np.array(i).mean(axis=0) for i in
-                     split_into(val, fit._group_repeats)])
+                    [np.mean(i, axis=0) for i in
+                      split_into(val, fit._group_repeats)])
                                 for key, val in newsig0_vals.items()}
-
             else:
                 fixed_param = dict()
 
@@ -1433,6 +1421,16 @@ class plot:
                                  np.ma.min(sig0_vals['data'])]),
                          np.max([np.ma.max(sig0_vals['tot']),
                                  np.ma.max(sig0_vals['data'])])])
+
+        # ensure sort-order
+        inc_sortp = np.argsort(indexes)
+        for key, val in sig0_vals.items():
+            sig0_vals[key] = val[inc_sortp]
+        for key, val in newsig0_vals.items():
+            newsig0_vals[key] = val[inc_sortp]
+        for key, val in newsig0_vals_I_linear.items():
+            newsig0_vals_I_linear[key] = val[inc_sortp]
+
 
         # print full data points in the background
         if printfulldata is True:
@@ -1512,7 +1510,7 @@ class plot:
                                      **styledict_dict['surf'])
                     lines += ax.plot(incs[day], sig0_vals['vol'][day],
                                      **styledict_dict['vol'])
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                         lines += ax.plot(incs[day], sig0_vals['inter'][day],
                                          **styledict_dict['inter'])
 
@@ -1528,14 +1526,14 @@ class plot:
                 linsurf = sig0_vals_I_linear['surf'][day]
                 linvol = sig0_vals_I_linear['vol'][day]
 
-                if fit.R.int_Q is True:
+                if fit.int_Q is True:
                     lininter = sig0_vals_I_linear['inter'][day]
 
                 lines_frac += ax1.plot(incs[day], linsurf/lintot,
                                        **styledict_dict['surf'])
                 lines_frac += ax1.plot(incs[day], linvol/lintot,
                                        **styledict_dict['vol'])
-                if fit.R.int_Q is True:
+                if fit.int_Q is True:
                     lines_frac += ax1.plot(incs[day], lininter/lintot,
                                            **styledict_dict['inter'])
 
@@ -1559,7 +1557,7 @@ class plot:
                         linesfull += ax.plot(newincs[day][sortp],
                                              newsig0_vals['vol'][day][sortp],
                                              **styledict_fullt0_dict['vol'])
-                        if fit.R.int_Q is True:
+                        if fit.int_Q is True:
                             linesfull += ax.plot(
                                 newincs[day][sortp],
                                 newsig0_vals['inter'][day][sortp],
@@ -1568,7 +1566,7 @@ class plot:
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
                     lines_frac_full += ax1.plot(
@@ -1577,7 +1575,7 @@ class plot:
                     lines_frac_full += ax1.plot(newincs[day][sortp],
                                                 (linvol/lintot)[sortp],
                                                 **styledict_fullt0_dict['vol'])
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                         lines_frac_full += ax1.plot(
                             newincs[day][sortp], (lininter/lintot)[sortp],
                             **styledict_fullt0_dict['inter'])
@@ -1696,7 +1694,7 @@ class plot:
                     i += 1
                     lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
                     lines[i].set_ydata(sig0_vals['vol'][day])
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                        i += 1
                        lines[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
                        lines[i].set_ydata(sig0_vals['inter'][day])
@@ -1716,7 +1714,7 @@ class plot:
                 lintot = sig0_vals_I_linear['tot'][day]
                 linsurf = sig0_vals_I_linear['surf'][day]
                 linvol = sig0_vals_I_linear['vol'][day]
-                if fit.R.int_Q is True:
+                if fit.int_Q is True:
                     lininter = sig0_vals_I_linear['inter'][day]
 
                 lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
@@ -1724,7 +1722,7 @@ class plot:
                 i += 1
                 lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
                 lines_frac[i].set_ydata(linvol/lintot)
-                if fit.R.int_Q is True:
+                if fit.int_Q is True:
                     i += 1
                     lines_frac[i].set_xdata(np.rad2deg(sig0_vals['incs'][day]))
                     lines_frac[i].set_ydata(lininter/lintot)
@@ -1746,7 +1744,7 @@ class plot:
                         i += 1
                         linesfull[i].set_xdata(day_inc_new[sortp])
                         linesfull[i].set_ydata(newsig0_vals['vol'][day][sortp])
-                        if fit.R.int_Q is True:
+                        if fit.int_Q is True:
                             i += 1
                             linesfull[i].set_xdata(day_inc_new[sortp])
                             linesfull[i].set_ydata(newsig0_vals['inter'][day][sortp])
@@ -1760,7 +1758,7 @@ class plot:
                     lintot = newsig0_vals_I_linear['tot'][day]
                     linsurf = newsig0_vals_I_linear['surf'][day]
                     linvol = newsig0_vals_I_linear['vol'][day]
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                         lininter = newsig0_vals_I_linear['inter'][day]
 
                     lines_frac_full[i].set_xdata(day_inc_new[sortp])
@@ -1768,7 +1766,7 @@ class plot:
                     i += 1
                     lines_frac_full[i].set_xdata(day_inc_new[sortp])
                     lines_frac_full[i].set_ydata((linvol/lintot)[sortp])
-                    if fit.R.int_Q is True:
+                    if fit.int_Q is True:
                         i += 1
                         lines_frac_full[i].set_xdata(day_inc_new[sortp])
                         lines_frac_full[i].set_ydata((lininter/lintot)[sortp])
