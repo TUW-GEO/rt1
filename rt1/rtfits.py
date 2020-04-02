@@ -1768,12 +1768,14 @@ class Fits(Scatter):
             indicator if a progress-bar should be printed to stdout or not.
             The default is False.
         '''
-        # maintain R object during fit
-        R = self.R
 
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
+        # maintain R object during fit
+        R = self.R
+
+        if clear_cache is True:
             R._clear_cache()
 
         # set the number of repetitions (e.g. the max. number of values
