@@ -2280,13 +2280,25 @@ class Fits(Scatter):
         R = self.R
         R.t_0 = np.atleast_2d(inc)
         R.p_0 = np.full_like(R.t_0, 0.)
-        res_dict = {key:[[val], 1] for key, val in param.items()}
+        if isinstance(param,
+                      pd.DataFrame) and (fixed_param is None
+                                         or isinstance(fixed_param,
+                                                       pd.DataFrame)):
+            res_dict = {key:[[val], 1] for key, val in param.items()}
+            if fixed_param is None:
+                fixed_param = dict()
+            else:
+                fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                               key, val in fixed_param.loc[param.index].items()}
 
-        if fixed_param is None:
-            fixed_param = dict()
         else:
-            fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
-                           key, val in fixed_param.items()}
+            res_dict = {key:[[val], 1] for key, val in param.items()}
+
+            if fixed_param is None:
+                fixed_param = dict()
+            else:
+                fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                               key, val in fixed_param.items()}
 
 
         res = self._calc_model(R=R, res_dict=res_dict, fixed_dict=fixed_param,
