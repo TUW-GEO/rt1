@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize, pairwise, \
-    split_into, dt_to_hms, update_progress
+    split_into, dt_to_hms, update_progress, groupby_unsorted
 
 from .rtplots import plot as rt1_plots
 
@@ -317,7 +317,7 @@ class Fits(Scatter):
          a list of the names of the properties that are cached
          '''
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
-                 '_group_repeats', '_dataset_used', 'index',
+                 '_group_repeats', '_dataset_used', 'index', '_orig_index',
                  'fit_index', '_jac_assign_rule',
                  'meandatetimes', 'inc', 'data', 'data_weights',
                  '_fit_param_dyn_dict', '_idx_assigns',
@@ -443,14 +443,12 @@ class Fits(Scatter):
         (with respect to the unique index values of the provided dataset)
         '''
         if self._groupindex is not None:
-            groupids = [next(j) for i,j in groupby(
-                zip(self._groupindex, *self.param_dyn_dict.values()),
-                key=itemgetter(0))]
-
+            groupids = [i[0] for i in groupby_unsorted(
+                        zip(self._groupindex, *self.param_dyn_dict.values()),
+                        key=itemgetter(0),
+                        get=itemgetter(slice(1,None))).values()]
             param_dyn_df = pd.DataFrame(groupids,
-                                        columns=['groupindex',
-                                                 *self.param_dyn_dict.keys()])
-            param_dyn_df.drop(columns='groupindex', inplace=True)
+                                        columns=self.param_dyn_dict.keys())
 
             return param_dyn_df
 
@@ -676,16 +674,16 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def _orig_index(self):
         '''
         a list of the (grouped) index-values
         '''
 
-        orig_index = [np.array([k[1].value for k in j],
-                               dtype=self.dataset.index.dtype)
-                      for i,j in groupby(zip(self._groupindex,
-                                             self.dataset.index),
-                                         key=itemgetter(0))]
+        orig_index = [np.array(i, dtype=self.dataset.index.dtype) for i in
+             groupby_unsorted(zip(self._groupindex, self.dataset.index),
+                              key=itemgetter(0), get=itemgetter(1)).values()]
+
         return orig_index
 
 
@@ -697,10 +695,13 @@ class Fits(Scatter):
         with length of the dataset to the shape needed for further processing
         (e.g. grouped with respect to the temporal dynamics of the parameters)
         '''
+        return rectangularize(groupby_unsorted(range(len(self._groupindex)),
+                                        key=lambda x: self._groupindex[x]
+                                        ).values())
 
-        return rectangularize([range(*i) for i in
-                               pairwise(accumulate([0, *self._group_repeats]))],
-                              dim=self._max_rep)
+        # return rectangularize([range(*i) for i in
+        #                        pairwise(accumulate([0, *self._group_repeats]))],
+        #                       dim=self._max_rep)
 
 
     @property
