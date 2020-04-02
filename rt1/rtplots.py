@@ -434,12 +434,10 @@ class plot:
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-        # get the residuals and apply mask
-        residuals = np.ma.masked_array(fit._calc_model() - fit.data, fit.mask)
         # prepare measurements
         measures = fit.data[~fit.mask]
         # calculate estimates
-        estimates = residuals[~fit.mask] + measures
+        estimates = fit._calc_model()[~fit.mask]
 
         if mima is None:
             mi = np.min((measures, estimates))
