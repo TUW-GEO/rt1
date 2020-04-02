@@ -1352,8 +1352,11 @@ class plot:
         indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
         indexes = [meandatetime(i.compressed()) for i in indexes]
 
-        sig0_vals['indexes'] = pd.to_datetime(indexes)#pd.to_datetime(fit.index)
+        sig0_vals['indexes'] = pd.to_datetime(indexes)
 
+        # ensure correct index-order ( in case a unordered dyn-dict is used)
+        for key, val in sig0_vals.items():
+            sig0_vals[key] = val[np.argsort(indexes)]
 
         # convert to sig0 and dB if necessary
         sig0_vals_I_linear = dict()
@@ -1385,12 +1388,12 @@ class plot:
                 newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
                         newsig0_vals))
 
-                newsig0_vals = {key:np.array(
-                    [val[i[0]:i[1]].mean(axis=0) for i in pairwise(
-                        [None,
-                         *(np.where(np.diff(fit._groupindex))[0] + 1).tolist(),
-                         None])])
-                    for key, val in newsig0_vals.items()}
+                # get the mean-value for each group
+                newsig0_vals = {key: np.array(
+                    [np.array(i).mean(axis=0) for i in
+                     split_into(val, fit._group_repeats)])
+                                for key, val in newsig0_vals.items()}
+
             else:
                 fixed_param = dict()
 
@@ -1471,7 +1474,7 @@ class plot:
                     axparamplot.tick_params(axis='y', which='both',
                                             labelsize=5, length=2)
 
-                l, = axparamplot.plot(fit.res_df[key],
+                l, = axparamplot.plot(fit.res_df.sort_index()[key],
                                       label = key, color='C' + str(i))
                 # add handles and labels to legend
                 handles += axparamplot.get_legend_handles_labels()[0]
