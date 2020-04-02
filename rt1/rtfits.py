@@ -2019,7 +2019,7 @@ class Fits(Scatter):
                     p_totcnt.value, p_max,
                     title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
                     finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_meancnt.value)
+                    progress2=p_totcnt.value - p_meancnt.value)
 
             return ret
 
@@ -2042,7 +2042,7 @@ class Fits(Scatter):
                     p_totcnt.value, p_max,
                     title=title,
                     finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_meancnt.value)
+                    progress2=p_totcnt.value - p_meancnt.value)
 
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
