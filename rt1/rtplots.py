@@ -1344,11 +1344,11 @@ class plot:
         sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
 
         sig0_vals['data'] = np.ma.masked_array(data, mask)
-        sig0_vals['incs'] = np.ma.masked_array(fit.R.t_0, mask)
+        sig0_vals['incs'] = np.ma.masked_array(fit.inc, mask)
 
 
         indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
-        np.take(fit.index, fit._idx_assigns, out=indexes)
+        np.take(fit.dataset.index.to_numpy(), fit._idx_assigns, out=indexes)
         indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
         indexes = [meandatetime(i.compressed()) for i in indexes]
 
@@ -1380,15 +1380,16 @@ class plot:
                 aux_keys = [key for key, val in fit.defdict.items()
                             if val[0] is False and val[1] == 'auxiliary']
                 newsig0_vals = fit.calc(
-                    param=fit.res_df.reindex(fit.dataset.index), inc=inc,
+                    param=fit.res_df, inc=inc,
                     fixed_param=fit.dataset[aux_keys])
                 newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
                         newsig0_vals))
 
                 newsig0_vals = {key:np.array(
                     [val[i[0]:i[1]].mean(axis=0) for i in pairwise(
-                        [0, *np.where(np.diff(fit._groupindex))[0].tolist(),
-                        len(fit._groupindex)])])
+                        [None,
+                         *(np.where(np.diff(fit._groupindex))[0] + 1).tolist(),
+                         None])])
                     for key, val in newsig0_vals.items()}
             else:
                 fixed_param = dict()

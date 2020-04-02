@@ -699,10 +699,6 @@ class Fits(Scatter):
                                         key=lambda x: self._groupindex[x]
                                         ).values())
 
-        # return rectangularize([range(*i) for i in
-        #                        pairwise(accumulate([0, *self._group_repeats]))],
-        #                       dim=self._max_rep)
-
 
     @property
     def _setdict(self):
