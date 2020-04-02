@@ -1060,7 +1060,7 @@ class plot:
                     '-', color='w', linewidth=3)
 
             ax.plot(np.rad2deg(iii[np.argsort(iii)]), y[np.argsort(iii)],
-                    '-', color=asdf.get_color(), linewidth=2)
+                    '-', color=asdf.get_color(), linewidth=2, marker='x')
 
         ax.set_xlabel('$\\theta_0$ [deg]')
         ax.set_ylabel('$\\sigma_0$ [dB]')
