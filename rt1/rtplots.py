@@ -435,10 +435,10 @@ class plot:
         ax = fig.add_subplot(111)
 
         # prepare measurements
-        measures = fit.data[~fit.mask]
+        #measures = fit.dataset.sig.values
         # calculate estimates
-        estimates = fit._calc_model()[~fit.mask]
-
+        #estimates = fit.calc_model().tot.values
+        measures, estimates = pd.concat([fit.dataset.sig, fit.calc_model().tot], axis=1).values.T
         if mima is None:
             mi = np.min((measures, estimates))
             ma = np.max((measures, estimates))
@@ -531,20 +531,9 @@ class plot:
         data = np.ma.masked_array(fit.data, fit.mask)
 
         # calculate individual contributions
-        contrib_array = fit._calc_model(return_components=True)
-
-        # apply mask and convert to pandas dataframe
-        contrib_array = [np.ma.masked_array(con, fit.mask)
-                         for con in contrib_array]
-
-        contrib = dict(zip(['tot', 'surf', 'vol', 'inter'], contrib_array))
-
-        contrib['$\\sigma_0$ dataset'] = data
-        contrib['inc'] = inc_array
-
-        contrib = pd.DataFrame({key:val.compressed()
-                                for key, val in contrib.items()},
-                               fit.dataset.index)
+        contrib = fit.calc_model(return_components=True)
+        contrib['$\\sigma_0$ dataset'] = fit.dataset.sig
+        contrib['inc'] = fit.dataset.inc
 
         # convert units
         complist = [i for i in contrib.keys() if i not in ['inc']]
@@ -991,7 +980,7 @@ class plot:
             return cmap
 
         estimates = fit._calc_model()
-        indexsplits = list(split_into(fit.index, fit._group_repeats))
+        indexsplits = fit._orig_index
 
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1106,7 +1095,7 @@ class plot:
             params = fit.res_dict.keys()
 
         # constant parameters
-        constparams = [key for key in params if len(fit.res_dict[key][0]) == 1]
+        constparams = [key for key in params if len(fit.res_dict[key]) == 1]
         # timeseries-parameters
         tsparams = [i for i in params if i not in constparams]
 
@@ -1144,7 +1133,7 @@ class plot:
 
         interres_params = {}
         for key in params:
-            interres_p = pd.concat([pd.DataFrame(valdict[key][0],
+            interres_p = pd.concat([pd.DataFrame(valdict[key],
                                                  fit.meandatetimes[key],
                                     columns=[i])
                                     for i, valdict in enumerate(
@@ -1364,33 +1353,23 @@ class plot:
         if printfullt_0 is True:
             inc=np.deg2rad(np.arange(1, 89, 1))
 
-            # set parameters and auxiliary datasets
-            param = {key: val.mean(axis=1)
-                     for key, val in fit._assignvals(fit.res_dict).items()}
-            aux_keys = [i for i in fit.dataset.keys() if i not in ['inc',
-                                                                   'sig']]
-            if len(aux_keys) > 0:
-                aux_keys = [key for key, val in fit.defdict.items()
-                            if val[0] is False and val[1] == 'auxiliary']
-                newsig0_vals = fit.calc(
-                    param=fit.res_df, inc=inc,
-                    fixed_param=fit.dataset[aux_keys])
-                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                        newsig0_vals))
-                # # get the mean-value for each group
-                newsig0_vals = {key: np.array(
-                    [np.mean(i, axis=0) for i in
-                      split_into(val, fit._group_repeats)])
-                                for key, val in newsig0_vals.items()}
+            if len(fit.fixed_dict) > 0:
+                # get the average value of the fixed-parameters
+                # for each group
+                usefixedparams = fit.dataset[fit.fixed_dict.keys()].groupby(
+                    fit._groupindex).mean().set_index(
+                        pd.to_datetime(fit.meandatetimes_group))
             else:
-                fixed_param = dict()
+                usefixedparams = dict()
 
-                newsig0_vals = fit.calc(param=param,
-                                        inc=inc,
-                                        fixed_param=fixed_param,
-                                        return_components=True)
-                newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
-                                        newsig0_vals))
+            newsig0_vals = fit.calc(param=fit.res_df_group,
+                                    inc=inc,
+                                    fixed_param=usefixedparams,
+                                    return_components=True)
+            newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
+                                    newsig0_vals))
+
+
 
             newsig0_vals['incs'] = np.broadcast_to(inc,
                                                    newsig0_vals['tot'].shape)
