@@ -270,8 +270,9 @@ class TestRTfits(unittest.TestCase):
                        'omega': 0.01,
                        't1': 0.09}
 
+        fittedvals = testfit._assignvals(testfit.res_dict)
         for key in truevals:
-            err = abs(np.repeat(*testfit.res_dict[key]) - truevals[key]).mean()
+            err = abs(fittedvals[key].flatten() - truevals[key]).mean()
             self.assertTrue(
                 err < errdict[key],
                 msg='derived error' + str(err) + 'too high for ' + str(key))

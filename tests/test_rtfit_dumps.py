@@ -37,7 +37,9 @@ class TestDUMPS(unittest.TestCase):
             # call performfit to re-initialize _fnevals functions
             # and evaluate intermediate results
             # (they might have been removed if symeninge has been used)
-            fit.performfit(intermediate_results=True)
+            fit.lsq_kwargs['verbose'] = 0
+            fit.performfit(intermediate_results=True,
+                           print_progress=True)
 
             # get list of available plot-methods
             method_list = [func for func in dir(fit.plot) if
@@ -92,18 +94,17 @@ class TestDUMPS(unittest.TestCase):
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(path)
             old_results = fit.res_dict
-
             # print model definition
             fit.model_definition
-
             print('testing performfit')
-            fit.performfit()
-
+            fit.lsq_kwargs['verbose'] = 0
+            fit.performfit(intermediate_results=True,
+                           print_progress=True)
             for key, val in old_results.items():
-                self.assertTrue(np.allclose(np.repeat(*fit.res_dict[key]),
-                                            np.repeat(*val), atol=1e-4, rtol=1e-4),
+                self.assertTrue(np.allclose(fit.res_dict[key],
+                                            old_results[key], atol=1e-4, rtol=1e-4),
                                 msg=f'fitted values for {msg} fit of {key} ' +
-                                     f'differ by {np.mean(np.repeat(*fit.res_dict[key]) - np.repeat(*val))}')
+                                     f'differ by {np.subtract(fit.res_dict[key], old_results[key]).mean()}')
 
 
 

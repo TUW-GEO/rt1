@@ -246,7 +246,7 @@ def dt_to_hms(td):
     return days, hours, minutes, seconds
 
 
-def groupby_unsorted(a, key=lambda x: x, sort=True, get=lambda x: x):
+def groupby_unsorted(a, key=lambda x: x, sort=False, get=lambda x: x):
     '''
     group the elements of the input-array and return it as a dict with a list
     of the found values. optionally use a key- and a get- function.
@@ -264,7 +264,8 @@ def groupby_unsorted(a, key=lambda x: x, sort=True, get=lambda x: x):
 
 
     '''
-    d = dict()
+    # always use an OrderedDict to ensure sort-order for python < 3.6
+    d = OrderedDict()
     for item in a:
         d.setdefault(key(item), []).append(get(item))
     if sort is True:
