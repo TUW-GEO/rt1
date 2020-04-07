@@ -396,10 +396,10 @@ class Fits(Scatter):
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
-            grps = [[i, [p[0] for p in j]] for i, j in groupby(
-                self._timescaledict.items(), key=itemgetter(1))]
-            freq = [i[0] for i in grps]
-            freqkeys = [i[1] for i in grps]
+            grps = groupby_unsorted(self._timescaledict.items(),
+                                    key=itemgetter(1), get=itemgetter(0))
+            freq = list(grps.keys())
+            freqkeys = list(grps.values())
             param_dyn_dict = {}
             # initialize all parameters as scalar parameters
             for key in dyn_keys:
