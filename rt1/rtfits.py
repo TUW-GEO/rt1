@@ -387,10 +387,11 @@ class Fits(Scatter):
                      if val[0] is True and len(val) >= 5 and val[4] is True]
 
         # TODO make a proper test
-        for key in interpkeys:
-            assert np.all(self.meandatetimes[key][:-1]
-                          <= self.meandatetimes[key][1:]), (
-                'interpolation of unsorted parameter-groupings not possible!')
+        # don't use meandatetimes -> it disrupts parallel processing
+        # for key in interpkeys:
+        #     assert np.all(self.meandatetimes[key][:-1]
+        #                   <= self.meandatetimes[key][1:]), (
+        #         'interpolation of unsorted parameter-groupings not possible!')
         return interpkeys
 
 
@@ -457,7 +458,7 @@ class Fits(Scatter):
         a data-frame with the individual group-indexes for each parameter
         (with respect to the unique index values of the provided dataset)
         '''
-        if self._groupindex is not None:
+        if self.dataset is not None:
             groupids = [i[0] for i in groupby_unsorted(
                         zip(self._groupindex, *self.param_dyn_dict.values()),
                         key=itemgetter(0),
@@ -802,9 +803,7 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if val[0] is True:
                 startvaldict[key] = val[1]
-
         if self.param_dyn_df is not None:
-
             # re-shape param_dict and bounds_dict to fit needs
             uniques = self.param_dyn_df.nunique()
             for key, val in startvaldict.items():
@@ -2003,7 +2002,6 @@ class Fits(Scatter):
             else:
                 raise TypeError('the first return-value of reader function ' +
                                 'must be a pandas DataFrame')
-
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
@@ -2011,7 +2009,6 @@ class Fits(Scatter):
                        lambda_backend=self.lambda_backend,
                        _fnevals_input=self._fnevals_input,
                        interp_vals=self.interp_vals)
-
             fit.performfit()
 
             # append auxiliary data
