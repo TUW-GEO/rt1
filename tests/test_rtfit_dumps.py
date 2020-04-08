@@ -91,8 +91,26 @@ class TestDUMPS(unittest.TestCase):
                                 b.set_val(0.02)
                             if 'max' in key:
                                 b.set_val(0.99)
-
                     plt.close(f)
+
+                elif function_name == 'intermediate_residuals':
+                    # check default (e.g. pandas datetime-offset)
+                    f = fit.plot.__getattribute__(function_name)(fmt='%d.%b %Y')
+                    plt.close(f)
+                    # check grouping with respect to incidence angles and
+                    # convert the labels to degrees
+                    f = fit.plot.__getattribute__(function_name)(
+                        grp=('inc', 10),
+                        label_formatter=lambda x,y:round(np.rad2deg(x),2))
+                    plt.close(f)
+                    # check grouping with respect to datetimes
+                    f = fit.plot.__getattribute__(function_name)(grp='groups')
+                    plt.close(f)
+                    # check grouping with respect to the dataset index
+                    f = fit.plot.__getattribute__(function_name)(
+                        grp='dataset', plottype='2D', fmt='%Y %b %d (%H:%M)')
+                    plt.close(f)
+
                 else:
                     f = fit.plot.__getattribute__(function_name)()
                     plt.close(f)

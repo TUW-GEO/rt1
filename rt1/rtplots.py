@@ -2278,16 +2278,20 @@ class plot:
         fit : rt1.rtfits.Fits object
             the rtfits object to use.
         grp : `str` or `tuple`
-            the grouping to use
+            the grouping to use, you can either provide
 
-            - if you provide a string, it will be interpreted as a pandas
-              datetime offset string (e.g. like 'D', 'M', '10D' etc.)
-            - if 'all', the fit-index will be used to group the values
-            - if `tuple`, it is interpreted as (key, values or bins) where the
-              key must correspond to a column in fit.dataset or fit.res_df and
-              the second entry is one of the following (see pandas.cut)
+            - a `string`
+                - if 'groups', the parameter-groups will be used
+                - if 'dataset', the unique dataset-index values will be used
+                - all other strings will be interpreted as a pandas datetime
+                  offset string (e.g. like 'D', 'M', '10D' etc.)
+            - a `tuple`
+                - it is interpreted as (key, values or bins) where the
+                  key must correspond to a column in fit.dataset or fit.res_df
+                  and the second entry is one of the following (see pandas.cut)
                   - `int`, e.g. the number of bins to use
                   - `array-like` e.g. the group-boundaries to use
+
               Note that only dynamic parameters can be used here since
               a constant can not be grouped!
 
@@ -2364,9 +2368,9 @@ class plot:
                 use_label = axtitle
 
         elif isinstance(grp, str):
-            if grp == 'all':
+            if grp == 'groups':
                 # group the residuals with respect to the defined group
-                grplabels = pd.to_datetime(fit.fit_index)
+                grplabels = pd.to_datetime(fit.meandatetimes_group)
                 resarr = np.abs(
                     [pd.DataFrame(i[err], fit.dataset.index).groupby(
                         fit._groupindex).mean().values.flatten()
@@ -2381,6 +2385,24 @@ class plot:
                         return ''
 
                 use_label = ''
+            if grp == 'dataset':
+                # group the residuals with respect to the dataset-index
+                grplabels = pd.to_datetime(fit.index)
+                resarr = np.abs(
+                    [pd.DataFrame(i[err], fit.dataset.index).groupby(
+                        level=0).mean().values.flatten()
+                     for i in fit.intermediate_results['residuals'][iter_slice]]
+                    )
+                grpvals = np.arange(resarr.shape[1])
+                ymin, ymax = grpvals.min() - .5, grpvals.max() + .5
+                def label_formatter(x, pos=None):
+                    if x in grpvals:
+                        return grplabels[int(x)].strftime(fmt)
+                    else:
+                        return ''
+
+                use_label = ''
+
             else:
                 # group the residuals with respect to the defined group
                 grplabels = pd.DataFrame(
@@ -2531,7 +2553,7 @@ class plot:
 
         ax.set_ylabel(use_label)
         ax.set_xlabel('# fit-iteration')
-
+        fig.tight_layout()
         return fig
 
 
