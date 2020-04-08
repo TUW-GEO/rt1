@@ -43,11 +43,15 @@ after_success:
   - coveralls
 
 deploy:
+  # automatically deploy a release from the master-branch on pypi
   provider: pypi
   user: "__token__"
   password: $pypi_token
+  skip_existing: true
   on:
     branch: master
     tags: true
-    skip_existing: true
 
+after_deploy:
+  #test installation from pip
+  - pip install rt1
