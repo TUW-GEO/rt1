@@ -53,5 +53,5 @@ deploy:
     tags: true
 
 after_deploy:
-  #test installation from pip
+  # test installation from pip
   - pip install rt1
