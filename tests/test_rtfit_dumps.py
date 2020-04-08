@@ -121,6 +121,10 @@ class TestDUMPS(unittest.TestCase):
 
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(path)
+
+            # call _cache_info() to make coveralls happy
+            fit._cache_info()
+
             old_results = fit.res_dict
             # print model definition
             fit.model_definition
