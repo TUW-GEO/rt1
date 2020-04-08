@@ -1241,6 +1241,7 @@ class plot:
     def printsig0analysis(self, fit=None,
                           range1=1,
                           range2=None,
+                          use_index='groups',
                           printfullt_0=True,
                           printfulldata=True,
                           dB = True,
@@ -1261,6 +1262,12 @@ class plot:
         range1, range2 : int, optional
             The number of consecutive measurements considered by the
             first/second slider. The default is (1 / None).
+        use_index : str, optional
+            Select the partition of the index accessible via the sliders.
+                - if 'groups', the dataset will be grouped with respect to
+                  the parameter-dynamics
+                - if 'dataset', each unique dataset-index is used
+
         printcomponents1, printcomponents2 : bool, optional
             Indicator if individual backscatter contributions (surface, volume,
             interaction) should be plotted or not. The default is (True, True).
@@ -1316,28 +1323,29 @@ class plot:
         ax.grid()
         ax1.grid()
 
-        # get the indexes
-        indexes = np.empty_like(fit._idx_assigns, dtype='datetime64[ns]')
-        np.take(fit.dataset.index.to_numpy(), fit._idx_assigns, out=indexes)
-        indexes = np.ma.masked_array(indexes, fit.mask, dtype='datetime64[ns]')
-        indexes = np.array([meandatetime(i.compressed()) for i in indexes])
 
-        # calculate backscatter values and ensure correct index-order
-        # ( in case a unordered dyn-dict is used)
-        mask = fit.mask
+        if use_index == 'dataset':
+            sig0_vals = fit.calc_model(return_components=True)
+            sig0_vals['data'] = fit.dataset.sig
+            sig0_vals['incs'] = fit.dataset.inc
+            sig0_vals = sig0_vals.groupby(
+                level=0).agg(list).to_dict(orient='list')
+            sig0_vals = {key:rectangularize(val, return_masked=True) for
+                         key, val in sig0_vals.items()}
+            sig0_vals['indexes'] = pd.to_datetime(fit.index)
+        elif use_index == 'groups':
+            # calculate backscatter values and ensure correct index-order
+            # ( in case a unordered dyn-dict is used)
+            mask = fit.mask
 
-        sig0_vals = fit._calc_model(return_components=True)
-        # apply mask and convert to pandas dataframe
-        sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
-        sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
+            sig0_vals = fit._calc_model(return_components=True)
+            # apply mask and convert to pandas dataframe
+            sig0_vals = [np.ma.masked_array(con, mask) for con in sig0_vals]
+            sig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'], sig0_vals))
 
-        sig0_vals['data'] = np.ma.masked_array(fit.data, mask)
-        sig0_vals['incs'] = np.ma.masked_array(fit.inc, mask)
-
-
-
-        sig0_vals['indexes'] = pd.to_datetime(indexes)
-
+            sig0_vals['data'] = np.ma.masked_array(fit.data, mask)
+            sig0_vals['incs'] = np.ma.masked_array(fit.inc, mask)
+            sig0_vals['indexes'] = pd.to_datetime(fit.meandatetimes_group)
         # convert to sig0 and dB if necessary
         sig0_vals_I_linear = dict()
         for key in ['tot', 'surf', 'vol', 'inter', 'data']:
@@ -1352,24 +1360,27 @@ class plot:
                                                     fitdB=dB, fitsig0=sig0)
         if printfullt_0 is True:
             inc=np.deg2rad(np.arange(1, 89, 1))
+            if use_index == 'dataset':
+                newsig0_vals = fit.calc(param=fit.res_df,
+                        inc=inc,
+                        fixed_param=fit.dataset[fit.fixed_dict.keys()],
+                        return_components=True)
+            elif use_index == 'groups':
+                if len(fit.fixed_dict) > 0:
+                    # get the average value of the fixed-parameters
+                    # for each group
+                    usefixedparams = fit.dataset[fit.fixed_dict.keys()].groupby(
+                        fit._groupindex).mean().set_index(
+                            pd.to_datetime(fit.meandatetimes_group))
+                else:
+                    usefixedparams = dict()
+                newsig0_vals = fit.calc(param=fit.res_df_group,
+                                        inc=inc,
+                                        fixed_param=usefixedparams,
+                                        return_components=True)
 
-            if len(fit.fixed_dict) > 0:
-                # get the average value of the fixed-parameters
-                # for each group
-                usefixedparams = fit.dataset[fit.fixed_dict.keys()].groupby(
-                    fit._groupindex).mean().set_index(
-                        pd.to_datetime(fit.meandatetimes_group))
-            else:
-                usefixedparams = dict()
-
-            newsig0_vals = fit.calc(param=fit.res_df_group,
-                                    inc=inc,
-                                    fixed_param=usefixedparams,
-                                    return_components=True)
             newsig0_vals = dict(zip(['tot', 'surf', 'vol', 'inter'],
                                     newsig0_vals))
-
-
 
             newsig0_vals['incs'] = np.broadcast_to(inc,
                                                    newsig0_vals['tot'].shape)
@@ -1402,7 +1413,11 @@ class plot:
                                  np.ma.max(sig0_vals['data'])])])
 
         # ensure sort-order
-        inc_sortp = np.argsort(indexes)
+        if use_index == 'dataset':
+            inc_sortp = np.argsort(fit.index)
+        elif use_index == 'groups':
+            inc_sortp = np.argsort(fit.meandatetimes_group)
+
         for key, val in sig0_vals.items():
             sig0_vals[key] = val[inc_sortp]
         for key, val in newsig0_vals.items():
@@ -1779,7 +1794,7 @@ class plot:
         a_slider = Slider(slider_ax,            # axes object for the slider
                           'solid lines',        # name of the slider parameter
                           0,                    # minimal value of parameter
-                          len(fit._idx_assigns) - 1,   # maximal value of parameter
+                          len(sig0_vals['tot']) - 1,   # maximal value of parameter
                           valinit=0,            # initial value of parameter
                           valfmt="%i",          # print slider-value as integer
                           valstep=1,
@@ -1811,14 +1826,13 @@ class plot:
         # update slider boundary with respect to zoom of second plot
         ax2.callbacks.connect('xlim_changed', partial(updatesliderboundary,
                                                       slider=a_slider))
-
         if range2 is not None:
 
             # here we create the slider
             b_slider = Slider(slider_bx,         # axes object for the slider
                               'dashed lines',    # name of the slider parameter
                               0,                 # minimal value of parameter
-                              len(fit._idx_assigns) - 1,# maximal value of parameter
+                              len(sig0_vals['tot']) - 1,# maximal value of parameter
                               valinit=0,         # initial value of parameter
                               valfmt="%i",
                               valstep=1,

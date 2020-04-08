@@ -48,13 +48,23 @@ class TestDUMPS(unittest.TestCase):
             for function_name in method_list:
                 print(f'... {function_name}')
                 if function_name == 'printsig0analysis':
+                    # check 'dataset' index slider
                     f, s1, s2 = fit.plot.__getattribute__(function_name)(
-                            range2=2, range1=1)
+                            range2=2, range1=1, use_index='dataset')
                     # check update functions
                     s1.set_val(1)
                     s2.set_val(1)
-
                     plt.close(f)
+
+                    # check 'groups' index slider
+                    f, s1, s2 = fit.plot.__getattribute__(function_name)(
+                            range2=2, range1=1, use_index='groups')
+                    # check update functions
+                    s1.set_val(1)
+                    s2.set_val(1)
+                    plt.close(f)
+
+
                 elif function_name == 'analyzemodel':
                     f, sliders, txt_but = fit.plot.__getattribute__(
                         function_name)()
