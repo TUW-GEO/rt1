@@ -4,18 +4,8 @@
 language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
-  # - "2.7"
-  # - "3.4"
-  # - "3.5"
   - "3.6"
   - "3.7"
-
-env:
-  # don't use gmpy in mpmath to avoid pickling errors caused by a bug
-  # that affects the rtfits-module
-  # see: https://github.com/sympy/sympy/issues/12895
-  # see: https://github.com/sympy/sympy/pull/13530
-  - MPMATH_NOGMPY=1
 
 # blocklist
 branches:
@@ -26,19 +16,14 @@ install:
   - sudo apt-get update
   # We do this conditionally because it saves us some downloading if the
   # version is the same.
-  - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-      wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
-    else
-      wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-    fi
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
   - bash miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
   - export PYTHONPATH="."
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
 
-  # --- temporarily remove this due to https://github.com/conda/conda/issues/9337
-  #- conda update -q conda
+  - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
 
@@ -50,24 +35,19 @@ install:
   - conda install cloudpickle
   - conda install pytables
   - conda install -c conda-forge coveralls
-  # before the actual installation we test first if existing
-  # installation mechanism using PIP and CONDA work
-  # with the versioned package on PyPi. Please note
-  # that this is not necessarily the same code as in the current development
-  # or master branches
-  #- conda install pip
-
-  # test installation from pip
-  #- pip install rt1
-  #- yes | pip uninstall rt1
-
-  # test conda based installation (currently not activated as package still missing)
-  # - conda install -c conda-forge rt1
-  # - conda uninstall -c conda-forge rt1
 
 script:
-#  - nosetests -v --nocapture --with-coverage --cover-package=rt1 --cover-config-file=.coveragerc  # -s to see print-output from nosetests
-
   - pytest --cov=rt1
+
 after_success:
   - coveralls
+
+deploy:
+  provider: pypi
+  user: "__token__"
+  password: $pypi_token
+  on:
+    branch: master
+    tags: true
+    skip_existing: true
+
