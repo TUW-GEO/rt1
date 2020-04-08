@@ -122,9 +122,6 @@ class TestDUMPS(unittest.TestCase):
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(path)
 
-            # call _cache_info() to make coveralls happy
-            fit._cache_info()
-
             old_results = fit.res_dict
             # print model definition
             fit.model_definition
@@ -132,6 +129,18 @@ class TestDUMPS(unittest.TestCase):
             fit.lsq_kwargs['verbose'] = 0
             fit.performfit(intermediate_results=True,
                            print_progress=True)
+
+            # call _cache_info() to make coveralls happy
+            fit._cache_info()
+            fit.R._cache_info()
+
+            # try to dump the file again (without fit-details)
+            fit.dump(os.path.join(os.path.dirname(__file__), 'testdump1.dump'),
+                     mini=True)
+            # try to dump the file again (with fit-details)
+            fit.dump(os.path.join(os.path.dirname(__file__), 'testdump2.dump'),
+                     mini=False)
+
             for key, val in old_results.items():
                 self.assertTrue(np.allclose(fit.res_dict[key],
                                             old_results[key], atol=1e-4, rtol=1e-4),
