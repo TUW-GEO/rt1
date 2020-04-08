@@ -5,6 +5,7 @@ helper functions that are used both in rtfits and rtplots
 import sys
 import numpy as np
 from itertools import tee, islice
+from collections import OrderedDict
 
 def rectangularize(array, return_mask=False, dim=None,
                    return_masked=False):
@@ -154,18 +155,22 @@ def dBsig0convert(val, inc,
     return val
 
 
-def pairwise(iterable):
+def pairwise(iterable, pairs=2):
     """
-    a generator to return consecutive pairs from an iterable, e.g.:
+    a generator to return n consecutive values from an iterable, e.g.:
 
+        pairs = 2
         s -> (s0,s1), (s1,s2), (s2, s3), ...
 
-    taken from https://docs.python.org/3.7/library/itertools.html
-    """
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
+        pairs = 3
+        s -> (s0, s1, s2), (s1, s2, s3), (s2, s3, s4), ...
 
+    adapted from https://docs.python.org/3.7/library/itertools.html
+    """
+    x = tee(iterable, pairs)
+    for n, n_iter in enumerate(x[1:]):
+        [next(n_iter, None) for i in range(n + 1)]
+    return zip(*x)
 
 def split_into(iterable, sizes):
     """
@@ -239,3 +244,31 @@ def dt_to_hms(td):
     days, hours, minutes  = td.days, td.seconds // 3600, td.seconds %3600//60
     seconds = td.seconds - hours*3600 - minutes*60
     return days, hours, minutes, seconds
+
+
+def groupby_unsorted(a, key=lambda x: x, sort=False, get=lambda x: x):
+    '''
+    group the elements of the input-array and return it as a dict with a list
+    of the found values. optionally use a key- and a get- function.
+
+    if sort is True, a OrderedDict with sorted keys will be returned
+
+    roughly equivalent to:
+
+        >>> # if only the input-array a is provided
+        ... {unique value of a: [found copies of the unique value]}
+        ... # if a and a key-function is provided
+        ... {key(a) : [...values with the same key(a)...]}
+        ... # if both a key- and a get-function is provided
+        ... {key(a) : [get(x) for x in ...values with the same key(a)...]}
+
+
+    '''
+    # always use an OrderedDict to ensure sort-order for python < 3.6
+    d = OrderedDict()
+    for item in a:
+        d.setdefault(key(item), []).append(get(item))
+    if sort is True:
+        return OrderedDict(sorted(d.items()))
+    else:
+        return d

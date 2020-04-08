@@ -13,8 +13,8 @@ from scipy.interpolate import interp1d
 
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
-from .general_functions import meandatetime, rectangularize, pairwise, \
-    split_into, dt_to_hms, update_progress
+from .general_functions import meandatetime, rectangularize, \
+    split_into, dt_to_hms, update_progress, groupby_unsorted
 
 from .rtplots import plot as rt1_plots
 
@@ -24,10 +24,10 @@ from . import volume as rt1_v
 import copy
 import multiprocessing as mp
 import ctypes
-from itertools import repeat, groupby, accumulate, count
+from itertools import repeat, groupby, count
 from functools import lru_cache
 from operator import itemgetter
-from collections import Counter, deque
+from collections import Counter
 
 from timeit import default_timer as tick
 from datetime import timedelta
@@ -167,8 +167,6 @@ class Fits(Scatter):
 
     index: array-like
         the unique index values of the provided dataset
-    fit_index: array-like
-        the mean datetime-indexes that correspond to each fit-group
     res_dict: dict
         a dictionary of the obtained fit-results
     res_df: pandas.DataFrame
@@ -277,6 +275,15 @@ class Fits(Scatter):
             self._fnevals_input = self.lsq_kwargs.pop('_fnevals_input',
                                                       None)
 
+        if (hasattr(self, 'res_dict')
+            and np.all([len(val)==2
+                       for _, val in self.res_dict.items()])
+            and np.all([isinstance(val[0], list)
+                       for _, val in self.res_dict.items()])):
+                print('updating res-dict to new shape...')
+                self.res_dict = {key:val[0]
+                                 for key, val in self.res_dict.items()}
+
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
@@ -316,12 +323,12 @@ class Fits(Scatter):
          '''
          a list of the names of the properties that are cached
          '''
-         names = ['param_dyn_dict', 'param_dyn_df', '_groupindex',
-                 '_group_repeats', '_dataset_used', 'index',
-                 'fit_index', '_jac_assign_rule',
-                 'meandatetimes', 'inc', 'data', 'data_weights',
-                 '_fit_param_dyn_dict', '_idx_assigns',
-                 '_repeatdict', '_order', 'interp_vals']
+         names = ['param_dyn_dict', 'param_dyn_df', '_groupindex', '_N_groups',
+                  '_dataset_used', 'index', '_orig_index',
+                  '_jac_assign_rule', 'meandatetimes', 'inc', 'data',
+                  'data_weights', '_idx_assigns', '_param_assigns',
+                  '_param_assigns_dataset', '_val_assigns', '_order',
+                  'interp_vals', ]
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -376,8 +383,16 @@ class Fits(Scatter):
     @property
     @lru_cache()
     def interp_vals(self):
-        return [key for key, val in self.defdict.items()
-                if val[0] is True and len(val) >= 5 and val[4] is True]
+        interpkeys= [key for key, val in self.defdict.items()
+                     if val[0] is True and len(val) >= 5 and val[4] is True]
+
+        # TODO make a proper test
+        # don't use meandatetimes -> it disrupts parallel processing
+        # for key in interpkeys:
+        #     assert np.all(self.meandatetimes[key][:-1]
+        #                   <= self.meandatetimes[key][1:]), (
+        #         'interpolation of unsorted parameter-groupings not possible!')
+        return interpkeys
 
 
     @property
@@ -396,10 +411,10 @@ class Fits(Scatter):
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
-            grps = [[i, [p[0] for p in j]] for i, j in groupby(
-                self._timescaledict.items(), key=itemgetter(1))]
-            freq = [i[0] for i in grps]
-            freqkeys = [i[1] for i in grps]
+            grps = groupby_unsorted(self._timescaledict.items(),
+                                    key=itemgetter(1), get=itemgetter(0))
+            freq = list(grps.keys())
+            freqkeys = list(grps.values())
             param_dyn_dict = {}
             # initialize all parameters as scalar parameters
             for key in dyn_keys:
@@ -408,7 +423,8 @@ class Fits(Scatter):
                 for i, f in enumerate(freq):
                     try:
                         grp_idx = self.dataset.index.to_frame().groupby(
-                                                        pd.Grouper(freq=f))
+                                                        pd.Grouper(freq=f),
+                                                        sort=False)
                     except ValueError:
                         raise ValueError(f'The provided frequency ({f}) of ' +
                                          f'{freqkeys[i]} is not a valid ' +
@@ -442,27 +458,16 @@ class Fits(Scatter):
         a data-frame with the individual group-indexes for each parameter
         (with respect to the unique index values of the provided dataset)
         '''
-        if self._groupindex is not None:
-            groupids = [next(j) for i,j in groupby(
-                zip(self._groupindex, *self.param_dyn_dict.values()),
-                key=itemgetter(0))]
-
+        if self.dataset is not None:
+            groupids = [i[0] for i in groupby_unsorted(
+                        zip(self._groupindex, *self.param_dyn_dict.values()),
+                        key=itemgetter(0),
+                        ).values()]
             param_dyn_df = pd.DataFrame(groupids,
-                                        columns=['groupindex',
+                                        columns=['group_id',
                                                  *self.param_dyn_dict.keys()])
-            param_dyn_df.drop(columns='groupindex', inplace=True)
-
+            param_dyn_df.set_index('group_id', inplace=True)
             return param_dyn_df
-
-
-    @property
-    @lru_cache()
-    def _fit_param_dyn_dict(self):
-        '''
-        get index to assign grouping (with respect to the fit-index)
-        '''
-
-        return self.param_dyn_df.to_dict(orient='list')
 
 
     @property
@@ -472,34 +477,19 @@ class Fits(Scatter):
         the index used to group the dataset with respect to the temporal
         dynamics of the parameters
         '''
-        if self.dataset is not None:
-            # get final group-indexes
-            groupindex = None
-            for key, val in self.param_dyn_dict.items():
-                dd = np.char.zfill(np.array(val, dtype='str'),
-                                   len(max(np.array(val, dtype='str'),
-                                           key=len)))
-                if groupindex is None:
-                    groupindex = dd
-                else:
-                    groupindex = np.char.add(groupindex, dd)
 
-            if groupindex is None:
-                _, groupindex = np.unique(self.dataset.index,
-                                          return_inverse=True)
+        # get final group-indexes
+        grdf = pd.DataFrame(self.param_dyn_dict).astype(str)
+        groupindex = grdf.apply(lambda x: x.str.zfill(max(x.str.len()))
+                                ).agg(lambda x: ''.join(x), axis=1
+                                      ).values
 
-            return groupindex.astype(np.int64)
-
+        return groupindex.astype(np.int64)
 
     @property
     @lru_cache()
-    def _group_repeats(self):
-        '''
-        the repetition of each fitted value (in order to distribute it
-        to the fit_index)
-        '''
-
-        return list(map(len, map(set, self._orig_index)))
+    def _N_groups(self):
+        return len(set(self._groupindex))
 
 
     @property
@@ -524,7 +514,7 @@ class Fits(Scatter):
 
         dataset['orig_index'] = dataset.index
         dataset = dataset.set_index(self._groupindex)
-        groupdf = dataset.groupby(level=0)
+        groupdf = dataset.groupby(level=0, sort=False)
 
         # generate new data-frame based on groups
         dataset_used = groupdf.agg(pd.Series.tolist)
@@ -547,19 +537,6 @@ class Fits(Scatter):
         # get all unique values of each group in _orig_index
         return np.concatenate([list(dict.fromkeys(i))
                                for i in self._orig_index])
-
-
-    @property
-    @lru_cache()
-    def fit_index(self):
-        '''
-        the mean datetime-indexes that correspond to each fit-group
-        '''
-
-        # be careful in case an unsorted grouping is applied !!!
-        # (e.g. manual dyn)
-        return np.array(list(map(meandatetime, self._orig_index)),
-                        dtype=self.index.dtype)
 
 
     @property
@@ -598,13 +575,26 @@ class Fits(Scatter):
         parameter
         '''
 
+        idx = self.dataset.index.to_numpy()
         dates = dict()
-        for key, val in self.param_dyn_df.items():
-            grp = groupby(zip(val.values, self.fit_index), key=itemgetter(0))
-            dates[key] = np.array(list(map(meandatetime,
-                             [[k[1] for k in j] for i,j in grp])),
-                                  dtype=self.index.dtype)
+        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+            dates[key] = list({g:meandatetime(val_g) for g, val_g in
+             groupby_unsorted(zip(idx, val),
+                             key=itemgetter(1),
+                             get=itemgetter(0)).items()}.values())
         return dates
+
+
+    @property
+    def meandatetimes_group(self):
+        '''
+        the average datetime-index of each fit-group
+        '''
+        return [meandatetime(val)for key, val in
+                groupby_unsorted(zip(self.dataset.index.to_numpy(),
+                                     self._groupindex),
+                                 key=itemgetter(1),
+                                 get=itemgetter(0)).items()]
 
 
     @property
@@ -676,16 +666,17 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def _orig_index(self):
         '''
         a list of the (grouped) index-values
         '''
 
-        orig_index = [np.array([k[1].value for k in j],
-                               dtype=self.dataset.index.dtype)
-                      for i,j in groupby(zip(self._groupindex,
-                                             self.dataset.index),
-                                         key=itemgetter(0))]
+        orig_index = [np.array(i, dtype=self.dataset.index.dtype) for i in
+             groupby_unsorted(zip(self._groupindex,
+                                  self.dataset.index.to_numpy()),
+                              key=itemgetter(0), get=itemgetter(1)).values()]
+
         return orig_index
 
 
@@ -697,11 +688,47 @@ class Fits(Scatter):
         with length of the dataset to the shape needed for further processing
         (e.g. grouped with respect to the temporal dynamics of the parameters)
         '''
+        return rectangularize(groupby_unsorted(range(len(self._groupindex)),
+                                        key=lambda x: self._groupindex[x]
+                                        ).values())
 
-        return rectangularize([range(*i) for i in
-                               pairwise(accumulate([0, *self._group_repeats]))],
-                              dim=self._max_rep)
 
+    @property
+    @lru_cache()
+    def _param_assigns(self):
+        '''
+        the indices of each parameter-group (to re-assign to to the fit-index)
+        '''
+        assigndict = dict()
+        for key, val in self.param_dyn_df.items():
+            assigndict[key] = groupby_unsorted(range(len(val)),
+                                               key=lambda x: val.iloc[x])
+
+        return assigndict
+
+
+    @property
+    @lru_cache()
+    def _param_assigns_dataset(self):
+        '''
+        the indices of each parameter-group (to re-assign to to the fit-index)
+        '''
+        assigndict = dict()
+        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+            assigndict[key] = groupby_unsorted(range(len(val)),
+                                               key=lambda x: val.iloc[x])
+
+        return assigndict
+
+    @property
+    @lru_cache()
+    def _val_assigns(self):
+        '''
+        the indices to assign the groups to the dataset-index
+        '''
+        return groupby_unsorted(enumerate(self._groupindex),
+                                key=itemgetter(1),
+                                get=itemgetter(0))
 
     @property
     def _setdict(self):
@@ -776,9 +803,7 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if val[0] is True:
                 startvaldict[key] = val[1]
-
         if self.param_dyn_df is not None:
-
             # re-shape param_dict and bounds_dict to fit needs
             uniques = self.param_dyn_df.nunique()
             for key, val in startvaldict.items():
@@ -842,8 +867,8 @@ class Fits(Scatter):
                     manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
                 elif val[2] == 'index':
                     indexdyn = pd.DataFrame({key:1}, self.dataset.index
-                                            ).groupby(axis=0, level=0
-                                                      ).ngroup()
+                                            ).groupby(axis=0, level=0,
+                                                      sort=False).ngroup()
                     indexdyn.name = key
                     manual_dyn_df[f'{key}'] = indexdyn
 
@@ -1053,21 +1078,46 @@ class Fits(Scatter):
             print('you must perform the fit first! ...e.g. call performfit()')
             return
 
-        series = []
+        vals = self._assignvals(self.res_dict)
         for key, val in self._assignvals(self.res_dict).items():
             if key in self.interp_vals:
-                # re-assign interpolated values to the corresponding indexes
-                # (they are provided as groups corresponding to the fitted
-                # time-periods)
-                x = np.full(len(self.index), -999.)
-                np.put(a=x, ind=self._idx_assigns, v=val)
-                series.append(pd.Series(x, self.index, name=key))
+                # take care of interpolation-values
+                # (they are provided in the shape of fit.data)
+                vals[key] = vals[key][~self.mask]
             else:
-                series.append(pd.Series(np.repeat(val, self._group_repeats),
-                                        self.index, name=key))
-        resdf = pd.concat(series, axis=1).ffill()
+                x = np.empty(len(self._groupindex), dtype=float)
+                [x.put(ind, val_i) for val_i, ind in
+                 zip(vals[key], self._val_assigns.values())]
+                vals[key] = x
+
+        resdf = pd.DataFrame(vals, self.dataset.index).groupby(level=0).first()
 
         return resdf
+
+
+    @property
+    def res_df_group(self):
+        '''
+        return a pandas DataFrame with the obtained parameters from the fit
+        for each unique fit-group. The index is the mean-datetime index
+        of the corresponding group.
+        (performfit must be called prior to accessing this property!)
+        '''
+        if not hasattr(self, 'res_dict'):
+            print('you must perform the fit first! ...e.g. call performfit()')
+            return
+
+        series = []
+        for key, val in self.res_dict.items():
+            x = np.empty(len(self.meandatetimes_group), dtype=float)
+            [x.put(ind, val_i) for val_i, ind in
+              zip(val, self._param_assigns[key].values())]
+            series.append(pd.Series(x,
+                                    self.meandatetimes_group,
+                                    name=key))
+        resdf = pd.concat(series, axis=1)
+        return resdf
+
 
 
     def _assignvals(self, res_dict, interp_vals=None):
@@ -1100,7 +1150,6 @@ class Fits(Scatter):
                     # generate an interpolaion function
                     # the values at the boundaries are set to the nearest
                     # obtained values to avoid extrapolation
-                    # "deque" is a list-type that supports append on both sides
 
                     # ensure that the indexes are never the same
                     # (add a milisecond if they are...)
@@ -1109,60 +1158,83 @@ class Fits(Scatter):
                     if lastindex == self.meandatetimes[key][-1]:
                         lastindex -= np.timedelta64(1, 'ms')
 
-                    useindex = deque(self.meandatetimes[key])
-                    useindex.appendleft(firstindex)
-                    useindex.append(lastindex)
-                    useindex = np.array(useindex,
-                                        dtype='datetime64[ns]').astype(float)
+                    useindex = np.array([firstindex,
+                                         *self.meandatetimes[key],
+                                         lastindex],
+                                        dtype='datetime64[ns]'
+                                        ).astype(float, copy=False)
+
                     if len(val) >= 2:
-                        usevals = deque(val[0])
-                        usevals.appendleft(val[0][0])
-                        usevals.append(val[0][-1])
+                        usevals = np.take(val, [0, *range(len(val)), -1])
 
                         # interpolate the data to the used timestamps
                         f = interp1d(useindex.astype(float), usevals,
                                      fill_value='extrapolate', axis=0,
                                      kind='quadratic')
 
-                        interpvals = f(np.array(self.index,
+                        x = f(np.array(self.dataset.index,
                                                 dtype='datetime64[ns]'))
+                        # assign correct shape
+                        use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
                         print('warning, interpolation not possible for ({key})'
                               'because there are less than 2 values')
-                        interpvals = np.repeat(val[0], len(self.index))
 
-                    # assign correct shape
-                    use_res_dict[key] = np.take(interpvals, self._idx_assigns)
+                        x = np.empty(len(self.dataset), dtype=float)
+                        [x.put(ind, val_i) for val_i, ind in
+                              zip(val,
+                                  self._param_assigns_dataset[key].values())]
+                        # assign correct shape
+                        use_res_dict[key] = np.take(x, self._idx_assigns)
 
                 else:
-                    use_res_dict[key] = np.repeat(*val)[:,np.newaxis]
+                    x = np.empty(self._N_groups, dtype=float)
+                    [x.put(ind, val_i) for val_i, ind in
+                     zip(val, self._param_assigns[key].values())]
+                    use_res_dict[key] = x[:,np.newaxis]
         else:
-            use_res_dict = {key:np.repeat(*val)[:,np.newaxis]
-                            for key, val in res_dict.items()}
+            use_res_dict = dict()
+            for key, val in res_dict.items():
+                x = np.empty(self._N_groups, dtype=float)
+                [x.put(ind, val_i) for val_i, ind in
+                  zip(val, self._param_assigns[key].values())]
+                use_res_dict[key] = x[:,np.newaxis]
 
         return use_res_dict
 
 
     def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
-                    interp_vals=None, return_components=False):
+                    interp_vals=None, return_components=False,
+                    assign=True):
         '''
-        function to calculate the model-results (intensity or sigma_0) based
-        on the provided parameters in linear-units or dB
+        function to calculate the model-results based on the provided
+        parameters
 
         Parameters:
         ------------
         R: RT1-object
            the rt1-object for which the results shall be calculated
         res_dict: dict
-                  a dictionary containing all parameter-values that should
-                  be updated before calling R.calc()
+                  a dictionary containing all dynamic parameter-values
+                  if None, `self.res_dict` is used
+        fixed_dict: dict
+                    a dictionary containing all fixed-values
+                    if None, `self.fixed_dict` is used
+        interp_vals: list
+                     a list of parameter-names whose fitted values should
+                     be interpolated. if None, `self.interp_vals` is used
         return_components: bool (default=False)
                            indicator if the individual components or only
                            the total backscattered radiation are returned
-                           (useful for quick evaluation of a model)
+        assign: bool (default=True)
+                indicator if the provided values should be assigned based
+                on `fit.param_dyn_df` bevore evaluating the model.
+                If `True`, the parameters must be provided in the
+                same shape as `fit.res_dict`. For arbitrary number of
+                parameters set to `False` or the dedicated method `fit.calc()`
         Returns:
         ----------
-        model_calc: the output of R.calc() (as intensity or sigma_0)
+        model_calc: the evaluated backscatter (as intensity or sigma_0)
                     in linear-units or dB corresponding to the specifications
                     defined in the rtfits-class.
         '''
@@ -1179,7 +1251,8 @@ class Fits(Scatter):
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
         #             key, val in self._assignvals(res_dict).items()}
-        res_dict = self._assignvals(res_dict, interp_vals)
+        if assign is True:
+            res_dict = self._assignvals(res_dict, interp_vals)
         res_dict.update(fixed_dict)
 
         # update the numeric representations of omega, tau and NormBRDF
@@ -1279,7 +1352,7 @@ class Fits(Scatter):
         if fixed_dict is None:
             fixed_dict = self.fixed_dict
         if param_dyn_dict is None:
-            param_dyn_dict = self._fit_param_dyn_dict
+            param_dyn_dict = self.param_dyn_df
         if order is None:
             order = self._order
 
@@ -1347,13 +1420,13 @@ class Fits(Scatter):
         # so that calling R.jacobian will calculate the "outer" derivative
         neworder = [o for o in order]
         if len(self._tau_symb) != 0:
-            for i in self._tau_symb & param_dyn_dict.keys():
+            for i in set(self._tau_symb) & set(param_dyn_dict.keys()):
                 neworder[neworder.index(i)] = 'tau'
         if len(self._omega_symb) != 0:
-            for i in self._omega_symb & param_dyn_dict.keys():
+            for i in set(self._omega_symb) & set(param_dyn_dict.keys()):
                 neworder[neworder.index(i)] = 'omega'
         if len(self._N_symb) != 0:
-            for i in self._N_symb & param_dyn_dict.keys():
+            for i in set(self._N_symb) & set(param_dyn_dict.keys()):
                 neworder[neworder.index(i)] = 'NormBRDF'
 
         # calculate the jacobian based on neworder
@@ -1367,11 +1440,8 @@ class Fits(Scatter):
         # (this is needed to avoid memory overflows for very large jacobians)
         newjacdict = {}
         for i, key in enumerate(order):
-            uniques, inds = np.unique(param_dyn_dict[key],
-                                      return_index = True)
+            uniques = pd.unique(param_dyn_dict[key])
             # provide unique values based on original occurence
-            # (np.unique sorts the result!!)
-            uniques = uniques[np.argsort(inds)]
 
             if len(uniques) == 1:
                 newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
@@ -1390,7 +1460,7 @@ class Fits(Scatter):
 
         # evaluate jacobians of the functional representations of tau
         # and add them to newjacdict
-        for i in self._tau_symb & param_dyn_dict.keys():
+        for i in set(self._tau_symb) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             d_inner = self._tau_diff_func[i]
@@ -1421,7 +1491,7 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
 
         # same for omega
-        for i in self._omega_symb & param_dyn_dict.keys():
+        for i in set(self._omega_symb) & set(param_dyn_dict.keys()):
             d_inner = self._omega_diff_func[i]
             domega_dx = d_inner(**{key:res_dict[key]
                                    for key in self._omega_symb})
@@ -1449,7 +1519,7 @@ class Fits(Scatter):
                     newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
 
         # same for NormBRDF
-        for i in self._N_symb & param_dyn_dict.keys():
+        for i in set(self._N_symb) & set(param_dyn_dict.keys()):
             d_inner = self._N_diff_func[i]
             dN_dx = d_inner(**{key:res_dict[key] for key in self._N_symb})
 
@@ -1716,36 +1786,6 @@ class Fits(Scatter):
             SRF = getattr(rt1_s, SRF_props['SRF_name'])(**set_dict)
             return SRF
 
-    @property
-    @lru_cache()
-    def _repeatdict(self):
-        # will be used to re-assign the values to the index of the dataset
-        # this procedure is necessary to ensure correct broadcasting in case
-        # the param_dyn_dict values are not sorted, e.g. [1,1,2,3,1,1,4,...]
-
-        # get and a dict that can be used to re-assign the values for each
-        # fitted parameter
-        repeatdict = dict()
-        for key in self._order:
-            # get the (sorted) unique values and locations in param_dyn_dict
-            dynnr, uniquewhere = np.unique(self._fit_param_dyn_dict[key],
-                                           return_inverse=True)
-            # get value positions and number of repetitions to reconstruct an
-            # array indexed like the dataset
-            # (param_dyn_dict[key] = np.repeat(dynnr[repeats[0]], repeats[1]))
-            repeats = [[], []]
-            for i,j in groupby(uniquewhere):
-                repeats[0].append(i)
-                repeats[1].append(sum(1 for x in j))
-
-            # in case all parameters are repeated by the same amount,
-            # return an integer instead of an array of N time the same value
-            if len(set(repeats[1])) == 1:
-                repeats[1] = repeats[1][0]
-
-            repeatdict[key] = repeats
-        return repeatdict
-
     def performfit(self, clear_cache=True, intermediate_results=False,
                    print_progress=False):
         '''
@@ -1768,12 +1808,14 @@ class Fits(Scatter):
             indicator if a progress-bar should be printed to stdout or not.
             The default is False.
         '''
-        # maintain R object during fit
-        R = self.R
 
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
+        # maintain R object during fit
+        R = self.R
+
+        if clear_cache is True:
             R._clear_cache()
 
         # set the number of repetitions (e.g. the max. number of values
@@ -1808,13 +1850,7 @@ class Fits(Scatter):
 
             # generate a dictionary to assign values based on input
             split_vals = split_into(params, splitpos)
-
-            newdict = dict()
-            for key, val in zip(self._order, split_vals):
-                # value positions and consecutive repetitions
-                reloc, rep = self._repeatdict[key]
-                newdict[key] = ([val[i] for i in reloc], rep)
-
+            newdict = dict(zip(self._order, split_vals))
             # calculate the residuals and incorporate data-weighting
             errs = (self.data_weights *
                     (self._calc_model(R=R, res_dict=newdict) - self.data)
@@ -1833,11 +1869,7 @@ class Fits(Scatter):
         def dfun(params):
             # generate a dictionary to assign values based on input
             split_vals = split_into(params, splitpos)
-            newdict = dict()
-            for key, val in zip(self._order, split_vals):
-                # value positions and consecutive repetitions
-                reloc, rep = self._repeatdict[key]
-                newdict[key] = ([val[i] for i in reloc], rep)
+            newdict = dict(zip(self._order, split_vals))
 
             # calculate the jacobian
             jac = self._calc_jac(R=R, res_dict=newdict)
@@ -1871,13 +1903,7 @@ class Fits(Scatter):
             # (don't use the last array since it is empty)
 
             split_vals = split_into(res_lsq.x, splitpos)
-
-            res_dict = dict()
-            for key, val in zip(self._order, split_vals):
-                # value positions and consecutive repetitions
-                reloc, rep = self._repeatdict[key]
-                res_dict[key] = ([val[i] for i in reloc], rep)
-
+            res_dict = dict(zip(self._order, split_vals))
             self.fit_output = res_lsq
             self.res_dict = res_dict
         else:
@@ -1976,7 +2002,6 @@ class Fits(Scatter):
             else:
                 raise TypeError('the first return-value of reader function ' +
                                 'must be a pandas DataFrame')
-
             # perform the fit
             fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
                        defdict=self.defdict, set_V_SRF=self.set_V_SRF,
@@ -1984,7 +2009,6 @@ class Fits(Scatter):
                        lambda_backend=self.lambda_backend,
                        _fnevals_input=self._fnevals_input,
                        interp_vals=self.interp_vals)
-
             fit.performfit()
 
             # append auxiliary data
@@ -2017,7 +2041,7 @@ class Fits(Scatter):
                     p_totcnt.value, p_max,
                     title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
                     finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_meancnt.value)
+                    progress2=p_totcnt.value - p_meancnt.value)
 
             return ret
 
@@ -2040,7 +2064,7 @@ class Fits(Scatter):
                     p_totcnt.value, p_max,
                     title=title,
                     finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_meancnt.value)
+                    progress2=p_totcnt.value - p_meancnt.value)
 
             if callable(exceptfunc):
                 return exceptfunc(ex, reader_arg)
@@ -2237,7 +2261,7 @@ class Fits(Scatter):
 
 
     def calc(self, param, inc, return_components=True,
-                 fixed_param = None):
+             fixed_param = None):
         '''
         evaluate the model with respect to a given set of parameters
         and incidence-angles.
@@ -2281,20 +2305,57 @@ class Fits(Scatter):
         R = self.R
         R.t_0 = np.atleast_2d(inc)
         R.p_0 = np.full_like(R.t_0, 0.)
-        res_dict = {key:[[val], 1] for key, val in param.items()}
+        if isinstance(param,
+                      pd.DataFrame) and (fixed_param is None
+                                         or isinstance(fixed_param,
+                                                       pd.DataFrame)):
+            res_dict = {key:np.atleast_1d(val.values)[:,np.newaxis]
+                        for key, val in param.items()}
+            if fixed_param is None:
+                fixed_param = dict()
+            else:
+                fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                               key, val in fixed_param.loc[param.index].items()}
 
-        if fixed_param is None:
-            fixed_param = dict()
         else:
-            fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
-                           key, val in fixed_param.items()}
+            res_dict = {key:np.atleast_1d(val)[:,np.newaxis]
+                        for key, val in param.items()}
 
+            if fixed_param is None:
+                fixed_param = dict()
+            else:
+                fixed_param = {key:np.atleast_1d(val)[:,np.newaxis] for
+                               key, val in fixed_param.items()}
 
         res = self._calc_model(R=R, res_dict=res_dict, fixed_dict=fixed_param,
                                interp_vals=[],
-                               return_components=return_components)
+                               return_components=return_components,
+                               assign=False)
 
         return res
+
+    from functools import wraps
+    @wraps(_calc_model)
+    def calc_model(self, *args, **kwargs):
+        # check if components have been calculated
+
+        # get the index of each fit-value
+        # use the concatenated orig_index in case unsorted grouping is used!
+        # (only different from fit.dataset.index in case a unsorted grouping
+        # has been used)
+        calcindex = np.concatenate(self._orig_index)
+
+        res = self._calc_model(*args, **kwargs)
+        if len(res.shape) == 3:
+            return pd.DataFrame(
+                dict(zip(('tot','surf','vol','inter'),
+                         [i[~self.mask] for i in res])),
+                index=calcindex)#.groupby(level=0).mean()
+        else:
+            return pd.DataFrame(
+                dict(tot=res[~self.mask]),
+                index= calcindex)#.groupby(level=0).mean()
+
 
     @property
     def model_definition(self):
