@@ -2385,7 +2385,7 @@ class plot:
                         return ''
 
                 use_label = ''
-            if grp == 'dataset':
+            elif grp == 'dataset':
                 # group the residuals with respect to the dataset-index
                 grplabels = pd.to_datetime(fit.index)
                 resarr = np.abs(
@@ -2402,7 +2402,6 @@ class plot:
                         return ''
 
                 use_label = ''
-
             else:
                 # group the residuals with respect to the defined group
                 grplabels = pd.DataFrame(
