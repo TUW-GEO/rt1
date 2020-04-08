@@ -2,6 +2,7 @@
 [![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/)
 [![Coverage Status](https://coveralls.io/repos/github/TUW-GEO/rt1/badge.svg?branch=dev)](https://coveralls.io/github/TUW-GEO/rt1?branch=dev)
 [![pypi version](https://img.shields.io/pypi/v/rt1)](https://pypi.org/project/rt1/)
+[![DOI](https://zenodo.org/badge/69531751.svg)](https://zenodo.org/badge/latestdoi/69531751)
 
 # RT1 - bistatic scattering model for first order scattering of random media
 
