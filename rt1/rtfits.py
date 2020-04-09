@@ -24,9 +24,9 @@ from . import volume as rt1_v
 import copy
 import multiprocessing as mp
 import ctypes
-from itertools import repeat, groupby, count
-from functools import lru_cache
-from operator import itemgetter
+from itertools import repeat, count
+from functools import lru_cache, partial
+from operator import itemgetter, add
 from collections import Counter
 
 from timeit import default_timer as tick
@@ -478,13 +478,21 @@ class Fits(Scatter):
         dynamics of the parameters
         '''
 
-        # get final group-indexes
-        grdf = pd.DataFrame(self.param_dyn_dict).astype(str)
-        groupindex = grdf.apply(lambda x: x.str.zfill(max(x.str.len()))
-                                ).agg(lambda x: ''.join(x), axis=1
-                                      ).values
+        # find the max. length of the parameters
+        maxdict = {key:len(str(max(val))) for key, val in
+                   self.param_dyn_dict.items()}
+        # find the max. length of the parameters
+        def doit(x, N):
+            return str(x).zfill(N)
+        for i, [key, val] in enumerate(self.param_dyn_dict.items()):
+            if i == 0:
+                conclist = list(map(partial(doit, N=maxdict[key]), val))
+            else:
+                conclist = map(add, conclist,
+                               map(partial(doit, N=maxdict[key]), val))
+        return np.array(list(map(int, conclist)))
 
-        return groupindex.astype(np.int64)
+
 
     @property
     @lru_cache()
@@ -719,6 +727,7 @@ class Fits(Scatter):
                                                key=lambda x: val.iloc[x])
 
         return assigndict
+
 
     @property
     @lru_cache()
