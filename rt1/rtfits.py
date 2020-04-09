@@ -20,14 +20,14 @@ from .rtplots import plot as rt1_plots
 
 from . import surface as rt1_s
 from . import volume as rt1_v
+from . import __version__ as _RT1_version
 
 import copy
 import multiprocessing as mp
 import ctypes
-from itertools import repeat, groupby, count
-from functools import lru_cache
-from operator import itemgetter
-from collections import Counter
+from itertools import repeat, count, chain
+from functools import lru_cache, partial
+from operator import itemgetter, add
 
 from timeit import default_timer as tick
 from datetime import timedelta
@@ -478,13 +478,20 @@ class Fits(Scatter):
         dynamics of the parameters
         '''
 
-        # get final group-indexes
-        grdf = pd.DataFrame(self.param_dyn_dict).astype(str)
-        groupindex = grdf.apply(lambda x: x.str.zfill(max(x.str.len()))
-                                ).agg(lambda x: ''.join(x), axis=1
-                                      ).values
+        # find the max. length of the parameters
+        maxdict = {key:len(str(max(val))) for key, val in
+                   self.param_dyn_dict.items()}
+        # find the max. length of the parameters
+        def doit(x, N):
+            return str(x).zfill(N)
+        for i, [key, val] in enumerate(self.param_dyn_dict.items()):
+            if i == 0:
+                conclist = list(map(partial(doit, N=maxdict[key]), val))
+            else:
+                conclist = map(add, conclist,
+                               map(partial(doit, N=maxdict[key]), val))
+        return np.array(list(map(int, conclist)))
 
-        return groupindex.astype(np.int64)
 
     @property
     @lru_cache()
@@ -506,18 +513,13 @@ class Fits(Scatter):
                                     self.defdict if key in self.dataset]
         if 'data_weights' in self.dataset:
             usekeys += ['data_weights']
-        # prepare dataset
-        dataset = pd.concat([self.dataset[usekeys]] +
-                            [val for key, val in self._fixed_dict.items() \
-                             if isinstance(val, (pd.Series, pd.DataFrame))],
-                            axis=1)
-
-        dataset['orig_index'] = dataset.index
-        dataset = dataset.set_index(self._groupindex)
-        groupdf = dataset.groupby(level=0, sort=False)
 
         # generate new data-frame based on groups
-        dataset_used = groupdf.agg(pd.Series.tolist)
+        dataset_used = self.dataset[usekeys].reset_index()
+        dataset_used.rename(columns={'index':'orig_index'}, inplace=True)
+        dataset_used.set_index(self._groupindex, inplace=True)
+        dataset_used = dataset_used.groupby(level=0,
+                                            sort=False).agg(pd.Series.tolist)
 
         return dataset_used
 
@@ -526,12 +528,8 @@ class Fits(Scatter):
     @lru_cache()
     def index(self):
         '''
-        return the unique index-values of the dataset
+        return the unique index-values of each fit-group
         (used to assign the fit-results)
-
-        - if `dataset` is provided, the unique index-values are used
-        - if `dataset` is not provided but 'dataset_used'
-
         '''
 
         # get all unique values of each group in _orig_index
@@ -557,14 +555,17 @@ class Fits(Scatter):
             col_ind = []  # col-indices where jac is nonzero
             for n_uni, uni in enumerate(uniques):
                 rule = (val == uni).values
-                where_n = np.where(
-                        np.concatenate(np.broadcast_to(rule[:,np.newaxis],
-                                                       shape)))[0]
+                #where_n = np.where(np.concatenate(
+                #    np.broadcast_to(rule[:,np.newaxis], shape)))[0]
+                where_n = [i for i, x in enumerate(
+                    chain(*(repeat(i, shape[1]) for i in rule))) if x]
 
-                col_ind += list(where_n)
-                row_ind += list(np.full_like(where_n, n_uni))
+                col_ind += where_n
+                row_ind += list(repeat(n_uni, len(where_n)))
             jac_rules[key] = [row_ind, col_ind]
         return jac_rules
+
+
 
 
     @property
@@ -657,15 +658,6 @@ class Fits(Scatter):
 
 
     @property
-    def _max_rep(self):
-        '''
-        the maximum number of unique objects in the "_groupindex"
-        '''
-
-        return Counter(self._groupindex).most_common(1)[0][1]
-
-
-    @property
     @lru_cache()
     def _orig_index(self):
         '''
@@ -719,6 +711,7 @@ class Fits(Scatter):
                                                key=lambda x: val.iloc[x])
 
         return assigndict
+
 
     @property
     @lru_cache()
@@ -1438,19 +1431,24 @@ class Fits(Scatter):
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
         # (this is needed to avoid memory overflows for very large jacobians)
+        jac_size = jac[0].size
         newjacdict = {}
         for i, key in enumerate(order):
             uniques = pd.unique(param_dyn_dict[key])
             # provide unique values based on original occurence
 
             if len(uniques) == 1:
-                newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
+                my_array = np.empty(jac_size)
+                #np.array([np.concatenate(jac[i], axis=0)])
+                newjacdict[key] = np.expand_dims(
+                    np.fromiter(chain(*jac[i]), dtype=float, count=jac_size),0)
             else:
                 # if too many unique values occur, use scipy sparse matrix
                 # to avoid memory-overflow due to the large number of zeroes...
                 # (this will reduce speed since scipy.sparse does not fully
                 # supprot BLAS and so no proper parallelization is performed)
-                data = np.concatenate(jac[i])
+                #data = np.concatenate(jac[i])
+                data = np.fromiter(chain(*jac[i]), dtype=float, count=jac_size)
                 row_ind, col_ind = self._jac_assign_rule[key]
                 # generate a sparse matrix
                 m = csr_matrix((data, (row_ind, col_ind)),
@@ -2247,6 +2245,8 @@ class Fits(Scatter):
 
             The default is True.
         '''
+        # add version number to dump
+        self._RT1_version = _RT1_version
 
         if mini is True:
             self._rt1_dump_mini = True
