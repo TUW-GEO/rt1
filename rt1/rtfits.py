@@ -28,7 +28,6 @@ import ctypes
 from itertools import repeat, count
 from functools import lru_cache, partial
 from operator import itemgetter, add
-from collections import Counter
 
 from timeit import default_timer as tick
 from datetime import timedelta
