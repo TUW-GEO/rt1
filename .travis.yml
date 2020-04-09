@@ -54,4 +54,6 @@ deploy:
 
 after_deploy:
   # test installation from pip
+  - conda create -q -n test-deploy-environment python=$TRAVIS_PYTHON_VERSION
+  - source activate test-deploy-environment
   - pip install rt1
