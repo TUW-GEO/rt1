@@ -1083,7 +1083,8 @@ class Fits(Scatter):
                  zip(vals[key], self._val_assigns.values())]
                 vals[key] = x
 
-        resdf = pd.DataFrame(vals, self.dataset.index).groupby(level=0).first()
+        resdf = pd.DataFrame(vals, list(chain(*self._orig_index))
+                             ).groupby(level=0).first()
 
         return resdf
 
@@ -1166,7 +1167,7 @@ class Fits(Scatter):
                                      kind='quadratic')
 
                         x = f(np.array(self.dataset.index,
-                                                dtype='datetime64[ns]'))
+                                       dtype='datetime64[ns]'))
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
