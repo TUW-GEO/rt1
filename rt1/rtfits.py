@@ -20,6 +20,7 @@ from .rtplots import plot as rt1_plots
 
 from . import surface as rt1_s
 from . import volume as rt1_v
+from . import __version__ as _RT1_version
 
 import copy
 import multiprocessing as mp
@@ -2246,6 +2247,8 @@ class Fits(Scatter):
 
             The default is True.
         '''
+        # add version number to dump
+        self._RT1_version = _RT1_version
 
         if mini is True:
             self._rt1_dump_mini = True
