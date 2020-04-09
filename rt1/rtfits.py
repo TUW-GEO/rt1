@@ -493,7 +493,6 @@ class Fits(Scatter):
         return np.array(list(map(int, conclist)))
 
 
-
     @property
     @lru_cache()
     def _N_groups(self):
@@ -662,15 +661,6 @@ class Fits(Scatter):
         '''
 
         return [i for i, v in self._startvaldict.items() if v is not None]
-
-
-    @property
-    def _max_rep(self):
-        '''
-        the maximum number of unique objects in the "_groupindex"
-        '''
-
-        return Counter(self._groupindex).most_common(1)[0][1]
 
 
     @property
