@@ -513,18 +513,13 @@ class Fits(Scatter):
                                     self.defdict if key in self.dataset]
         if 'data_weights' in self.dataset:
             usekeys += ['data_weights']
-        # prepare dataset
-        dataset = pd.concat([self.dataset[usekeys]] +
-                            [val for key, val in self._fixed_dict.items() \
-                             if isinstance(val, (pd.Series, pd.DataFrame))],
-                            axis=1)
-
-        dataset['orig_index'] = dataset.index
-        dataset = dataset.set_index(self._groupindex)
-        groupdf = dataset.groupby(level=0, sort=False)
 
         # generate new data-frame based on groups
-        dataset_used = groupdf.agg(pd.Series.tolist)
+        dataset_used = self.dataset[usekeys].reset_index()
+        dataset_used.rename(columns={'index':'orig_index'}, inplace=True)
+        dataset_used.set_index(self._groupindex, inplace=True)
+        dataset_used = dataset_used.groupby(level=0,
+                                            sort=False).agg(pd.Series.tolist)
 
         return dataset_used
 
@@ -533,12 +528,8 @@ class Fits(Scatter):
     @lru_cache()
     def index(self):
         '''
-        return the unique index-values of the dataset
+        return the unique index-values of each fit-group
         (used to assign the fit-results)
-
-        - if `dataset` is provided, the unique index-values are used
-        - if `dataset` is not provided but 'dataset_used'
-
         '''
 
         # get all unique values of each group in _orig_index
