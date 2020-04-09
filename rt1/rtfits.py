@@ -25,7 +25,7 @@ from . import __version__ as _RT1_version
 import copy
 import multiprocessing as mp
 import ctypes
-from itertools import repeat, count
+from itertools import repeat, count, chain
 from functools import lru_cache, partial
 from operator import itemgetter, add
 
@@ -555,14 +555,17 @@ class Fits(Scatter):
             col_ind = []  # col-indices where jac is nonzero
             for n_uni, uni in enumerate(uniques):
                 rule = (val == uni).values
-                where_n = np.where(
-                        np.concatenate(np.broadcast_to(rule[:,np.newaxis],
-                                                       shape)))[0]
+                #where_n = np.where(np.concatenate(
+                #    np.broadcast_to(rule[:,np.newaxis], shape)))[0]
+                where_n = [i for i, x in enumerate(
+                    chain(*(repeat(i, shape[1]) for i in rule))) if x]
 
-                col_ind += list(where_n)
-                row_ind += list(np.full_like(where_n, n_uni))
+                col_ind += where_n
+                row_ind += list(repeat(n_uni, len(where_n)))
             jac_rules[key] = [row_ind, col_ind]
         return jac_rules
+
+
 
 
     @property
@@ -1428,19 +1431,24 @@ class Fits(Scatter):
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
         # (this is needed to avoid memory overflows for very large jacobians)
+        jac_size = jac[0].size
         newjacdict = {}
         for i, key in enumerate(order):
             uniques = pd.unique(param_dyn_dict[key])
             # provide unique values based on original occurence
 
             if len(uniques) == 1:
-                newjacdict[key] = np.array([np.concatenate(jac[i], axis=0)])
+                my_array = np.empty(jac_size)
+                #np.array([np.concatenate(jac[i], axis=0)])
+                newjacdict[key] = np.expand_dims(
+                    np.fromiter(chain(*jac[i]), dtype=float, count=jac_size),0)
             else:
                 # if too many unique values occur, use scipy sparse matrix
                 # to avoid memory-overflow due to the large number of zeroes...
                 # (this will reduce speed since scipy.sparse does not fully
                 # supprot BLAS and so no proper parallelization is performed)
-                data = np.concatenate(jac[i])
+                #data = np.concatenate(jac[i])
+                data = np.fromiter(chain(*jac[i]), dtype=float, count=jac_size)
                 row_ind, col_ind = self._jac_assign_rule[key]
                 # generate a sparse matrix
                 m = csr_matrix((data, (row_ind, col_ind)),
