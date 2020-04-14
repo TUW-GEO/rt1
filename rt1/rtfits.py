@@ -551,9 +551,10 @@ class Fits(Scatter):
         # first find the column indexes of each unique dyn-key
         uniquewheredict0 = {
             key:groupby_unsorted(enumerate(chain(*rectangularize(
-                val.groupby(level=0).apply(list)))),
+                val.groupby(level=0, sort=False).apply(list)))),
                 key=itemgetter(1), get=itemgetter(0)) for
-            key, val in self.param_dyn_df.reindex(self._groupindex).items()}
+            key, val in self.param_dyn_df.reindex(
+                self._groupindex).items()}
 
         # now get the row-indexes (note that the dyn-keys do not need to
         # start at 0 and also do not need to be sorted!)
