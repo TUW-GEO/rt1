@@ -328,7 +328,7 @@ class Fits(Scatter):
                   '_jac_assign_rule', 'meandatetimes', 'inc', 'data',
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
-                  'interp_vals', ]
+                  'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -544,25 +544,41 @@ class Fits(Scatter):
         a dict containing the positions of the derivative-values
         (used in the calculation of the jacobi-determinant to assign
         a scipy.sparse matrix and avoid memory-overflows)
+
+        key: [[row-index of the values], [column-index of the values]]
+
         '''
-        shape = self.inc.shape
+        # first find the column indexes of each unique dyn-key
+        uniquewheredict0 = {
+            key:groupby_unsorted(enumerate(chain(*rectangularize(
+                val.groupby(level=0).apply(list)))),
+                key=itemgetter(1), get=itemgetter(0)) for
+            key, val in self.param_dyn_df.reindex(self._groupindex).items()}
 
-        jac_rules = dict()
-        for key, val in self.param_dyn_df.items():
-            uniques = pd.unique(val)
+        # now get the row-indexes (note that the dyn-keys do not need to
+        # start at 0 and also do not need to be sorted!)
+        jac_rules = {key: np.row_stack(
+            (np.fromiter(chain(*(repeat(i, len(val_i)) for i, val_i in
+                                 enumerate(val.values()))), dtype=int),
+             np.fromiter(chain(*val.values()), dtype=int)))
+            for key, val in uniquewheredict0.items()}
 
-            row_ind = []  # row-indices where jac is nonzero
-            col_ind = []  # col-indices where jac is nonzero
-            for n_uni, uni in enumerate(uniques):
-                rule = (val == uni).values
-                #where_n = np.where(np.concatenate(
-                #    np.broadcast_to(rule[:,np.newaxis], shape)))[0]
-                where_n = [i for i, x in enumerate(
-                    chain(*(repeat(i, shape[1]) for i in rule))) if x]
+        # shape = self.inc.shape
+        # jac_rules = dict()
+        # for key, val in self.param_dyn_df.items():
+        #     uniques = pd.unique(val)
 
-                col_ind += where_n
-                row_ind += list(repeat(n_uni, len(where_n)))
-            jac_rules[key] = [row_ind, col_ind]
+        #     row_ind = []  # row-indices where jac is nonzero
+        #     col_ind = []  # col-indices where jac is nonzero
+        #     for n_uni, uni in enumerate(uniques):
+        #         rule = (val == uni).values
+        #         # where_n = list(np.where(np.concatenate(
+        #         #     np.broadcast_to(rule[:,np.newaxis], shape)))[0])
+        #         where_n = [i for i, x in enumerate(
+        #             chain(*(repeat(i, shape[1]) for i in rule))) if x]
+        #         col_ind += where_n
+        #         row_ind += list(repeat(n_uni, len(where_n)))
+        #     jac_rules[key] = [row_ind, col_ind]
         return jac_rules
 
 
