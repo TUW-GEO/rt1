@@ -80,22 +80,44 @@ class RT1_configparser(object):
     - [PROCESS_SPECS]
         additional properties needed to specify the process
 
-        - any passed argument starting with `int__NAME` will be passed as
+        - any argument starting with `int__NAME` will be parsed as
           `integer` with the name `NAME`
-        - any passed argument starting with `float__NAME` will be passed as
+        - any argument starting with `float__NAME` will be parsed as
           `float` with the name `NAME`
-        - any passed argument starting with `bool__NAME` will be passed as
+        - any argument starting with `bool__NAME` will be parsed as
           `bool` with the name `NAME`
-        - any passed argument starting with `path__NAME` will be passed as
+        - any argument starting with `path__NAME` will be parsed as
           `pathlib.Path` with the name `NAME`
-        - any passed argument starting with `datetime__NAME` will be passed as
+        - any argument starting with `datetime__NAME` will be parsed as
           `datetime.datetime` with the name `NAME` as follows:
 
-              >>> datetime__NAME = datetime-string, datetime-format
+              >>> datetime__NAME = datetime-string  fmt= datetime-format
 
               for example:
 
-              >>> datetime_d1 = 1.1.2018, %d%m%Y
+              >>> datetime_d1 = 1.1.2018 fmt=%d%m%Y
+
+              if fmt is not provided, `"%Y-%m-%d %H:%M:%S.%f"` is used.
+              Note that the exact string "fmt=" must be used to separate
+              the datetime-string from the format-string!
+        - any argument starting with list__NAME will be parsed as a `list`
+            - list__NAME will be parsed as a list of strings with the
+              name NAME
+            - list__float__NAME will be parsed as a list of floats with the
+              name NAME
+            - list__int__NAME will be parsed as a list of integers with the
+              name NAME
+            - list__bool__NAME will be parsed as a list of bools with the
+              name NAME
+            - list__datetime__NAME will be parsed as a list of datetimes with
+              the name NAME as follows:
+
+              >>> list__datetime__NAME = [df1, dt2, ...]  fmt= datetime-format
+
+              for example:
+
+              >>> list__datetime__dts = [1.1.2018, 1.10.2018] fmt= %d%m%Y
+
     '''
 
 
