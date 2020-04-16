@@ -1949,7 +1949,9 @@ class plot:
                      startparams[key] = val[1]
             if val[0] is False:
                 if isinstance(val[1], (int, float)):
-                         startparams[key] = val[1]
+                         # don't add constants to startparams (they are
+                         # directly inserted into the functions)
+                         #startparams[key] = val[1]
                          fixparams[key] = val[1]
                 elif val[1] == 'auxiliary':
                     assert (key in fit.dataset or

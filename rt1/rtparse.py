@@ -1,5 +1,6 @@
 from configparser import ConfigParser, ExtendedInterpolation
 from datetime import datetime
+from functools import partial
 import sys
 import importlib.util
 from pathlib import Path
@@ -79,22 +80,44 @@ class RT1_configparser(object):
     - [PROCESS_SPECS]
         additional properties needed to specify the process
 
-        - any passed argument starting with `int__NAME` will be passed as
+        - any argument starting with `int__NAME` will be parsed as
           `integer` with the name `NAME`
-        - any passed argument starting with `float__NAME` will be passed as
+        - any argument starting with `float__NAME` will be parsed as
           `float` with the name `NAME`
-        - any passed argument starting with `bool__NAME` will be passed as
+        - any argument starting with `bool__NAME` will be parsed as
           `bool` with the name `NAME`
-        - any passed argument starting with `path__NAME` will be passed as
+        - any argument starting with `path__NAME` will be parsed as
           `pathlib.Path` with the name `NAME`
-        - any passed argument starting with `datetime__NAME` will be passed as
+        - any argument starting with `datetime__NAME` will be parsed as
           `datetime.datetime` with the name `NAME` as follows:
 
-              >>> datetime__NAME = datetime-string, datetime-format
+              >>> datetime__NAME = datetime-string  fmt= datetime-format
 
               for example:
 
-              >>> datetime_d1 = 1.1.2018, %d%m%Y
+              >>> datetime_d1 = 1.1.2018 fmt=%d%m%Y
+
+              if fmt is not provided, `"%Y-%m-%d %H:%M:%S.%f"` is used.
+              Note that the exact string "fmt=" must be used to separate
+              the datetime-string from the format-string!
+        - any argument starting with list__NAME will be parsed as a `list`
+            - list__NAME will be parsed as a list of strings with the
+              name NAME
+            - list__float__NAME will be parsed as a list of floats with the
+              name NAME
+            - list__int__NAME will be parsed as a list of integers with the
+              name NAME
+            - list__bool__NAME will be parsed as a list of bools with the
+              name NAME
+            - list__datetime__NAME will be parsed as a list of datetimes with
+              the name NAME as follows:
+
+              >>> list__datetime__NAME = [df1, dt2, ...]  fmt= datetime-format
+
+              for example:
+
+              >>> list__datetime__dts = [1.1.2018, 1.10.2018] fmt= %d%m%Y
+
     '''
 
 
@@ -243,6 +266,12 @@ class RT1_configparser(object):
         return parsed_dict
 
 
+    def _to_dt(self, s, fmt=None):
+        if fmt is None:
+            fmt = '%Y-%m-%d %H:%M:%S.%f'
+        return datetime.strptime(s, fmt)
+
+
     def get_config(self):
         lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
 
@@ -329,18 +358,9 @@ class RT1_configparser(object):
         process_specs = dict()
         for key, val in inp.items():
             if key.startswith('datetime__'):
-                try:
-                    date = dict(zip(['t0', 'fmt'],
-                                    [i.strip() for i in val.split(',')]))
-                    if 'fmt' not in date:
-                        date['fmt'] = '%Y-%m-%d %H:%M:%S.%f'
-                    process_specs[key[10:]] = datetime.strptime(date['t0'],
-                                                           date['fmt'])
-                except Exception:
-                    print('date could not be converted... ',
-                          'original string-value returned')
-                    process_specs[key[10:]] = val.strip()
-
+                date = dict(zip(['s', 'fmt'],
+                        [i.strip() for i in val.split('fmt=')]))
+                process_specs[key[10:]] = self._to_dt(**date)
             elif key.startswith('path__'):
                 # resolve the path in case .. syntax is used to traverse dirs
                 if '..' in val.strip():
@@ -354,6 +374,37 @@ class RT1_configparser(object):
                 process_specs[key[7:]] = inp.getfloat(key)
             elif key.startswith('int__'):
                 process_specs[key[5:]] = inp.getint(key)
+            elif key.startswith('list__'):
+                listkey = key[6:]
+                if val.startswith('[') and (val.endswith(']')
+                                            or 'fmt=' in val):
+                    # allow direct conversion of values
+                    if listkey.startswith('bool__'):
+                        listkey = listkey[6:]
+                        conffunc = ConfigParser()._convert_to_boolean
+                    elif listkey.startswith('float__'):
+                        listkey = listkey[7:]
+                        conffunc = float
+                    elif listkey.startswith('int__'):
+                        listkey = listkey[5:]
+                        conffunc = int
+                    elif listkey.startswith('datetime__'):
+                        listkey = listkey[10:]
+                        spl = dict(zip(['val', 'fmt'],
+                                       [i.strip() for i in val.split('fmt=')]))
+                        if 'fmt' in spl:
+                            conffunc = partial(self._to_dt, fmt=spl['fmt'])
+                        else:
+                            conffunc = self._to_dt
+                        val = spl['val']
+                    else:
+                        conffunc = lambda x: x
+                    process_specs[listkey] = [
+                        conffunc(i.strip()) for i in
+                        val.strip()[1:-1].split(',')]
+
+                else:
+                    assert False, f'{key} is not a list! (use brackets [] !)'
             else:
                 process_specs[key] = val
 

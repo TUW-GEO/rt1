@@ -129,6 +129,12 @@ class rt1_processing_config(object):
             - check if a dumpfile of the site already exists and if yes,
               raise a 'rt1_file_already_exists' error
 
+        the introduced folder-structure is:
+        - "save-path"
+            - dumps -> folder where dump-files will be stored
+            - results -> folder where finalouput-files will be stored
+            - cfg -> folder where additional processing files will be saved
+
         Parameters
         ----------
         reader_arg : dict
@@ -140,15 +146,20 @@ class rt1_processing_config(object):
             if not self.save_path.exists():
                 print(self.save_path, 'does not exist... creating directory')
                 self.save_path.mkdir()
-            # generate "dumpfolder" directory if it does not exist
-            dumppath = self.save_path / self.dumpfolder
+            # generate "dumpfs" directory if it does not exist
+            dumppath = self.save_path / self.dumpfolder / 'dumps'
             if not dumppath.exists():
                 print(dumppath, 'does not exist... creating directory')
-                dumppath.mkdir()
+                dumppath.mkdir(parents=True)
+
+            respath = self.save_path / self.dumpfolder / 'results'
+            if not respath.exists():
+                print(respath, 'does not exist... creating directory')
+                respath.mkdir()
 
             # obtain the path where the dump-file would be stored
             _, filename, _ = self.get_names_ids(reader_arg)
-            dumppath = self.save_path.joinpath(self.dumpfolder, filename)
+            dumppath = dumppath / filename
 
             # raise a file already exists error
             if dumppath.exists():
@@ -189,7 +200,7 @@ class rt1_processing_config(object):
         feature_id, fname, error_fname = self.get_names_ids(reader_arg)
 
         if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = self.save_path.joinpath(self.dumpfolder, fname)
+            dumppath = self.save_path.joinpath(self.dumpfolder, 'dumps', fname)
 
             # if no dump exists, dump it, else load the existing dump
             if not dumppath.exists():
@@ -209,7 +220,7 @@ class rt1_processing_config(object):
         return df
 
 
-    def finaloutput(self, res, hdf_key=None, format='fixed'):
+    def finaloutput(self, res, hdf_key=None, format='table'):
         '''
         A function that is called after ALL sites are processed:
 
@@ -223,6 +234,14 @@ class rt1_processing_config(object):
               will be used
             - if `"save_path"` is None, the DataFrame of the concatenated
               results will be returned
+
+        Notice:
+        Since hdf is a row-based format, the HDF-file will contain a transposed
+        version of the multiindexed "res"-DataFrame.
+        Furthermore all values will be converted to numerical values
+        by using `pd.to_numeric()`   -> timestaps need to be re-converted using
+        `pd.to_datetime()`!
+
 
         Parameters
         ----------
@@ -262,9 +281,17 @@ class rt1_processing_config(object):
                 else:
                     hdf_key = 'result'
 
+
+            # transpose the dataframe (we want less columns and more rows)
+            res = res.T
+            # ensure that all values are numeric (required for table format)
+            res = res.apply(pd.to_numeric)
+            # ensure that all columns are numeric (required for table format)
+            res.columns = pd.to_numeric(res.columns)
+
             # create (or append) results to a HDF-store
             res.to_hdf(self.save_path / self.finalout_name,
-                       key=hdf_key, format=format, complevel=5)
+                       key=hdf_key, format=format, complevel=7)
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
@@ -302,9 +329,9 @@ class rt1_processing_config(object):
                   'otherwise exceptions will be raised')
             raise ex
         else:
-            dumppath = self.save_path.joinpath(self.dumpfolder, fname)
+            dumppath = self.save_path.joinpath(self.dumpfolder, 'dumps', fname)
             error_dump = self.save_path.joinpath(self.error_dumpfolder,
-                                                 error_fname)
+                                                 'dumps', error_fname)
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
@@ -340,4 +367,3 @@ class rt1_processing_config(object):
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
-

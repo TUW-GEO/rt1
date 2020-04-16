@@ -48,7 +48,7 @@ def rectangularize(array, return_mask=False, dim=None,
         newarray, mask = [], []
         for s in array:
             adddim = dim - len(s)
-            m = np.full_like(s, False)
+            m = np.full_like(s, False, dtype=bool)
             if adddim > 0:
                 s = np.append(s, np.full(adddim, s[-1]))
                 m = np.append(m, np.full(adddim, True))

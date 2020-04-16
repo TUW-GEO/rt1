@@ -328,7 +328,7 @@ class Fits(Scatter):
                   '_jac_assign_rule', 'meandatetimes', 'inc', 'data',
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
-                  'interp_vals', ]
+                  'interp_vals']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -544,28 +544,43 @@ class Fits(Scatter):
         a dict containing the positions of the derivative-values
         (used in the calculation of the jacobi-determinant to assign
         a scipy.sparse matrix and avoid memory-overflows)
+
+        key: [[row-index of the values], [column-index of the values]]
+
         '''
-        shape = self.inc.shape
+        # first find the column indexes of each unique dyn-key
+        uniquewheredict0 = {
+            key:groupby_unsorted(enumerate(chain(*rectangularize(
+                val.groupby(level=0, sort=False).apply(list)))),
+                key=itemgetter(1), get=itemgetter(0)) for
+            key, val in self.param_dyn_df.reindex(
+                self._groupindex).items()}
 
-        jac_rules = dict()
-        for key, val in self.param_dyn_df.items():
-            uniques = pd.unique(val)
+        # now get the row-indexes (note that the dyn-keys do not need to
+        # start at 0 and also do not need to be sorted!)
+        jac_rules = {key: np.row_stack(
+            (np.fromiter(chain(*(repeat(i, len(val_i)) for i, val_i in
+                                 enumerate(val.values()))), dtype=int),
+             np.fromiter(chain(*val.values()), dtype=int)))
+            for key, val in uniquewheredict0.items()}
 
-            row_ind = []  # row-indices where jac is nonzero
-            col_ind = []  # col-indices where jac is nonzero
-            for n_uni, uni in enumerate(uniques):
-                rule = (val == uni).values
-                #where_n = np.where(np.concatenate(
-                #    np.broadcast_to(rule[:,np.newaxis], shape)))[0]
-                where_n = [i for i, x in enumerate(
-                    chain(*(repeat(i, shape[1]) for i in rule))) if x]
+        # shape = self.inc.shape
+        # jac_rules = dict()
+        # for key, val in self.param_dyn_df.items():
+        #     uniques = pd.unique(val)
 
-                col_ind += where_n
-                row_ind += list(repeat(n_uni, len(where_n)))
-            jac_rules[key] = [row_ind, col_ind]
+        #     row_ind = []  # row-indices where jac is nonzero
+        #     col_ind = []  # col-indices where jac is nonzero
+        #     for n_uni, uni in enumerate(uniques):
+        #         rule = (val == uni).values
+        #         # where_n = list(np.where(np.concatenate(
+        #         #     np.broadcast_to(rule[:,np.newaxis], shape)))[0])
+        #         where_n = [i for i, x in enumerate(
+        #             chain(*(repeat(i, shape[1]) for i in rule))) if x]
+        #         col_ind += where_n
+        #         row_ind += list(repeat(n_uni, len(where_n)))
+        #     jac_rules[key] = [row_ind, col_ind]
         return jac_rules
-
-
 
 
     @property
@@ -1073,15 +1088,7 @@ class Fits(Scatter):
 
         vals = self._assignvals(self.res_dict)
         for key, val in self._assignvals(self.res_dict).items():
-            if key in self.interp_vals:
-                # take care of interpolation-values
-                # (they are provided in the shape of fit.data)
-                vals[key] = vals[key][~self.mask]
-            else:
-                x = np.empty(len(self._groupindex), dtype=float)
-                [x.put(ind, val_i) for val_i, ind in
-                 zip(vals[key], self._val_assigns.values())]
-                vals[key] = x
+            vals[key] = vals[key][~self.mask]
 
         resdf = pd.DataFrame(vals, list(chain(*self._orig_index))
                              ).groupby(level=0).first()
@@ -1182,17 +1189,20 @@ class Fits(Scatter):
                         use_res_dict[key] = np.take(x, self._idx_assigns)
 
                 else:
-                    x = np.empty(self._N_groups, dtype=float)
+                    x = np.empty(len(self.dataset), dtype=float)
                     [x.put(ind, val_i) for val_i, ind in
-                     zip(val, self._param_assigns[key].values())]
-                    use_res_dict[key] = x[:,np.newaxis]
+                          zip(val, self._param_assigns_dataset[key].values())]
+                    # assign correct shape
+                    use_res_dict[key] = np.take(x, self._idx_assigns)
+
         else:
             use_res_dict = dict()
             for key, val in res_dict.items():
-                x = np.empty(self._N_groups, dtype=float)
+                x = np.empty(len(self.dataset), dtype=float)
                 [x.put(ind, val_i) for val_i, ind in
-                  zip(val, self._param_assigns[key].values())]
-                use_res_dict[key] = x[:,np.newaxis]
+                      zip(val, self._param_assigns_dataset[key].values())]
+                # assign correct shape
+                use_res_dict[key] = np.take(x, self._idx_assigns)
 
         return use_res_dict
 
@@ -1428,7 +1438,6 @@ class Fits(Scatter):
         # tau and NormBRDF)
         jac = R.jacobian(sig0=self.sig0, dB=self.dB, param_list=neworder)
         #self.jacshape = jac[0].shape
-
         # generate a scipy.sparse matrix that represents the jacobian for all
         # the individual parameters according to jac_dyn_dict
         # (this is needed to avoid memory overflows for very large jacobians)
@@ -1437,9 +1446,7 @@ class Fits(Scatter):
         for i, key in enumerate(order):
             uniques = pd.unique(param_dyn_dict[key])
             # provide unique values based on original occurence
-
             if len(uniques) == 1:
-                my_array = np.empty(jac_size)
                 #np.array([np.concatenate(jac[i], axis=0)])
                 newjacdict[key] = np.expand_dims(
                     np.fromiter(chain(*jac[i]), dtype=float, count=jac_size),0)
@@ -1462,87 +1469,43 @@ class Fits(Scatter):
         for i in set(self._tau_symb) & set(param_dyn_dict.keys()):
             # generate a function that evaluates the 'inner' derivative, i.e.:
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
-            d_inner = self._tau_diff_func[i]
             # evaluate the inner derivative
-            dtau_dx = d_inner(**{key:res_dict[key]
-                                   for key in self._tau_symb})
-            # calculate the derivative with respect to the parameters
-            if np.isscalar(dtau_dx):
-                newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
-            elif isspmatrix(newjacdict[str(i)]):
-                # In case the parameter is varying temporally, it must be
-                # repeated by the number of incidence-angles in order
-                # to have correct array-processing (it is assumed that no
-                # parameter is incidence-angle dependent itself)
+            df_dx = self._tau_diff_func[i](**{key:res_dict[key] for key in
+                                              self._tau_symb})
+            if not np.isscalar(df_dx):
+                # flatten the array (except if it is a scalar)
+                # happens for example when   f = 5*x   ->   df/dx = 5
+                df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
+            if isspmatrix(newjacdict[str(i)]):
                 # calculate "outer" * "inner" derivative for sparse matrices
-                if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
-                         dtau_dx.reshape(np.prod(dtau_dx.shape)))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)].multiply(dtau_dx)
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(df_dx)
             else:
-                # calculate "outer" * "inner" derivative for numpy arrays
-                if np.atleast_1d(dtau_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx.reshape(
-                         np.prod(dtau_dx.shape))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)] * dtau_dx
+                newjacdict[str(i)] = newjacdict[str(i)] * df_dx
 
         # same for omega
         for i in set(self._omega_symb) & set(param_dyn_dict.keys()):
-            d_inner = self._omega_diff_func[i]
-            domega_dx = d_inner(**{key:res_dict[key]
-                                   for key in self._omega_symb})
+            df_dx = self._omega_diff_func[i](**{key:res_dict[key] for key in
+                                                self._omega_symb})
+            if not np.isscalar(df_dx):
+                df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
-            if np.isscalar(domega_dx):
-                newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
-            elif isspmatrix(newjacdict[str(i)]):
-                # In case the parameter is varying temporally, it must be
-                # repeated by the number of incidence-angles in order
-                # to have correct array-processing (it is assumed that no
-                # parameter is incidence-angle dependent itself)
-
-                # calculate "outer" * "inner" derivative for sparse matrices
-                if np.atleast_1d(domega_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
-                         domega_dx.reshape(np.prod(domega_dx.shape)))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)].multiply(domega_dx)
+            if isspmatrix(newjacdict[str(i)]):
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(df_dx)
             else:
-                # calculate "outer" * "inner" derivative for numpy arrays
-                if np.atleast_1d(domega_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)] * domega_dx.reshape(
-                         np.prod(domega_dx.shape))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)] * domega_dx
+                newjacdict[str(i)] = newjacdict[str(i)] * df_dx
 
         # same for NormBRDF
         for i in set(self._N_symb) & set(param_dyn_dict.keys()):
-            d_inner = self._N_diff_func[i]
-            dN_dx = d_inner(**{key:res_dict[key] for key in self._N_symb})
+            df_dx = self._N_diff_func[i](**{key:res_dict[key] for key in
+                                            self._N_symb})
+            if not np.isscalar(df_dx):
+                df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
-            if np.isscalar(dN_dx):
-                newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
-            elif isspmatrix(newjacdict[str(i)]):
-                # In case the parameter is varying temporally, it must be
-                # repeated by the number of incidence-angles in order
-                # to have correct array-processing (it is assumed that no
-                # parameter is incidence-angle dependent itself)
-
-                # calculate "outer" * "inner" derivative for sparse matrices
-                if np.atleast_1d(dN_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)].multiply(
-                         dN_dx.reshape(np.prod(dN_dx.shape)))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)].multiply(dN_dx)
+            if isspmatrix(newjacdict[str(i)]):
+                newjacdict[str(i)] = newjacdict[str(i)].multiply(df_dx)
             else:
-                # calculate "outer" * "inner" derivative for numpy arrays
-                if np.atleast_1d(dN_dx).shape == R.t_0.shape:
-                     newjacdict[str(i)] = newjacdict[str(i)] * dN_dx.reshape(
-                         np.prod(dN_dx.shape))
-                else:
-                    newjacdict[str(i)] = newjacdict[str(i)] * dN_dx
+                newjacdict[str(i)] = newjacdict[str(i)] * df_dx
 
         if hasattr(self, 'intermediate_results'):
             self.intermediate_results['jacobian'] += [newjacdict]
@@ -1556,7 +1519,7 @@ class Fits(Scatter):
                 newjacdict[key] = val[:,np.ravel(~self.mask)]
 
         # return the transposed jacobian as needed by scipy's least_squares
-        if sparse:#np.any([isspmatrix(newjacdict[key]) for key in order]):
+        if sparse:
             # in case sparse matrices have been used, use scipy to vstack them
             jac_lsq = vstack([newjacdict[key] for key in order]).transpose()
         else:

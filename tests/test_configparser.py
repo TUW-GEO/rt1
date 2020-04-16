@@ -91,7 +91,13 @@ class TestCONFIGPARSER(unittest.TestCase):
                          'b0' : False,
                          'b1' : True,
                          'd0' : datetime(2020,3,23),
-                         'd1' : datetime(2017,1,22,12,34)}
+                         'd1' : datetime(2017,1,22,12,34),
+                         'lf' : [.1,.2,.3,.4,.5],
+                         'li' : [1,2,3,4,5],
+                         'lb' : [True, False, True, False],
+                         'ls' : ['a','B','c','AbCd#'],
+                         'ldt': [datetime(2017,1,22,12,34),
+                                 datetime(2019,3,24,11,13)]}
 
         process_specs_parsed = cfg.get_process_specs()
 
@@ -136,9 +142,9 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
         #----------------------------------------- check if files have been copied
-        assert Path('tests/proc_test/cfg').exists(), 'copying did not work'
-        assert Path('tests/proc_test/cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('tests/proc_test/cfg/parallel_processing_config.py').exists(), 'copying did not work'
+        assert Path('tests/proc_test/dump01/cfg').exists(), 'copying did not work'
+        assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/proc_test/dump01/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":
