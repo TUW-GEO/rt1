@@ -91,7 +91,13 @@ class TestCONFIGPARSER(unittest.TestCase):
                          'b0' : False,
                          'b1' : True,
                          'd0' : datetime(2020,3,23),
-                         'd1' : datetime(2017,1,22,12,34)}
+                         'd1' : datetime(2017,1,22,12,34),
+                         'lf' : [.1,.2,.3,.4,.5],
+                         'li' : [1,2,3,4,5],
+                         'lb' : [True, False, True, False],
+                         'ls' : ['a','B','c','AbCd#'],
+                         'ldt': [datetime(2017,1,22,12,34),
+                                 datetime(2019,3,24,11,13)]}
 
         process_specs_parsed = cfg.get_process_specs()
 
