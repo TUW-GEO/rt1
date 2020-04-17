@@ -325,7 +325,7 @@ class Fits(Scatter):
          '''
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex', '_N_groups',
                   '_dataset_used', 'index', '_orig_index',
-                  '_jac_assign_rule', 'meandatetimes', 'inc', 'data',
+                  '_jac_assign_rule', 'meandatetimes', 'inc', 'data', 'mask',
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
                   'interp_vals']
@@ -626,6 +626,7 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def mask(self):
         '''
         a mask that indicates the artificially added values
