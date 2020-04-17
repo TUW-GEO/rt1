@@ -505,6 +505,7 @@ class Fits(Scatter):
         '''
         group the dataset with respect to the required parameter-groups
         '''
+
         if self.dataset is None:
             return
         # don't use keys that are not provided in defdict
@@ -515,13 +516,12 @@ class Fits(Scatter):
             usekeys += ['data_weights']
 
         # generate new data-frame based on groups
-        dataset_used = self.dataset[usekeys].reset_index()
-        dataset_used.rename(columns={'index':'orig_index'}, inplace=True)
-        dataset_used.set_index(self._groupindex, inplace=True)
-        dataset_used = dataset_used.groupby(level=0,
-                                            sort=False).agg(pd.Series.tolist)
-
-        return dataset_used
+        df = dict()
+        for key, val in self.dataset[usekeys].reset_index().items():
+            df[key] = groupby_unsorted(zip(self._groupindex, val),
+                                       key=itemgetter(0), get=itemgetter(1))
+        df = pd.DataFrame(df).rename(columns={'index':'orig_index'})
+        return df
 
 
     @property
@@ -549,15 +549,20 @@ class Fits(Scatter):
 
         '''
         # first find the column indexes of each unique dyn-key
-        uniquewheredict0 = {
-            key:groupby_unsorted(enumerate(chain(*rectangularize(
-                val.groupby(level=0, sort=False).apply(list)))),
-                key=itemgetter(1), get=itemgetter(0)) for
-            key, val in self.param_dyn_df.reindex(
-                self._groupindex).items()}
+        # reindex param_dyn_df to _groupindex and get a list of all groupitems
+        index_grps = dict()
+        for key, val in self.param_dyn_dict.items():
+            index_grps[key] = groupby_unsorted(zip(self._groupindex, val),
+                                               key=itemgetter(0),
+                                               get=itemgetter(1))
 
-        # now get the row-indexes (note that the dyn-keys do not need to
-        # start at 0 and also do not need to be sorted!)
+        uniquewheredict0 = {
+            key:groupby_unsorted(enumerate(chain(*rectangularize(val.values()))),
+                key=itemgetter(1), get=itemgetter(0)) for
+            key, val in index_grps.items()}
+
+        # now get the row- and col-indexes (note that the dyn-keys do not need
+        # to start at 0 and must not be sorted!)
         jac_rules = {key: np.row_stack(
             (np.fromiter(chain(*(repeat(i, len(val_i)) for i, val_i in
                                  enumerate(val.values()))), dtype=int),
@@ -583,6 +588,7 @@ class Fits(Scatter):
         return jac_rules
 
 
+
     @property
     @lru_cache()
     def meandatetimes(self):
@@ -593,7 +599,7 @@ class Fits(Scatter):
 
         idx = self.dataset.index.to_numpy()
         dates = dict()
-        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+        for key, val in self.param_dyn_dict.items():
             dates[key] = list({g:meandatetime(val_g) for g, val_g in
              groupby_unsorted(zip(idx, val),
                              key=itemgetter(1),
@@ -722,9 +728,9 @@ class Fits(Scatter):
         the indices of each parameter-group (to re-assign to to the fit-index)
         '''
         assigndict = dict()
-        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+        for key, val in self.param_dyn_dict.items():
             assigndict[key] = groupby_unsorted(range(len(val)),
-                                               key=lambda x: val.iloc[x])
+                                               key=lambda x: val[x])
 
         return assigndict
 
