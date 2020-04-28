@@ -28,6 +28,7 @@ import ctypes
 from itertools import repeat, count, chain
 from functools import lru_cache, partial
 from operator import itemgetter, add
+from itertools import groupby
 
 from timeit import default_timer as tick
 from datetime import timedelta
@@ -95,10 +96,6 @@ class Fits(Scatter):
                             of the dataset-column `'key_start'` will be used as
                             start-values
                       - if fitQ is False, val will be used as constant.
-
-                      Notice: if val is a DataFrame, the index must coinicide
-                      with the index of the dataset, and the column-name
-                      must be the corresponding variabile-name
 
                 freq: str or None (only needed if fitQ is True)
 
@@ -332,7 +329,8 @@ class Fits(Scatter):
                   '_jac_assign_rule', 'meandatetimes', 'inc', 'data', 'mask',
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
-                  'interp_vals']
+                  'interp_vals', '_meandt_interp_assigns',
+                  '_param_dyn_monotonic']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -347,7 +345,12 @@ class Fits(Scatter):
         # only clear the cache if at least one property has been cached
         if not all(i == 0 for i in self._cached_arg_number):
             for name in self._cached_props:
-                getattr(Fits, name).fget.cache_clear()
+                # treat functions and properties accordingly
+                if isinstance(getattr(type(self), name), property):
+                    getattr(Fits, name).fget.cache_clear()
+                else:
+                    getattr(Fits, name).cache_clear()
+
             #print('...cache cleared')
 
 
@@ -358,7 +361,12 @@ class Fits(Scatter):
         text = []
         for name in self._cached_props:
             try:
-                cinfo = getattr(Fits, name).fget.cache_info()
+                # treat functions and properties accordingly
+                if isinstance(getattr(type(self), name), property):
+                    cinfo = getattr(Fits, name).fget.cache_info()
+                else:
+                    cinfo = getattr(Fits, name).cache_info()
+
                 text += [f'{name:<18}:   ' + f'{cinfo}']
             except:
                 text += [f'{name:<18}:   ' + '???']
@@ -472,6 +480,14 @@ class Fits(Scatter):
                                                  *self.param_dyn_dict.keys()])
             param_dyn_df.set_index('group_id', inplace=True)
             return param_dyn_df
+
+    @property
+    @lru_cache()
+    def _param_dyn_monotonic(self):
+        '''
+        a dict indicating if the param_dyn assignments are monotonic
+        '''
+        return {key:val.is_monotonic for key, val in self.param_dyn_df.items()}
 
 
     @property
@@ -609,6 +625,42 @@ class Fits(Scatter):
                              key=itemgetter(1),
                              get=itemgetter(0)).items()}.values())
         return dates
+
+
+    @lru_cache()
+    def _meandt_interp_assigns(self, key):
+        '''
+        return the indices to distribute values with respect to the appearance
+        of consecutive unique dyn-groups of the specific parameter.
+        (used to allow interpolation of dyn-groups that are not sorted in time)
+
+        Parameters
+        ----------
+        key : str
+            the name of the parameter.
+        vals : list
+            the values to assign.
+
+        Returns
+        -------
+        list
+            a list of shape (2, n) where list[0] are the mean-datetime values
+            of each group and list[1] are the corresponding indices used to
+            assign the values returned in res_df.
+
+        '''
+
+        # get a dict to assign the dyn-numbers to the value-ids
+        assigndict = dict(zip(pd.unique(self.param_dyn_dict[key]),
+                              range(len(self.param_dyn_dict[key]))))
+
+        # assign the values with respect to the consecutive appearance of the
+        # groups (and their corresponding mean datetime value)
+        # --> groupby assigns groups with respect to the order of appearance!
+        return [list(i) for i in zip(*([meandatetime([j[1] for j in i[1]]),
+                           assigndict[i[0]]]
+                for i in groupby(enumerate(self.dataset.index.to_numpy()),
+                                 key=lambda x: self.param_dyn_dict[key][x[0]])))]
 
 
     @property
@@ -1176,26 +1228,35 @@ class Fits(Scatter):
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
             for key, val in res_dict.items():
+                # generate an interpolaion function
+                # the values at the boundaries are set to the nearest
+                # obtained values to avoid extrapolation
+
                 if key in interp_vals:
-                    # generate an interpolaion function
-                    # the values at the boundaries are set to the nearest
-                    # obtained values to avoid extrapolation
+                    if self._param_dyn_monotonic[key] is False:
+                        #print(f'interpolation of non-monotonic {key}')
+                        # use assignments for unsorted param_dyns
+                        useindex = self._meandt_interp_assigns(key)[0]
+                        usevals = np.array(
+                            val)[self._meandt_interp_assigns(key)[1]]
+                    else:
+                        useindex = self.meandatetimes[key]
+                        usevals = val
 
                     # ensure that the indexes are never the same
                     # (add a milisecond if they are...)
-                    if firstindex == self.meandatetimes[key][0]:
+                    if firstindex == useindex[0]:
                         firstindex += np.timedelta64(1, 'ms')
-                    if lastindex == self.meandatetimes[key][-1]:
+                    if lastindex == useindex[-1]:
                         lastindex -= np.timedelta64(1, 'ms')
 
-                    useindex = np.array([firstindex,
-                                         *self.meandatetimes[key],
-                                         lastindex],
+                    useindex = np.array([firstindex, *useindex, lastindex],
                                         dtype='datetime64[ns]'
                                         ).astype(float, copy=False)
 
-                    if len(val) >= 2:
-                        usevals = np.take(val, [0, *range(len(val)), -1])
+                    if len(usevals) >= 2:
+                        usevals = np.take(usevals, [0,
+                                                    *range(len(usevals)), -1])
 
                         # interpolate the data to the used timestamps
                         f = interp1d(useindex.astype(float), usevals,
@@ -1207,8 +1268,8 @@ class Fits(Scatter):
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
-                        print('warning, interpolation not possible for ({key})'
-                              'because there are less than 2 values')
+                        print('warning, interpolation not possible for '
+                              f'({key}) because there are less than 2 values')
 
                         x = np.empty(len(self.dataset), dtype=float)
                         [x.put(ind, val_i) for val_i, ind in
