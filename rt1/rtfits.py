@@ -89,7 +89,11 @@ class Fits(Scatter):
 
                 val: float or pandas.DataFrame
 
-                      - if fitQ is True, val will be used as start-value
+                      - if fitQ is True
+                          - if it's an number it will be used as start-value
+                          - if `'auxiliary'`, the mean-values of each fit-group
+                            of the dataset-column `'key_start'` will be used as
+                            start-values
                       - if fitQ is False, val will be used as constant.
 
                       Notice: if val is a DataFrame, the index must coinicide
@@ -817,9 +821,27 @@ class Fits(Scatter):
         startvaldict = {}
         for key, val in self.defdict.items():
             if val[0] is True:
-                startvaldict[key] = val[1]
+                # in case start-values have been provided via dataset,
+                # take the average-value for each fit-group
+                if val[1] == 'auxiliary':
+                    assert key + '_start' in self.dataset, (
+                        f'you must provide a column {key + "_start"} in ' +
+                        'the dataset if you want to use "auxiliary" start-vals'
+                        )
+                    startval = list(groupby_unsorted(
+                        zip(self._groupindex, self.dataset[key + '_start']),
+                        key=itemgetter(0), get=itemgetter(1)).values())
+
+                    meanstartvals = []
+                    for dyn, idx in self._param_assigns[key].items():
+                        meanstartvals += [np.mean(np.take(startval, idx))]
+
+                    startvaldict[key] = meanstartvals
+                else:
+                    startvaldict[key] = val[1]
+
+        # re-shape startvaldict to fit needs in case a constant is provided
         if self.param_dyn_df is not None:
-            # re-shape param_dict and bounds_dict to fit needs
             uniques = self.param_dyn_df.nunique()
             for key, val in startvaldict.items():
                 # adjust shape of startvalues
