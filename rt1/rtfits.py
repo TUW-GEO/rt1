@@ -38,6 +38,27 @@ try:
 except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
 
+
+def load(path):
+    '''
+    a convenience-function to load a Fits-object dumped with `fit.dump()`
+
+    Parameters
+    ----------
+    path : str
+        the path to the dump-file
+
+    Returns
+    -------
+    fit : rtfits.Fits object
+    '''
+
+    with open(path, 'rb') as file:
+        fit = cloudpickle.load(file)
+
+    return fit
+
+
 class Fits(Scatter):
     '''
     Class to perform nonlinear least-squares fits to data.
