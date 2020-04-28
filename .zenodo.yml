@@ -1,0 +1,17 @@
+{
+    "description": "A python-module to retrieve and analyze radiative-transfer based soil- and vegetation parameters from radar-data.",
+    "keywords": [
+         "Python",
+         "Remote Sensing",
+         "Microwave",
+         "Radiative Transfer"
+     ],
+    "license": {"id": "Apache-2.0"},
+    "creators": [
+        {
+            "orcid": "0000-0003-0419-4546",
+            "name": "Raphael Quast",
+            "affiliation": "TU Wien Department of Geodesy and Geoinformation"
+        }
+    ]
+}

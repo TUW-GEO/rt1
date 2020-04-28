@@ -28,6 +28,7 @@ import ctypes
 from itertools import repeat, count, chain
 from functools import lru_cache, partial
 from operator import itemgetter, add
+from itertools import groupby
 
 from timeit import default_timer as tick
 from datetime import timedelta
@@ -36,6 +37,27 @@ try:
     import cloudpickle
 except ModuleNotFoundError:
     print('cloudpickle could not be imported, .dump() will not work!')
+
+
+def load(path):
+    '''
+    a convenience-function to load a Fits-object dumped with `fit.dump()`
+
+    Parameters
+    ----------
+    path : str
+        the path to the dump-file
+
+    Returns
+    -------
+    fit : rtfits.Fits object
+    '''
+
+    with open(path, 'rb') as file:
+        fit = cloudpickle.load(file)
+
+    return fit
+
 
 class Fits(Scatter):
     '''
@@ -89,12 +111,12 @@ class Fits(Scatter):
 
                 val: float or pandas.DataFrame
 
-                      - if fitQ is True, val will be used as start-value
+                      - if fitQ is True
+                          - if it's an number it will be used as start-value
+                          - if `'auxiliary'`, the mean-values of each fit-group
+                            of the dataset-column `'key_start'` will be used as
+                            start-values
                       - if fitQ is False, val will be used as constant.
-
-                      Notice: if val is a DataFrame, the index must coinicide
-                      with the index of the dataset, and the column-name
-                      must be the corresponding variabile-name
 
                 freq: str or None (only needed if fitQ is True)
 
@@ -325,10 +347,11 @@ class Fits(Scatter):
          '''
          names = ['param_dyn_dict', 'param_dyn_df', '_groupindex', '_N_groups',
                   '_dataset_used', 'index', '_orig_index',
-                  '_jac_assign_rule', 'meandatetimes', 'inc', 'data',
+                  '_jac_assign_rule', 'meandatetimes', 'inc', 'data', 'mask',
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
-                  'interp_vals']
+                  'interp_vals', '_meandt_interp_assigns',
+                  '_param_dyn_monotonic']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -343,7 +366,12 @@ class Fits(Scatter):
         # only clear the cache if at least one property has been cached
         if not all(i == 0 for i in self._cached_arg_number):
             for name in self._cached_props:
-                getattr(Fits, name).fget.cache_clear()
+                # treat functions and properties accordingly
+                if isinstance(getattr(type(self), name), property):
+                    getattr(Fits, name).fget.cache_clear()
+                else:
+                    getattr(Fits, name).cache_clear()
+
             #print('...cache cleared')
 
 
@@ -354,7 +382,12 @@ class Fits(Scatter):
         text = []
         for name in self._cached_props:
             try:
-                cinfo = getattr(Fits, name).fget.cache_info()
+                # treat functions and properties accordingly
+                if isinstance(getattr(type(self), name), property):
+                    cinfo = getattr(Fits, name).fget.cache_info()
+                else:
+                    cinfo = getattr(Fits, name).cache_info()
+
                 text += [f'{name:<18}:   ' + f'{cinfo}']
             except:
                 text += [f'{name:<18}:   ' + '???']
@@ -469,6 +502,14 @@ class Fits(Scatter):
             param_dyn_df.set_index('group_id', inplace=True)
             return param_dyn_df
 
+    @property
+    @lru_cache()
+    def _param_dyn_monotonic(self):
+        '''
+        a dict indicating if the param_dyn assignments are monotonic
+        '''
+        return {key:val.is_monotonic for key, val in self.param_dyn_df.items()}
+
 
     @property
     @lru_cache()
@@ -505,6 +546,7 @@ class Fits(Scatter):
         '''
         group the dataset with respect to the required parameter-groups
         '''
+
         if self.dataset is None:
             return
         # don't use keys that are not provided in defdict
@@ -515,13 +557,12 @@ class Fits(Scatter):
             usekeys += ['data_weights']
 
         # generate new data-frame based on groups
-        dataset_used = self.dataset[usekeys].reset_index()
-        dataset_used.rename(columns={'index':'orig_index'}, inplace=True)
-        dataset_used.set_index(self._groupindex, inplace=True)
-        dataset_used = dataset_used.groupby(level=0,
-                                            sort=False).agg(pd.Series.tolist)
-
-        return dataset_used
+        df = dict()
+        for key, val in self.dataset[usekeys].reset_index().items():
+            df[key] = groupby_unsorted(zip(self._groupindex, val),
+                                       key=itemgetter(0), get=itemgetter(1))
+        df = pd.DataFrame(df).rename(columns={'index':'orig_index'})
+        return df
 
 
     @property
@@ -549,15 +590,20 @@ class Fits(Scatter):
 
         '''
         # first find the column indexes of each unique dyn-key
-        uniquewheredict0 = {
-            key:groupby_unsorted(enumerate(chain(*rectangularize(
-                val.groupby(level=0, sort=False).apply(list)))),
-                key=itemgetter(1), get=itemgetter(0)) for
-            key, val in self.param_dyn_df.reindex(
-                self._groupindex).items()}
+        # reindex param_dyn_df to _groupindex and get a list of all groupitems
+        index_grps = dict()
+        for key, val in self.param_dyn_dict.items():
+            index_grps[key] = groupby_unsorted(zip(self._groupindex, val),
+                                               key=itemgetter(0),
+                                               get=itemgetter(1))
 
-        # now get the row-indexes (note that the dyn-keys do not need to
-        # start at 0 and also do not need to be sorted!)
+        uniquewheredict0 = {
+            key:groupby_unsorted(enumerate(chain(*rectangularize(val.values()))),
+                key=itemgetter(1), get=itemgetter(0)) for
+            key, val in index_grps.items()}
+
+        # now get the row- and col-indexes (note that the dyn-keys do not need
+        # to start at 0 and must not be sorted!)
         jac_rules = {key: np.row_stack(
             (np.fromiter(chain(*(repeat(i, len(val_i)) for i, val_i in
                                  enumerate(val.values()))), dtype=int),
@@ -583,6 +629,7 @@ class Fits(Scatter):
         return jac_rules
 
 
+
     @property
     @lru_cache()
     def meandatetimes(self):
@@ -593,12 +640,48 @@ class Fits(Scatter):
 
         idx = self.dataset.index.to_numpy()
         dates = dict()
-        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+        for key, val in self.param_dyn_dict.items():
             dates[key] = list({g:meandatetime(val_g) for g, val_g in
              groupby_unsorted(zip(idx, val),
                              key=itemgetter(1),
                              get=itemgetter(0)).items()}.values())
         return dates
+
+
+    @lru_cache()
+    def _meandt_interp_assigns(self, key):
+        '''
+        return the indices to distribute values with respect to the appearance
+        of consecutive unique dyn-groups of the specific parameter.
+        (used to allow interpolation of dyn-groups that are not sorted in time)
+
+        Parameters
+        ----------
+        key : str
+            the name of the parameter.
+        vals : list
+            the values to assign.
+
+        Returns
+        -------
+        list
+            a list of shape (2, n) where list[0] are the mean-datetime values
+            of each group and list[1] are the corresponding indices used to
+            assign the values returned in res_df.
+
+        '''
+
+        # get a dict to assign the dyn-numbers to the value-ids
+        assigndict = dict(zip(pd.unique(self.param_dyn_dict[key]),
+                              range(len(self.param_dyn_dict[key]))))
+
+        # assign the values with respect to the consecutive appearance of the
+        # groups (and their corresponding mean datetime value)
+        # --> groupby assigns groups with respect to the order of appearance!
+        return [list(i) for i in zip(*([meandatetime([j[1] for j in i[1]]),
+                           assigndict[i[0]]]
+                for i in groupby(enumerate(self.dataset.index.to_numpy()),
+                                 key=lambda x: self.param_dyn_dict[key][x[0]])))]
 
 
     @property
@@ -626,6 +709,7 @@ class Fits(Scatter):
 
 
     @property
+    @lru_cache()
     def mask(self):
         '''
         a mask that indicates the artificially added values
@@ -721,9 +805,9 @@ class Fits(Scatter):
         the indices of each parameter-group (to re-assign to to the fit-index)
         '''
         assigndict = dict()
-        for key, val in self.param_dyn_df.reindex(self._groupindex).items():
+        for key, val in self.param_dyn_dict.items():
             assigndict[key] = groupby_unsorted(range(len(val)),
-                                               key=lambda x: val.iloc[x])
+                                               key=lambda x: val[x])
 
         return assigndict
 
@@ -810,9 +894,27 @@ class Fits(Scatter):
         startvaldict = {}
         for key, val in self.defdict.items():
             if val[0] is True:
-                startvaldict[key] = val[1]
+                # in case start-values have been provided via dataset,
+                # take the average-value for each fit-group
+                if val[1] == 'auxiliary':
+                    assert key + '_start' in self.dataset, (
+                        f'you must provide a column {key + "_start"} in ' +
+                        'the dataset if you want to use "auxiliary" start-vals'
+                        )
+                    startval = list(groupby_unsorted(
+                        zip(self._groupindex, self.dataset[key + '_start']),
+                        key=itemgetter(0), get=itemgetter(1)).values())
+
+                    meanstartvals = []
+                    for dyn, idx in self._param_assigns[key].items():
+                        meanstartvals += [np.mean(np.take(startval, idx))]
+
+                    startvaldict[key] = meanstartvals
+                else:
+                    startvaldict[key] = val[1]
+
+        # re-shape startvaldict to fit needs in case a constant is provided
         if self.param_dyn_df is not None:
-            # re-shape param_dict and bounds_dict to fit needs
             uniques = self.param_dyn_df.nunique()
             for key, val in startvaldict.items():
                 # adjust shape of startvalues
@@ -1147,26 +1249,35 @@ class Fits(Scatter):
             # get the results and a quadratic interpolation-function
             use_res_dict = dict()
             for key, val in res_dict.items():
+                # generate an interpolaion function
+                # the values at the boundaries are set to the nearest
+                # obtained values to avoid extrapolation
+
                 if key in interp_vals:
-                    # generate an interpolaion function
-                    # the values at the boundaries are set to the nearest
-                    # obtained values to avoid extrapolation
+                    if self._param_dyn_monotonic[key] is False:
+                        #print(f'interpolation of non-monotonic {key}')
+                        # use assignments for unsorted param_dyns
+                        useindex = self._meandt_interp_assigns(key)[0]
+                        usevals = np.array(
+                            val)[self._meandt_interp_assigns(key)[1]]
+                    else:
+                        useindex = self.meandatetimes[key]
+                        usevals = val
 
                     # ensure that the indexes are never the same
                     # (add a milisecond if they are...)
-                    if firstindex == self.meandatetimes[key][0]:
+                    if firstindex == useindex[0]:
                         firstindex += np.timedelta64(1, 'ms')
-                    if lastindex == self.meandatetimes[key][-1]:
+                    if lastindex == useindex[-1]:
                         lastindex -= np.timedelta64(1, 'ms')
 
-                    useindex = np.array([firstindex,
-                                         *self.meandatetimes[key],
-                                         lastindex],
+                    useindex = np.array([firstindex, *useindex, lastindex],
                                         dtype='datetime64[ns]'
                                         ).astype(float, copy=False)
 
-                    if len(val) >= 2:
-                        usevals = np.take(val, [0, *range(len(val)), -1])
+                    if len(usevals) >= 2:
+                        usevals = np.take(usevals, [0,
+                                                    *range(len(usevals)), -1])
 
                         # interpolate the data to the used timestamps
                         f = interp1d(useindex.astype(float), usevals,
@@ -1178,8 +1289,8 @@ class Fits(Scatter):
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
-                        print('warning, interpolation not possible for ({key})'
-                              'because there are less than 2 values')
+                        print('warning, interpolation not possible for '
+                              f'({key}) because there are less than 2 values')
 
                         x = np.empty(len(self.dataset), dtype=float)
                         [x.put(ind, val_i) for val_i, ind in
