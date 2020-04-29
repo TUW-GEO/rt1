@@ -7,8 +7,9 @@ import numpy as np
 from itertools import tee, islice
 from collections import OrderedDict
 
+
 def rectangularize(array, return_mask=False, dim=None,
-                   return_masked=False):
+                   return_masked=False, dtype=None):
     '''
     return a rectangularized version of the input-array by repeating the
     last value to obtain the smallest possible rectangular shape.
@@ -31,7 +32,9 @@ def rectangularize(array, return_mask=False, dim=None,
          if None, the shortest length of all sub-lists will be used
     return_masked: bool (default=False)
                    indicator if a masked-array should be returned
-
+    dtype: type (default = None)
+           the dtype of the returned array. If None, the dtype of the first
+           element will be used
     Returns:
     ----------
     new_array: array-like
@@ -40,36 +43,37 @@ def rectangularize(array, return_mask=False, dim=None,
           a mask indicating the added values
 
     '''
+    # use this method to get the dtype of the first element since it works with
+    # pandas-Series, lists, arrays, dict-value views, etc.
+    if dtype is None:
+        dtype = np.array(next(islice(array, 1))).dtype
+
     if dim is None:
         # get longest dimension of sub-arrays
         dim  = len(max(array, key=len))
 
     if return_mask is True or return_masked is True:
-        newarray, mask = [], []
-        for s in array:
-            adddim = dim - len(s)
-            m = np.full_like(s, False, dtype=bool)
-            if adddim > 0:
-                s = np.append(s, np.full(adddim, s[-1]))
-                m = np.append(m, np.full(adddim, True))
-            newarray += [s]
-            mask     += [m]
+        newarray = np.empty((len(array), dim), dtype=dtype)
+        mask = np.full((len(array), dim), False, dtype=bool)
 
-        newarray = np.array(newarray)
-        mask = np.array(mask, dtype=bool)
+        for i, s in enumerate(array):
+            l = len(s)
+            newarray[i, :l] = s
+            newarray[i, l:] = s[-1]
+            mask[i,l:] = True
 
         if return_masked is True:
             return np.ma.masked_array(newarray, mask)
         else:
             return [newarray, mask]
     else:
-        newarray = []
-        for s in array:
-            adddim = dim - len(s)
-            if adddim > 0:
-                s = np.append(s, np.full(adddim, s[-1]))
-            newarray += [s]
-        return np.array(newarray)
+        newarray = np.empty((len(array), dim), dtype=dtype)
+        for i, s in enumerate(array):
+            l = len(s)
+            newarray[i, :l] = s
+            newarray[i, l:] = s[-1]
+        return newarray
+
 
 
 def meandatetime(datetimes):
