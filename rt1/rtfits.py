@@ -917,7 +917,11 @@ class Fits(Scatter):
                         st, sm = rectangularize(
                             self._param_assigns[key].values(),
                             return_mask=True)
-
+                        # average over each group in the dataset
+                        meanstartvals=np.ma.mean(
+                            rectangularize(meanstartvals, return_masked=True),
+                            axis=1)
+                        # assign individual values to each parameter-group
                         meanstartvals = np.ma.mean(
                             np.ma.masked_array(np.take(meanstartvals, st), sm),
                             axis=1).compressed()
