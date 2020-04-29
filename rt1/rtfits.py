@@ -901,13 +901,26 @@ class Fits(Scatter):
                         f'you must provide a column {key + "_start"} in ' +
                         'the dataset if you want to use "auxiliary" start-vals'
                         )
-                    startval = list(groupby_unsorted(
+                    meanstartvals = list(groupby_unsorted(
                         zip(self._groupindex, self.dataset[key + '_start']),
                         key=itemgetter(0), get=itemgetter(1)).values())
 
-                    meanstartvals = []
-                    for dyn, idx in self._param_assigns[key].items():
-                        meanstartvals += [np.mean(np.take(startval, idx))]
+                    # evaluate the mean start-value for each group
+                    if val[2] == 'index':
+                        # avoid grouping with _param_assigns since anyway
+                        # only a single value is given for each group
+                        meanstartvals = np.mean(meanstartvals, axis=1)
+                    else:
+                        # get a rectangularized list of indices for each
+                        # parameter (instead of using a loop which can be VERY
+                        # slow for a large number of parameters)
+                        st, sm = rectangularize(
+                            self._param_assigns[key].values(),
+                            return_mask=True)
+
+                        meanstartvals = np.ma.mean(
+                            np.ma.masked_array(np.take(meanstartvals, st), sm),
+                            axis=1).compressed()
 
                     startvaldict[key] = meanstartvals
                 else:
