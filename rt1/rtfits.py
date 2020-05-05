@@ -130,9 +130,14 @@ class Fits(Scatter):
                          will be used together with the dataset-index to
                          assign the temporal variability within the fit
                          (see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)
-                       - if both a pandas offset-alias and a dataset-column
-                         "key_dyn" is provided, the the provided variability
-                         will be superimposed onto the variability resulting
+                       - if freq is an integer (N), the dataset will be grouped
+                         such that each group contains N unique dataset-indexes
+                         (in case an exact split is not possible, the split is
+                          performed such that the groups are as similar as
+                          possible)
+                       - if both a freq AND a dataset-column "key_dyn" is
+                         provided, the the provided variability will be
+                         superimposed onto the variability resulting
                          form the chosen offset-alias
 
                 min, max: float (only needed if fitQ is True)
@@ -454,21 +459,56 @@ class Fits(Scatter):
                 param_dyn_dict[key] = list(repeat(1, len(self.dataset.index)))
             if freq is not None:
                 for i, f in enumerate(freq):
-                    try:
-                        grp_idx = self.dataset.index.to_frame().groupby(
-                                                        pd.Grouper(freq=f),
-                                                        sort=False)
-                    except ValueError:
-                        raise ValueError(f'The provided frequency ({f}) of ' +
-                                         f'{freqkeys[i]} is not a valid ' +
-                                         'pandas datetime-offset string. ' +
-                                         'Check the assignments in defdict!')
-                    # get unique group indices for each datetime-group
-                    for key in freqkeys[i]:
-                        grp_data = []
-                        for nval, [_, val] in enumerate(grp_idx):
-                            grp_data += repeat(nval, len(val))
-                        param_dyn_dict[key] = grp_data
+                    if isinstance(f, str):
+                        try:
+                            grp_idx = self.dataset.index.to_frame().groupby(
+                                                            pd.Grouper(freq=f),
+                                                            sort=False)
+                        except ValueError:
+                            raise ValueError(f'The provided frequency ({f}) of ' +
+                                             f'{freqkeys[i]} is not a valid ' +
+                                             'pandas datetime-offset string. ' +
+                                             'Check the assignments in defdict!')
+                        # get unique group indices for each datetime-group
+                        for key in freqkeys[i]:
+                            grp_data = []
+                            for nval, [_, val] in enumerate(grp_idx):
+                                grp_data += repeat(nval, len(val))
+                            param_dyn_dict[key] = grp_data
+                    elif isinstance(f, int):
+                        # find the number of groups required to split the
+                        # dataset into measurement-bins of length "f"
+                        n_dat = self.dataset.index.nunique()
+                        ngrps = n_dat//f
+                        rest = n_dat%f
+                        res = [0 for i in range(ngrps)]
+                        # distribute the rest as equal as possible
+                        # (to the first groups)
+                        for r in range(rest):
+                            res[r%len(res)] += 1
+                        if rest >= ngrps:
+                            print(f'warning: grouping {f} of {freqkeys}',
+                                  'is actually between',
+                                  f'{min([f+i for i in res])} and ',
+                                  f'{max([f+i for i in res])}')
+
+                        # (repetitions + rest + number of elements in group)
+                        dyn = chain(*[repeat(ni, f + r) for ni, r in
+                                      zip(range(ngrps), res)])
+                        # get the number of observations for each unique
+                        # index in the dataset
+                        dat = groupby_unsorted(
+                            zip(dyn,
+                                groupby_unsorted(self.dataset.index).values()),
+                            get=lambda x: len(x[1]),
+                            key=itemgetter(0))
+
+                        for key in freqkeys[i]:
+                            param_dyn_dict[key] = list(chain(*[repeat(key,
+                                                                      sum(val))
+                                                               for key, val in
+                                                               dat.items()]))
+
 
             manual_dyn_df = self._manual_dyn_df
             if manual_dyn_df is not None:
@@ -901,13 +941,30 @@ class Fits(Scatter):
                         f'you must provide a column {key + "_start"} in ' +
                         'the dataset if you want to use "auxiliary" start-vals'
                         )
-                    startval = list(groupby_unsorted(
+                    meanstartvals = list(groupby_unsorted(
                         zip(self._groupindex, self.dataset[key + '_start']),
                         key=itemgetter(0), get=itemgetter(1)).values())
 
-                    meanstartvals = []
-                    for dyn, idx in self._param_assigns[key].items():
-                        meanstartvals += [np.mean(np.take(startval, idx))]
+                    # evaluate the mean start-value for each group
+                    if val[2] == 'index':
+                        # avoid grouping with _param_assigns since anyway
+                        # only a single value is given for each group
+                        meanstartvals = np.mean(meanstartvals, axis=1)
+                    else:
+                        # get a rectangularized list of indices for each
+                        # parameter (instead of using a loop which can be VERY
+                        # slow for a large number of parameters)
+                        st, sm = rectangularize(
+                            self._param_assigns[key].values(),
+                            return_mask=True)
+                        # average over each group in the dataset
+                        meanstartvals=np.ma.mean(
+                            rectangularize(meanstartvals, return_masked=True),
+                            axis=1)
+                        # assign individual values to each parameter-group
+                        meanstartvals = np.ma.mean(
+                            np.ma.masked_array(np.take(meanstartvals, st), sm),
+                            axis=1).compressed()
 
                     startvaldict[key] = meanstartvals
                 else:
