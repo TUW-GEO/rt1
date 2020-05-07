@@ -1041,9 +1041,15 @@ class Fits(Scatter):
 
                 else:
                     if f'{key}_dyn' in self.dataset:
-                        print(f'parameter dynamics ({val[2]}) and ' +
-                              f'"dataset[{key}_dyn]" combined')
-                        manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
+                        if val[2] is not None:
+                            print(f'parameter dynamics ({val[2]}) and ' +
+                                  f'"dataset[{key}_dyn]" combined')
+                            manual_dyn_df[
+                                f'{key}'] = self.dataset[f'{key}_dyn']
+                        else:
+                            print(f'WARNING: the provided manual-dynanics ' +
+                                  f'column "{key}_dyn" is ignored since ' +
+                                  f'"defdict[{key}][1]" is set to "None".')
         if manual_dyn_df.empty:
             return None
         else:
