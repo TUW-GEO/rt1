@@ -2498,7 +2498,7 @@ class Fits(Scatter):
     @property
     def model_definition(self):
 
-        fitted, auxiliary, fixed = '', [], []
+        fitted, auxiliary, fixed, dyn_ignored = '', [], [], []
 
         fitted += ('     NAME'.ljust(14) + '|     START'.ljust(15) +
                    '|  VARIABILITY'.ljust(16) + '|    BOUNDS'.ljust(15) +
@@ -2512,7 +2512,11 @@ class Fits(Scatter):
 
                 if (val[2] != 'manual' and self.dataset is not None and
                     f'{key}_dyn' in self.dataset):
-                    vari = f'{str(val[2])} & manual'.ljust(14)
+                    if val[2] is not None:
+                        vari = f'{str(val[2])} & manual'.ljust(14)
+                    else:
+                        vari = '      -       '
+                        dyn_ignored += [f'{key}']
                 elif val[2] is not None:
                     vari = f'{str(val[2]):<14}'
                 else:
@@ -2543,7 +2547,12 @@ class Fits(Scatter):
         except Exception:
             srfname = '?'
 
-        outstr = '-'*77 + '\n'
+        outstr = ''
+        if len(dyn_ignored) > 0:
+            outstr += ' '.join(['Warning: Manual parameter-dynamics for',
+                              'the following parameters are ignored:\n'])
+            outstr += '         [ ' + ', '.join(dyn_ignored) + ' ]\n'
+        outstr += '-'*77 + '\n'
         outstr += '# SCATTERING FUNCTIONS ' + '\n'
 
         outstr += f' Volume: {vname}'.ljust(37) + '|'
