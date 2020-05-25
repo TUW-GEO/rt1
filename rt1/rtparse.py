@@ -352,6 +352,62 @@ class RT1_configparser(object):
         return processmodules
 
 
+    def get_module(self, modulename):
+        '''
+        programmatically import the module 'modulename' as described here:
+        https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+
+        Returns
+        -------
+        module : the imported module
+
+        '''
+
+        if 'copy' in self.config['CONFIGFILES']:
+            copy_val = self.config['CONFIGFILES']['copy'].strip()
+            if '..' in copy_val:
+                copy = Path(copy_val).resolve()
+            else:
+                copy = Path(copy_val)
+
+            if not copy.exists():
+                print(f'creating config-dir {copy}')
+                copy.mkdir(parents=True)
+            shutil.copy(self.configpath, copy)
+            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
+        else:
+            copy = False
+
+        assert f'module__{modulename}' in self.config['CONFIGFILES'], (
+            f'"module__{modulename}" is not defined in the [CONFIGFILES]' +
+            ' section of the .ini file')
+
+        val = self.config['CONFIGFILES'][f'module__{modulename}']
+
+        location = Path(val.strip())
+
+        assert location.suffix == '.py', f'{location} is not a .py file!'
+        # copy the file and use the copied one for the import
+        if copy is not False:
+            copypath = copy / location.name
+            if not copypath.exists():
+                shutil.copy(location, copypath)
+                print(f'"{location.name}" copied to \n',
+                      f'    "{copy}"')
+            else:
+                print(f'"{copypath.stem}" imported from \n',
+                      f'    "{copypath.parent}"')
+
+        spec = importlib.util.spec_from_file_location(name=copypath.stem,
+                                                      location=copypath)
+
+        foo = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = foo
+        spec.loader.exec_module(foo)
+
+        return foo
+
+
     def get_process_specs(self):
         inp = self.config['PROCESS_SPECS']
 

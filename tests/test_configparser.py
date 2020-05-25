@@ -141,6 +141,13 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert hasattr(cfg_module, 'processing_cfg'), 'modules not correctly parsed'
         assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
+
+        cfg_module_direct = cfg.get_module('processfuncs')
+        assert hasattr(cfg_module_direct, 'processing_cfg'), 'direct-module load not working'
+        assert hasattr(cfg_module_direct, 'run'), 'direct-module load not working'
+
+
+
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'copying did not work'
         assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
