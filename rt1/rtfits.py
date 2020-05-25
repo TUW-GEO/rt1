@@ -2073,6 +2073,8 @@ class Fits(Scatter):
                 update_progress(max_cnt, max_cnt,
                                 finalmsg=f'Done! ({res_lsq.message})')
 
+        # set _RT1_version after successful call of performfit
+        self._RT1_version = _RT1_version
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
@@ -2595,7 +2597,11 @@ class Fits(Scatter):
 
         datefmt = '%d. %B %Y (%H:%M:%S)'
 
-        outstr = f"RT1_version:  {self._RT1_version}".ljust(38)
+        try:
+            outstr = f"used RT1_version:  {self._RT1_version}".ljust(38)
+        except:
+            outstr = f"RT1_version: {_RT1_version}".ljust(38)
+
         outstr += f"{datetime.now().strftime(datefmt)}\n".rjust(39)
         outstr += '-'*77 + '\n'
         outstr += '# SCATTERING FUNCTIONS ' + '\n'
