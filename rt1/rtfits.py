@@ -138,7 +138,7 @@ class Fits(Scatter):
                          (in case an exact split is not possible, the split is
                           performed such that the groups are as similar as
                           possible)
-                       - if both a freq AND a dataset-column "key_dyn" is
+                       - if "freq + manual" AND a dataset-column "key_dyn" is
                          provided, the the provided variability will be
                          superimposed onto the variability resulting
                          form the chosen offset-alias
@@ -1013,7 +1013,17 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if (val[0] is True and val[2] is not None
                 and val[2] != 'manual' and val[2] != 'index'):
-                    timescaledict[key] = self.defdict[key][2]
+                    usevals = list(map(str.strip, val[2].split('+')))
+                    assert len(usevals) <= 2, ('there are 2 + symbols in ' +
+                                               'the variability definition ' +
+                                               f'of {key} = {val[2]}')
+                    if len(usevals) == 2 :
+                        assert 'manual' in usevals, ('you can only combine' +
+                                                     '1 datetime-offset and ' +
+                                                     'the keyword "manual" !')
+
+                        usevals.pop(usevals.index('manual'))
+                    timescaledict[key] = usevals[0]
         return timescaledict
 
 
@@ -1042,16 +1052,21 @@ class Fits(Scatter):
                     manual_dyn_df[f'{key}'] = indexdyn
 
                 else:
-                    if f'{key}_dyn' in self.dataset:
-                        if val[2] is not None:
-                            print(f'parameter dynamics ({val[2]}) and ' +
-                                  f'"dataset[{key}_dyn]" combined')
-                            manual_dyn_df[
-                                f'{key}'] = self.dataset[f'{key}_dyn']
-                        else:
-                            print(f'WARNING: the provided manual-dynanics ' +
-                                  f'column "{key}_dyn" is ignored since ' +
-                                  f'"defdict[{key}][1]" is set to "None".')
+                    if (val[2] is not None
+                        and 'manual' in map(str.strip, val[2].split('+'))):
+
+                        assert f'{key}_dyn' in self.dataset, (
+                            f'{key}_dyn must be provided in the dataset' +
+                            'if defdict[{key}][2] is set to "manual"')
+
+                        manual_dyn_df[
+                            f'{key}'] = self.dataset[f'{key}_dyn']
+
+                    elif f'{key}_dyn' in self.dataset:
+                        warnings.warn(f'the provided manual-dynanics ' +
+                              f'column "{key}_dyn" is ignored since ' +
+                              f'"defdict[{key}][1]" is set to "{val[2]}".')
+
         if manual_dyn_df.empty:
             return None
         else:
