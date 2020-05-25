@@ -398,8 +398,11 @@ class RT1_configparser(object):
                 print(f'"{copypath.stem}" imported from \n',
                       f'    "{copypath.parent}"')
 
-        spec = importlib.util.spec_from_file_location(name=copypath.stem,
-                                                      location=copypath)
+            # import module from copypath if it has been copied
+            location = copypath
+
+        spec = importlib.util.spec_from_file_location(name=location.stem,
+                                                      location=location)
 
         foo = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = foo
