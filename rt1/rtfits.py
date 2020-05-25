@@ -33,7 +33,7 @@ from operator import itemgetter, add
 from itertools import groupby
 
 from timeit import default_timer as tick
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 try:
     import cloudpickle
@@ -2593,8 +2593,10 @@ class Fits(Scatter):
             except Exception:
                 srfname = '?'
 
+        datefmt = '%d. %B %Y (%H:%M:%S)'
 
-        outstr = ''
+        outstr = f"RT1_version:  {self._RT1_version}".ljust(38)
+        outstr += f"{datetime.now().strftime(datefmt)}\n".rjust(39)
         outstr += '-'*77 + '\n'
         outstr += '# SCATTERING FUNCTIONS ' + '\n'
 
@@ -2612,7 +2614,7 @@ class Fits(Scatter):
             outstr += '\n'
 
 
-        outstr += f'# Interaction-contribution?      {self.int_Q}'+'\n\n'
+        outstr += f'# Interaction-contribution?        {self.int_Q}'+'\n\n'
 
         outstr += '-'*29 + ' FITTED PARAMETERS ' + '-'*29 + '\n'
         outstr += fitted + '\n'
