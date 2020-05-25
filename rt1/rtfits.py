@@ -2513,9 +2513,20 @@ class Fits(Scatter):
 
 
     @property
-    def model_definition(self):
+    def _model_definition(self):
+        '''
+        return a string containing important informations on the definitions
 
-        fitted, auxiliary, fixed, dyn_ignored = '', [], [], []
+        Note that this can easily be written to a file via:
+
+            >>> print(fit._model_definition, file=open(FILEPATH, 'w'))
+
+        Returns
+        -------
+        outstr : str
+        '''
+
+        fitted, auxiliary, fixed = '', [], []
 
         fitted += ('     NAME'.ljust(14) + '|     START'.ljust(15) +
                    '|  VARIABILITY'.ljust(16) + '|    BOUNDS'.ljust(15) +
@@ -2527,15 +2538,8 @@ class Fits(Scatter):
                 name = f'{key:<13}'
                 star = f'{val[1]:.10}'.ljust(13)
 
-                if (val[2] != 'manual' and self.dataset is not None and
-                    f'{key}_dyn' in self.dataset):
-                    if val[2] is not None:
-                        vari = f'{str(val[2])} & manual'.ljust(14)
-                    else:
-                        vari = '      -       '
-                        dyn_ignored += [f'{key}']
-                elif val[2] is not None:
-                    vari = f'{str(val[2]):<14}'
+                if val[2] is not None:
+                    vari = f'{" & ".join(map(str.strip, val[2].split("+"))):<14}'
                 else:
                     vari = '      -       '
 
@@ -2555,29 +2559,74 @@ class Fits(Scatter):
                     auxiliary += [f'| {key}']
                 elif isinstance(val[1], (int, float)):
                     fixed += [f' {key:<13}= {val[1]}']
-        try:
-            vname = self.V.__class__.__name__
-        except Exception:
-            vname = '?'
-        try:
-            srfname = self.SRF.__class__.__name__
-        except Exception:
-            srfname = '?'
+
+        # print V and SRF definitions
+        if isinstance(self.set_V_SRF,dict):
+            vprop = {**self.set_V_SRF['V_props']}
+            vname = vprop.pop('V_name', '?')
+            srfprop = {**self.set_V_SRF['SRF_props']}
+            srfname = srfprop.pop('SRF_name', '?')
+
+            vnames = list(vprop.keys())
+            vnames = [i.ljust(max(map(len, vnames))) + ':' for i in vnames]
+            vvals = list(vprop.values())
+
+            srfnames = list(srfprop.keys())
+            srfnames = [i.ljust(max(map(len, srfnames))) + ':'
+                        for i in srfnames]
+            srfvals = list(srfprop.values())
+
+            while len(vnames) < max(len(vnames), len(srfnames)):
+                vnames += ['']
+                vvals += ['']
+
+            while len(srfnames) < max(len(vnames), len(srfnames)):
+                srfnames += ['']
+                srfvals += ['']
+        else:
+            try:
+                vname = self.V.__class__.__name__
+            except Exception:
+                vname = '?'
+            try:
+                srfname = self.SRF.__class__.__name__
+            except Exception:
+                srfname = '?'
+
 
         outstr = ''
-        if len(dyn_ignored) > 0:
-            outstr += ' '.join(['Warning: Manual parameter-dynamics for',
-                              'the following parameters are ignored:\n'])
-            outstr += '         [ ' + ', '.join(dyn_ignored) + ' ]\n'
         outstr += '-'*77 + '\n'
         outstr += '# SCATTERING FUNCTIONS ' + '\n'
 
-        outstr += f' Volume: {vname}'.ljust(37) + '|'
-        outstr += f' Surface: {srfname}' + '\n\n'
+        #outstr += f' Volume: {vname}'.ljust(37) + '|'
+        #outstr += f' Surface: {srfname}' + '\n\n'
+        outstr += f' VOLUME:'.ljust(37) + '|'
+        outstr += f' SURFACE:' + '\n'
+        outstr += f' {vname}'.ljust(37) + '|'
+        outstr += f' {srfname}' + '\n'
+        if isinstance(self.set_V_SRF,dict):
+            for vn, vv, sn, sv in zip(vnames, vvals,
+                                      srfnames, srfvals):
+                outstr += f'     {vn} {vv}'.ljust(37) + '|'
+                outstr += f'     {sn} {sv}' + '\n'
+            outstr += '\n'
+
+
         outstr += f'# Interaction-contribution?      {self.int_Q}'+'\n\n'
 
         outstr += '-'*29 + ' FITTED PARAMETERS ' + '-'*29 + '\n'
         outstr += fitted + '\n'
+
+        try:
+            nparams = [f'{key}: {val}' for key, val in
+                       self.param_dyn_df.nunique().items()]
+            if len(nparams) > 0:
+                outstr += '# NUMBER OF ESIMATED VALUES ' + '\n'
+                outstr += ',   '.join(nparams) + '\n\n'
+        except:
+            pass
+
+
         outstr += ('-'*9 +' FIXED PARAMETERS ' + '-'*10 + '|' +
                    '-'*10 + ' AUXILIARY DATASETS ' + '-'*9) + '\n'
 
@@ -2599,11 +2648,26 @@ class Fits(Scatter):
         lsqkw = self.lsq_kwargs
         keys = [*lsqkw.keys()]
         if len(lsqkw) > 0:
-            outstr += '\n# LSQ PARAMETERS ' + '\n'
+            outstr += '\n\n# LSQ PARAMETERS ' + '\n'
             for key1, key2 in zip(keys[:(len(keys) + 1)//2],
                                   keys[(len(keys) + 1)//2:]):
                 outstr += f' {key1:<15}= {lsqkw[key1]}'.ljust(37) + \
                           f'  {key2:<15}= {lsqkw[key2]}' + '\n'
             outstr += '-'*77
+        if self.dataset is not None:
+            try:
+                outstr += '\n\n# DATASET PROPERTIES ' + '\n'
+                outstr += f'Start-date: {self.dataset.index.min()}'.ljust(37)
+                outstr += f'End-date: {self.dataset.index.max()}\n'
+                outstr += 'Number of observations: '
+                outstr += f'{self.dataset.index.nunique()}'
+            except:
+                pass
 
-        print(outstr)
+        return outstr
+
+
+    @property
+    def model_definition(self):
+        print(self._model_definition)
+
