@@ -1,6 +1,8 @@
 """
 Class to perform least_squares fitting of RT-1 models to given datasets.
 """
+import warnings
+
 import numpy as np
 import sympy as sp
 from sympy.abc import _clash
@@ -36,7 +38,8 @@ from datetime import timedelta
 try:
     import cloudpickle
 except ModuleNotFoundError:
-    print('cloudpickle could not be imported, .dump() will not work!')
+    warnings.warn('cloudpickle could not be imported, .dump() will not work!')
+
 
 
 def load(path):
@@ -282,7 +285,6 @@ class Fits(Scatter):
         '''
 
         if not hasattr(self, 'plot'):
-            print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
         if not hasattr(self, 'verbose'):
@@ -307,7 +309,7 @@ class Fits(Scatter):
                        for _, val in self.res_dict.items()])
             and np.all([isinstance(val[0], list)
                        for _, val in self.res_dict.items()])):
-                print('updating res-dict to new shape...')
+                warnings.warn('updating res-dict to new shape...')
                 self.res_dict = {key:val[0]
                                  for key, val in self.res_dict.items()}
 
@@ -339,7 +341,7 @@ class Fits(Scatter):
         # defining variable is set
         if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
-                #print(f'{attr} has been set, clearing cache')
+                warnings.warn(f'{attr} has been set, clearing cache')
                 self._clear_cache()
 
         super().__setattr__(attr, value)
@@ -377,7 +379,7 @@ class Fits(Scatter):
                 else:
                     getattr(Fits, name).cache_clear()
 
-            #print('...cache cleared')
+            warnings.warn('...cache cleared')
 
 
     def _cache_info(self):
@@ -487,7 +489,7 @@ class Fits(Scatter):
                         for r in range(rest):
                             res[r%len(res)] += 1
                         if rest >= ngrps:
-                            print(f'warning: grouping {f} of {freqkeys}',
+                            warnings.warn(f'grouping {f} of {freqkeys}',
                                   'is actually between',
                                   f'{min([f+i for i in res])} and ',
                                   f'{max([f+i for i in res])}')
@@ -1318,7 +1320,7 @@ class Fits(Scatter):
 
                 if key in interp_vals:
                     if self._param_dyn_monotonic[key] is False:
-                        #print(f'interpolation of non-monotonic {key}')
+                        warnings.warn(f'interpolation of non-monotonic {key}')
                         # use assignments for unsorted param_dyns
                         useindex = self._meandt_interp_assigns(key)[0]
                         usevals = np.array(
@@ -1352,7 +1354,7 @@ class Fits(Scatter):
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
-                        print('warning, interpolation not possible for '
+                        warnings.warn('interpolation not possible for '
                               f'({key}) because there are less than 2 values')
 
                         x = np.empty(len(self.dataset), dtype=float)
