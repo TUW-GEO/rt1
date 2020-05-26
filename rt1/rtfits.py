@@ -1,6 +1,8 @@
 """
 Class to perform least_squares fitting of RT-1 models to given datasets.
 """
+import warnings
+
 import numpy as np
 import sympy as sp
 from sympy.abc import _clash
@@ -31,12 +33,13 @@ from operator import itemgetter, add
 from itertools import groupby
 
 from timeit import default_timer as tick
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 try:
     import cloudpickle
 except ModuleNotFoundError:
-    print('cloudpickle could not be imported, .dump() will not work!')
+    warnings.warn('cloudpickle could not be imported, .dump() will not work!')
+
 
 
 def load(path):
@@ -135,7 +138,7 @@ class Fits(Scatter):
                          (in case an exact split is not possible, the split is
                           performed such that the groups are as similar as
                           possible)
-                       - if both a freq AND a dataset-column "key_dyn" is
+                       - if "freq + manual" AND a dataset-column "key_dyn" is
                          provided, the the provided variability will be
                          superimposed onto the variability resulting
                          form the chosen offset-alias
@@ -282,7 +285,6 @@ class Fits(Scatter):
         '''
 
         if not hasattr(self, 'plot'):
-            print('... re-initializing plot-functions')
             self.plot = rt1_plots(self)
 
         if not hasattr(self, 'verbose'):
@@ -307,7 +309,7 @@ class Fits(Scatter):
                        for _, val in self.res_dict.items()])
             and np.all([isinstance(val[0], list)
                        for _, val in self.res_dict.items()])):
-                print('updating res-dict to new shape...')
+                warnings.warn('updating res-dict to new shape...')
                 self.res_dict = {key:val[0]
                                  for key, val in self.res_dict.items()}
 
@@ -339,7 +341,7 @@ class Fits(Scatter):
         # defining variable is set
         if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
-                #print(f'{attr} has been set, clearing cache')
+                warnings.warn(f'{attr} has been set, clearing cache')
                 self._clear_cache()
 
         super().__setattr__(attr, value)
@@ -377,7 +379,7 @@ class Fits(Scatter):
                 else:
                     getattr(Fits, name).cache_clear()
 
-            #print('...cache cleared')
+            warnings.warn('...cache cleared')
 
 
     def _cache_info(self):
@@ -487,7 +489,7 @@ class Fits(Scatter):
                         for r in range(rest):
                             res[r%len(res)] += 1
                         if rest >= ngrps:
-                            print(f'warning: grouping {f} of {freqkeys}',
+                            warnings.warn(f'grouping {f} of {freqkeys}',
                                   'is actually between',
                                   f'{min([f+i for i in res])} and ',
                                   f'{max([f+i for i in res])}')
@@ -1011,7 +1013,17 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if (val[0] is True and val[2] is not None
                 and val[2] != 'manual' and val[2] != 'index'):
-                    timescaledict[key] = self.defdict[key][2]
+                    usevals = list(map(str.strip, val[2].split('+')))
+                    assert len(usevals) <= 2, ('there are 2 + symbols in ' +
+                                               'the variability definition ' +
+                                               f'of {key} = {val[2]}')
+                    if len(usevals) == 2 :
+                        assert 'manual' in usevals, ('you can only combine' +
+                                                     '1 datetime-offset and ' +
+                                                     'the keyword "manual" !')
+
+                        usevals.pop(usevals.index('manual'))
+                    timescaledict[key] = usevals[0]
         return timescaledict
 
 
@@ -1040,10 +1052,21 @@ class Fits(Scatter):
                     manual_dyn_df[f'{key}'] = indexdyn
 
                 else:
-                    if f'{key}_dyn' in self.dataset:
-                        print(f'parameter dynamics ({val[2]}) and ' +
-                              f'"dataset[{key}_dyn]" combined')
-                        manual_dyn_df[f'{key}'] = self.dataset[f'{key}_dyn']
+                    if (val[2] is not None
+                        and 'manual' in map(str.strip, val[2].split('+'))):
+
+                        assert f'{key}_dyn' in self.dataset, (
+                            f'{key}_dyn must be provided in the dataset' +
+                            'if defdict[{key}][2] is set to "manual"')
+
+                        manual_dyn_df[
+                            f'{key}'] = self.dataset[f'{key}_dyn']
+
+                    elif f'{key}_dyn' in self.dataset:
+                        warnings.warn(f'the provided manual-dynanics ' +
+                              f'column "{key}_dyn" is ignored since ' +
+                              f'"defdict[{key}][1]" is set to "{val[2]}".')
+
         if manual_dyn_df.empty:
             return None
         else:
@@ -1312,7 +1335,7 @@ class Fits(Scatter):
 
                 if key in interp_vals:
                     if self._param_dyn_monotonic[key] is False:
-                        #print(f'interpolation of non-monotonic {key}')
+                        warnings.warn(f'interpolation of non-monotonic {key}')
                         # use assignments for unsorted param_dyns
                         useindex = self._meandt_interp_assigns(key)[0]
                         usevals = np.array(
@@ -1346,7 +1369,7 @@ class Fits(Scatter):
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
-                        print('warning, interpolation not possible for '
+                        warnings.warn('interpolation not possible for '
                               f'({key}) because there are less than 2 values')
 
                         x = np.empty(len(self.dataset), dtype=float)
@@ -2050,6 +2073,8 @@ class Fits(Scatter):
                 update_progress(max_cnt, max_cnt,
                                 finalmsg=f'Done! ({res_lsq.message})')
 
+        # set _RT1_version after successful call of performfit
+        self._RT1_version = _RT1_version
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
@@ -2490,7 +2515,18 @@ class Fits(Scatter):
 
 
     @property
-    def model_definition(self):
+    def _model_definition(self):
+        '''
+        return a string containing important informations on the definitions
+
+        Note that this can easily be written to a file via:
+
+            >>> print(fit._model_definition, file=open(FILEPATH, 'w'))
+
+        Returns
+        -------
+        outstr : str
+        '''
 
         fitted, auxiliary, fixed = '', [], []
 
@@ -2504,11 +2540,8 @@ class Fits(Scatter):
                 name = f'{key:<13}'
                 star = f'{val[1]:.10}'.ljust(13)
 
-                if (val[2] != 'manual' and self.dataset is not None and
-                    f'{key}_dyn' in self.dataset):
-                    vari = f'{str(val[2])} & manual'.ljust(14)
-                elif val[2] is not None:
-                    vari = f'{str(val[2]):<14}'
+                if val[2] is not None:
+                    vari = f'{" & ".join(map(str.strip, val[2].split("+"))):<14}'
                 else:
                     vari = '      -       '
 
@@ -2528,24 +2561,80 @@ class Fits(Scatter):
                     auxiliary += [f'| {key}']
                 elif isinstance(val[1], (int, float)):
                     fixed += [f' {key:<13}= {val[1]}']
-        try:
-            vname = self.V.__class__.__name__
-        except Exception:
-            vname = '?'
-        try:
-            srfname = self.SRF.__class__.__name__
-        except Exception:
-            srfname = '?'
 
-        outstr = '-'*77 + '\n'
+        # print V and SRF definitions
+        if isinstance(self.set_V_SRF,dict):
+            vprop = {**self.set_V_SRF['V_props']}
+            vname = vprop.pop('V_name', '?')
+            srfprop = {**self.set_V_SRF['SRF_props']}
+            srfname = srfprop.pop('SRF_name', '?')
+
+            vnames = list(vprop.keys())
+            vnames = [i.ljust(max(map(len, vnames))) + ':' for i in vnames]
+            vvals = list(vprop.values())
+
+            srfnames = list(srfprop.keys())
+            srfnames = [i.ljust(max(map(len, srfnames))) + ':'
+                        for i in srfnames]
+            srfvals = list(srfprop.values())
+
+            while len(vnames) < max(len(vnames), len(srfnames)):
+                vnames += ['']
+                vvals += ['']
+
+            while len(srfnames) < max(len(vnames), len(srfnames)):
+                srfnames += ['']
+                srfvals += ['']
+        else:
+            try:
+                vname = self.V.__class__.__name__
+            except Exception:
+                vname = '?'
+            try:
+                srfname = self.SRF.__class__.__name__
+            except Exception:
+                srfname = '?'
+
+        datefmt = '%d. %B %Y (%H:%M:%S)'
+
+        try:
+            outstr = f"used RT1_version:  {self._RT1_version}".ljust(38)
+        except:
+            outstr = f"RT1_version: {_RT1_version}".ljust(38)
+
+        outstr += f"{datetime.now().strftime(datefmt)}\n".rjust(39)
+        outstr += '-'*77 + '\n'
         outstr += '# SCATTERING FUNCTIONS ' + '\n'
 
-        outstr += f' Volume: {vname}'.ljust(37) + '|'
-        outstr += f' Surface: {srfname}' + '\n\n'
-        outstr += f'# Interaction-contribution?      {self.int_Q}'+'\n\n'
+        #outstr += f' Volume: {vname}'.ljust(37) + '|'
+        #outstr += f' Surface: {srfname}' + '\n\n'
+        outstr += f' VOLUME:'.ljust(37) + '|'
+        outstr += f' SURFACE:' + '\n'
+        outstr += f' {vname}'.ljust(37) + '|'
+        outstr += f' {srfname}' + '\n'
+        if isinstance(self.set_V_SRF,dict):
+            for vn, vv, sn, sv in zip(vnames, vvals,
+                                      srfnames, srfvals):
+                outstr += f'     {vn} {vv}'.ljust(37) + '|'
+                outstr += f'     {sn} {sv}' + '\n'
+            outstr += '\n'
+
+
+        outstr += f'# Interaction-contribution?        {self.int_Q}'+'\n\n'
 
         outstr += '-'*29 + ' FITTED PARAMETERS ' + '-'*29 + '\n'
         outstr += fitted + '\n'
+
+        try:
+            nparams = [f'{key}: {val}' for key, val in
+                       self.param_dyn_df.nunique().items()]
+            if len(nparams) > 0:
+                outstr += '# NUMBER OF ESIMATED VALUES ' + '\n'
+                outstr += ',   '.join(nparams) + '\n\n'
+        except:
+            pass
+
+
         outstr += ('-'*9 +' FIXED PARAMETERS ' + '-'*10 + '|' +
                    '-'*10 + ' AUXILIARY DATASETS ' + '-'*9) + '\n'
 
@@ -2567,11 +2656,26 @@ class Fits(Scatter):
         lsqkw = self.lsq_kwargs
         keys = [*lsqkw.keys()]
         if len(lsqkw) > 0:
-            outstr += '\n# LSQ PARAMETERS ' + '\n'
+            outstr += '\n\n# LSQ PARAMETERS ' + '\n'
             for key1, key2 in zip(keys[:(len(keys) + 1)//2],
                                   keys[(len(keys) + 1)//2:]):
                 outstr += f' {key1:<15}= {lsqkw[key1]}'.ljust(37) + \
                           f'  {key2:<15}= {lsqkw[key2]}' + '\n'
             outstr += '-'*77
+        if self.dataset is not None:
+            try:
+                outstr += '\n\n# DATASET PROPERTIES ' + '\n'
+                outstr += f'Start-date: {self.dataset.index.min()}'.ljust(37)
+                outstr += f'End-date: {self.dataset.index.max()}\n'
+                outstr += 'Number of observations: '
+                outstr += f'{self.dataset.index.nunique()}'
+            except:
+                pass
 
-        print(outstr)
+        return outstr
+
+
+    @property
+    def model_definition(self):
+        print(self._model_definition)
+

@@ -80,12 +80,19 @@ class rt1_processing_config(object):
 
     def __init__(self, save_path=None, dumpfolder=None,
                  error_dumpfolder=None, finalout_name=None):
-        self.save_path = Path(save_path)
+
+        if save_path is not None:
+            self.save_path = Path(save_path)
+        else:
+            self.save_path = None
+
         self.dumpfolder = dumpfolder
+
         if error_dumpfolder is None and self.dumpfolder is not None:
             self.error_dumpfolder = self.dumpfolder
         else:
             self.error_dumpfolder = error_dumpfolder
+
         self.finalout_name = finalout_name
 
 
@@ -329,9 +336,9 @@ class rt1_processing_config(object):
                   'otherwise exceptions will be raised')
             raise ex
         else:
-            dumppath = self.save_path.joinpath(self.dumpfolder, 'dumps', fname)
-            error_dump = self.save_path.joinpath(self.error_dumpfolder,
-                                                 'dumps', error_fname)
+            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
+            error_dump = self.save_path / self.error_dumpfolder / \
+                'dumps' / error_fname
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
