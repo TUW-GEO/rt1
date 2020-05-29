@@ -1014,17 +1014,25 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if (val[0] is True and val[2] is not None
                 and val[2] != 'manual' and val[2] != 'index'):
-                    usevals = list(map(str.strip, val[2].split('+')))
-                    assert len(usevals) <= 2, ('there are 2 + symbols in ' +
-                                               'the variability definition ' +
-                                               f'of {key} = {val[2]}')
-                    if len(usevals) == 2 :
-                        assert 'manual' in usevals, ('you can only combine' +
-                                                     '1 datetime-offset and ' +
-                                                     'the keyword "manual" !')
 
-                        usevals.pop(usevals.index('manual'))
-                    timescaledict[key] = usevals[0]
+                usevals = list(map(str.strip, str(val[2]).split('+')))
+                assert len(usevals) <= 2, ('there are 2 + symbols in ' +
+                                           'the variability definition ' +
+                                           f'of {key} = {val[2]}')
+                if len(usevals) == 2 :
+                    assert 'manual' in usevals, ('you can only combine' +
+                                                 '1 datetime-offset and ' +
+                                                 'the keyword "manual" !')
+
+                    usevals.pop(usevals.index('manual'))
+
+                # check if remaining freq can be converted to an integer
+                try:
+                    useval = int(usevals[0])
+                except ValueError:
+                    useval = usevals[0]
+
+                timescaledict[key] = useval
         return timescaledict
 
 
@@ -1054,7 +1062,8 @@ class Fits(Scatter):
 
                 else:
                     if (val[2] is not None
-                        and 'manual' in map(str.strip, val[2].split('+'))):
+                        and 'manual' in map(str.strip,
+                                            str(val[2]).split('+'))):
 
                         assert f'{key}_dyn' in self.dataset, (
                             f'{key}_dyn must be provided in the dataset' +
@@ -2539,7 +2548,8 @@ class Fits(Scatter):
                 star = f'{val[1]:.10}'.ljust(13)
 
                 if val[2] is not None:
-                    vari = f'{" & ".join(map(str.strip, val[2].split("+"))):<14}'
+                    freqs = map(str.strip, str(val[2]).split("+"))
+                    vari = f'{" & ".join(freqs):<14}'
                 else:
                     vari = '      -       '
 
