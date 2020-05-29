@@ -2063,11 +2063,6 @@ class Fits(Scatter):
             self.res_dict = dict()
             self.fit_output = None
 
-        # clear the cache (to avoid issues in case re-processing is applied)
-        if clear_cache is True:
-            self._clear_cache()
-            R._clear_cache()
-
         if print_progress:
             if next(update_cnt) - 1 < max_cnt:
                 update_progress(max_cnt, max_cnt,
