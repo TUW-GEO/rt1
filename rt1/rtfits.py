@@ -489,10 +489,10 @@ class Fits(Scatter):
                         for r in range(rest):
                             res[r%len(res)] += 1
                         if rest >= ngrps:
-                            warnings.warn(f'grouping {f} of {freqkeys}',
-                                  'is actually between',
-                                  f'{min([f+i for i in res])} and ',
-                                  f'{max([f+i for i in res])}')
+                            warnings.warn(f'grouping {f} of {freqkeys}' +
+                                          'is actually between' +
+                                          f'{min([f+i for i in res])} and ' +
+                                          f'{max([f+i for i in res])}')
 
                         # (repetitions + rest + number of elements in group)
                         dyn = chain(*[repeat(ni, f + r) for ni, r in
