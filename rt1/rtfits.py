@@ -488,9 +488,10 @@ class Fits(Scatter):
                         # (to the first groups)
                         for r in range(rest):
                             res[r%len(res)] += 1
+
                         if rest >= ngrps:
                             warnings.warn(f'grouping {f} of {freqkeys}' +
-                                          'is actually between' +
+                                          ' is actually between ' +
                                           f'{min([f+i for i in res])} and ' +
                                           f'{max([f+i for i in res])}')
 
@@ -2190,7 +2191,8 @@ class Fits(Scatter):
                 update_progress(
                     p_totcnt.value, p_max,
                     title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    finalmsg="finished! " + \
+                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
                     progress2=p_totcnt.value - p_meancnt.value)
 
             return ret
@@ -2213,7 +2215,8 @@ class Fits(Scatter):
                 update_progress(
                     p_totcnt.value, p_max,
                     title=title,
-                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
+                    finalmsg="finished! " + \
+                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
                     progress2=p_totcnt.value - p_meancnt.value)
 
             if callable(exceptfunc):
