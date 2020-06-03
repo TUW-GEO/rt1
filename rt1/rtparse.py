@@ -36,8 +36,13 @@ class RT1_configparser(object):
     get_fitobject():
         get the rt1.rtfits.Fits() object
 
-    get_modules():
-        get a dict of the following structure:
+    get_module(NAME):
+        programmatically import the module with the name NAME from the path
+        "module__NAME" defined in the "[CONFIGFILES]" section of the .ini file
+        and return a reference to the module.
+
+    get_all_modules():
+        get a dict of ALL defined modules with the following structure:
 
         >>> {module_name1 : reference to imported module1 from "[CONFIGFILES]",
         >>>  module_name2 : reference to imported module2 from "[CONFIGFILES]"}
@@ -67,10 +72,14 @@ class RT1_configparser(object):
         keyword-arguments passed to the call of `scipy.stats.least_squares()`
     - [CONFIGFILES]
 
-        - any passed argument starting with `module__NAME` will be interpreted as the
-          location of a python-module that is intended to be imported.
+        - any passed argument starting with `module__NAME` will be interpreted
+          as the location of a python-module that is intended to be imported.
 
-          the `.get_modules()` function returns a dict:  {NAME : imported module}
+          use .get_module(NAME) to get a reference to the module imported
+          from the specified loaction.
+
+          the `.get_all_modules()` function returns a dict of ALL specified
+          modules:     processfuncs = {NAME : imported module, ...}
 
         - if `copy = path to a folder` is provided, both the .ini file as well
           as any file imported via `module__` arguments will be copied to the
@@ -122,6 +131,7 @@ class RT1_configparser(object):
 
 
     def __init__(self, configpath):
+
         self.configpath = Path(configpath)
         # setup config (allow empty values -> will result in None)
         self.config = ConfigParser(allow_no_value=True,
@@ -132,6 +142,38 @@ class RT1_configparser(object):
 
         # read config file
         self.cfg = self.config.read(self.configpath)
+
+        # in case a copy  path is provided, copy the config-file and
+        # re-import the values from the copied file
+        if 'copy' in self.config['CONFIGFILES']:
+            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
+            if '..' in copy_val:
+                self.copy = Path(copy_val).resolve()
+            else:
+                self.copy = Path(copy_val)
+
+            if not self.copy.exists():
+                print(f'creating config-dir {self.copy}')
+                self.copy.mkdir(parents=True)
+            if (self.copy / self.configpath.name).exists():
+                print(f'the file "{self.copy / self.configpath.name}" already',
+                      'exists \n... NO copying is performed and the existing',
+                      'one is used!')
+            else:
+                shutil.copy(self.configpath, self.copy)
+                print(f'"{self.configpath.name}" copied to\n    "{self.copy}"')
+
+                # set the configpath to the path of the copied file
+                self.configpath = self.copy / self.configpath.name
+
+            # clear the initially read config
+            self.config.clear()
+            # re-read from the copied file
+            self.config.read(self.configpath)
+
+            # re-read from the copied file
+        else:
+            self.copy = False
 
         # keys that will be converted to int, float or bool
         self.lsq_parse_props = dict(section = 'least_squares_kwargs',
@@ -295,59 +337,25 @@ class RT1_configparser(object):
 
         return rt1_fits
 
-    def get_modules(self):
+
+    def get_all_modules(self):
         '''
-        programmatically import a module as described here:
-        https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+        programmatically import all defined modules from the paths provided
+        in the [CONFIGFILES] section
 
         Returns
         -------
         processmodules : dict
-            a dict with the imported moduels
-
+            a dict with the imported modules
         '''
-
-        if 'copy' in self.config['CONFIGFILES']:
-            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
-            if '..' in copy_val:
-                copy = Path(copy_val).resolve()
-            else:
-                copy = Path(copy_val)
-
-            if not copy.exists():
-                print(f'creating config-dir {copy}')
-                copy.mkdir(parents=True)
-            shutil.copy(self.configpath, copy)
-            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
-        else:
-            copy = False
 
         processmodules = dict()
         for key, val in self.config['CONFIGFILES'].items():
             if not key.startswith('module__'):
                 continue
 
-            dict_key = key[8:]
-            location = Path(val.strip())
-
-            assert location.suffix == '.py', f'{location} is not a .py file!'
-            # copy the file and use the copied one for the import
-            if copy is not False:
-                copypath = copy / location.name
-                shutil.copy(location, copypath)
-
-                location = copypath
-
-                print(f'"{location.name}" copied to \n    "{copy}"')
-
-            spec = importlib.util.spec_from_file_location(name=location.stem,
-                                                          location=location)
-
-            foo = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = foo
-            spec.loader.exec_module(foo)
-
-            processmodules[dict_key] = foo
+            modulename = key[8:]
+            processmodules[modulename] = self.get_module(modulename)
 
         return processmodules
 
@@ -363,24 +371,12 @@ class RT1_configparser(object):
 
         '''
 
-        if 'copy' in self.config['CONFIGFILES']:
-            copy_val = self.config['CONFIGFILES']['copy'].strip()
-            if '..' in copy_val:
-                copy = Path(copy_val).resolve()
-            else:
-                copy = Path(copy_val)
-
-            if not copy.exists():
-                print(f'creating config-dir {copy}')
-                copy.mkdir(parents=True)
-            shutil.copy(self.configpath, copy)
-            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
-        else:
-            copy = False
-
         assert f'module__{modulename}' in self.config['CONFIGFILES'], (
-            f'"module__{modulename}" is not defined in the [CONFIGFILES]' +
-            ' section of the .ini file')
+            f'the module "{modulename}" is not defined in the [CONFIGFILES]'+
+            ' section of the .ini file     ...available modules are:  '+
+            '  ,  '.join(['"' + i.replace('module__','') + '"'
+                        for i in self.config['CONFIGFILES']
+                        if i.startswith('module__')]))
 
         val = self.config['CONFIGFILES'][f'module__{modulename}']
 
@@ -388,15 +384,14 @@ class RT1_configparser(object):
 
         assert location.suffix == '.py', f'{location} is not a .py file!'
         # copy the file and use the copied one for the import
-        if copy is not False:
-            copypath = copy / location.name
-            if not copypath.exists():
-                shutil.copy(location, copypath)
-                print(f'"{location.name}" copied to \n',
-                      f'    "{copy}"')
+        if self.copy is not False:
+            copypath = self.copy / location.name
+            if copypath.exists():
+                print(f'the file "{copypath}" already exists \n... NO',
+                      'copying is performed and the existing one is used!')
             else:
-                print(f'"{copypath.stem}" imported from \n',
-                      f'    "{copypath.parent}"')
+                shutil.copy(location, copypath)
+                print(f'"{location.name}" copied to \n    "{self.copy}"')
 
             # import module from copypath if it has been copied
             location = copypath

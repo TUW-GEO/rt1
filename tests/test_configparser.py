@@ -134,7 +134,7 @@ class TestCONFIGPARSER(unittest.TestCase):
 
 
         #----------------------------------------- check imported module
-        cfg_module_dict = cfg.get_modules()
+        cfg_module_dict = cfg.get_all_modules()
         assert 'processfuncs' in cfg_module_dict, 'modules not correctly parsed'
         cfg_module = cfg_module_dict['processfuncs']
 

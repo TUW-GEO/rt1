@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path('H:/python_modules/rt_model_python/rt1')))
 import unittest
 from pathlib import Path
 from rt1.rtparse import RT1_configparser
@@ -9,7 +12,7 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
 
         cfg = RT1_configparser(config_path)
-        run = cfg.get_modules()['processfuncs'].run
+        run = cfg.get_module('processfuncs').run
 
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
@@ -33,7 +36,7 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
 
         cfg = RT1_configparser(config_path)
-        run = cfg.get_modules()['processfuncs'].run
+        run = cfg.get_all_modules()['processfuncs'].run
 
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
