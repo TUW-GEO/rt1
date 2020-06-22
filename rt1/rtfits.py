@@ -27,12 +27,11 @@ from . import __version__ as _RT1_version
 import copy
 import multiprocessing as mp
 import ctypes
-from itertools import repeat, count, chain
-from functools import lru_cache, partial
+from itertools import repeat, count, chain, groupby
+from functools import lru_cache, partial, wraps
 from operator import itemgetter, add
-from itertools import groupby
 
-from timeit import default_timer as tick
+from timeit import default_timer
 from datetime import datetime, timedelta
 
 try:
@@ -2083,8 +2082,7 @@ class Fits(Scatter):
 
 
     def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
-                  preprocess=None, postprocess=None, exceptfunc=None,
-                  process_cnt=None):
+                  postprocess=None, exceptfunc=None, process_cnt=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -2103,11 +2101,6 @@ class Fits(Scatter):
             override the lsq_kwargs-dict of the parent Fits-object.
             (see documentation of 'rt1.rtfits.Fits')
             The default is None.
-        preprocess : callable
-            A function that will be called prior to the start of the processing
-            It is called via:
-
-            >>> preprocess(reader_arg)
         postprocess : callable
             A function that accepts a rt1.rtfits.Fits object and a dict
             as arguments and returns any desired output.
@@ -2136,11 +2129,8 @@ class Fits(Scatter):
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
         if process_cnt is not None:
-            start = tick()
+            start = default_timer()
         try:
-            # call preprocess function if provided
-            if callable(preprocess):
-                preprocess(reader_arg)
 
             if lsq_kwargs is None:
                 lsq_kwargs = self.lsq_kwargs
@@ -2175,6 +2165,9 @@ class Fits(Scatter):
             if aux_data is not None:
                 fit.aux_data = aux_data
 
+            # append reader_arg
+            fit.reader_arg = reader_arg
+
             # if a post-processing function is provided, return its output,
             # else return the fit-object directly
             if callable(postprocess):
@@ -2184,7 +2177,7 @@ class Fits(Scatter):
 
             if process_cnt is not None:
                 p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                end = tick()
+                end = default_timer()
                 # increase the total counter
                 p_totcnt.value += 1
 
@@ -2282,7 +2275,7 @@ class Fits(Scatter):
             A function that will be called prior to the start of the processing
             It is called via:
 
-            >>> preprocess(reader_arg)
+            >>> preprocess()
         postprocess : callable
             A function that accepts a rt1.rtfits.Fits object and a dict
             as arguments and returns any desired output.
@@ -2330,12 +2323,16 @@ class Fits(Scatter):
 
         """
 
+        if callable(preprocess):
+            preprocess()
+
         if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
         if pool_kwargs is None: pool_kwargs = dict()
 
         if self.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
             self._fnevals_input = self.R._fnevals
+
 
         if print_progress is True:
             # initialize shared values that will be used to track the number
@@ -2357,10 +2354,10 @@ class Fits(Scatter):
                                                zip(repeat(reader),
                                                    reader_args,
                                                    repeat(lsq_kwargs),
-                                                   repeat(preprocess),
                                                    repeat(postprocess),
                                                    repeat(exceptfunc),
                                                    repeat(process_cnt)))
+
                 pool.close()  # Marks the pool as closed.
                 pool.join()   # Waits for workers to exit.
                 res = res_async.get()
@@ -2371,7 +2368,6 @@ class Fits(Scatter):
                 res.append(self._evalfunc(reader=reader,
                                           reader_arg=reader_arg,
                                           lsq_kwargs=lsq_kwargs,
-                                          preprocess=preprocess,
                                           postprocess=postprocess,
                                           exceptfunc=exceptfunc,
                                           process_cnt=process_cnt))
@@ -2498,7 +2494,7 @@ class Fits(Scatter):
 
         return res
 
-    from functools import wraps
+
     @wraps(_calc_model)
     def calc_model(self, *args, **kwargs):
         # check if components have been calculated
