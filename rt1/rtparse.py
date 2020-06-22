@@ -130,50 +130,19 @@ class RT1_configparser(object):
     '''
 
 
-    def __init__(self, configpath):
+    def __init__(self, configpath, interpolation=ExtendedInterpolation()):
 
         self.configpath = Path(configpath)
+        self.interpolation = interpolation
         # setup config (allow empty values -> will result in None)
         self.config = ConfigParser(allow_no_value=True,
-                                   interpolation=ExtendedInterpolation())
+                                   interpolation=self.interpolation)
         # avoid converting uppercase characters
         # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
 
         # read config file
         self.cfg = self.config.read(self.configpath)
-
-        # in case a copy  path is provided, copy the config-file and
-        # re-import the values from the copied file
-        if 'copy' in self.config['CONFIGFILES']:
-            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
-            if '..' in copy_val:
-                self.copy = Path(copy_val).resolve()
-            else:
-                self.copy = Path(copy_val)
-
-            if not self.copy.exists():
-                print(f'creating config-dir {self.copy}')
-                self.copy.mkdir(parents=True)
-            if (self.copy / self.configpath.name).exists():
-                print(f'the file "{self.copy / self.configpath.name}" already',
-                      'exists \n... NO copying is performed and the existing',
-                      'one is used!')
-            else:
-                shutil.copy(self.configpath, self.copy)
-                print(f'"{self.configpath.name}" copied to\n    "{self.copy}"')
-
-                # set the configpath to the path of the copied file
-                self.configpath = self.copy / self.configpath.name
-
-            # clear the initially read config
-            self.config.clear()
-            # re-read from the copied file
-            self.config.read(self.configpath)
-
-            # re-read from the copied file
-        else:
-            self.copy = False
 
         # keys that will be converted to int, float or bool
         self.lsq_parse_props = dict(section = 'least_squares_kwargs',
@@ -377,6 +346,43 @@ class RT1_configparser(object):
             '  ,  '.join(['"' + i.replace('module__','') + '"'
                         for i in self.config['CONFIGFILES']
                         if i.startswith('module__')]))
+
+
+        # in case a copy  path is provided, copy the config-file and
+        # re-import the values from the copied file
+        if 'copy' in self.config['CONFIGFILES']:
+            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
+            if '..' in copy_val:
+                self.copy = Path(copy_val).resolve()
+            else:
+                self.copy = Path(copy_val)
+
+            if not self.copy.exists():
+                print(f'creating config-dir {self.copy}')
+                self.copy.mkdir(parents=True)
+            if (self.copy / self.configpath.name).exists():
+                print(f'the file "{self.copy / self.configpath.name}" already',
+                      'exists \n... NO copying is performed and the existing',
+                      'one is used!')
+            else:
+                shutil.copy(self.configpath, self.copy)
+                print(f'"{self.configpath.name}" copied to\n    "{self.copy}"')
+
+                # set the configpath to the path of the copied file
+                self.configpath = self.copy / self.configpath.name
+
+            # clear the initially read config
+            self.config.clear()
+            # re-read from the copied file
+            self.config.read(self.configpath)
+
+            # re-read from the copied file
+        else:
+            self.copy = False
+
+
+
+
 
         val = self.config['CONFIGFILES'][f'module__{modulename}']
 
