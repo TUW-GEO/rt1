@@ -129,12 +129,10 @@ class rt1_processing_config(object):
         return feature_id, filename, error_filename
 
 
-    def preprocess(self, reader_arg):
+    def preprocess(self):
         '''
         a function that is called PRIOR to processing that does the following:
             - create the folder-structure if it does not yet exist
-            - check if a dumpfile of the site already exists and if yes,
-              raise a 'rt1_file_already_exists' error
 
         the introduced folder-structure is:
         - "save-path"
@@ -163,14 +161,6 @@ class rt1_processing_config(object):
             if not respath.exists():
                 print(respath, 'does not exist... creating directory')
                 respath.mkdir()
-
-            # obtain the path where the dump-file would be stored
-            _, filename, _ = self.get_names_ids(reader_arg)
-            dumppath = dumppath / filename
-
-            # raise a file already exists error
-            if dumppath.exists():
-                raise Exception('rt1_file_already_exists')
 
 
     def postprocess(self, fit, reader_arg):
