@@ -122,8 +122,8 @@ class TestCONFIGPARSER(unittest.TestCase):
         #----------------------------------------- check fitobjects
 
         fit = cfg.get_fitobject()
-        V = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='V')
-        SRF = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='SRF')
+        V = fit._init_V_SRF(fit.set_V_SRF['V_props'])
+        SRF = fit._init_V_SRF(fit.set_V_SRF['SRF_props'])
 
         assert V.t == sp.Symbol('t_v'), 'V.t assigned incorrectly'
         assert V.tau == sp.Symbol('tau') * sp.Symbol('tau_multip'), 'V.tau assigned incorrectly'

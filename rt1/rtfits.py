@@ -1131,9 +1131,8 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(**self.set_V_SRF,
-                                 setdict=self._setdict,
-                                 V_SRF_Q='V')
+            V = self._init_V_SRF(self.set_V_SRF['V_props'],
+                                 setdict=self._setdict)
 
         return V
 
@@ -1148,9 +1147,8 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(**self.set_V_SRF,
-                                   setdict=self._setdict,
-                                   V_SRF_Q='SRF')
+            SRF = self._init_V_SRF(self.set_V_SRF['SRF_props'],
+                                   setdict=self._setdict)
         return SRF
 
 
@@ -1375,6 +1373,7 @@ class Fits(Scatter):
 
                         x = f(np.array(self.dataset.index,
                                        dtype='datetime64[ns]'))
+
                         # assign correct shape
                         use_res_dict[key] = np.take(x, self._idx_assigns)
                     else:
@@ -1881,25 +1880,29 @@ class Fits(Scatter):
                 'curv' : model_curv}
 
 
-    def _init_V_SRF(self, V_props, SRF_props, setdict=dict(),
-                    V_SRF_Q='V'):
+    def _init_V_SRF(self, props, setdict=None):
         '''
-        initialize a volume and a surface scattering function based on
+        Initialize a volume and a surface scattering function based on
         a list of dicts
 
         Parameters
         ----------
-        V_params, SRF_params : dict
-            a dict that defines all variables needed to initialize the
-            selected volume (surface) scattering function.
+        props : dict
+            A dict that defines all variables needed to initialize the
+            selected volume (or surface) scattering function.
 
-            if the value is a string, it will be converted to a sympy
-            expression to determine the variables of the resulting expression
+            If the valuea are strings, they will be converted to sympy
+            expressions to determine the variables of the resulting expression.
 
-        V_name, SRF_name : str
-            the name of the volume (surface)-scattering function.
-        setdict : TYPE, optional
-            DESCRIPTION. The default is dict().
+            A key "V_name" or "SRF_name" MUST be provided whose value will be
+            used to get the volume (surface)-scattering object.
+            If "V_name" is provided, a RT1.Volume object is initialized.
+            If "SRF_name" is provided, a RT1.Surface object is initialized.
+
+        setdict : dict, optional
+            a dict that will be used to replace the symbols defined by
+            props with numerical values
+            The default is None.
 
         Returns
         -------
@@ -1909,8 +1912,14 @@ class Fits(Scatter):
             the used surface-scattering function.
         '''
 
-        if V_SRF_Q == 'V': props = V_props
-        elif V_SRF_Q == 'SRF': props = SRF_props
+        if setdict is None:
+            setdict = dict()
+
+        assert ('V_name' in props or 'SRF_name' in props), (
+            'you must provide "V_name" or "SRF_name" in the props-dict!')
+        assert not ('V_name' in props and 'SRF_name' in props), (
+            'provide either "V_name" or "SRF_name" not both!')
+
 
         set_dict = dict()
         for key, val in props.items():
@@ -1938,14 +1947,13 @@ class Fits(Scatter):
 
             set_dict[key] = useval
 
-        if V_SRF_Q == 'V':
+        if 'V_name' in props:
             # initialize the volume-scattering function
-            V = getattr(rt1_v, V_props['V_name'])(**set_dict)
+            V = getattr(rt1_v, props['V_name'])(**set_dict)
             return V
-
-        elif V_SRF_Q == 'SRF':
+        elif 'SRF_name' in props:
             # initialize the surface-scattering function
-            SRF = getattr(rt1_s, SRF_props['SRF_name'])(**set_dict)
+            SRF = getattr(rt1_s, props['SRF_name'])(**set_dict)
             return SRF
 
     def performfit(self, clear_cache=True, intermediate_results=False,
