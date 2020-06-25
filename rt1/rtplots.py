@@ -2450,7 +2450,7 @@ class plot:
                 fig = f_gs[0]
                 ax = fig.add_subplot(f_gs[1], projection='3d')
             ax.grid()
-            for a in (ax.w_xaxis, ax.w_yaxis, ax.w_zaxis):
+            for a in (ax.xaxis, ax.yaxis, ax.zaxis):
                 a.pane.set_color('none')
 
             if project_contour:
