@@ -1329,74 +1329,63 @@ class Fits(Scatter):
         if interp_vals is None:
             interp_vals = self.interp_vals
 
-        if len(interp_vals) > 0:
-            firstindex = self.dataset.index[0]
-            lastindex = self.dataset.index[-1]
+        firstindex = self.dataset.index[0]
+        lastindex = self.dataset.index[-1]
 
-            # get the results and a quadratic interpolation-function
-            use_res_dict = dict()
-            for key, val in res_dict.items():
-                # generate an interpolaion function
-                # the values at the boundaries are set to the nearest
-                # obtained values to avoid extrapolation
+        # get the results and a quadratic interpolation-function
+        use_res_dict = dict()
+        for key, val in res_dict.items():
+            # generate an interpolaion function
+            # the values at the boundaries are set to the nearest
+            # obtained values to avoid extrapolation
 
-                if key in interp_vals:
-                    if self._param_dyn_monotonic[key] is False:
-                        warnings.warn(f'interpolation of non-monotonic {key}')
-                        # use assignments for unsorted param_dyns
-                        useindex = self._meandt_interp_assigns(key)[0]
-                        usevals = np.array(
-                            val)[self._meandt_interp_assigns(key)[1]]
-                    else:
-                        useindex = self.meandatetimes[key]
-                        usevals = val
-
-                    # ensure that the indexes are never the same
-                    # (add a milisecond if they are...)
-                    if firstindex == useindex[0]:
-                        firstindex += np.timedelta64(1, 'ms')
-                    if lastindex == useindex[-1]:
-                        lastindex -= np.timedelta64(1, 'ms')
-
-                    useindex = np.array([firstindex, *useindex, lastindex],
-                                        dtype='datetime64[ns]'
-                                        ).astype(float, copy=False)
-
-                    if len(usevals) >= 2:
-                        usevals = np.take(usevals, [0,
-                                                    *range(len(usevals)), -1])
-
-                        # interpolate the data to the used timestamps
-                        f = interp1d(useindex.astype(float), usevals,
-                                     fill_value='extrapolate', axis=0,
-                                     kind='quadratic')
-
-                        x = f(np.array(self.dataset.index,
-                                       dtype='datetime64[ns]'))
-
-                        # assign correct shape
-                        use_res_dict[key] = np.take(x, self._idx_assigns)
-                    else:
-                        warnings.warn('interpolation not possible for '
-                              f'({key}) because there are less than 2 values')
-
-                        x = np.empty(len(self.dataset), dtype=float)
-                        [x.put(ind, val_i) for val_i, ind in
-                              zip(val,
-                                  self._param_assigns_dataset[key].values())]
-                        # assign correct shape
-                        use_res_dict[key] = np.take(x, self._idx_assigns)
-
+            if key in interp_vals:
+                if self._param_dyn_monotonic[key] is False:
+                    warnings.warn(f'interpolation of non-monotonic {key}')
+                    # use assignments for unsorted param_dyns
+                    useindex = self._meandt_interp_assigns(key)[0]
+                    usevals = np.array(
+                        val)[self._meandt_interp_assigns(key)[1]]
                 else:
-                    x = np.empty(len(self.dataset), dtype=float)
-                    [x.put(ind, val_i) for val_i, ind in
-                          zip(val, self._param_assigns_dataset[key].values())]
+                    useindex = self.meandatetimes[key]
+                    usevals = val
+
+                # ensure that the indexes are never the same
+                # (add a milisecond if they are...)
+                if firstindex == useindex[0]:
+                    firstindex += np.timedelta64(1, 'ms')
+                if lastindex == useindex[-1]:
+                    lastindex -= np.timedelta64(1, 'ms')
+
+                useindex = np.array([firstindex, *useindex, lastindex],
+                                    dtype='datetime64[ns]'
+                                    ).astype(float, copy=False)
+
+                if len(usevals) >= 2:
+                    usevals = np.take(usevals, [0,
+                                                *range(len(usevals)), -1])
+
+                    # interpolate the data to the used timestamps
+                    f = interp1d(useindex.astype(float), usevals,
+                                 fill_value='extrapolate', axis=0,
+                                 kind='quadratic')
+
+                    x = f(np.array(self.dataset.index,
+                                   dtype='datetime64[ns]'))
+
                     # assign correct shape
                     use_res_dict[key] = np.take(x, self._idx_assigns)
+                else:
+                    warnings.warn('interpolation not possible for '
+                          f'({key}) because there are less than 2 values')
 
-        else:
-            use_res_dict = dict()
-            for key, val in res_dict.items():
+                    x = np.empty(len(self.dataset), dtype=float)
+                    [x.put(ind, val_i) for val_i, ind in
+                          zip(val,
+                              self._param_assigns_dataset[key].values())]
+                    # assign correct shape
+                    use_res_dict[key] = np.take(x, self._idx_assigns)
+            else:
                 x = np.empty(len(self.dataset), dtype=float)
                 [x.put(ind, val_i) for val_i, ind in
                       zip(val, self._param_assigns_dataset[key].values())]
