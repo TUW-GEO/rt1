@@ -151,12 +151,14 @@ class rt1_processing_config(object):
             if not self.save_path.exists():
                 print(self.save_path, 'does not exist... creating directory')
                 self.save_path.mkdir()
-            # generate "dumpfs" directory if it does not exist
+
+            # generate "dumps" directory if it does not exist
             dumppath = self.save_path / self.dumpfolder / 'dumps'
             if not dumppath.exists():
                 print(dumppath, 'does not exist... creating directory')
                 dumppath.mkdir(parents=True)
 
+            # generate "results" directory if it does not exist
             respath = self.save_path / self.dumpfolder / 'results'
             if not respath.exists():
                 print(respath, 'does not exist... creating directory')
@@ -202,8 +204,6 @@ class rt1_processing_config(object):
             # if no dump exists, dump it, else load the existing dump
             if not dumppath.exists():
                 fit.dump(dumppath, mini=True)
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'finished', feature_id)
 
         # get resulting parameter DataFrame
         df = fit.res_df
