@@ -119,7 +119,8 @@ class RTprocess(object):
         perform necessary tasks to run a processing-routine
           - initialize the folderstructure
           - copy modules and .ini files (if copy=True)
-          -
+          - load modules and set parent-fit-object
+
         Parameters
         ----------
         copy : bool

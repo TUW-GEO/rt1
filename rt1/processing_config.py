@@ -4,10 +4,10 @@ convenient default functions for use with rt1.rtfits.processfunc()
 
 import sys
 import pandas as pd
-from datetime import datetime
 import traceback
-import cloudpickle
 from pathlib import Path
+from .rtfits import load
+
 
 class rt1_processing_config(object):
     '''
@@ -45,8 +45,8 @@ class rt1_processing_config(object):
     ...         # run code prior to the init. of a multiprocessing.Pool
     ...         ...
     ...         return dict(reader_args=[dict(...), dict(...)],
-                            pool_kwargs=dict(...),
-                            ...)
+    ...                     pool_kwargs=dict(...),
+    ...                     ...)
     ...
     ...     # add a reader-function
     ...     def reader(self, **reader_arg):
@@ -123,6 +123,7 @@ class rt1_processing_config(object):
         a function that is called PRIOR to processing that does the following:
         '''
         return
+
 
     def postprocess(self, fit, reader_arg):
         '''
@@ -237,7 +238,6 @@ class rt1_processing_config(object):
                 else:
                     hdf_key = 'result'
 
-
             # transpose the dataframe (we want less columns and more rows)
             res = res.T
             # ensure that all values are numeric (required for table format)
@@ -291,33 +291,21 @@ class rt1_processing_config(object):
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      '... skipping', feature_id)
                 pass
             elif 'rt1_file_already_exists' in ex.args:
                 # if the fit-dump file already exists, try loading the existing
                 # file and apply post-processing if possible
-                #print('file already exists')
-
                 try:
-                    with open(dumppath, 'rb') as file:
-                        fit = cloudpickle.load(file)
-
+                    fit = load(dumppath)
                     return self.postprocess(fit, reader_arg)
                 except Exception:
-                    #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                    #      'the file', dumppath, 'seems to be corrupted')
                     pass
 
             elif 'rt1_data_error' in ex.args:
                 # if no data is found, ignore and continue
                 pass
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'there was no data for ', feature_id, '   ...passing on')
             else:
                 # dump the encountered exception to a file
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'there was an exception for ', feature_id)
                 with open(error_dump, 'w') as file:
                     file.write(traceback.format_exc())
 
