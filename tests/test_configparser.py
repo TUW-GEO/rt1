@@ -135,23 +135,14 @@ class TestCONFIGPARSER(unittest.TestCase):
 
         #----------------------------------------- check imported module
         cfg_module_dict = cfg.get_all_modules()
-        assert 'processfuncs' in cfg_module_dict, 'modules not correctly parsed'
-        cfg_module = cfg_module_dict['processfuncs']
+        assert 'processing_cfg' in cfg_module_dict, 'modules not correctly parsed'
+        cfg_module = cfg_module_dict['processing_cfg']
 
         assert hasattr(cfg_module, 'processing_cfg'), 'modules not correctly parsed'
-        assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
 
-        cfg_module_direct = cfg.get_module('processfuncs')
+        cfg_module_direct = cfg.get_module('processing_cfg')
         assert hasattr(cfg_module_direct, 'processing_cfg'), 'direct-module load not working'
-        assert hasattr(cfg_module_direct, 'run'), 'direct-module load not working'
-
-
-
-        #----------------------------------------- check if files have been copied
-        assert Path('tests/proc_test/dump01/cfg').exists(), 'copying did not work'
-        assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('tests/proc_test/dump01/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":

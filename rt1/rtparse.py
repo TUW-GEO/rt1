@@ -339,10 +339,17 @@ class RT1_configparser(object):
         return rt1_fits
 
 
-    def get_all_modules(self, load_copy=True):
+    def get_all_modules(self, load_copy=False):
         '''
         programmatically import all defined modules from the paths provided
         in the [CONFIGFILES] section
+
+        Parameters
+        ----------
+        load_copy : bool, optional
+            indicator if the modules should be loaded from the specified path
+            or if it should be loaded from "save_path/dumpfolder/cfg".
+            The default is False.
 
         Returns
         -------
@@ -362,10 +369,20 @@ class RT1_configparser(object):
         return processmodules
 
 
-    def get_module(self, modulename, load_copy=True):
+    def get_module(self, modulename, load_copy=False):
         '''
         programmatically import the module 'modulename' as described here:
         https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+
+
+        Parameters
+        ----------
+        modulename : str
+            the module-name (e.g. the key specified in the ".ini"-file).
+        load_copy : bool, optional
+            indicator if the module should be loaded from the specified path
+            or if it should be loaded from "save_path/dumpfolder/cfg".
+            The default is False.
 
         Returns
         -------

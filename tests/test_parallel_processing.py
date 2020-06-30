@@ -21,10 +21,21 @@ class TestRTfits(unittest.TestCase):
         proc.run_processing(ncpu=4, reader_args = reader_args)
 
 
+
+        #----------------------------------------- check if files have been copied
+        assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/results').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/dumps').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/proc_test/dump01/cfg/parallel_processing_config.py').exists(), 'copying did not work'
+
+
         # remove the save_path directory
         print('deleting save_path directory...')
         #print('\n'.join([str(i) for i in cfg.get_process_specs()["save_path"].rglob('*')]))
         shutil.rmtree(proc.dumppath.parent)
+
+
 
 
     def test_single_core_processing(self):
@@ -36,6 +47,15 @@ class TestRTfits(unittest.TestCase):
         proc.run_processing(ncpu=1, reader_args = reader_args)
         # run again to check what happens if files already exist
         proc.run_processing(ncpu=1, reader_args = reader_args)
+
+
+        #----------------------------------------- check if files have been copied
+        assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/results').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/dumps').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/proc_test/dump01/cfg/parallel_processing_config.py').exists(), 'copying did not work'
+
 
 
         # remove the save_path directory
