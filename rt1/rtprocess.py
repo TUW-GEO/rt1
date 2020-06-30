@@ -83,22 +83,60 @@ def _make_folderstructure(save_path, subfolders):
 
 
 class RTprocess(object):
-    def __init__(self, config_path=None,
-                 proc_cls=None, parent_fit=None,
-                 init_kwargs=None, copy=True,
-                 autocontinue=False):
+    def __init__(self, config_path=None, autocontinue=False,
+                 proc_cls=None, parent_fit=None, init_kwargs=None):
+        '''
+        A class to perform parallelized processing.
 
-        if config_path is not None and proc_cls is None:
-            self.config_path = Path(config_path)
+        Parameters
+        ----------
+        config_path : str, optional
+            The path to the config-file to be used. The default is None.
+        autocontinue : bool, optional
+            indicator if user-input should be raised (True) in case the
+             dump-folder already exists. The default is False.
+        proc_cls : class, optional
+            the processing-class. (if None it will be imported use the
+            'module__processing_cfg' from the .ini file) The default is None.
+        parent_fit : rt1.rtfits.Fits, optional
+            a parent fit-object. (if None it will be set-up
+            using the specifications of the .ini file) The default is None.
+        init_kwargs : dict, optional
+            keyword-arguments passed to the initialization of the
+            'processing_cfg' module imported from the '.ini file'.
+            The default is None.
+        '''
+        self._config_path = config_path
+        self.autocontinue = autocontinue
+
+        self._proc_cls = proc_cls
+        self._parent_fit = parent_fit
+        self._init_kwargs = init_kwargs
+
+
+    def setup(self, copy=True):
+        '''
+        perform necessary tasks to run a processing-routine
+          - initialize the folderstructure
+          - copy modules and .ini files (if copy=True)
+          -
+        Parameters
+        ----------
+        copy : bool
+            indicator if '.ini' files and modules should be copied to
+            the dumppath/cfg folder or not. The default is True.
+        '''
+        if self._config_path is not None and self._proc_cls is None:
+            self.config_path = Path(self._config_path)
             assert self.config_path.exists(), (f'the file {self.config_path} '
                                                + 'does not exist!')
 
-            self.cfg = RT1_configparser(config_path)
+            self.cfg = RT1_configparser(self.config_path)
             specs = self.cfg.get_process_specs()
 
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
-            if autocontinue is False:
+            if self.autocontinue is False:
                 if self.dumppath.exists():
                     def remove_folder():
                         shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
@@ -151,9 +189,10 @@ class RTprocess(object):
                 setattr(self.proc_cls, key, val)
 
             # get the parent fit-object
-            if parent_fit is None:
-                parent_fit = self.cfg.get_fitobject()
-
+            if self._parent_fit is None:
+                self.parent_fit = self.cfg.get_fitobject()
+            else:
+                self.parent_fit = self._parent_fit
 
         # check if all necessary functions are defined in the  processing-class
         for key in ['preprocess', 'reader', 'postprocess', 'finaloutput',
@@ -161,10 +200,9 @@ class RTprocess(object):
             assert hasattr(self.proc_cls, key), (
                 f'a function {key}() MUST be provided in the config-class!')
 
-        assert parent_fit is not None, (
+        assert self.parent_fit is not None, (
             'you MUST provide a valid config-file or a parent_fit-object!')
 
-        self.parent_fit = parent_fit
 
 
     def _copy_cfg_and_modules(self):
@@ -476,7 +514,7 @@ class RTprocess(object):
             return res
 
 
-    def run_processing(self, ncpu=1, print_progress=True,
+    def run_processing(self, ncpu=1, copy=True, print_progress=True,
                        reader_args=None, pool_kwargs=None,
                        preprocess_kwargs=None):
         '''
@@ -486,6 +524,9 @@ class RTprocess(object):
         ----------
         ncpu : int
             The number of cpu's to use.
+        copy : bool
+            Indicator if config-files and modules should be copied to
+            "/dumpfolder/cfg" or not
         print_progress : bool, optional
             Indicator if a progress-bar should be printed or not.
             If True, it might be wise to suppress warnings during runtime
@@ -502,6 +543,9 @@ class RTprocess(object):
 
         '''
         print('############################################################\n')
+
+        self.setup(copy=copy)
+
         if preprocess_kwargs is None:
             preprocess_kwargs = dict()
 
