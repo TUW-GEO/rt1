@@ -3,56 +3,45 @@ from pathlib import Path
 sys.path.append(str(Path('H:/python_modules/rt_model_python/rt1')))
 import unittest
 from pathlib import Path
-from rt1.rtparse import RT1_configparser
+from rt1.rtprocess import RTprocess
 import shutil
+
+import warnings
+warnings.simplefilter('ignore')
 
 class TestRTfits(unittest.TestCase):
     def test_parallel_processing(self):
-        ncpu = 4
+        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
 
-        cfg = RT1_configparser(config_path)
-        run = cfg.get_module('processfuncs').run
+        proc = RTprocess(config_path, copy=True, autocontinue=True)
 
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
-
-        run(config_path=config_path,
-            reader_args=reader_args,
-            ncpu=ncpu)
-
+        proc.run_processing(ncpu=1, reader_args = reader_args)
         # run again to check what happens if files already exist
-        run(config_path=config_path,
-            reader_args=reader_args,
-            ncpu=ncpu)
+        proc.run_processing(ncpu=4, reader_args = reader_args)
+
 
         # remove the save_path directory
         print('deleting save_path directory...')
         #print('\n'.join([str(i) for i in cfg.get_process_specs()["save_path"].rglob('*')]))
-        shutil.rmtree(cfg.get_process_specs()['save_path'])
+        shutil.rmtree(proc.dumppath.parent)
 
 
     def test_single_core_processing(self):
-        ncpu = 1
+        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
 
-        cfg = RT1_configparser(config_path)
-        run = cfg.get_all_modules()['processfuncs'].run
+        proc = RTprocess(config_path, copy=True, autocontinue=True)
 
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
-
-        run(config_path=config_path,
-            reader_args=reader_args,
-            ncpu=ncpu)
-
+        proc.run_processing(ncpu=1, reader_args = reader_args)
         # run again to check what happens if files already exist
-        run(config_path=config_path,
-            reader_args=reader_args,
-            ncpu=ncpu)
+        proc.run_processing(ncpu=1, reader_args = reader_args)
+
 
         # remove the save_path directory
         print('deleting save_path directory...')
         #print('\n'.join([str(i) for i in cfg.get_process_specs()["save_path"].rglob('*')]))
-        shutil.rmtree(cfg.get_process_specs()['save_path'])
+        shutil.rmtree(proc.dumppath.parent)
 
 
 if __name__ == "__main__":

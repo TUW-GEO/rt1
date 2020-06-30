@@ -84,7 +84,8 @@ def _make_folderstructure(save_path, subfolders):
 class RTprocess(object):
     def __init__(self, config_path=None,
                  proc_cls=None, parent_fit=None,
-                 init_kwargs=None, copy=True):
+                 init_kwargs=None, copy=True,
+                 autocontinue=False):
 
         if config_path is not None and proc_cls is None:
             self.config_path = Path(config_path)
@@ -96,20 +97,21 @@ class RTprocess(object):
 
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
-            if self.dumppath.exists():
-                def remove_folder():
-                    shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
+            if autocontinue is False:
+                if self.dumppath.exists():
+                    def remove_folder():
+                        shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
 
-                _confirm_input(
-                    msg=(f'the path \n "{self.dumppath}"\n already exists...' +
-                         '\n- to continue type YES or Y' +
-                         '\n- to abort type NO or N' +
-                         '\n- to remove the existing directory and all' +
-                         'subdirectories type REMOVE \n \n'),
-                    callbackdict={'REMOVE':[
-                        (f'\n"{self.dumppath}"\n will be removed!' +
-                         ' are you sure? (y, n): '),
-                        remove_folder]})
+                    _confirm_input(
+                        msg=(f'the path \n "{self.dumppath}"\n already exists...' +
+                             '\n- to continue type YES or Y' +
+                             '\n- to abort type NO or N' +
+                             '\n- to remove the existing directory and all' +
+                             'subdirectories type REMOVE \n \n'),
+                        callbackdict={'REMOVE':[
+                            (f'\n"{self.dumppath}"\n will be removed!' +
+                             ' are you sure? (y, n): '),
+                            remove_folder]})
 
             # initialize the folderstructure
             _make_folderstructure(specs['save_path'] / specs['dumpfolder'],
@@ -141,7 +143,7 @@ class RTprocess(object):
             # the processing-class
             for key, val in specs.items():
                 if hasattr(self.proc_cls, key):
-                    print(f'warning, "{key}={getattr(self, key)}" will be ',
+                    print(f'"{key}={getattr(self.proc_cls, key)}" will be ',
                           'overwritten by the definition provided in the .ini',
                           f'file "{key} = {val}" ')
 
@@ -405,6 +407,8 @@ class RTprocess(object):
 
         if callable(self.proc_cls.preprocess):
             setupdict = self.proc_cls.preprocess(**preprocess_kwargs)
+            if setupdict is None:
+                setupdict = dict()
             assert isinstance(setupdict, dict), (
                 'the preprocess() function must return a dict!')
         else:
@@ -422,7 +426,7 @@ class RTprocess(object):
             '"reader_args" is provided as argument to processfunc() ' +
             'AND via the return-dict of the preprocess() function!')
 
-        print(f'processing {len(setupdict["reader_args"])} features')
+        print(f'processing {len(reader_args)} features')
 
 
         if 'pool_kwargs' in setupdict:
@@ -471,7 +475,8 @@ class RTprocess(object):
             return res
 
 
-    def run_processing(self, ncpu, print_progress=True,
+    def run_processing(self, ncpu=1, print_progress=True,
+                       reader_args=None, pool_kwargs=None,
                        preprocess_kwargs=None):
         '''
         Start the processing
@@ -505,6 +510,7 @@ class RTprocess(object):
                         'cfg' / 'model_definition.txt', 'w'))
 
         _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
+                             reader_args=reader_args, pool_kwargs=pool_kwargs,
                              preprocess_kwargs=preprocess_kwargs)
 
 

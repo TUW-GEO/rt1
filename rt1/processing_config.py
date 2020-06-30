@@ -118,41 +118,11 @@ class rt1_processing_config(object):
         return feature_id, filename, error_filename
 
 
-    def preprocess(self):
+    def preprocess(self, **kwargs):
         '''
         a function that is called PRIOR to processing that does the following:
-            - create the folder-structure if it does not yet exist
-
-        the introduced folder-structure is:
-        - "save-path"
-            - dumps -> folder where dump-files will be stored
-            - results -> folder where finalouput-files will be stored
-            - cfg -> folder where additional processing files will be saved
-
-        Parameters
-        ----------
-        reader_arg : dict
-            the arguments passed to the reader.
-
         '''
-        if self.save_path is not None and self.dumpfolder is not None:
-            # generate "save_path" directory if it does not exist
-            if not self.save_path.exists():
-                print(self.save_path, 'does not exist... creating directory')
-                self.save_path.mkdir()
-
-            # generate "dumps" directory if it does not exist
-            dumppath = self.save_path / self.dumpfolder / 'dumps'
-            if not dumppath.exists():
-                print(dumppath, 'does not exist... creating directory')
-                dumppath.mkdir(parents=True)
-
-            # generate "results" directory if it does not exist
-            respath = self.save_path / self.dumpfolder / 'results'
-            if not respath.exists():
-                print(respath, 'does not exist... creating directory')
-                respath.mkdir()
-
+        return
 
     def postprocess(self, fit, reader_arg):
         '''
