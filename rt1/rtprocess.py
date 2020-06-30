@@ -724,7 +724,8 @@ class RTresults(object):
                 '''
                 a generator of the available dump-files
                 '''
-                return self._dump_path.iterdir()
+                return (i for i in self._dump_path.iterdir()
+                        if i.suffix == '.dump' and 'error' not in i.stem)
 
 
             @property

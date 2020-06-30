@@ -113,7 +113,7 @@ class rt1_processing_config(object):
         filename = f"{feature_id}.dump"
 
         # the filename of the error-dumpfile
-        error_filename = f"{feature_id}_error.dump"
+        error_filename = f"{feature_id}_error.txt"
 
         return feature_id, filename, error_filename
 
