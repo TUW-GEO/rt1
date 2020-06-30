@@ -16,7 +16,7 @@ from scipy.interpolate import interp1d
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize, \
-    split_into, dt_to_hms, update_progress, groupby_unsorted
+    split_into, update_progress, groupby_unsorted
 
 from .rtplots import plot as rt1_plots
 
@@ -25,14 +25,10 @@ from . import volume as rt1_v
 from . import __version__ as _RT1_version
 
 import copy
-import multiprocessing as mp
-import ctypes
 from itertools import repeat, count, chain, groupby
 from functools import lru_cache, partial, wraps
 from operator import itemgetter, add
-
-from timeit import default_timer
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     import cloudpickle
@@ -1237,7 +1233,6 @@ class Fits(Scatter):
     def _tau_diff_func(self):
         return self.__get_V_SRF_diff_funcs('V', 'tau')
 
-
     @property
     @lru_cache()
     def _omega_symb(self):
@@ -1307,7 +1302,6 @@ class Fits(Scatter):
                                     name=key))
         resdf = pd.concat(series, axis=1)
         return resdf
-
 
 
     def _assignvals(self, res_dict, interp_vals=None):
@@ -1945,6 +1939,7 @@ class Fits(Scatter):
             SRF = getattr(rt1_s, props['SRF_name'])(**set_dict)
             return SRF
 
+
     def performfit(self, clear_cache=True, intermediate_results=False,
                    print_progress=False):
         '''
@@ -2076,303 +2071,6 @@ class Fits(Scatter):
 
         # set _RT1_version after successful call of performfit
         self._RT1_version = _RT1_version
-
-
-    def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
-                  postprocess=None, exceptfunc=None, process_cnt=None):
-        """
-        Initialize a Fits-instance and perform a fit.
-        (used for parallel processing)
-
-        Parameters
-        ----------
-        reader : callable, optional
-            A function whose first return-value is a pandas.DataFrame that can
-            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to properly specify a RT-1 dataset).
-            Any additional (optional) return-values will be appended to the
-            Fits-object in the 'aux_data' attribute. The default is None.
-        reader_arg : dict
-            A dict of arguments passed to the reader.
-        lsq_kwargs : dict, optional
-            override the lsq_kwargs-dict of the parent Fits-object.
-            (see documentation of 'rt1.rtfits.Fits')
-            The default is None.
-        postprocess : callable
-            A function that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            Internally it is called after calling performfit() via:
-
-            >>> ...
-            >>> fit.performfit()
-            >>> return postprocess(fit, reader_arg)
-        exceptfunc : callable, optional
-            A function that is called in case an exception occurs.
-            It is (roughly) implemented via:
-
-            >>> for reader_arg in reader_args:
-            >>>     try:
-            >>>         ...
-            >>>         ... perform fit ...
-            >>>         ...
-            >>>     except Exception as ex:
-            >>>         exceptfunc(ex, reader_arg)
-
-            The default is None, in which case the exception will be raised.
-
-        Returns
-        -------
-        The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
-        """
-        if process_cnt is not None:
-            start = default_timer()
-        try:
-
-            if lsq_kwargs is None:
-                lsq_kwargs = self.lsq_kwargs
-
-            # if a reader (and no dataset) is provided, use the reader
-            read_data = reader(**reader_arg)
-            # check for multiple return values and split them accordingly
-            # (any value beyond the first is appended as aux_data)
-            if isinstance(read_data, pd.DataFrame):
-                dataset = read_data
-                aux_data = None
-            elif (isinstance(read_data, (list, tuple))
-                  and isinstance(read_data[0], pd.DataFrame)):
-                if len(read_data) == 2:
-                    dataset, aux_data = read_data
-                elif  len(read_data) > 2:
-                    dataset = read_data[0]
-                    aux_data = read_data[1:]
-            else:
-                raise TypeError('the first return-value of reader function ' +
-                                'must be a pandas DataFrame')
-            # perform the fit
-            fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                       defdict=self.defdict, set_V_SRF=self.set_V_SRF,
-                       lsq_kwargs=lsq_kwargs, int_Q=self.int_Q,
-                       lambda_backend=self.lambda_backend,
-                       _fnevals_input=self._fnevals_input,
-                       interp_vals=self.interp_vals)
-            fit.performfit()
-
-            # append auxiliary data
-            if aux_data is not None:
-                fit.aux_data = aux_data
-
-            # append reader_arg
-            fit.reader_arg = reader_arg
-
-            # if a post-processing function is provided, return its output,
-            # else return the fit-object directly
-            if callable(postprocess):
-                ret = postprocess(fit, reader_arg)
-            else:
-                ret = fit
-
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                end = default_timer()
-                # increase the total counter
-                p_totcnt.value += 1
-
-                # update the estimate of the mean time needed to process a site
-                p_time.value = (p_meancnt.value * p_time.value
-                                + (end - start)) / (p_meancnt.value + 1)
-                # increase the mean counter
-                p_meancnt.value += 1
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
-                d,h,m,s = dt_to_hms(remain)
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                    finalmsg="finished! " + \
-                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
-
-            return ret
-
-        except Exception as ex:
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                # only increase the total counter
-                p_totcnt.value += 1
-                if p_meancnt.value == 0:
-                    title=f"{'estimating time ...':<28}"
-                else:
-                    # get the remaining time and update the progressbar
-                    remain = timedelta(
-                        seconds = (p_max - p_totcnt.value
-                                   ) / p_ncpu * p_time.value)
-                    d,h,m,s = dt_to_hms(remain)
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=title,
-                    finalmsg="finished! " + \
-                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
-
-            if callable(exceptfunc):
-                return exceptfunc(ex, reader_arg)
-            else:
-                raise ex
-
-
-    def processfunc(self, ncpu=1, reader=None, reader_args=None,
-                    lsq_kwargs=None, preprocess=None, postprocess=None,
-                    exceptfunc=None, finaloutput=None, pool_kwargs=None,
-                    print_progress=True):
-        """
-        Evaluate a RT-1 model on a single core or in parallel using either
-            - a list of datasets or
-            - a reader-function together with a list of arguments that
-              will be used to read the datasets
-
-        Notice:
-            On Windows, if multiprocessing is used, you must protect the call
-            of this function via:
-            (see for example: )
-
-            >>> if __name__ == '__main__':
-                    fit.processfunc(...)
-
-            In order to allow pickling the final rt1.rtfits.Fits object,
-            it is required to store ALL definitions within a separate
-            file and call processfunc in the 'main'-file as follows:
-
-            >>> from specification_file import fit reader lsq_kwargs ... ...
-                if __name__ == '__main__':
-                    fit.processfunc(ncpu=5, reader=reader,
-                                    lsq_kwargs=lsq_kwargs, ... ...)
-
-        Parameters
-        ----------
-        ncpu : int, optional
-            The number of kernels to use. The default is 1.
-        reader : callable, optional
-            A function whose first return-value is a pandas.DataFrame that can
-            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to properly specify a RT-1 dataset).
-            Any additional (optional) return-values will be appended to the
-            Fits-object in the 'aux_data' attribute. The default is None.
-        reader_args : list, optional
-            A list of dicts that will be passed to the reader-function.
-            The default is None.
-        lsq_kwargs : dict, optional
-            override the lsq_kwargs-dict of the parent Fits-object.
-            (see documentation of 'rt1.rtfits.Fits')
-            The default is None.
-        preprocess : callable
-            A function that will be called prior to the start of the processing
-            It is called via:
-
-            >>> preprocess()
-        postprocess : callable
-            A function that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            Internally it is called after calling performfit() via:
-
-            >>> ...
-            >>> fit.performfit()
-            >>> return postprocess(fit, reader_arg)
-        exceptfunc : callable, optional
-            A function that is called in case an exception occurs.
-            It is (roughly) implemented via:
-
-            >>> for reader_arg in reader_args:
-            >>>     try:
-            >>>         ...
-            >>>         ... perform fit ...
-            >>>         ...
-            >>>     except Exception as ex:
-            >>>         exceptfunc(ex, reader_arg)
-
-            The default is None, in which case the exception will be raised.
-        finaloutput : callable, optional
-            A function that will be called on the list of returned objects
-            after the processing has been finished.
-        pool_kwargs : dict
-            A dict with additional keyword-arguments passed to the
-            initialization of the multiprocessing-pool via:
-
-            >>> mp.Pool(ncpu, **pool_kwargs)
-        print_progress : bool
-            indicator if a progress-bar should be printed to stdout or not
-            that looks like this:
-
-            >>> approx. 0 00:00:02 remaining ################------ 3 (2) / 4
-            >>>
-            >>> (estimated time day HH:MM:SS)(     progress bar   )( counts )
-            >>> ( counts ) = finished fits [actually fitted] / total
-
-        Returns
-        -------
-        res : list
-            A list of rt1.rtfits.Fits objects or a list of outputs of the
-            postprocess-function.
-
-        """
-
-        if callable(preprocess):
-            preprocess()
-
-        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
-        if pool_kwargs is None: pool_kwargs = dict()
-
-        if self.int_Q is True:
-            # pre-evaluate the fn-coefficients if interaction terms are used
-            self._fnevals_input = self.R._fnevals
-
-
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            manager = mp.Manager()
-            p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_time = manager.Value(ctypes.c_float, 0)
-            process_cnt = [p_totcnt, p_meancnt, len(reader_args),
-                           p_time, ncpu]
-        else:
-            process_cnt = None
-
-        if ncpu > 1:
-            print('start of parallel evaluation')
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(self._evalfunc,
-                                               zip(repeat(reader),
-                                                   reader_args,
-                                                   repeat(lsq_kwargs),
-                                                   repeat(postprocess),
-                                                   repeat(exceptfunc),
-                                                   repeat(process_cnt)))
-
-                pool.close()  # Marks the pool as closed.
-                pool.join()   # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            print('start of single-core evaluation')
-            res = []
-            for reader_arg in reader_args:
-                res.append(self._evalfunc(reader=reader,
-                                          reader_arg=reader_arg,
-                                          lsq_kwargs=lsq_kwargs,
-                                          postprocess=postprocess,
-                                          exceptfunc=exceptfunc,
-                                          process_cnt=process_cnt))
-
-        if callable(finaloutput):
-            return finaloutput(res)
-        else:
-            return res
 
 
     def dump(self, path, mini=True):
@@ -2679,4 +2377,41 @@ class Fits(Scatter):
     @property
     def model_definition(self):
         print(self._model_definition)
+
+
+    @classmethod
+    def _reinit_object(cls, self, **kwargs):
+
+        args = {'sig0':self.sig0, 'dB':self.dB, 'dataset':self.dataset,
+                'defdict':self.defdict, 'set_V_SRF':self.set_V_SRF,
+                'lsq_kwargs':self.lsq_kwargs, 'int_Q':self.int_Q,
+                'lambda_backend':self.lambda_backend,
+                '_fnevals_input':self._fnevals_input,
+                'interp_vals':self.interp_vals}
+
+        args.update(**kwargs)
+
+        fit = cls(**args)
+
+        return fit
+
+
+    def reinit_object(self, **kwargs):
+        '''
+        initialize a new fits-object that share all attributes except
+        for the ones passed as kwargs.
+
+        Parameters
+        ----------
+        **kwargs :
+            Keyword arguments that will be used to initialize a new Fits-object
+            (all other arguments will be taken from the parent object!)
+
+        Returns
+        -------
+        rtfits.Fits
+            a new Fits-object.
+
+        '''
+        return self._reinit_object(self, **kwargs)
 

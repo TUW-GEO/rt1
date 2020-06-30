@@ -12,7 +12,7 @@ from pathlib import Path
 class rt1_processing_config(object):
     '''
     a class that provides convenient default functions that can be used
-    with `rt1.rtfits.Fits.processfunc()`.
+    with `rt1.rtprocess.RTprocess`.
 
     Parameters
     ----------
@@ -33,48 +33,37 @@ class rt1_processing_config(object):
     Examples
     --------
 
-    >>> # subclass the configuration and add a reader
-    ... from rt1.processing_config import rt1_processing_config
-    ... from rt1.rtparse import RT1_configparser
+    >>> from rt1.processing_config import rt1_processing_config
     ...
     ... class run_configuration(rt1_processing_config):
     ...     def __init__(self, config_path, **kwargs):
     ...         super().__init__(**kwargs)
     ...         self.config_path = config_path
     ...
+    ...     # customize the preprocess function
+    ...     def preprocess(self, **kwargs):
+    ...         # run code prior to the init. of a multiprocessing.Pool
+    ...         ...
+    ...         return dict(reader_args=[dict(...), dict(...)],
+                            pool_kwargs=dict(...),
+                            ...)
+    ...
     ...     # add a reader-function
     ...     def reader(self, **reader_arg):
+    ...         # read the data for each fit
     ...         ...
+    ...         return df, aux_data
+    ...
+    ...     # customize the postprocess function
+    ...     def postprocess(self, fit, reader_arg):
+    ...         # do something with each fit and return the desired output
+    ...         return ...
+    ...
+    ...     # customize the finaloutput function
+    ...     def finaloutput(self, res):
+    ...         # do something with res
+    ...         # (res is a list of outputs from the postprocess() function)
     ...         ...
-    ...         return df
-    ...
-    ...     # add a function to initialize the processing
-    ...     def run_procesing(self, reader_args, ncpu):
-    ...
-    ...         # get fit object by using a config-file
-    ...         fitobject = RT1_configparser(self.config_path).get_fitobject()
-    ...
-    ...         res = fitobject.processfunc(ncpu=ncpu,
-    ...                                     reader_args=reader_args,
-    ...                                     reader=self.reader,
-    ...                                     preprocess=self.preprocess,
-    ...                                     postprocess=self.postprocess,
-    ...                                     exceptfunc=self.exceptfunc,
-    ...                                     finaloutput=self.finaloutput
-    ...                                     )
-    ...
-    ... # the final function to be called within '__main__'
-    ... def run(config_path, reader_args, ncpu):
-    ...
-    ...     cfg = RT1_configparser(config_path)
-    ...     # get paths etc. from config-file
-    ...     spec = cfg.get_process_specs()
-    ...
-    ...     proc = run_configuration(config_path=config_path,
-    ...                              save_path=spec['save_path'],
-    ...                              dumpfolder=spec['dumpfolder'],
-    ...                              finalout_name=spec['finalout_name'])
-    ...     proc.run_procesing(reader_args=reader_args, ncpu=ncpu)
 
     '''
 
