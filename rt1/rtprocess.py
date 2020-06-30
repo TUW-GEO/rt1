@@ -504,10 +504,10 @@ class RTprocess(object):
         if preprocess_kwargs is None:
             preprocess_kwargs = dict()
 
-        print(self.parent_fit._model_definition,
-              file=open(self.cfg.get_process_specs()['save_path'] /
-                        self.cfg.get_process_specs()['dumpfolder'] /
-                        'cfg' / 'model_definition.txt', 'w'))
+        with open(self.cfg.get_process_specs()['save_path'] /
+                  self.cfg.get_process_specs()['dumpfolder'] /
+                  'cfg' / 'model_definition.txt', 'w') as file:
+            print(self.parent_fit._model_definition, file=file)
 
         _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
                              reader_args=reader_args, pool_kwargs=pool_kwargs,
@@ -515,7 +515,7 @@ class RTprocess(object):
 
 
 
-class RT1_results(object):
+class RTresults(object):
     '''
     A class to provide easy access to processed results.
     On initialization the class will traverse the provided "parent_path"
