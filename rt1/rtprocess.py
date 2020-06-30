@@ -70,14 +70,14 @@ def _make_folderstructure(save_path, subfolders):
         # generate "save_path" directory if it does not exist
         if not save_path.exists():
             print(f'"{save_path}"\ndoes not exist... creating directory')
-            save_path.mkdir(parents=True)
+            save_path.mkdir(parents=True, exist_ok=True)
 
         for folder in subfolders:
         # generate subfolder if it does not exist
             mkpath = save_path / folder
             if not mkpath.exists():
                 print(f'"{mkpath}"\ndoes not exist... creating directory')
-                mkpath.mkdir(parents=True)
+                mkpath.mkdir(parents=True, exist_ok=True)
 
 
 
