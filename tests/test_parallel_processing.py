@@ -58,6 +58,14 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
 
         # mock inputs as shown here: https://stackoverflow.com/a/37467870/9703451
+        with self.assertRaises(SystemExit):
+            with mock.patch('builtins.input', side_effect=['N']):
+                proc = RTprocess(config_path, copy=True, autocontinue=False)
+
+        with self.assertRaises(SystemExit):
+            with mock.patch('builtins.input', side_effect=['REMOVE', 'N']):
+                proc = RTprocess(config_path, copy=True, autocontinue=False)
+
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, copy=True, autocontinue=False)
 

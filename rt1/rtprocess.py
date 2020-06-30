@@ -3,6 +3,7 @@ from timeit import default_timer
 from datetime import timedelta
 from itertools import repeat
 import ctypes
+import sys
 
 from pathlib import Path
 import shutil
@@ -53,7 +54,7 @@ def _confirm_input(msg='are you sure?', stopmsg='STOP', callbackdict=None):
         answer2 = default_answers.get(inp2, False)
         if answer2 is False:
             print(stopmsg)
-            exit(0)
+            sys.exit(0)
             return
         cb()
     else:
@@ -61,7 +62,7 @@ def _confirm_input(msg='are you sure?', stopmsg='STOP', callbackdict=None):
         if answer is False:
             print(stopmsg)
             print()
-            exit(0)
+            sys.exit(0)
             return
 
 
