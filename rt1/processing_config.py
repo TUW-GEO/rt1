@@ -56,7 +56,7 @@ class rt1_processing_config(object):
     ...                     ...)
     ...
     ...     # add a reader-function
-    ...     def reader(self, reader_arg):
+    ...     def reader(self, **reader_arg):
     ...         # read the data for each fit
     ...         ...
     ...         return df, aux_data
@@ -125,6 +125,16 @@ class rt1_processing_config(object):
         return feature_id, filename, error_filename
 
 
+    def check_dump_exists(self, reader_arg):
+        # check if the file already exists, and if yes, raise a skip-error
+        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
+        if self.save_path is not None and self.dumpfolder is not None:
+            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
+
+            if dumppath.exists():
+                raise Exception('rt1_file_already_exists')
+
+
     def preprocess(self, **kwargs):
         '''
         a function that is called PRIOR to processing that does the following:
@@ -162,15 +172,17 @@ class rt1_processing_config(object):
 
         '''
 
-        # set filenames
+        # get filenames
         feature_id, fname, error_fname = self.get_names_ids(reader_arg)
 
+        # make a dump of the fit
+        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
         if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = self.save_path.joinpath(self.dumpfolder, 'dumps', fname)
+            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
 
-            # if no dump exists, dump it, else load the existing dump
             if not dumppath.exists():
                 fit.dump(dumppath, mini=True)
+
 
         # get resulting parameter DataFrame
         df = fit.res_df
