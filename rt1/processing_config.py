@@ -36,9 +36,16 @@ class rt1_processing_config(object):
     >>> from rt1.processing_config import rt1_processing_config
     ...
     ... class run_configuration(rt1_processing_config):
-    ...     def __init__(self, config_path, **kwargs):
+    ...     def __init__(self, **kwargs):
     ...         super().__init__(**kwargs)
-    ...         self.config_path = config_path
+    ...
+    ...     # customize the naming of the output-files
+    ...     def get_names_ids(self, reader_arg):
+    ...         # run code prior to the init. of a multiprocessing.Pool
+    ...         ...
+    ...         return dict(reader_args=[dict(...), dict(...)],
+    ...                     pool_kwargs=dict(...),
+    ...                     ...)
     ...
     ...     # customize the preprocess function
     ...     def preprocess(self, **kwargs):
@@ -49,7 +56,7 @@ class rt1_processing_config(object):
     ...                     ...)
     ...
     ...     # add a reader-function
-    ...     def reader(self, **reader_arg):
+    ...     def reader(self, reader_arg):
     ...         # read the data for each fit
     ...         ...
     ...         return df, aux_data
