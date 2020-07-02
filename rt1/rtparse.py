@@ -439,7 +439,13 @@ class RT1_configparser(object):
             elif key.startswith('path__'):
                 # resolve the path in case .. syntax is used to traverse dirs
                 if '..' in val.strip():
-                    process_specs[key[6:]] = Path(val.strip()).resolve()
+                    try:
+                        process_specs[key[6:]] = Path(val.strip()).resolve()
+                    except PermissionError:
+                        print('some paths could not be resolved!',
+                              'avoid using ".." syntax in path-specifications',
+                              ' to circuumvent this issue')
+                        process_specs[key[6:]] = Path(val.strip())
                 else:
                     process_specs[key[6:]] = Path(val.strip())
 
