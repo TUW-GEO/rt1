@@ -181,7 +181,7 @@ class rt1_processing_config(object):
 
             if not (self.rt1_procsesing_dumppath /
                     names_ids['filename']).exists():
-                fit.dump(dumppath, mini=mini)
+                fit.dump(self.rt1_procsesing_dumppath, mini=mini)
 
 
     def preprocess(self, **kwargs):
