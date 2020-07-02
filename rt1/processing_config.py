@@ -4,15 +4,15 @@ convenient default functions for use with rt1.rtfits.processfunc()
 
 import sys
 import pandas as pd
-from datetime import datetime
 import traceback
-import cloudpickle
 from pathlib import Path
+from .rtfits import load
+
 
 class rt1_processing_config(object):
     '''
     a class that provides convenient default functions that can be used
-    with `rt1.rtfits.Fits.processfunc()`.
+    with `rt1.rtprocess.RTprocess`.
 
     Parameters
     ----------
@@ -33,48 +33,44 @@ class rt1_processing_config(object):
     Examples
     --------
 
-    >>> # subclass the configuration and add a reader
-    ... from rt1.processing_config import rt1_processing_config
-    ... from rt1.rtparse import RT1_configparser
+    >>> from rt1.processing_config import rt1_processing_config
     ...
     ... class run_configuration(rt1_processing_config):
-    ...     def __init__(self, config_path, **kwargs):
+    ...     def __init__(self, **kwargs):
     ...         super().__init__(**kwargs)
-    ...         self.config_path = config_path
+    ...
+    ...     # customize the naming of the output-files
+    ...     def get_names_ids(self, reader_arg):
+    ...         # run code prior to the init. of a multiprocessing.Pool
+    ...         ...
+    ...         return dict(reader_args=[dict(...), dict(...)],
+    ...                     pool_kwargs=dict(...),
+    ...                     ...)
+    ...
+    ...     # customize the preprocess function
+    ...     def preprocess(self, **kwargs):
+    ...         # run code prior to the init. of a multiprocessing.Pool
+    ...         ...
+    ...         return dict(reader_args=[dict(...), dict(...)],
+    ...                     pool_kwargs=dict(...),
+    ...                     ...)
     ...
     ...     # add a reader-function
     ...     def reader(self, **reader_arg):
+    ...         # read the data for each fit
     ...         ...
+    ...         return df, aux_data
+    ...
+    ...     # customize the postprocess function
+    ...     def postprocess(self, fit, reader_arg):
+    ...         # do something with each fit and return the desired output
+    ...         return ...
+    ...
+    ...     # customize the finaloutput function
+    ...     def finaloutput(self, res):
+    ...         # do something with res
+    ...         # (res is a list of outputs from the postprocess() function)
     ...         ...
-    ...         return df
-    ...
-    ...     # add a function to initialize the processing
-    ...     def run_procesing(self, reader_args, ncpu):
-    ...
-    ...         # get fit object by using a config-file
-    ...         fitobject = RT1_configparser(self.config_path).get_fitobject()
-    ...
-    ...         res = fitobject.processfunc(ncpu=ncpu,
-    ...                                     reader_args=reader_args,
-    ...                                     reader=self.reader,
-    ...                                     preprocess=self.preprocess,
-    ...                                     postprocess=self.postprocess,
-    ...                                     exceptfunc=self.exceptfunc,
-    ...                                     finaloutput=self.finaloutput
-    ...                                     )
-    ...
-    ... # the final function to be called within '__main__'
-    ... def run(config_path, reader_args, ncpu):
-    ...
-    ...     cfg = RT1_configparser(config_path)
-    ...     # get paths etc. from config-file
-    ...     spec = cfg.get_process_specs()
-    ...
-    ...     proc = run_configuration(config_path=config_path,
-    ...                              save_path=spec['save_path'],
-    ...                              dumpfolder=spec['dumpfolder'],
-    ...                              finalout_name=spec['finalout_name'])
-    ...     proc.run_procesing(reader_args=reader_args, ncpu=ncpu)
 
     '''
 
@@ -124,43 +120,26 @@ class rt1_processing_config(object):
         filename = f"{feature_id}.dump"
 
         # the filename of the error-dumpfile
-        error_filename = f"{feature_id}_error.dump"
+        error_filename = f"{feature_id}_error.txt"
 
         return feature_id, filename, error_filename
 
 
-    def preprocess(self):
+    def check_dump_exists(self, reader_arg):
+        # check if the file already exists, and if yes, raise a skip-error
+        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
+        if self.save_path is not None and self.dumpfolder is not None:
+            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
+
+            if dumppath.exists():
+                raise Exception('rt1_file_already_exists')
+
+
+    def preprocess(self, **kwargs):
         '''
         a function that is called PRIOR to processing that does the following:
-            - create the folder-structure if it does not yet exist
-
-        the introduced folder-structure is:
-        - "save-path"
-            - dumps -> folder where dump-files will be stored
-            - results -> folder where finalouput-files will be stored
-            - cfg -> folder where additional processing files will be saved
-
-        Parameters
-        ----------
-        reader_arg : dict
-            the arguments passed to the reader.
-
         '''
-        if self.save_path is not None and self.dumpfolder is not None:
-            # generate "save_path" directory if it does not exist
-            if not self.save_path.exists():
-                print(self.save_path, 'does not exist... creating directory')
-                self.save_path.mkdir()
-            # generate "dumpfs" directory if it does not exist
-            dumppath = self.save_path / self.dumpfolder / 'dumps'
-            if not dumppath.exists():
-                print(dumppath, 'does not exist... creating directory')
-                dumppath.mkdir(parents=True)
-
-            respath = self.save_path / self.dumpfolder / 'results'
-            if not respath.exists():
-                print(respath, 'does not exist... creating directory')
-                respath.mkdir()
+        return
 
 
     def postprocess(self, fit, reader_arg):
@@ -193,17 +172,17 @@ class rt1_processing_config(object):
 
         '''
 
-        # set filenames
+        # get filenames
         feature_id, fname, error_fname = self.get_names_ids(reader_arg)
 
+        # make a dump of the fit
+        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
         if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = self.save_path.joinpath(self.dumpfolder, 'dumps', fname)
+            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
 
-            # if no dump exists, dump it, else load the existing dump
             if not dumppath.exists():
                 fit.dump(dumppath, mini=True)
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'finished', feature_id)
+
 
         # get resulting parameter DataFrame
         df = fit.res_df
@@ -278,7 +257,6 @@ class rt1_processing_config(object):
                 else:
                     hdf_key = 'result'
 
-
             # transpose the dataframe (we want less columns and more rows)
             res = res.T
             # ensure that all values are numeric (required for table format)
@@ -332,33 +310,21 @@ class rt1_processing_config(object):
 
             if 'rt1_skip' in ex.args:
                 # ignore skip exceptions
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      '... skipping', feature_id)
                 pass
             elif 'rt1_file_already_exists' in ex.args:
                 # if the fit-dump file already exists, try loading the existing
                 # file and apply post-processing if possible
-                #print('file already exists')
-
                 try:
-                    with open(dumppath, 'rb') as file:
-                        fit = cloudpickle.load(file)
-
+                    fit = load(dumppath)
                     return self.postprocess(fit, reader_arg)
                 except Exception:
-                    #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                    #      'the file', dumppath, 'seems to be corrupted')
                     pass
 
             elif 'rt1_data_error' in ex.args:
                 # if no data is found, ignore and continue
                 pass
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'there was no data for ', feature_id, '   ...passing on')
             else:
                 # dump the encountered exception to a file
-                #print(datetime.now().strftime('%d-%b-%Y %H:%M:%S'),
-                #      'there was an exception for ', feature_id)
                 with open(error_dump, 'w') as file:
                     file.write(traceback.format_exc())
 
