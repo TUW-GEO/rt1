@@ -94,24 +94,47 @@ class RTprocess(object):
             The path to the config-file to be used. The default is None.
         autocontinue : bool, optional
             indicator if user-input should be raised (True) in case the
-             dump-folder already exists. The default is False.
+            dump-folder already exists. The default is False.
         proc_cls : class, optional
             the processing-class. (if None it will be imported use the
-            'module__processing_cfg' from the .ini file) The default is None.
+            'module__processing_cfg' from the 'CONFIGFILES' section of
+            the .ini file).
+
+            NOTICE:
+                All parsed arguments from the 'PROCESS_SPECS' section of
+                the config-file will be used in the initialization of
+                the processing class! The call-signature is equivalent to:
+
+                    >>> from rt1.rtparse import RT1_configparser
+                    ... cfg = RT1_configparser(config_path)
+                    ... proc_cls = proc_cls(**cfg.get_process_specs(),
+                                            **init_kwargs)
+
+            For details on how to specify a processing-class, have look at
+            the `rt1_processing_config` class in `rt1.processing_config`.
+            The default is None.
         parent_fit : rt1.rtfits.Fits, optional
             a parent fit-object. (if None it will be set-up
             using the specifications of the .ini file) The default is None.
         init_kwargs : dict, optional
-            keyword-arguments passed to the initialization of the
-            'processing_cfg' module imported from the '.ini file'.
-            The default is None.
+            Additional keyword-arguments passed to the initialization of the
+            'proc_cls' class. (used to append-to or partially overwrite
+            definitions passed via the config-file). The default is None.
+
+
         '''
         self._config_path = config_path
         self.autocontinue = autocontinue
 
         self._proc_cls = proc_cls
         self._parent_fit = parent_fit
-        self._init_kwargs = init_kwargs
+        if init_kwargs is None:
+            self.init_kwargs = dict()
+        else:
+
+            assert all([isinstance(i, str) for i in init_kwargs.values()]), (
+                'the values of "init_kwargs" MUST be strings !')
+            self.init_kwargs = init_kwargs
 
 
     def setup(self, copy=True):
@@ -135,6 +158,16 @@ class RTprocess(object):
             self.cfg = RT1_configparser(self.config_path)
             specs = self.cfg.get_process_specs()
 
+            # update specs with init_kwargs
+            for key, val in self.init_kwargs.items():
+                if key in specs:
+                    print(f'"{key} = {specs[key]}" will be ',
+                          'overwritten by the definition provided via ',
+                          f'"init_kwargs": "{key}={val}" ')
+                    specs[key] = val
+                    # update the parsed config (for import of modules etc.)
+                    self.cfg.config['PROCESS_SPECS'][key] = val
+
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
             if self.autocontinue is False:
@@ -143,7 +176,8 @@ class RTprocess(object):
                         shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
 
                     _confirm_input(
-                        msg=(f'the path \n "{self.dumppath}"\n already exists...' +
+                        msg=(f'the path \n "{self.dumppath}"\n' +
+                             ' already exists...' +
                              '\n- to continue type YES or Y' +
                              '\n- to abort type NO or N' +
                              '\n- to remove the existing directory and all' +
@@ -176,24 +210,16 @@ class RTprocess(object):
             print(f'processing config class "{proc_class_name}" will be ' +
                   f'imported from \n"{procmodule}"')
 
-            self.proc_cls = getattr(procmodule, proc_class_name)(
-                **getattr(self, 'init_kwargs', dict()))
-
-            # make all arguments provided in [PROCESS SPECS] accessible to
-            # the processing-class
-            for key, val in specs.items():
-                if hasattr(self.proc_cls, key):
-                    print(f'"{key}={getattr(self.proc_cls, key)}" will be ',
-                          'overwritten by the definition provided in the .ini',
-                          f'file "{key} = {val}" ')
-
-                setattr(self.proc_cls, key, val)
+            self.proc_cls = getattr(procmodule, proc_class_name)(**specs)
 
             # get the parent fit-object
             if self._parent_fit is None:
                 self.parent_fit = self.cfg.get_fitobject()
             else:
                 self.parent_fit = self._parent_fit
+        else:
+            self.dumppath = None
+
 
         # check if all necessary functions are defined in the  processing-class
         for key in ['preprocess', 'reader', 'postprocess', 'finaloutput',
@@ -215,9 +241,22 @@ class RTprocess(object):
                       'already exists... NO copying is performed and the ' +
                       'existing one is used!\n')
             else:
-                shutil.copy(self.cfg.configpath, copypath.parent)
-                print(f'"{self.cfg.configpath.name}" copied to\n' +
-                      f'"{copypath.parent}"')
+                if len(self.init_kwargs) == 0:
+                    # if no init_kwargs have been provided, copy the
+                    # original file
+                    shutil.copy(self.cfg.configpath, copypath.parent)
+                    print(f'"{self.cfg.configpath.name}" copied to\n' +
+                          f'"{copypath.parent}"')
+                else:
+                    # if init_kwargs have been provided, write the updated
+                    # config to the folder
+                    with open(copypath.parent /
+                              self.cfg.configpath.name, 'w') as file:
+                        self.cfg.config.write(file)
+
+                    print(f'the config-file "{self.cfg.configpath}" has been',
+                          ' updated with the init_kwargs and saved to',
+                          f'"{copypath.parent / self.cfg.configpath.name}"')
 
                 # remove the config and re-read the config from the copied path
                 del self.cfg
@@ -245,7 +284,6 @@ class RTprocess(object):
                         print(f'"{location.name}" copied to \n"{copypath}"')
 
 
-
     def _evalfunc(self, reader_arg=None, process_cnt=None):
         """
         Initialize a Fits-instance and perform a fit.
@@ -255,7 +293,9 @@ class RTprocess(object):
         ----------
         reader_arg : dict
             A dict of arguments passed to the reader.
-
+        process_cnt : list
+            A list of shared-memory variables that are used to update the
+            progressbar
         Returns
         -------
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
@@ -354,7 +394,8 @@ class RTprocess(object):
                     reader_args=None, pool_kwargs=None,
                     preprocess_kwargs=None):
         """
-        Evaluate a RT-1 model on a single core or in parallel using either
+        Evaluate a RT-1 model on a single core or in parallel using
+
             - a list of datasets or
             - a reader-function together with a list of arguments that
               will be used to read the datasets
@@ -380,63 +421,38 @@ class RTprocess(object):
         ----------
         ncpu : int, optional
             The number of kernels to use. The default is 1.
-        reader : callable, optional
-            A function whose first return-value is a pandas.DataFrame that can
-            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to properly specify a RT-1 dataset).
-            Any additional (optional) return-values will be appended to the
-            Fits-object in the 'aux_data' attribute. The default is None.
-        reader_args : list, optional
-            A list of dicts that will be passed to the reader-function.
-            The default is None.
-        lsq_kwargs : dict, optional
-            override the lsq_kwargs-dict of the parent Fits-object.
-            (see documentation of 'rt1.rtfits.Fits')
-            The default is None.
-        preprocess : callable
-            A function that will be called prior to the start of the processing
-            It is called via:
-
-            >>> preprocess()
-        postprocess : callable
-            A function that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            Internally it is called after calling performfit() via:
-
-            >>> ...
-            >>> fit.performfit()
-            >>> return postprocess(fit, reader_arg)
-        exceptfunc : callable, optional
-            A function that is called in case an exception occurs.
-            It is (roughly) implemented via:
-
-            >>> for reader_arg in reader_args:
-            >>>     try:
-            >>>         ...
-            >>>         ... perform fit ...
-            >>>         ...
-            >>>     except Exception as ex:
-            >>>         exceptfunc(ex, reader_arg)
-
-            The default is None, in which case the exception will be raised.
-        finaloutput : callable, optional
-            A function that will be called on the list of returned objects
-            after the processing has been finished.
-        pool_kwargs : dict
-            A dict with additional keyword-arguments passed to the
-            initialization of the multiprocessing-pool via:
-
-            >>> mp.Pool(ncpu, **pool_kwargs)
-        print_progress : bool
+        print_progress : bool, optional
             indicator if a progress-bar should be printed to stdout or not
             that looks like this:
 
             >>> approx. 0 00:00:02 remaining ################------ 3 (2) / 4
-            >>>
-            >>> (estimated time day HH:MM:SS)(     progress bar   )( counts )
-            >>> ( counts ) = finished fits [actually fitted] / total
+            ...
+            ... (estimated time day HH:MM:SS)(     progress bar   )( counts )
+            ... ( counts ) = finished fits [actually fitted] / total
 
+            The default is True.
+        reader_args : list, optional
+            A list of dicts that will be passed to the reader-function.
+            I `None`, the `reader_args` will be taken from the return of the
+            `preprocess()`-function via:
+
+            >>> reader_args = preprocess(**preprocess_kwargs)['reader_args']
+
+            The default is None.
+        pool_kwargs : dict, optional
+            A dict with additional keyword-arguments passed to the
+            initialization of the multiprocessing-pool via:
+
+            >>> mp.Pool(ncpu, **pool_kwargs)
+
+            The default is None.
+        preprocess_kwargs : dict, optional
+            A dict with keyword-arguments passed to the call of the preprocess
+            function via:
+
+            >>> preprocess(**preprocess_kwargs)
+
+            The default is None.
         Returns
         -------
         res : list
@@ -524,10 +540,11 @@ class RTprocess(object):
         Parameters
         ----------
         ncpu : int
-            The number of cpu's to use.
-        copy : bool
-            Indicator if config-files and modules should be copied to
-            "/dumpfolder/cfg" or not
+            The number of cpu's to use. The default is 1.
+        copy : bool, optional
+            Indicator if the used config-file and all modules specified in the
+            "CONFIGFILES" section of the config-file should be copied to
+            "/dumpfolder/cfg" or not. The default is True.
         print_progress : bool, optional
             Indicator if a progress-bar should be printed or not.
             If True, it might be wise to suppress warnings during runtime
@@ -537,23 +554,43 @@ class RTprocess(object):
                 ... warnings.simplefilter('ignore')
 
             The default is True.
+        reader_args : list, optional
+            A list of dicts that will be passed to the reader-function.
+            I `None`, the `reader_args` will be taken from the return of the
+            `preprocess()`-function via:
+
+            >>> reader_args = preprocess(**preprocess_kwargs)['reader_args']
+
+            The default is None.
+        pool_kwargs : dict, optional
+            A dict with additional keyword-arguments passed to the
+            initialization of the multiprocessing-pool via:
+
+            >>> mp.Pool(ncpu, **pool_kwargs)
+
+            The default is None.
         preprocess_kwargs : dict, optional
-            A dict containing keyword-arguments that will be passed to
-            the preprocess function via `preprocess(**preprocess_kwargs)`.
+            A dict with keyword-arguments passed to the call of the preprocess
+            function via:
+
+            >>> preprocess(**preprocess_kwargs)
+
             The default is None.
 
         '''
         print('############################################################\n')
 
+        # initialize all necessary properties
         self.setup(copy=copy)
 
         if preprocess_kwargs is None:
             preprocess_kwargs = dict()
 
-        with open(self.cfg.get_process_specs()['save_path'] /
-                  self.cfg.get_process_specs()['dumpfolder'] /
-                  'cfg' / 'model_definition.txt', 'w') as file:
-            print(self.parent_fit._model_definition, file=file)
+        # save the used model-definition string to a file
+        if self.dumppath is not None:
+            with open(self.dumppath / 'cfg' / 'model_definition.txt',
+                      'w') as file:
+                print(self.parent_fit._model_definition, file=file)
 
         _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
                              reader_args=reader_args, pool_kwargs=pool_kwargs,

@@ -41,11 +41,10 @@ class rt1_processing_config(object):
     ...
     ...     # customize the naming of the output-files
     ...     def get_names_ids(self, reader_arg):
-    ...         # run code prior to the init. of a multiprocessing.Pool
+    ...         # define the naming-convention of the files etc.
     ...         ...
-    ...         return dict(reader_args=[dict(...), dict(...)],
-    ...                     pool_kwargs=dict(...),
-    ...                     ...)
+    ...         names_ids = dict(filename='site_1.dump', feature_id = '1')
+    ...         return names_ids
     ...
     ...     # customize the preprocess function
     ...     def preprocess(self, **kwargs):
@@ -71,26 +70,35 @@ class rt1_processing_config(object):
     ...         # do something with res
     ...         # (res is a list of outputs from the postprocess() function)
     ...         ...
+    ...
+    ...     # customize the function that is used to catch exceptions
+    ...     def exceptfunc(self, ex, reader_arg):
+    ...         # do something with the catched exception ex.args:
+    ...         if 'lets catch this exception' in ex:
+    ...             ...
 
     '''
 
-    def __init__(self, save_path=None, dumpfolder=None,
-                 error_dumpfolder=None, finalout_name=None):
+    def __init__(self, save_path=None, dumpfolder=None, finalout_name=None,
+                 **kwargs):
 
         if save_path is not None:
-            self.save_path = Path(save_path)
+            self.dumppath = Path(save_path) / dumpfolder / 'dumps'
+            self.respath = Path(save_path) / dumpfolder / 'results'
+            self.cfgpath = Path(save_path) / dumpfolder / 'cfg'
         else:
-            self.save_path = None
+            self.dumppath = None
+            self.respath = None
+            self.cfgpath = None
 
-        self.dumpfolder = dumpfolder
-
-        if error_dumpfolder is None and self.dumpfolder is not None:
-            self.error_dumpfolder = self.dumpfolder
-        else:
-            self.error_dumpfolder = error_dumpfolder
+        # append all arguments passed as kwargs to the class
+        # NOTICE: ALL definitions in the 'PROCESS_SPECS' section of the
+        #         config-file will be passed as kwargs to the initialization
+        #          of this class!)
+        for key, val in kwargs.items():
+            setattr(self, key, val)
 
         self.finalout_name = finalout_name
-
 
     def get_names_ids(self, reader_arg):
         '''
@@ -122,16 +130,16 @@ class rt1_processing_config(object):
         # the filename of the error-dumpfile
         error_filename = f"{feature_id}_error.txt"
 
-        return feature_id, filename, error_filename
+        return dict(feature_id=feature_id,
+                    filename=filename,
+                    error_filename=error_filename)
 
 
     def check_dump_exists(self, reader_arg):
         # check if the file already exists, and if yes, raise a skip-error
-        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
-        if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
-
-            if dumppath.exists():
+        if self.dumppath is not None:
+            names_ids = self.get_names_ids(reader_arg)
+            if (self.dumppath / names_ids['filename']).exists():
                 raise Exception('rt1_file_already_exists')
 
 
@@ -140,6 +148,26 @@ class rt1_processing_config(object):
         a function that is called PRIOR to processing that does the following:
         '''
         return
+
+
+    def reader(self, **reader_arg):
+        '''
+        a function that is called for each site to obtain the dataset
+        '''
+        names_ids = self.get_names_ids(reader_arg)
+
+        # get the incidence-angles of the data
+        inc = [.1, .2, .3, .4, .5]
+        # get the sig0-values of the data
+        sig = [-10, -11. -11.45, -13, -15]
+        # get the index-values of the data
+        index = pd.date_range('1.1.2020', '1.5.2020', freq='D')
+
+        data = pd.DataFrame(dict(inc=inc, sig=sig), index=index)
+
+        aux_data = pd.DataFrame(dict(something=[1,2,3,4,5]))
+
+        return data, aux_data
 
 
     def postprocess(self, fit, reader_arg):
@@ -173,21 +201,18 @@ class rt1_processing_config(object):
         '''
 
         # get filenames
-        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
-
+        names_ids = self.get_names_ids(reader_arg)
         # make a dump of the fit
-        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
-        if self.save_path is not None and self.dumpfolder is not None:
-            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
-
-            if not dumppath.exists():
-                fit.dump(dumppath, mini=True)
+        if self.dumppath is not None:
+            if not (self.dumppath / names_ids['filename']).exists():
+                fit.dump(self.dumppath / names_ids['filename'], mini=True)
 
 
         # get resulting parameter DataFrame
         df = fit.res_df
         # add the feature_id as first column-level
-        df.columns = pd.MultiIndex.from_product([[feature_id], df.columns])
+        df.columns = pd.MultiIndex.from_product([[names_ids['feature_id']],
+                                                 df.columns])
         df.columns.names = ['feature_id', 'param']
 
         # flush stdout to see output of child-processes
@@ -196,7 +221,7 @@ class rt1_processing_config(object):
         return df
 
 
-    def finaloutput(self, res, hdf_key=None, format='table'):
+    def finaloutput(self, res, format='table'):
         '''
         A function that is called after ALL sites are processed:
 
@@ -226,10 +251,6 @@ class rt1_processing_config(object):
         save_path: str, optional
             The path where the finalout-file will be stored.
             The default is None.
-        hdf_key: str, optional
-            The key used in the hdf-file. If None, the dumpfolder name will
-            be used. If dumpfolder is not provided, 'result' is used.
-            The default is None.
         format: str
             the format used when exporting the hdf-file.
 
@@ -245,17 +266,13 @@ class rt1_processing_config(object):
         # concatenate the results
         res = pd.concat([i for i in res if i is not None], axis=1)
 
-        if self.save_path is None or self.finalout_name is None:
+        if self.respath is None or self.finalout_name is None:
             print('both save_path and finalout_name must be specified... ',
-                  'results have NOT been saved!')
+                  'otherwise the final results can NOT be saved!')
             return res
         else:
 
-            if hdf_key is None:
-                if self.dumpfolder is not None:
-                    hdf_key = str(self.dumpfolder)
-                else:
-                    hdf_key = 'result'
+            hdf_key = 'RT1_result'
 
             # transpose the dataframe (we want less columns and more rows)
             res = res.T
@@ -265,7 +282,7 @@ class rt1_processing_config(object):
             res.columns = pd.to_numeric(res.columns)
 
             # create (or append) results to a HDF-store
-            res.to_hdf(self.save_path / self.finalout_name,
+            res.to_hdf(self.respath / self.finalout_name,
                        key=hdf_key, format=format, complevel=7)
 
         # flush stdout to see output of child-processes
@@ -277,7 +294,8 @@ class rt1_processing_config(object):
         a error-catch function that handles the following errors:
 
         - 'rt1_skip'
-            exceptions are ignored and the next site is processed
+            exceptions are ignored and the next site is processed WITHOUT
+            writing the exception to a file
         - 'rt1_data_error'
             exceptions are ignored and the next site is processed
         - 'rt1_file_already_exists'
@@ -297,36 +315,47 @@ class rt1_processing_config(object):
 
         '''
 
-        feature_id, fname, error_fname = self.get_names_ids(reader_arg)
+        names_ids = self.get_names_ids(reader_arg)
+        raise_exception = True
 
-        if self.save_path is None and self.error_dumpfolder is None:
-            print('both save_path and error_dumpfolder must be specified ',
-                  'otherwise exceptions will be raised')
+        if 'rt1_skip' in ex.args:
+            # ignore skip exceptions
+            raise_exception = False
+
+        elif 'rt1_file_already_exists' in ex.args:
+            # if the fit-dump file already exists, try loading the existing
+            # file and apply post-processing (e.g. avoid re-processing results)
+            raise_exception = False
+
+            try:
+                fit = load(self.dumppath / names_ids['filename'])
+                return self.postprocess(fit, reader_arg)
+            except Exception:
+                pass
+
+        elif 'rt1_data_error' in ex.args:
+            # raised if there was a problem with the data, ignore and continue
+            raise_exception = False
+
+        # in case `save_path` is specified, write ALL exceptions to a file
+        # and continue processing WITHOUT raising the exception.
+        # if `save_path`is NOT specified, raise ONLY exceptions that
+        # have not been explicitly catched
+        if self.dumppath is None and raise_exception is True:
+            print('`save_path` must be specified otherwise exceptions ' +
+                  'that are not explicitly catched by `exceptfunc()` ' +
+                  ' will be raised!')
             raise ex
         else:
-            dumppath = self.save_path / self.dumpfolder / 'dumps' / fname
-            error_dump = self.save_path / self.error_dumpfolder / \
-                'dumps' / error_fname
-
-            if 'rt1_skip' in ex.args:
-                # ignore skip exceptions
-                pass
-            elif 'rt1_file_already_exists' in ex.args:
-                # if the fit-dump file already exists, try loading the existing
-                # file and apply post-processing if possible
-                try:
-                    fit = load(dumppath)
-                    return self.postprocess(fit, reader_arg)
-                except Exception:
-                    pass
-
-            elif 'rt1_data_error' in ex.args:
-                # if no data is found, ignore and continue
-                pass
+            if 'error_filename' in names_ids:
+                error_filename = names_ids['error_filename']
             else:
-                # dump the encountered exception to a file
-                with open(error_dump, 'w') as file:
-                    file.write(traceback.format_exc())
+                error_filename = names_ids[
+                    'filename'].split('.')[0] + '_error.txt'
+
+            # dump the encountered exception to a file
+            with open(self.dumppath / error_filename, 'w') as file:
+                file.write(traceback.format_exc())
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
