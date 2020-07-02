@@ -16,7 +16,7 @@ from scipy.interpolate import interp1d
 from .scatter import Scatter
 from .rt1 import RT1, _init_lambda_backend
 from .general_functions import meandatetime, rectangularize, \
-    split_into, dt_to_hms, update_progress, groupby_unsorted
+    split_into, update_progress, groupby_unsorted
 
 from .rtplots import plot as rt1_plots
 
@@ -25,15 +25,10 @@ from . import volume as rt1_v
 from . import __version__ as _RT1_version
 
 import copy
-import multiprocessing as mp
-import ctypes
-from itertools import repeat, count, chain
-from functools import lru_cache, partial
+from itertools import repeat, count, chain, groupby
+from functools import lru_cache, partial, wraps
 from operator import itemgetter, add
-from itertools import groupby
-
-from timeit import default_timer as tick
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     import cloudpickle
@@ -488,11 +483,12 @@ class Fits(Scatter):
                         # (to the first groups)
                         for r in range(rest):
                             res[r%len(res)] += 1
+
                         if rest >= ngrps:
-                            warnings.warn(f'grouping {f} of {freqkeys}',
-                                  'is actually between',
-                                  f'{min([f+i for i in res])} and ',
-                                  f'{max([f+i for i in res])}')
+                            warnings.warn(f'grouping {f} of {freqkeys}' +
+                                          ' is actually between ' +
+                                          f'{min([f+i for i in res])} and ' +
+                                          f'{max([f+i for i in res])}')
 
                         # (repetitions + rest + number of elements in group)
                         dyn = chain(*[repeat(ni, f + r) for ni, r in
@@ -1013,17 +1009,25 @@ class Fits(Scatter):
         for key, val in self.defdict.items():
             if (val[0] is True and val[2] is not None
                 and val[2] != 'manual' and val[2] != 'index'):
-                    usevals = list(map(str.strip, val[2].split('+')))
-                    assert len(usevals) <= 2, ('there are 2 + symbols in ' +
-                                               'the variability definition ' +
-                                               f'of {key} = {val[2]}')
-                    if len(usevals) == 2 :
-                        assert 'manual' in usevals, ('you can only combine' +
-                                                     '1 datetime-offset and ' +
-                                                     'the keyword "manual" !')
 
-                        usevals.pop(usevals.index('manual'))
-                    timescaledict[key] = usevals[0]
+                usevals = list(map(str.strip, str(val[2]).split('+')))
+                assert len(usevals) <= 2, ('there are 2 + symbols in ' +
+                                           'the variability definition ' +
+                                           f'of {key} = {val[2]}')
+                if len(usevals) == 2 :
+                    assert 'manual' in usevals, ('you can only combine' +
+                                                 '1 datetime-offset and ' +
+                                                 'the keyword "manual" !')
+
+                    usevals.pop(usevals.index('manual'))
+
+                # check if remaining freq can be converted to an integer
+                try:
+                    useval = int(usevals[0])
+                except ValueError:
+                    useval = usevals[0]
+
+                timescaledict[key] = useval
         return timescaledict
 
 
@@ -1053,7 +1057,8 @@ class Fits(Scatter):
 
                 else:
                     if (val[2] is not None
-                        and 'manual' in map(str.strip, val[2].split('+'))):
+                        and 'manual' in map(str.strip,
+                                            str(val[2]).split('+'))):
 
                         assert f'{key}_dyn' in self.dataset, (
                             f'{key}_dyn must be provided in the dataset' +
@@ -1122,9 +1127,8 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(**self.set_V_SRF,
-                                 setdict=self._setdict,
-                                 V_SRF_Q='V')
+            V = self._init_V_SRF(self.set_V_SRF['V_props'],
+                                 setdict=self._setdict)
 
         return V
 
@@ -1139,9 +1143,8 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(**self.set_V_SRF,
-                                   setdict=self._setdict,
-                                   V_SRF_Q='SRF')
+            SRF = self._init_V_SRF(self.set_V_SRF['SRF_props'],
+                                   setdict=self._setdict)
         return SRF
 
 
@@ -1230,7 +1233,6 @@ class Fits(Scatter):
     def _tau_diff_func(self):
         return self.__get_V_SRF_diff_funcs('V', 'tau')
 
-
     @property
     @lru_cache()
     def _omega_symb(self):
@@ -1302,7 +1304,6 @@ class Fits(Scatter):
         return resdf
 
 
-
     def _assignvals(self, res_dict, interp_vals=None):
         '''
         a function to distribute the fit-values to the actual shape of the
@@ -1322,73 +1323,63 @@ class Fits(Scatter):
         if interp_vals is None:
             interp_vals = self.interp_vals
 
-        if len(interp_vals) > 0:
-            firstindex = self.dataset.index[0]
-            lastindex = self.dataset.index[-1]
+        firstindex = self.dataset.index[0]
+        lastindex = self.dataset.index[-1]
 
-            # get the results and a quadratic interpolation-function
-            use_res_dict = dict()
-            for key, val in res_dict.items():
-                # generate an interpolaion function
-                # the values at the boundaries are set to the nearest
-                # obtained values to avoid extrapolation
+        # get the results and a quadratic interpolation-function
+        use_res_dict = dict()
+        for key, val in res_dict.items():
+            # generate an interpolaion function
+            # the values at the boundaries are set to the nearest
+            # obtained values to avoid extrapolation
 
-                if key in interp_vals:
-                    if self._param_dyn_monotonic[key] is False:
-                        warnings.warn(f'interpolation of non-monotonic {key}')
-                        # use assignments for unsorted param_dyns
-                        useindex = self._meandt_interp_assigns(key)[0]
-                        usevals = np.array(
-                            val)[self._meandt_interp_assigns(key)[1]]
-                    else:
-                        useindex = self.meandatetimes[key]
-                        usevals = val
-
-                    # ensure that the indexes are never the same
-                    # (add a milisecond if they are...)
-                    if firstindex == useindex[0]:
-                        firstindex += np.timedelta64(1, 'ms')
-                    if lastindex == useindex[-1]:
-                        lastindex -= np.timedelta64(1, 'ms')
-
-                    useindex = np.array([firstindex, *useindex, lastindex],
-                                        dtype='datetime64[ns]'
-                                        ).astype(float, copy=False)
-
-                    if len(usevals) >= 2:
-                        usevals = np.take(usevals, [0,
-                                                    *range(len(usevals)), -1])
-
-                        # interpolate the data to the used timestamps
-                        f = interp1d(useindex.astype(float), usevals,
-                                     fill_value='extrapolate', axis=0,
-                                     kind='quadratic')
-
-                        x = f(np.array(self.dataset.index,
-                                       dtype='datetime64[ns]'))
-                        # assign correct shape
-                        use_res_dict[key] = np.take(x, self._idx_assigns)
-                    else:
-                        warnings.warn('interpolation not possible for '
-                              f'({key}) because there are less than 2 values')
-
-                        x = np.empty(len(self.dataset), dtype=float)
-                        [x.put(ind, val_i) for val_i, ind in
-                              zip(val,
-                                  self._param_assigns_dataset[key].values())]
-                        # assign correct shape
-                        use_res_dict[key] = np.take(x, self._idx_assigns)
-
+            if key in interp_vals:
+                if self._param_dyn_monotonic[key] is False:
+                    warnings.warn(f'interpolation of non-monotonic {key}')
+                    # use assignments for unsorted param_dyns
+                    useindex = self._meandt_interp_assigns(key)[0]
+                    usevals = np.array(
+                        val)[self._meandt_interp_assigns(key)[1]]
                 else:
-                    x = np.empty(len(self.dataset), dtype=float)
-                    [x.put(ind, val_i) for val_i, ind in
-                          zip(val, self._param_assigns_dataset[key].values())]
+                    useindex = self.meandatetimes[key]
+                    usevals = val
+
+                # ensure that the indexes are never the same
+                # (add a milisecond if they are...)
+                if firstindex == useindex[0]:
+                    firstindex += np.timedelta64(1, 'ms')
+                if lastindex == useindex[-1]:
+                    lastindex -= np.timedelta64(1, 'ms')
+
+                useindex = np.array([firstindex, *useindex, lastindex],
+                                    dtype='datetime64[ns]'
+                                    ).astype(float, copy=False)
+
+                if len(usevals) >= 2:
+                    usevals = np.take(usevals, [0,
+                                                *range(len(usevals)), -1])
+
+                    # interpolate the data to the used timestamps
+                    f = interp1d(useindex.astype(float), usevals,
+                                 fill_value='extrapolate', axis=0,
+                                 kind='quadratic')
+
+                    x = f(np.array(self.dataset.index,
+                                   dtype='datetime64[ns]'))
+
                     # assign correct shape
                     use_res_dict[key] = np.take(x, self._idx_assigns)
+                else:
+                    warnings.warn('interpolation not possible for '
+                          f'({key}) because there are less than 2 values')
 
-        else:
-            use_res_dict = dict()
-            for key, val in res_dict.items():
+                    x = np.empty(len(self.dataset), dtype=float)
+                    [x.put(ind, val_i) for val_i, ind in
+                          zip(val,
+                              self._param_assigns_dataset[key].values())]
+                    # assign correct shape
+                    use_res_dict[key] = np.take(x, self._idx_assigns)
+            else:
                 x = np.empty(len(self.dataset), dtype=float)
                 [x.put(ind, val_i) for val_i, ind in
                       zip(val, self._param_assigns_dataset[key].values())]
@@ -1872,25 +1863,29 @@ class Fits(Scatter):
                 'curv' : model_curv}
 
 
-    def _init_V_SRF(self, V_props, SRF_props, setdict=dict(),
-                    V_SRF_Q='V'):
+    def _init_V_SRF(self, props, setdict=None):
         '''
-        initialize a volume and a surface scattering function based on
+        Initialize a volume and a surface scattering function based on
         a list of dicts
 
         Parameters
         ----------
-        V_params, SRF_params : dict
-            a dict that defines all variables needed to initialize the
-            selected volume (surface) scattering function.
+        props : dict
+            A dict that defines all variables needed to initialize the
+            selected volume (or surface) scattering function.
 
-            if the value is a string, it will be converted to a sympy
-            expression to determine the variables of the resulting expression
+            If the valuea are strings, they will be converted to sympy
+            expressions to determine the variables of the resulting expression.
 
-        V_name, SRF_name : str
-            the name of the volume (surface)-scattering function.
-        setdict : TYPE, optional
-            DESCRIPTION. The default is dict().
+            A key "V_name" or "SRF_name" MUST be provided whose value will be
+            used to get the volume (surface)-scattering object.
+            If "V_name" is provided, a RT1.Volume object is initialized.
+            If "SRF_name" is provided, a RT1.Surface object is initialized.
+
+        setdict : dict, optional
+            a dict that will be used to replace the symbols defined by
+            props with numerical values
+            The default is None.
 
         Returns
         -------
@@ -1900,8 +1895,14 @@ class Fits(Scatter):
             the used surface-scattering function.
         '''
 
-        if V_SRF_Q == 'V': props = V_props
-        elif V_SRF_Q == 'SRF': props = SRF_props
+        if setdict is None:
+            setdict = dict()
+
+        assert ('V_name' in props or 'SRF_name' in props), (
+            'you must provide "V_name" or "SRF_name" in the props-dict!')
+        assert not ('V_name' in props and 'SRF_name' in props), (
+            'provide either "V_name" or "SRF_name" not both!')
+
 
         set_dict = dict()
         for key, val in props.items():
@@ -1929,15 +1930,15 @@ class Fits(Scatter):
 
             set_dict[key] = useval
 
-        if V_SRF_Q == 'V':
+        if 'V_name' in props:
             # initialize the volume-scattering function
-            V = getattr(rt1_v, V_props['V_name'])(**set_dict)
+            V = getattr(rt1_v, props['V_name'])(**set_dict)
             return V
-
-        elif V_SRF_Q == 'SRF':
+        elif 'SRF_name' in props:
             # initialize the surface-scattering function
-            SRF = getattr(rt1_s, SRF_props['SRF_name'])(**set_dict)
+            SRF = getattr(rt1_s, props['SRF_name'])(**set_dict)
             return SRF
+
 
     def performfit(self, clear_cache=True, intermediate_results=False,
                    print_progress=False):
@@ -2063,11 +2064,6 @@ class Fits(Scatter):
             self.res_dict = dict()
             self.fit_output = None
 
-        # clear the cache (to avoid issues in case re-processing is applied)
-        if clear_cache is True:
-            self._clear_cache()
-            R._clear_cache()
-
         if print_progress:
             if next(update_cnt) - 1 < max_cnt:
                 update_progress(max_cnt, max_cnt,
@@ -2075,304 +2071,6 @@ class Fits(Scatter):
 
         # set _RT1_version after successful call of performfit
         self._RT1_version = _RT1_version
-
-
-    def _evalfunc(self, reader=None, reader_arg=None, lsq_kwargs=None,
-                  preprocess=None, postprocess=None, exceptfunc=None,
-                  process_cnt=None):
-        """
-        Initialize a Fits-instance and perform a fit.
-        (used for parallel processing)
-
-        Parameters
-        ----------
-        reader : callable, optional
-            A function whose first return-value is a pandas.DataFrame that can
-            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to properly specify a RT-1 dataset).
-            Any additional (optional) return-values will be appended to the
-            Fits-object in the 'aux_data' attribute. The default is None.
-        reader_arg : dict
-            A dict of arguments passed to the reader.
-        lsq_kwargs : dict, optional
-            override the lsq_kwargs-dict of the parent Fits-object.
-            (see documentation of 'rt1.rtfits.Fits')
-            The default is None.
-        preprocess : callable
-            A function that will be called prior to the start of the processing
-            It is called via:
-
-            >>> preprocess(reader_arg)
-        postprocess : callable
-            A function that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            Internally it is called after calling performfit() via:
-
-            >>> ...
-            >>> fit.performfit()
-            >>> return postprocess(fit, reader_arg)
-        exceptfunc : callable, optional
-            A function that is called in case an exception occurs.
-            It is (roughly) implemented via:
-
-            >>> for reader_arg in reader_args:
-            >>>     try:
-            >>>         ...
-            >>>         ... perform fit ...
-            >>>         ...
-            >>>     except Exception as ex:
-            >>>         exceptfunc(ex, reader_arg)
-
-            The default is None, in which case the exception will be raised.
-
-        Returns
-        -------
-        The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
-        """
-        if process_cnt is not None:
-            start = tick()
-        try:
-            # call preprocess function if provided
-            if callable(preprocess):
-                preprocess(reader_arg)
-
-            if lsq_kwargs is None:
-                lsq_kwargs = self.lsq_kwargs
-
-            # if a reader (and no dataset) is provided, use the reader
-            read_data = reader(**reader_arg)
-            # check for multiple return values and split them accordingly
-            # (any value beyond the first is appended as aux_data)
-            if isinstance(read_data, pd.DataFrame):
-                dataset = read_data
-                aux_data = None
-            elif (isinstance(read_data, (list, tuple))
-                  and isinstance(read_data[0], pd.DataFrame)):
-                if len(read_data) == 2:
-                    dataset, aux_data = read_data
-                elif  len(read_data) > 2:
-                    dataset = read_data[0]
-                    aux_data = read_data[1:]
-            else:
-                raise TypeError('the first return-value of reader function ' +
-                                'must be a pandas DataFrame')
-            # perform the fit
-            fit = Fits(sig0=self.sig0, dB=self.dB, dataset = dataset,
-                       defdict=self.defdict, set_V_SRF=self.set_V_SRF,
-                       lsq_kwargs=lsq_kwargs, int_Q=self.int_Q,
-                       lambda_backend=self.lambda_backend,
-                       _fnevals_input=self._fnevals_input,
-                       interp_vals=self.interp_vals)
-            fit.performfit()
-
-            # append auxiliary data
-            if aux_data is not None:
-                fit.aux_data = aux_data
-
-            # if a post-processing function is provided, return its output,
-            # else return the fit-object directly
-            if callable(postprocess):
-                ret = postprocess(fit, reader_arg)
-            else:
-                ret = fit
-
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                end = tick()
-                # increase the total counter
-                p_totcnt.value += 1
-
-                # update the estimate of the mean time needed to process a site
-                p_time.value = (p_meancnt.value * p_time.value
-                                + (end - start)) / (p_meancnt.value + 1)
-                # increase the mean counter
-                p_meancnt.value += 1
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
-                d,h,m,s = dt_to_hms(remain)
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
-
-            return ret
-
-        except Exception as ex:
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                # only increase the total counter
-                p_totcnt.value += 1
-                if p_meancnt.value == 0:
-                    title=f"{'estimating time ...':<28}"
-                else:
-                    # get the remaining time and update the progressbar
-                    remain = timedelta(
-                        seconds = (p_max - p_totcnt.value
-                                   ) / p_ncpu * p_time.value)
-                    d,h,m,s = dt_to_hms(remain)
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=title,
-                    finalmsg=f"finished! ({p_max} [{p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
-
-            if callable(exceptfunc):
-                return exceptfunc(ex, reader_arg)
-            else:
-                raise ex
-
-
-    def processfunc(self, ncpu=1, reader=None, reader_args=None,
-                    lsq_kwargs=None, preprocess=None, postprocess=None,
-                    exceptfunc=None, finaloutput=None, pool_kwargs=None,
-                    print_progress=True):
-        """
-        Evaluate a RT-1 model on a single core or in parallel using either
-            - a list of datasets or
-            - a reader-function together with a list of arguments that
-              will be used to read the datasets
-
-        Notice:
-            On Windows, if multiprocessing is used, you must protect the call
-            of this function via:
-            (see for example: )
-
-            >>> if __name__ == '__main__':
-                    fit.processfunc(...)
-
-            In order to allow pickling the final rt1.rtfits.Fits object,
-            it is required to store ALL definitions within a separate
-            file and call processfunc in the 'main'-file as follows:
-
-            >>> from specification_file import fit reader lsq_kwargs ... ...
-                if __name__ == '__main__':
-                    fit.processfunc(ncpu=5, reader=reader,
-                                    lsq_kwargs=lsq_kwargs, ... ...)
-
-        Parameters
-        ----------
-        ncpu : int, optional
-            The number of kernels to use. The default is 1.
-        reader : callable, optional
-            A function whose first return-value is a pandas.DataFrame that can
-            be used as a 'dataset'. (see documentation of 'rt1.rtfits.Fits'
-            for details on how to properly specify a RT-1 dataset).
-            Any additional (optional) return-values will be appended to the
-            Fits-object in the 'aux_data' attribute. The default is None.
-        reader_args : list, optional
-            A list of dicts that will be passed to the reader-function.
-            The default is None.
-        lsq_kwargs : dict, optional
-            override the lsq_kwargs-dict of the parent Fits-object.
-            (see documentation of 'rt1.rtfits.Fits')
-            The default is None.
-        preprocess : callable
-            A function that will be called prior to the start of the processing
-            It is called via:
-
-            >>> preprocess(reader_arg)
-        postprocess : callable
-            A function that accepts a rt1.rtfits.Fits object and a dict
-            as arguments and returns any desired output.
-
-            Internally it is called after calling performfit() via:
-
-            >>> ...
-            >>> fit.performfit()
-            >>> return postprocess(fit, reader_arg)
-        exceptfunc : callable, optional
-            A function that is called in case an exception occurs.
-            It is (roughly) implemented via:
-
-            >>> for reader_arg in reader_args:
-            >>>     try:
-            >>>         ...
-            >>>         ... perform fit ...
-            >>>         ...
-            >>>     except Exception as ex:
-            >>>         exceptfunc(ex, reader_arg)
-
-            The default is None, in which case the exception will be raised.
-        finaloutput : callable, optional
-            A function that will be called on the list of returned objects
-            after the processing has been finished.
-        pool_kwargs : dict
-            A dict with additional keyword-arguments passed to the
-            initialization of the multiprocessing-pool via:
-
-            >>> mp.Pool(ncpu, **pool_kwargs)
-        print_progress : bool
-            indicator if a progress-bar should be printed to stdout or not
-            that looks like this:
-
-            >>> approx. 0 00:00:02 remaining ################------ 3 (2) / 4
-            >>>
-            >>> (estimated time day HH:MM:SS)(     progress bar   )( counts )
-            >>> ( counts ) = finished fits [actually fitted] / total
-
-        Returns
-        -------
-        res : list
-            A list of rt1.rtfits.Fits objects or a list of outputs of the
-            postprocess-function.
-
-        """
-
-        if lsq_kwargs is None: lsq_kwargs = self.lsq_kwargs
-        if pool_kwargs is None: pool_kwargs = dict()
-
-        if self.int_Q is True:
-            # pre-evaluate the fn-coefficients if interaction terms are used
-            self._fnevals_input = self.R._fnevals
-
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            manager = mp.Manager()
-            p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_time = manager.Value(ctypes.c_float, 0)
-            process_cnt = [p_totcnt, p_meancnt, len(reader_args),
-                           p_time, ncpu]
-        else:
-            process_cnt = None
-
-        if ncpu > 1:
-            print('start of parallel evaluation')
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(self._evalfunc,
-                                               zip(repeat(reader),
-                                                   reader_args,
-                                                   repeat(lsq_kwargs),
-                                                   repeat(preprocess),
-                                                   repeat(postprocess),
-                                                   repeat(exceptfunc),
-                                                   repeat(process_cnt)))
-                pool.close()  # Marks the pool as closed.
-                pool.join()   # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            print('start of single-core evaluation')
-            res = []
-            for reader_arg in reader_args:
-                res.append(self._evalfunc(reader=reader,
-                                          reader_arg=reader_arg,
-                                          lsq_kwargs=lsq_kwargs,
-                                          preprocess=preprocess,
-                                          postprocess=postprocess,
-                                          exceptfunc=exceptfunc,
-                                          process_cnt=process_cnt))
-
-        if callable(finaloutput):
-            return finaloutput(res)
-        else:
-            return res
 
 
     def dump(self, path, mini=True):
@@ -2491,7 +2189,7 @@ class Fits(Scatter):
 
         return res
 
-    from functools import wraps
+
     @wraps(_calc_model)
     def calc_model(self, *args, **kwargs):
         # check if components have been calculated
@@ -2541,7 +2239,8 @@ class Fits(Scatter):
                 star = f'{val[1]:.10}'.ljust(13)
 
                 if val[2] is not None:
-                    vari = f'{" & ".join(map(str.strip, val[2].split("+"))):<14}'
+                    freqs = map(str.strip, str(val[2]).split("+"))
+                    vari = f'{" & ".join(freqs):<14}'
                 else:
                     vari = '      -       '
 
@@ -2678,4 +2377,41 @@ class Fits(Scatter):
     @property
     def model_definition(self):
         print(self._model_definition)
+
+
+    @classmethod
+    def _reinit_object(cls, self, **kwargs):
+
+        args = {'sig0':self.sig0, 'dB':self.dB, 'dataset':self.dataset,
+                'defdict':self.defdict, 'set_V_SRF':self.set_V_SRF,
+                'lsq_kwargs':self.lsq_kwargs, 'int_Q':self.int_Q,
+                'lambda_backend':self.lambda_backend,
+                '_fnevals_input':self._fnevals_input,
+                'interp_vals':self.interp_vals}
+
+        args.update(**kwargs)
+
+        fit = cls(**args)
+
+        return fit
+
+
+    def reinit_object(self, **kwargs):
+        '''
+        initialize a new fits-object that share all attributes except
+        for the ones passed as kwargs.
+
+        Parameters
+        ----------
+        **kwargs :
+            Keyword arguments that will be used to initialize a new Fits-object
+            (all other arguments will be taken from the parent object!)
+
+        Returns
+        -------
+        rtfits.Fits
+            a new Fits-object.
+
+        '''
+        return self._reinit_object(self, **kwargs)
 

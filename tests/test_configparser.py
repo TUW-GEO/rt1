@@ -122,8 +122,8 @@ class TestCONFIGPARSER(unittest.TestCase):
         #----------------------------------------- check fitobjects
 
         fit = cfg.get_fitobject()
-        V = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='V')
-        SRF = fit._init_V_SRF(**fit.set_V_SRF, V_SRF_Q='SRF')
+        V = fit._init_V_SRF(fit.set_V_SRF['V_props'])
+        SRF = fit._init_V_SRF(fit.set_V_SRF['SRF_props'])
 
         assert V.t == sp.Symbol('t_v'), 'V.t assigned incorrectly'
         assert V.tau == sp.Symbol('tau') * sp.Symbol('tau_multip'), 'V.tau assigned incorrectly'
@@ -134,24 +134,15 @@ class TestCONFIGPARSER(unittest.TestCase):
 
 
         #----------------------------------------- check imported module
-        cfg_module_dict = cfg.get_modules()
-        assert 'processfuncs' in cfg_module_dict, 'modules not correctly parsed'
-        cfg_module = cfg_module_dict['processfuncs']
+        cfg_module_dict = cfg.get_all_modules()
+        assert 'processing_cfg' in cfg_module_dict, 'modules not correctly parsed'
+        cfg_module = cfg_module_dict['processing_cfg']
 
         assert hasattr(cfg_module, 'processing_cfg'), 'modules not correctly parsed'
-        assert hasattr(cfg_module, 'run'), 'modules not correctly parsed'
 
 
-        cfg_module_direct = cfg.get_module('processfuncs')
+        cfg_module_direct = cfg.get_module('processing_cfg')
         assert hasattr(cfg_module_direct, 'processing_cfg'), 'direct-module load not working'
-        assert hasattr(cfg_module_direct, 'run'), 'direct-module load not working'
-
-
-
-        #----------------------------------------- check if files have been copied
-        assert Path('tests/proc_test/dump01/cfg').exists(), 'copying did not work'
-        assert Path('tests/proc_test/dump01/cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('tests/proc_test/dump01/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":

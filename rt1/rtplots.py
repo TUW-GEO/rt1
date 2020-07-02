@@ -1248,7 +1248,8 @@ class plot:
                           sig0=True,
                           printcomponents1=True,
                           printcomponents2=True,
-                          printparamnames=None):
+                          printparamnames=None,
+                          printparamstyles=dict()):
         '''
         A widget to analyze the results of a rt1.rtfits.Fits object.
         (In order to keep the widget responsive, a reference to the returns
@@ -1287,6 +1288,11 @@ class plot:
         printparamnames : list of str, optional
             A list of strings corresponding to the parameter-names whose
             results should be added to the plot. The default is None.
+        printparamstyles : dict
+            A dict with style-options (updating the default ones) passed to the
+            plot for each parameter selected in printparamnames via:
+
+                >>> plt.plot(x, y, **printparamstyles['parameter-name'])
 
         Returns
         -------
@@ -1433,22 +1439,6 @@ class plot:
                     alpha = 0.5)
 
 
-        # get upper and lower boundaries for the indicator-lines
-        indicator_bounds = [0,1]
-        try:
-            for key in printparamnames:
-                indicator_bounds = [np.nanmin([fit.res_dict.get(key, [np.nan])[0],
-                                               fit.fixed_dict.get(key, np.nan)]),
-                                    np.nanmax([fit.res_dict.get(key, [np.nan])[0],
-                                               fit.fixed_dict.get(key, np.nan)])]
-                # if a constant value is plotted, ensure that the boundaries
-                # are not equal
-                if indicator_bounds[0] == indicator_bounds[1]:
-                    indicator_bounds[1] = indicator_bounds[0]*1.1
-                    indicator_bounds[0] = indicator_bounds[0]*0.9
-                break
-        except:
-            pass
 
         # plot parameters as specified in printparamnames
         axparamplot = ax2
@@ -1457,6 +1447,9 @@ class plot:
         pos = 1 - len(printparamnames)//2 * 0.035
         for key in printparamnames:
             try:
+                style = dict(color='C' + str(i), marker='.', lw=0.75)
+                style.update(printparamstyles.get(key, dict()))
+
                 if i > 0:
                     axparamplot = ax2.twinx()
                     axparamplot.tick_params(axis='y', which='both',
@@ -1465,9 +1458,17 @@ class plot:
                     axparamplot.spines["right"].set_position(('axes', pos))
                     axparamplot.tick_params(axis='y', which='both',
                                             labelsize=5, length=2)
+                if key in fit.res_df:
+                    l, = axparamplot.plot(fit.res_df.sort_index()[key],
+                                          label = key, **style)
+                elif key in fit.dataset:
+                    l, = axparamplot.plot(fit.dataset.sort_index()[key],
+                                          label = key, **style)
+                else:
+                    print(f'parameter "{key}" not found in "fit.res_df"',
+                          'and "fit.dataset"')
+                    continue
 
-                l, = axparamplot.plot(fit.res_df.sort_index()[key],
-                                      label = key, color='C' + str(i))
                 # add handles and labels to legend
                 handles += axparamplot.get_legend_handles_labels()[0]
                 labels += axparamplot.get_legend_handles_labels()[1]
@@ -1487,6 +1488,7 @@ class plot:
         ax2.xaxis.set_major_locator(mpl.dates.YearLocator())
         ax2.xaxis.set_major_formatter(mpl.dates.DateFormatter('\n%Y'))
 
+        indicator_bounds = [ax2.get_ylim()[0]*1.05, ax2.get_ylim()[1]*0.95]
 
         # -----------------------------------------------------------
         # plot lines
@@ -2448,7 +2450,7 @@ class plot:
                 fig = f_gs[0]
                 ax = fig.add_subplot(f_gs[1], projection='3d')
             ax.grid()
-            for a in (ax.w_xaxis, ax.w_yaxis, ax.w_zaxis):
+            for a in (ax.xaxis, ax.yaxis, ax.zaxis):
                 a.pane.set_color('none')
 
             if project_contour:

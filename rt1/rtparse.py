@@ -36,8 +36,13 @@ class RT1_configparser(object):
     get_fitobject():
         get the rt1.rtfits.Fits() object
 
-    get_modules():
-        get a dict of the following structure:
+    get_module(NAME):
+        programmatically import the module with the name NAME from the path
+        "module__NAME" defined in the "[CONFIGFILES]" section of the .ini file
+        and return a reference to the module.
+
+    get_all_modules():
+        get a dict of ALL defined modules with the following structure:
 
         >>> {module_name1 : reference to imported module1 from "[CONFIGFILES]",
         >>>  module_name2 : reference to imported module2 from "[CONFIGFILES]"}
@@ -67,10 +72,14 @@ class RT1_configparser(object):
         keyword-arguments passed to the call of `scipy.stats.least_squares()`
     - [CONFIGFILES]
 
-        - any passed argument starting with `module__NAME` will be interpreted as the
-          location of a python-module that is intended to be imported.
+        - any passed argument starting with `module__NAME` will be interpreted
+          as the location of a python-module that is intended to be imported.
 
-          the `.get_modules()` function returns a dict:  {NAME : imported module}
+          use .get_module(NAME) to get a reference to the module imported
+          from the specified loaction.
+
+          the `.get_all_modules()` function returns a dict of ALL specified
+          modules:     processfuncs = {NAME : imported module, ...}
 
         - if `copy = path to a folder` is provided, both the .ini file as well
           as any file imported via `module__` arguments will be copied to the
@@ -121,11 +130,13 @@ class RT1_configparser(object):
     '''
 
 
-    def __init__(self, configpath):
+    def __init__(self, configpath, interpolation=ExtendedInterpolation()):
+
         self.configpath = Path(configpath)
+        self.interpolation = interpolation
         # setup config (allow empty values -> will result in None)
         self.config = ConfigParser(allow_no_value=True,
-                                   interpolation=ExtendedInterpolation())
+                                   interpolation=self.interpolation)
         # avoid converting uppercase characters
         # (see https://stackoverflow.com/a/19359720/9703451)
         self.config.optionxform = str
@@ -142,6 +153,38 @@ class RT1_configparser(object):
                                         bool_keys = ['sig0', 'dB', 'int_Q'],
                                         int_keys= ['verbose'],
                                         list_keys = [])
+
+        self._check_integrity()
+
+    def _check_integrity(self):
+
+        # check if required sections are defined
+        required_sections = ['PROCESS_SPECS', 'CONFIGFILES', 'fits_kwargs',
+                             'least_squares_kwargs', 'defdict', 'RT1_V',
+                             'RT1_SRF']
+        for key in required_sections:
+            assert key in self.config, (
+                f'a section "{key}" MUST be present in the .ini file!')
+
+        # check if save_path etc. has been defined
+        required_process_spec_keys = ['path__save_path', 'dumpfolder']
+        for key in required_process_spec_keys:
+            assert key in self.config['PROCESS_SPECS'], (
+                f'a key "{key}" MUST be provided in the section PROCESS_SPECS')
+
+
+        # check if processing-modue is specified
+        if 'processing_cfg_module' in self.config['CONFIGFILES']:
+            proc_module_name = self.config['CONFIGFILES'
+                                           ]['processing_cfg_module']
+        else:
+            proc_module_name = 'processing_cfg'
+
+        assert ('module__' + proc_module_name) in self.config['CONFIGFILES'], (
+            '"module__' + proc_module_name + '" must be defined in the '
+            + 'CONFIGFILES section... \n(specify "processing_cfg_module" if ' +
+            'you want to use a different name for the processing-module key!)')
+
 
 
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
@@ -295,67 +338,51 @@ class RT1_configparser(object):
 
         return rt1_fits
 
-    def get_modules(self):
+
+    def get_all_modules(self, load_copy=False):
         '''
-        programmatically import a module as described here:
-        https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+        programmatically import all defined modules from the paths provided
+        in the [CONFIGFILES] section
+
+        Parameters
+        ----------
+        load_copy : bool, optional
+            indicator if the modules should be loaded from the specified path
+            or if it should be loaded from "save_path/dumpfolder/cfg".
+            The default is False.
 
         Returns
         -------
         processmodules : dict
-            a dict with the imported moduels
-
+            a dict with the imported modules
         '''
-
-        if 'copy' in self.config['CONFIGFILES']:
-            copy_val = self.config['CONFIGFILES'].pop('copy').strip()
-            if '..' in copy_val:
-                copy = Path(copy_val).resolve()
-            else:
-                copy = Path(copy_val)
-
-            if not copy.exists():
-                print(f'creating config-dir {copy}')
-                copy.mkdir(parents=True)
-            shutil.copy(self.configpath, copy)
-            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
-        else:
-            copy = False
 
         processmodules = dict()
         for key, val in self.config['CONFIGFILES'].items():
             if not key.startswith('module__'):
                 continue
 
-            dict_key = key[8:]
-            location = Path(val.strip())
-
-            assert location.suffix == '.py', f'{location} is not a .py file!'
-            # copy the file and use the copied one for the import
-            if copy is not False:
-                copypath = copy / location.name
-                shutil.copy(location, copypath)
-
-                location = copypath
-
-                print(f'"{location.name}" copied to \n    "{copy}"')
-
-            spec = importlib.util.spec_from_file_location(name=location.stem,
-                                                          location=location)
-
-            foo = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = foo
-            spec.loader.exec_module(foo)
-
-            processmodules[dict_key] = foo
+            modulename = key[8:]
+            processmodules[modulename] = self.get_module(modulename,
+                                                         load_copy=load_copy)
 
         return processmodules
 
 
-    def get_module(self, modulename):
+    def get_module(self, modulename, load_copy=False):
         '''
         programmatically import the module 'modulename' as described here:
         https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
+
+
+        Parameters
+        ----------
+        modulename : str
+            the module-name (e.g. the key specified in the ".ini"-file).
+        load_copy : bool, optional
+            indicator if the module should be loaded from the specified path
+            or if it should be loaded from "save_path/dumpfolder/cfg".
+            The default is False.
 
         Returns
         -------
@@ -363,46 +390,35 @@ class RT1_configparser(object):
 
         '''
 
-        if 'copy' in self.config['CONFIGFILES']:
-            copy_val = self.config['CONFIGFILES']['copy'].strip()
-            if '..' in copy_val:
-                copy = Path(copy_val).resolve()
-            else:
-                copy = Path(copy_val)
-
-            if not copy.exists():
-                print(f'creating config-dir {copy}')
-                copy.mkdir(parents=True)
-            shutil.copy(self.configpath, copy)
-            print(f'"{self.configpath.name}" copied to \n    "{copy}"')
-        else:
-            copy = False
-
         assert f'module__{modulename}' in self.config['CONFIGFILES'], (
-            f'"module__{modulename}" is not defined in the [CONFIGFILES]' +
-            ' section of the .ini file')
+            f'the module "{modulename}" is not defined in the [CONFIGFILES]'+
+            ' section of the .ini file     ...available modules are:  '+
+            '  ,  '.join(['"' + i.replace('module__','') + '"'
+                        for i in self.config['CONFIGFILES']
+                        if i.startswith('module__')]))
 
-        val = self.config['CONFIGFILES'][f'module__{modulename}']
+        if load_copy is True:
+            save_path = Path(
+                self.config['PROCESS_SPECS']['path__save_path'].strip())
 
-        location = Path(val.strip())
+            dumpfolder = self.config['PROCESS_SPECS']['dumpfolder'].strip()
 
-        assert location.suffix == '.py', f'{location} is not a .py file!'
-        # copy the file and use the copied one for the import
-        if copy is not False:
-            copypath = copy / location.name
-            if not copypath.exists():
-                shutil.copy(location, copypath)
-                print(f'"{location.name}" copied to \n',
-                      f'    "{copy}"')
-            else:
-                print(f'"{copypath.stem}" imported from \n',
-                      f'    "{copypath.parent}"')
+            modulename = Path(
+                self.config['CONFIGFILES'][f'module__{modulename}'].strip()
+                ).name
 
-            # import module from copypath if it has been copied
-            location = copypath
+            modulepath = save_path / dumpfolder / 'cfg' / modulename
+            assert modulepath.exists(), (
+                f'the module "{modulename}" has not yet been copied to ' +
+                f'"{save_path / dumpfolder / "cfg"}" and can not be ' +
+                'imported using "load_copy=True"')
+        else:
+            modulepath = Path(
+                self.config['CONFIGFILES'][f'module__{modulename}'].strip())
 
-        spec = importlib.util.spec_from_file_location(name=location.stem,
-                                                      location=location)
+
+        spec = importlib.util.spec_from_file_location(name=modulepath.stem,
+                                                      location=modulepath)
 
         foo = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = foo
@@ -423,7 +439,13 @@ class RT1_configparser(object):
             elif key.startswith('path__'):
                 # resolve the path in case .. syntax is used to traverse dirs
                 if '..' in val.strip():
-                    process_specs[key[6:]] = Path(val.strip()).resolve()
+                    try:
+                        process_specs[key[6:]] = Path(val.strip()).resolve()
+                    except PermissionError:
+                        print('some paths could not be resolved!',
+                              'avoid using ".." syntax in path-specifications',
+                              ' to circuumvent this issue')
+                        process_specs[key[6:]] = Path(val.strip())
                 else:
                     process_specs[key[6:]] = Path(val.strip())
 
