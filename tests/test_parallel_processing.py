@@ -96,17 +96,18 @@ class TestRTfits(unittest.TestCase):
 
         proc = RTprocess(config_path, autocontinue=True,
                          init_kwargs=dict(
+                             path__save_path = 'tests/proc_test2',
                              dumpfolder='dump02')
                          )
 
         proc.run_processing(ncpu=4, reader_args = reader_args)
 
         #----------------------------------------- check if files have been copied
-        assert Path('tests/proc_test/dump02/cfg').exists(), 'folder-generation did not work'
-        assert Path('tests/proc_test/dump02/results').exists(), 'folder-generation did not work'
-        assert Path('tests/proc_test/dump02/dumps').exists(), 'folder-generation did not work'
-        assert Path('tests/proc_test/dump02/cfg/test_config.ini').exists(), 'copying did not work'
-        assert Path('tests/proc_test/dump02/cfg/parallel_processing_config.py').exists(), 'copying did not work'
+        assert Path('tests/proc_test2/dump02/cfg').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test2/dump02/results').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test2/dump02/dumps').exists(), 'folder-generation did not work'
+        assert Path('tests/proc_test2/dump02/cfg/test_config.ini').exists(), 'copying did not work'
+        assert Path('tests/proc_test2/dump02/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
 if __name__ == "__main__":
