@@ -156,17 +156,17 @@ class RTprocess(object):
                                                + 'does not exist!')
 
             self.cfg = RT1_configparser(self.config_path)
-            specs = self.cfg.get_process_specs()
 
             # update specs with init_kwargs
             for key, val in self.init_kwargs.items():
-                if key in specs:
-                    print(f'"{key} = {specs[key]}" will be ',
-                          'overwritten by the definition provided via ',
-                          f'"init_kwargs": "{key}={val}" ')
-                    specs[key] = val
+                if key in self.cfg.config['PROCESS_SPECS']:
+                    print(f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}"',
+                          'will be overwritten by the definition provided via',
+                          f'"init_kwargs": "{key} = {val}" ')
                     # update the parsed config (for import of modules etc.)
                     self.cfg.config['PROCESS_SPECS'][key] = val
+
+            specs = self.cfg.get_process_specs()
 
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
