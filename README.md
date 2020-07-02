@@ -22,10 +22,15 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 
 - **rt1.rtfits**
 
-  - a flexible interface for (parallelized) least-squares fitting
+  - a flexible interface to perform parameter estimation for incidence-angle
+    dependent data-timeseries via non-linear least-squares fitting routines.
 
   - integrates with a set of pre-defined plot-functions and interactive
     widgets that can be used to quickly analyze the obtained results
+
+- **rt1.rtprocess**
+
+  - a versatile interface to setup and run parallelized processing
 
 - **rt1.rtparse**
 
@@ -33,7 +38,7 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 
 - **rt1.volume** and **rt1.surface**
 
-  - a collection of useful surface- and volume scattering phase-functions
+  - a collection of useful surface- and volume scattering functions
 
 
 
