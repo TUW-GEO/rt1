@@ -174,6 +174,8 @@ class RTprocess(object):
                 if self.dumppath.exists():
                     def remove_folder():
                         shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
+                        print(f'"{specs["save_path"] / specs["dumpfolder"]}"',
+                              '\nhas successfully been removed.\n')
 
                     _confirm_input(
                         msg=(f'the path \n "{self.dumppath}"\n' +

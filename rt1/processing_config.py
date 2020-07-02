@@ -79,17 +79,19 @@ class rt1_processing_config(object):
 
     '''
 
-    def __init__(self, save_path=None, dumpfolder=None, finalout_name=None,
-                 **kwargs):
+    def __init__(self, **kwargs):
 
-        if save_path is not None:
-            self.dumppath = Path(save_path) / dumpfolder / 'dumps'
-            self.respath = Path(save_path) / dumpfolder / 'results'
-            self.cfgpath = Path(save_path) / dumpfolder / 'cfg'
+        if 'save_path' in kwargs and 'dumpfolder' in kwargs:
+            parentpath = Path(kwargs['save_path']) / kwargs['dumpfolder']
+
+            self.rt1_procsesing_dumppath = parentpath / 'dumps'
+            self.rt1_procsesing_respath  = parentpath / 'results'
+            self.rt1_procsesing_cfgpath  = parentpath / 'cfg'
         else:
-            self.dumppath = None
-            self.respath = None
-            self.cfgpath = None
+            self.rt1_procsesing_dumppath = None
+            self.rt1_procsesing_respath = None
+            self.rt1_procsesing_cfgpath = None
+
 
         # append all arguments passed as kwargs to the class
         # NOTICE: ALL definitions in the 'PROCESS_SPECS' section of the
@@ -98,7 +100,6 @@ class rt1_processing_config(object):
         for key, val in kwargs.items():
             setattr(self, key, val)
 
-        self.finalout_name = finalout_name
 
     def get_names_ids(self, reader_arg):
         '''
@@ -136,11 +137,51 @@ class rt1_processing_config(object):
 
 
     def check_dump_exists(self, reader_arg):
+        '''
+        check if a dump of the fit already exists
+        (used to determine if the fit has already been evaluated to avoid
+         performing the same fit twice)
+
+        Parameters
+        ----------
+        reader_arg : dict
+            the reader-arg dict.
+
+        Raises
+        ------
+        rt1_file_already_exists
+            If a dump-file with the specified filename already exists
+            at "save_path / dumpfolder / dumps /"
+        '''
+
         # check if the file already exists, and if yes, raise a skip-error
-        if self.dumppath is not None:
+        if self.rt1_procsesing_dumppath is not None:
             names_ids = self.get_names_ids(reader_arg)
-            if (self.dumppath / names_ids['filename']).exists():
+            if (self.rt1_procsesing_dumppath / names_ids['filename']).exists():
                 raise Exception('rt1_file_already_exists')
+
+
+    def dump_fit_to_file(self, fit, reader_arg, mini=True):
+        '''
+        pickle to Fits-object to  "save_path / dumpfolder / filename.dump"
+
+        Parameters
+        ----------
+        fit : rt1.rtfits.Fits
+            the rtfits.Fits object.
+        reader_arg : dict
+            the reader-arg dict.
+        mini : bool, optional
+            indicator if a mini-dump should be performed or not.
+            (see rt1.rtfits.Fits.dump() for details)
+            The default is True.
+        '''
+        if self.rt1_procsesing_dumppath is not None:
+            names_ids = self.get_names_ids(reader_arg)
+
+            if not (self.rt1_procsesing_dumppath /
+                    names_ids['filename']).exists():
+                fit.dump(dumppath, mini=mini)
 
 
     def preprocess(self, **kwargs):
@@ -154,8 +195,6 @@ class rt1_processing_config(object):
         '''
         a function that is called for each site to obtain the dataset
         '''
-        names_ids = self.get_names_ids(reader_arg)
-
         # get the incidence-angles of the data
         inc = [.1, .2, .3, .4, .5]
         # get the sig0-values of the data
@@ -202,11 +241,9 @@ class rt1_processing_config(object):
 
         # get filenames
         names_ids = self.get_names_ids(reader_arg)
-        # make a dump of the fit
-        if self.dumppath is not None:
-            if not (self.dumppath / names_ids['filename']).exists():
-                fit.dump(self.dumppath / names_ids['filename'], mini=True)
 
+        # make a dump of the fit
+        self.dump_fit_to_file(fit, reader_arg)
 
         # get resulting parameter DataFrame
         df = fit.res_df
@@ -266,7 +303,7 @@ class rt1_processing_config(object):
         # concatenate the results
         res = pd.concat([i for i in res if i is not None], axis=1)
 
-        if self.respath is None or self.finalout_name is None:
+        if self.rt1_procsesing_respath is None or self.finalout_name is None:
             print('both save_path and finalout_name must be specified... ',
                   'otherwise the final results can NOT be saved!')
             return res
@@ -282,7 +319,7 @@ class rt1_processing_config(object):
             res.columns = pd.to_numeric(res.columns)
 
             # create (or append) results to a HDF-store
-            res.to_hdf(self.respath / self.finalout_name,
+            res.to_hdf(self.rt1_procsesing_respath / self.finalout_name,
                        key=hdf_key, format=format, complevel=7)
 
         # flush stdout to see output of child-processes
@@ -328,7 +365,8 @@ class rt1_processing_config(object):
             raise_exception = False
 
             try:
-                fit = load(self.dumppath / names_ids['filename'])
+                fit = load(self.rt1_procsesing_dumppath /
+                           names_ids['filename'])
                 return self.postprocess(fit, reader_arg)
             except Exception:
                 pass
@@ -341,7 +379,7 @@ class rt1_processing_config(object):
         # and continue processing WITHOUT raising the exception.
         # if `save_path`is NOT specified, raise ONLY exceptions that
         # have not been explicitly catched
-        if self.dumppath is None and raise_exception is True:
+        if self.rt1_procsesing_dumppath is None and raise_exception is True:
             print('`save_path` must be specified otherwise exceptions ' +
                   'that are not explicitly catched by `exceptfunc()` ' +
                   ' will be raised!')
@@ -354,7 +392,8 @@ class rt1_processing_config(object):
                     'filename'].split('.')[0] + '_error.txt'
 
             # dump the encountered exception to a file
-            with open(self.dumppath / error_filename, 'w') as file:
+            with open(self.rt1_procsesing_dumppath /
+                      error_filename, 'w') as file:
                 file.write(traceback.format_exc())
 
         # flush stdout to see output of child-processes
