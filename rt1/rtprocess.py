@@ -522,6 +522,13 @@ class RTprocess(object):
                 res = res_async.get()
         else:
             print('start of single-core evaluation')
+
+            # call the initializer if it has been provided
+            if 'initializer' in pool_kwargs:
+                if 'initargs' in pool_kwargs:
+                    pool_kwargs['initializer'](*pool_kwargs['initargs'])
+                else:
+                    pool_kwargs['initializer']()
             res = []
             for reader_arg in reader_args:
                 res.append(self._evalfunc(reader_arg=reader_arg,
