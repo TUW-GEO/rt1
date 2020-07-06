@@ -225,7 +225,7 @@ class RT1_configparser(object):
                 #assert inp[key].startswith('['), f'{key}  must start with "[" '
                 #assert inp[key].endswith(']'), f'{key} must end with "]" '
                 #val = inp[key][1:-1].replace(' ', '').split(',')
-                if inp[key] == None:
+                if inp[key] == 'None':
                     val = []
                 else:
                     val = inp[key].replace(' ', '').split(',')
