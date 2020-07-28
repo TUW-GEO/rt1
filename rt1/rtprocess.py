@@ -4,6 +4,8 @@ from datetime import timedelta
 from itertools import repeat
 import ctypes
 import sys
+from textwrap import dedent
+import warnings
 
 from pathlib import Path
 import shutil
@@ -140,8 +142,8 @@ class RTprocess(object):
     def setup(self, copy=True):
         '''
         perform necessary tasks to run a processing-routine
-          - initialize the folderstructure
-          - copy modules and .ini files (if copy=True)
+          - initialize the folderstructure (only from MainProcess!)
+          - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
 
         Parameters
@@ -151,6 +153,7 @@ class RTprocess(object):
             the dumppath/cfg folder or not. The default is True.
         '''
         if self._config_path is not None and self._proc_cls is None:
+
             self.config_path = Path(self._config_path)
             assert self.config_path.exists(), (f'the file {self.config_path} '
                                                + 'does not exist!')
@@ -160,9 +163,10 @@ class RTprocess(object):
             # update specs with init_kwargs
             for key, val in self.init_kwargs.items():
                 if key in self.cfg.config['PROCESS_SPECS']:
-                    print(f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}"',
-                          'will be overwritten by the definition provided via',
-                          f'"init_kwargs": "{key} = {val}" ')
+                    warnings.warn(
+                        f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}"' +
+                        'will be overwritten by the definition provided via' +
+                        f'"init_kwargs": "{key} = {val}" ')
                     # update the parsed config (for import of modules etc.)
                     self.cfg.config['PROCESS_SPECS'][key] = val
 
@@ -170,31 +174,38 @@ class RTprocess(object):
 
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
-            if self.autocontinue is False:
-                if self.dumppath.exists():
-                    def remove_folder():
-                        shutil.rmtree(specs['save_path'] / specs['dumpfolder'])
-                        print(f'"{specs["save_path"] / specs["dumpfolder"]}"',
-                              '\nhas successfully been removed.\n')
 
-                    _confirm_input(
-                        msg=(f'the path \n "{self.dumppath}"\n' +
-                             ' already exists...' +
-                             '\n- to continue type YES or Y' +
-                             '\n- to abort type NO or N' +
-                             '\n- to remove the existing directory and all' +
-                             'subdirectories type REMOVE \n \n'),
-                        callbackdict={'REMOVE':[
-                            (f'\n"{self.dumppath}"\n will be removed!' +
-                             ' are you sure? (y, n): '),
-                            remove_folder]})
+            if mp.current_process().name == 'MainProcess':
+            # initialize the folderstructure and copy the files only from the main process
+                if self.autocontinue is False:
 
-            # initialize the folderstructure
-            _make_folderstructure(specs['save_path'] / specs['dumpfolder'],
-                                  ['results', 'cfg', 'dumps'])
+                    if self.dumppath.exists():
+                        def remove_folder():
+                            shutil.rmtree(
+                                specs['save_path'] / specs['dumpfolder'])
+                            warnings.warn(
+                               f'"{specs["save_path"]/specs["dumpfolder"]}"' +
+                               '\nhas successfully been removed.\n')
 
-            if copy is True:
-                self._copy_cfg_and_modules()
+                        _confirm_input(
+                            msg=(f'the path \n "{self.dumppath}"\n' +
+                                 ' already exists...' +
+                                 '\n- to continue type YES or Y' +
+                                 '\n- to abort type NO or N' +
+                                 '\n- to remove the existing directory and ' +
+                                 'all subdirectories type REMOVE \n \n'),
+                            callbackdict={'REMOVE':[
+                                (f'\n"{self.dumppath}"\n will be removed!' +
+                                 ' are you sure? (y, n): '),
+                                remove_folder]})
+
+                # initialize the folderstructure
+                _make_folderstructure(specs['save_path'] / specs['dumpfolder'],
+                                      ['results', 'cfg', 'dumps'])
+
+
+                if copy is True:
+                    self._copy_cfg_and_modules()
 
             # load the processing-class
             if 'processing_cfg_module' in specs:
@@ -207,10 +218,12 @@ class RTprocess(object):
             else:
                 proc_class_name = 'processing_cfg'
 
+            # load ALL modules to ensure that the importer finds them
             procmodule = self.cfg.get_all_modules(
                 load_copy=copy)[proc_module_name]
-            print(f'processing config class "{proc_class_name}" will be ' +
-                  f'imported from \n"{procmodule}"')
+
+            warnings.warn(f'processing config class "{proc_class_name}"' +
+                          f'  will be imported from \n"{procmodule}"')
 
             self.proc_cls = getattr(procmodule, proc_class_name)(**specs)
 
@@ -239,16 +252,17 @@ class RTprocess(object):
         # from the copied file
             copypath = self.dumppath / 'cfg' / self.cfg.configpath.name
             if (copypath).exists():
-                print(f'the file \n"{copypath / self.cfg.configpath.name}"\n' +
-                      'already exists... NO copying is performed and the ' +
-                      'existing one is used!\n')
+                warnings.warn(
+                    f'the file \n"{copypath / self.cfg.configpath.name}"\n' +
+                    'already exists... NO copying is performed and the ' +
+                    'existing one is used!\n')
             else:
                 if len(self.init_kwargs) == 0:
                     # if no init_kwargs have been provided, copy the
                     # original file
                     shutil.copy(self.cfg.configpath, copypath.parent)
-                    print(f'"{self.cfg.configpath.name}" copied to\n' +
-                          f'"{copypath.parent}"')
+                    warnings.warn(f'"{self.cfg.configpath.name}" copied to\n' +
+                                  f'"{copypath.parent}"')
                 else:
                     # if init_kwargs have been provided, write the updated
                     # config to the folder
@@ -256,9 +270,10 @@ class RTprocess(object):
                               self.cfg.configpath.name, 'w') as file:
                         self.cfg.config.write(file)
 
-                    print(f'the config-file "{self.cfg.configpath}" has been',
-                          ' updated with the init_kwargs and saved to',
-                          f'"{copypath.parent / self.cfg.configpath.name}"')
+                    warnings.warn(
+                        f'the config-file "{self.cfg.configpath}" has been' +
+                        ' updated with the init_kwargs and saved to' +
+                        f'"{copypath.parent / self.cfg.configpath.name}"')
 
                 # remove the config and re-read the config from the copied path
                 del self.cfg
@@ -278,12 +293,61 @@ class RTprocess(object):
                     copypath = self.dumppath / 'cfg' / location.name
 
                     if copypath.exists():
-                        print(f'the file \n"{copypath}" \nalready ' +
-                              'exists ... NO copying is performed ' +
-                              'and the existing one is used!\n')
+                        warnings.warn(f'the file \n"{copypath}" \nalready ' +
+                                      'exists ... NO copying is performed ' +
+                                      'and the existing one is used!\n')
                     else:
                         shutil.copy(location, copypath)
-                        print(f'"{location.name}" copied to \n"{copypath}"')
+                        warnings.warn(
+                            f'"{location.name}" copied to \n"{copypath}"')
+
+    @staticmethod
+    def _increase_cnt(process_cnt, start, err=False):
+        if process_cnt is None:
+            return
+
+        if err is False:
+            p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+            end = default_timer()
+            # increase the total counter
+            p_totcnt.value += 1
+
+            # update the estimate of the mean time needed to process a site
+            p_time.value = (p_meancnt.value * p_time.value
+                            + (end - start)) / (p_meancnt.value + 1)
+            # increase the mean counter
+            p_meancnt.value += 1
+            # get the remaining time and update the progressbar
+            remain = timedelta(
+                seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
+            d,h,m,s = dt_to_hms(remain)
+
+            update_progress(
+                p_totcnt.value, p_max,
+                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
+                finalmsg="finished! " + \
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                progress2=p_totcnt.value - p_meancnt.value)
+        else:
+            p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
+            # only increase the total counter
+            p_totcnt.value += 1
+            if p_meancnt.value == 0:
+                title=f"{'estimating time ...':<28}"
+            else:
+                # get the remaining time and update the progressbar
+                remain = timedelta(
+                    seconds = (p_max - p_totcnt.value
+                               ) / p_ncpu * p_time.value)
+                d,h,m,s = dt_to_hms(remain)
+                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
+
+            update_progress(
+                p_totcnt.value, p_max,
+                title=title,
+                finalmsg="finished! " + \
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                progress2=p_totcnt.value - p_meancnt.value)
 
 
     def _evalfunc(self, reader_arg=None, process_cnt=None):
@@ -306,7 +370,7 @@ class RTprocess(object):
             start = default_timer()
         try:
             # if a reader (and no dataset) is provided, use the reader
-            read_data = self.proc_cls.reader(**reader_arg)
+            read_data = self.proc_cls.reader(reader_arg)
             # check for multiple return values and split them accordingly
             # (any value beyond the first is appended as aux_data)
             if isinstance(read_data, pd.DataFrame):
@@ -332,6 +396,7 @@ class RTprocess(object):
 
             # append reader_arg
             fit.reader_arg = reader_arg
+            self._increase_cnt(process_cnt, start, err=False)
 
             # if a post-processing function is provided, return its output,
             # else return the fit-object directly
@@ -340,54 +405,18 @@ class RTprocess(object):
             else:
                 ret = fit
 
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                end = default_timer()
-                # increase the total counter
-                p_totcnt.value += 1
-
-                # update the estimate of the mean time needed to process a site
-                p_time.value = (p_meancnt.value * p_time.value
-                                + (end - start)) / (p_meancnt.value + 1)
-                # increase the mean counter
-                p_meancnt.value += 1
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
-                d,h,m,s = dt_to_hms(remain)
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                    finalmsg="finished! " + \
-                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
-
             return ret
 
         except Exception as ex:
-            if process_cnt is not None:
-                p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-                # only increase the total counter
-                p_totcnt.value += 1
-                if p_meancnt.value == 0:
-                    title=f"{'estimating time ...':<28}"
-                else:
-                    # get the remaining time and update the progressbar
-                    remain = timedelta(
-                        seconds = (p_max - p_totcnt.value
-                                   ) / p_ncpu * p_time.value)
-                    d,h,m,s = dt_to_hms(remain)
-                    title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-                update_progress(
-                    p_totcnt.value, p_max,
-                    title=title,
-                    finalmsg="finished! " + \
-                        f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                    progress2=p_totcnt.value - p_meancnt.value)
 
             if callable(self.proc_cls.exceptfunc):
-                return self.proc_cls.exceptfunc(ex, reader_arg)
+                ex_ret = self.proc_cls.exceptfunc(ex, reader_arg)
+                if ex_ret is None or ex_ret is False:
+                    self._increase_cnt(process_cnt, start, err=True)
+                else:
+                    self._increase_cnt(process_cnt, start, err=False)
+
+                return ex_ret
             else:
                 raise ex
 
@@ -599,12 +628,21 @@ class RTprocess(object):
         if self.dumppath is not None:
             with open(self.dumppath / 'cfg' / 'model_definition.txt',
                       'w') as file:
-                print(self.parent_fit._model_definition, file=file)
+
+                outtxt = ''
+                if hasattr(self.proc_cls, 'description'):
+                    outtxt += dedent(self.proc_cls.description)
+                    outtxt += '\n\n'
+                    outtxt += '_'*77
+                    outtxt += '\n\n'
+
+                outtxt += self.parent_fit._model_definition
+
+                print(outtxt, file=file)
 
         _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
                              reader_args=reader_args, pool_kwargs=pool_kwargs,
                              preprocess_kwargs=preprocess_kwargs)
-
 
 
 class RTresults(object):
@@ -836,6 +874,4 @@ class RTresults(object):
                                                            val.shape))
                             else:
                                 print(f'{key:<{space + 7}}', val.dimensions)
-
-
 

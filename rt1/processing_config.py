@@ -192,7 +192,7 @@ class rt1_processing_config(object):
         return
 
 
-    def reader(self, **reader_arg):
+    def reader(self, reader_arg):
         '''
         a function that is called for each site to obtain the dataset
         '''
