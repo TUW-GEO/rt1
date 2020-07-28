@@ -225,13 +225,17 @@ class RT1_configparser(object):
                 #assert inp[key].startswith('['), f'{key}  must start with "[" '
                 #assert inp[key].endswith(']'), f'{key} must end with "]" '
                 #val = inp[key][1:-1].replace(' ', '').split(',')
-                if inp[key] is None:
+                if inp[key] == 'None':
                     val = []
                 else:
                     val = inp[key].replace(' ', '').split(',')
                     val = [i for i in val if len(i) > 0]
             else:
-                val = inp[key]
+                # parse None as "real" None
+                if inp[key] == 'None':
+                    val = None
+                else:
+                    val = inp[key]
 
             parsed_dict[key] = val
         return parsed_dict
@@ -432,6 +436,10 @@ class RT1_configparser(object):
 
         process_specs = dict()
         for key, val in inp.items():
+            # parse None as a 'real' None and not as the string 'None'
+            if val == 'None':
+                val = None
+
             if key.startswith('datetime__'):
                 date = dict(zip(['s', 'fmt'],
                         [i.strip() for i in val.split('fmt=')]))

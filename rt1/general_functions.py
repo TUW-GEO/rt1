@@ -276,3 +276,55 @@ def groupby_unsorted(a, key=lambda x: x, sort=False, get=lambda x: x):
         return OrderedDict(sorted(d.items()))
     else:
         return d
+
+
+def interpolate_to_index(data, index, data_index=None, **interp1d_kwargs):
+    '''
+    A wrapper around scipy.interp1d to interpolate a dataset to a given index
+
+    Parameters
+    ----------
+    data : list, array-like, pandas.Series or pandas.DataFrame
+        The input-data as list, array, pandas.Series or pandas.DataFrame
+        If the data is provided as pandas Series or DataFrame, the index
+        must support a method .to_julian_date() to convert the timestamps
+        into numerical values.
+    index : array-like
+        the index to which the dataset should be interpolated.
+        It must support a method .to_julian_date()
+    data_index : TYPE, optional
+        DESCRIPTION. The default is None.
+    **interp1d_kwargs :
+        additional keyword-arguments passed to scipy.interpolate.interp1d
+        the default is (fill_value=None, bounds_error=False)
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    '''
+    from pandas import Series, DataFrame
+    from scipy.interpolate import interp1d
+
+    kwargs = dict(fill_value=None, bounds_error=False)
+    kwargs.update(interp1d_kwargs)
+
+    if isinstance(data, Series):
+    # perform a linear interpolation to the timestamps of the auxiliary data
+        f = interp1d(data.index.to_julian_date(), data.values, **kwargs)
+        x = f(index.to_julian_date())
+        return Series(x, index)
+    elif isinstance(data, DataFrame):
+        f = interp1d(data.index.to_julian_date(),  data.values, axis=0,
+                     **kwargs)
+        x = f(index.to_julian_date())
+        return DataFrame(x, index, columns=data.columns)
+
+    elif isinstance(data, (list, np.ndarray)):
+        assert data_index is not None, ('you must provide "data_index"' +
+                                        'if data is provided as list or array')
+
+        f = interp1d(data_index.to_julian_date(), data.values, **kwargs)
+        x = f(index.to_julian_date())
+        return Series(x, index)

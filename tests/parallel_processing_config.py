@@ -16,7 +16,7 @@ class processing_cfg(rt1_processing_config):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def reader(self, **reader_arg):
+    def reader(self, reader_arg):
 
         self.check_dump_exists(reader_arg)
 
