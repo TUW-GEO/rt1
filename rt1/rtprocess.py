@@ -83,6 +83,77 @@ def _make_folderstructure(save_path, subfolders):
                 mkpath.mkdir(parents=True, exist_ok=True)
 
 
+def _setup_cnt(N_items, ncpu):
+
+    manager = mp.Manager()
+    lock = manager.Lock()
+    p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+    p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+    p_time = manager.Value(ctypes.c_float, 0)
+
+    process_cnt = [p_totcnt, p_meancnt, N_items, p_time, ncpu, lock]
+    return process_cnt
+
+
+def _start_cnt():
+    return default_timer()
+
+
+def _increase_cnt(process_cnt, start, err=False):
+    if process_cnt is None:
+        return
+
+    p_totcnt, p_meancnt, p_max, p_time, p_ncpu, lock = process_cnt
+    # ensure that only one process is allowed to write simultaneously
+    lock.acquire()
+    try:
+        if err is False:
+            end = default_timer()
+            # increase the total counter
+            p_totcnt.value += 1
+
+            # update the estimate of the mean time needed to process a site
+            p_time.value = (p_meancnt.value * p_time.value
+                            + (end - start)) / (p_meancnt.value + 1)
+            # increase the mean counter
+            p_meancnt.value += 1
+            # get the remaining time and update the progressbar
+            remain = timedelta(
+                seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
+            d,h,m,s = dt_to_hms(remain)
+
+            update_progress(
+                p_totcnt.value, p_max,
+                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
+                finalmsg="finished! " + \
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                progress2=p_totcnt.value - p_meancnt.value)
+        else:
+            # only increase the total counter
+            p_totcnt.value += 1
+            if p_meancnt.value == 0:
+                title=f"{'estimating time ...':<28}"
+            else:
+                # get the remaining time and update the progressbar
+                remain = timedelta(
+                    seconds = (p_max - p_totcnt.value
+                               ) / p_ncpu * p_time.value)
+                d,h,m,s = dt_to_hms(remain)
+                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
+
+            update_progress(
+                p_totcnt.value, p_max,
+                title=title,
+                finalmsg="finished! " + \
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                progress2=p_totcnt.value - p_meancnt.value)
+        # release the lock
+        lock.release()
+    except:
+        # release the lock in case an error occured
+        lock.release()
+        pass
+
 
 class RTprocess(object):
     def __init__(self, config_path=None, autocontinue=False,
@@ -301,54 +372,6 @@ class RTprocess(object):
                         warnings.warn(
                             f'"{location.name}" copied to \n"{copypath}"')
 
-    @staticmethod
-    def _increase_cnt(process_cnt, start, err=False):
-        if process_cnt is None:
-            return
-
-        if err is False:
-            p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-            end = default_timer()
-            # increase the total counter
-            p_totcnt.value += 1
-
-            # update the estimate of the mean time needed to process a site
-            p_time.value = (p_meancnt.value * p_time.value
-                            + (end - start)) / (p_meancnt.value + 1)
-            # increase the mean counter
-            p_meancnt.value += 1
-            # get the remaining time and update the progressbar
-            remain = timedelta(
-                seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
-            d,h,m,s = dt_to_hms(remain)
-
-            update_progress(
-                p_totcnt.value, p_max,
-                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                finalmsg="finished! " + \
-                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                progress2=p_totcnt.value - p_meancnt.value)
-        else:
-            p_totcnt, p_meancnt, p_max, p_time, p_ncpu = process_cnt
-            # only increase the total counter
-            p_totcnt.value += 1
-            if p_meancnt.value == 0:
-                title=f"{'estimating time ...':<28}"
-            else:
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds = (p_max - p_totcnt.value
-                               ) / p_ncpu * p_time.value)
-                d,h,m,s = dt_to_hms(remain)
-                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-            update_progress(
-                p_totcnt.value, p_max,
-                title=title,
-                finalmsg="finished! " + \
-                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
-                progress2=p_totcnt.value - p_meancnt.value)
-
 
     def _evalfunc(self, reader_arg=None, process_cnt=None):
         """
@@ -367,7 +390,7 @@ class RTprocess(object):
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
         if process_cnt is not None:
-            start = default_timer()
+            start = _start_cnt()
         try:
             # if a reader (and no dataset) is provided, use the reader
             read_data = self.proc_cls.reader(reader_arg)
@@ -396,7 +419,7 @@ class RTprocess(object):
 
             # append reader_arg
             fit.reader_arg = reader_arg
-            self._increase_cnt(process_cnt, start, err=False)
+            _increase_cnt(process_cnt, start, err=False)
 
             # if a post-processing function is provided, return its output,
             # else return the fit-object directly
@@ -412,9 +435,9 @@ class RTprocess(object):
             if callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, reader_arg)
                 if ex_ret is None or ex_ret is False:
-                    self._increase_cnt(process_cnt, start, err=True)
+                    _increase_cnt(process_cnt, start, err=True)
                 else:
-                    self._increase_cnt(process_cnt, start, err=False)
+                    _increase_cnt(process_cnt, start, err=False)
 
                 return ex_ret
             else:
@@ -529,12 +552,7 @@ class RTprocess(object):
         if print_progress is True:
             # initialize shared values that will be used to track the number
             # of completed processes and the mean time to complete a process
-            manager = mp.Manager()
-            p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-            p_time = manager.Value(ctypes.c_float, 0)
-            process_cnt = [p_totcnt, p_meancnt, len(reader_args),
-                           p_time, ncpu]
+            process_cnt = _setup_cnt(N_items=len(reader_args), ncpu=ncpu)
         else:
             process_cnt = None
 
