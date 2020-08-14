@@ -353,7 +353,7 @@ class Fits(Scatter):
                   'data_weights', '_idx_assigns', '_param_assigns',
                   '_param_assigns_dataset', '_val_assigns', '_order',
                   'interp_vals', '_meandt_interp_assigns',
-                  '_param_dyn_monotonic']
+                  '_param_dyn_monotonic', '_get_excludesymbs']
 
          for i in ['tau', 'omega', 'N']:
              names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -1389,6 +1389,25 @@ class Fits(Scatter):
         return use_res_dict
 
 
+    @lru_cache()
+    def _get_excludesymbs(self):
+        # symbols used to define the functions
+        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
+        vsymb = set(map(str, self.V._func.free_symbols)) - angset
+        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+
+        # a list of all symbols used to define tau, omega and NormBRDF
+        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
+
+        # exclude all keys that are not needed to calculate the fn-coefficients
+        # vsymb and srfsymb must be subtracted in case the same symbol is used
+        # for omega, tau or NormBRDF definition and in the function definiton
+        excludekeys = set(['omega', 'tau', 'NormBRDF', 'bsf',
+                           *[str(i) for i in set(toNlist - vsymb - srfsymb)]])
+
+        return excludekeys
+
+
     def _calc_model(self, R=None, res_dict=None, fixed_dict=None,
                     interp_vals=None, return_components=False,
                     assign=True):
@@ -1472,20 +1491,7 @@ class Fits(Scatter):
         # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
         # and the symbols used to define them must be removed)
 
-        # symbols used to define the functions
-        angset = {'phi_ex', 'phi_0', 'theta_0', 'theta_ex'}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
-
-        # exclude all keys that are not needed to calculate the fn-coefficients
-        # vsymb and srfsymb must be subtracted in case the same symbol is used
-        # for omega, tau or NormBRDF definition and in the function definiton
-        excludekeys = ['omega', 'tau', 'NormBRDF', 'bsf',
-                       *[str(i) for i in set(toNlist - vsymb - srfsymb)]]
-
+        excludekeys = self._get_excludesymbs()
         strparam_fn = {str(key) : val for key, val in res_dict.items()
                        if key not in excludekeys}
 
