@@ -802,7 +802,7 @@ class RTresults(object):
                 return file
 
 
-            def load_fit(self, ID=None):
+            def load_fit(self, ID=None, return_ID=False):
                 '''
                 load one of the available .dump-files located in the "dumps"
                 folder.  (using rt1.rtfits.load() )
@@ -816,6 +816,9 @@ class RTresults(object):
                     The name of the dump-file to be loaded (without the .dump
                     extension). If None, a random file will be selected.
                     The default is None.
+                return_ID : bool, optional
+                    If True, a tuple (fit, ID) is returned, otherwise only
+                    the fit is returned
 
                 Returns
                 -------
@@ -832,7 +835,11 @@ class RTresults(object):
                           'available files')
 
                 fit = load(self._dump_path / (ID + '.dump'))
-                return fit
+
+                if return_ID is True:
+                    return (fit, ID)
+                else:
+                    return fit
 
 
             def load_cfg(self, cfg_name=None):
