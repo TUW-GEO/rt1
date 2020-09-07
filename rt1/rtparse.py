@@ -1,16 +1,17 @@
+"""a module to parse .ini files"""
+
 from configparser import ConfigParser, ExtendedInterpolation
 from datetime import datetime
 from functools import partial
 import sys
 import importlib.util
 from pathlib import Path
-import shutil
 from .rtfits import Fits
 
 
 class RT1_configparser(object):
-    '''
-    A configparser that can be used to fully specify a RT1-processing routine
+    """
+    A configparser that can be used to fully specify a RT1-processing routine.
 
     Extended interpolation is used -> variables can be addressed within the
     config-file by using:
@@ -24,7 +25,7 @@ class RT1_configparser(object):
         >>> var4 = ${class1:var1} bsdf
 
     Methods
-    --------
+    -------
     get_config():
         get a dict of the following structure:
 
@@ -126,9 +127,7 @@ class RT1_configparser(object):
               for example:
 
               >>> list__datetime__dts = [1.1.2018, 1.10.2018] fmt= %d%m%Y
-
-    '''
-
+    """
 
     def __init__(self, configpath, interpolation=ExtendedInterpolation()):
 
@@ -145,14 +144,14 @@ class RT1_configparser(object):
         self.cfg = self.config.read(self.configpath)
 
         # keys that will be converted to int, float or bool
-        self.lsq_parse_props = dict(section = 'least_squares_kwargs',
-                                    int_keys = ['verbose', 'max_nfev'],
-                                    float_keys = ['ftol', 'gtol', 'xtol'])
+        self.lsq_parse_props = dict(section='least_squares_kwargs',
+                                    int_keys=['verbose', 'max_nfev'],
+                                    float_keys=['ftol', 'gtol', 'xtol'])
 
-        self.fitargs_parse_props = dict(section = 'fits_kwargs',
-                                        bool_keys = ['sig0', 'dB', 'int_Q'],
-                                        int_keys= ['verbose'],
-                                        list_keys = [])
+        self.fitargs_parse_props = dict(section='fits_kwargs',
+                                        bool_keys=['sig0', 'dB', 'int_Q'],
+                                        int_keys=['verbose'],
+                                        list_keys=[])
 
         self._check_integrity()
 
@@ -172,7 +171,6 @@ class RT1_configparser(object):
             assert key in self.config['PROCESS_SPECS'], (
                 f'a key "{key}" MUST be provided in the section PROCESS_SPECS')
 
-
         # check if processing-modue is specified
         if 'processing_cfg_module' in self.config['CONFIGFILES']:
             proc_module_name = self.config['CONFIGFILES'
@@ -185,11 +183,9 @@ class RT1_configparser(object):
             + 'CONFIGFILES section... \n(specify "processing_cfg_module" if ' +
             'you want to use a different name for the processing-module key!)')
 
-
-
     def _parse_dict(self, section, int_keys=[], float_keys=[], bool_keys=[],
                     list_keys=[]):
-        '''
+        """
         a function to convert the parsed string values to int, float or bool
         (any additional values will be left unchanged)
 
@@ -208,8 +204,7 @@ class RT1_configparser(object):
         -------
         parsed_dict : dict
             a dict with the converted values.
-
-        '''
+        """
 
         inp = self.config[section]
 
@@ -222,9 +217,6 @@ class RT1_configparser(object):
             elif key in bool_keys:
                 val = inp.getboolean(key)
             elif key in list_keys:
-                #assert inp[key].startswith('['), f'{key}  must start with "[" '
-                #assert inp[key].endswith(']'), f'{key} must end with "]" '
-                #val = inp[key][1:-1].replace(' ', '').split(',')
                 if inp[key] == 'None':
                     val = []
                 else:
@@ -240,7 +232,6 @@ class RT1_configparser(object):
             parsed_dict[key] = val
         return parsed_dict
 
-
     def _parse_V_SRF(self, section):
 
         inp = self.config[section]
@@ -254,13 +245,12 @@ class RT1_configparser(object):
                 # try to convert floats, if it fails return the string
                 try:
                     val = inp.getfloat(key)
-                except:
+                except Exception:
                     val = inp[key]
 
             parsed_dict[key] = val
 
         return parsed_dict
-
 
     def _parse_defdict(self, section):
         inp = self.config[section]
@@ -304,36 +294,50 @@ class RT1_configparser(object):
                         parsed_val += [True]
                     else:
                         parsed_val += [False]
-                except:
+                except Exception:
                     parsed_val += [False]
-
 
             parsed_dict[key] = parsed_val
 
         return parsed_dict
-
 
     def _to_dt(self, s, fmt=None):
         if fmt is None:
             fmt = '%Y-%m-%d %H:%M:%S.%f'
         return datetime.strptime(s, fmt)
 
-
     def get_config(self):
+        """
+        get configuration dictionary
+
+        Returns
+        -------
+        dict
+            a dict with the model-configuration.
+
+        """
         lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
 
         fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
         defdict = self._parse_defdict('defdict')
-        set_V_SRF = dict(V_props = self._parse_V_SRF('RT1_V'),
-                         SRF_props = self._parse_V_SRF('RT1_SRF'))
+        set_V_SRF = dict(V_props=self._parse_V_SRF('RT1_V'),
+                         SRF_props=self._parse_V_SRF('RT1_SRF'))
 
         return dict(lsq_kwargs=lsq_kwargs,
                     defdict=defdict,
                     set_V_SRF=set_V_SRF,
                     fits_kwargs=fits_kwargs)
 
-
     def get_fitobject(self):
+        """
+        get the rt1.rtfits.Fits object
+
+        Returns
+        -------
+        rt1_fits : rt1.rtfits.Fits
+            the used Fits object.
+
+        """
         cfg = self.get_config()
 
         rt1_fits = Fits(dataset=None, defdict=cfg['defdict'],
@@ -342,9 +346,8 @@ class RT1_configparser(object):
 
         return rt1_fits
 
-
     def get_all_modules(self, load_copy=False):
-        '''
+        """
         programmatically import all defined modules from the paths provided
         in the [CONFIGFILES] section
 
@@ -359,7 +362,7 @@ class RT1_configparser(object):
         -------
         processmodules : dict
             a dict with the imported modules
-        '''
+        """
 
         processmodules = dict()
         for key, val in self.config['CONFIGFILES'].items():
@@ -372,9 +375,8 @@ class RT1_configparser(object):
 
         return processmodules
 
-
     def get_module(self, modulename, load_copy=False):
-        '''
+        """
         programmatically import the module 'modulename' as described here:
         https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly
 
@@ -392,14 +394,14 @@ class RT1_configparser(object):
         -------
         module : the imported module
 
-        '''
+        """
 
         assert f'module__{modulename}' in self.config['CONFIGFILES'], (
-            f'the module "{modulename}" is not defined in the [CONFIGFILES]'+
-            ' section of the .ini file     ...available modules are:  '+
-            '  ,  '.join(['"' + i.replace('module__','') + '"'
-                        for i in self.config['CONFIGFILES']
-                        if i.startswith('module__')]))
+            f'the module "{modulename}" is not defined in the [CONFIGFILES]' +
+            ' section of the .ini file     ...available modules are:  ' +
+            '  ,  '.join(['"' + i.replace('module__', '') + '"'
+                          for i in self.config['CONFIGFILES']
+                          if i.startswith('module__')]))
 
         if load_copy is True:
             save_path = Path(
@@ -420,7 +422,6 @@ class RT1_configparser(object):
             modulepath = Path(
                 self.config['CONFIGFILES'][f'module__{modulename}'].strip())
 
-
         spec = importlib.util.spec_from_file_location(name=modulepath.stem,
                                                       location=modulepath)
 
@@ -430,8 +431,16 @@ class RT1_configparser(object):
 
         return foo
 
-
     def get_process_specs(self):
+        """
+        get the process_specs dict
+
+        Returns
+        -------
+        dict
+            the process specs dict.
+
+        """
         inp = self.config['PROCESS_SPECS']
 
         process_specs = dict()
@@ -442,7 +451,7 @@ class RT1_configparser(object):
 
             if key.startswith('datetime__'):
                 date = dict(zip(['s', 'fmt'],
-                        [i.strip() for i in val.split('fmt=')]))
+                                [i.strip() for i in val.split('fmt=')]))
                 process_specs[key[10:]] = self._to_dt(**date)
             elif key.startswith('path__'):
                 # resolve the path in case .. syntax is used to traverse dirs
@@ -487,7 +496,9 @@ class RT1_configparser(object):
                             conffunc = self._to_dt
                         val = spl['val']
                     else:
-                        conffunc = lambda x: x
+                        def conffunc(x):
+                            return x
+
                     process_specs[listkey] = [
                         conffunc(i.strip()) for i in
                         val.strip()[1:-1].split(',')]
