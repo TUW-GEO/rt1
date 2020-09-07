@@ -1,6 +1,4 @@
-'''
-convenient default functions for use with rt1.rtfits.processfunc()
-'''
+"""convenient default functions for use with rt1.rtfits.processfunc()"""
 
 import sys
 import pandas as pd
@@ -10,7 +8,7 @@ from .rtfits import load
 
 
 class rt1_processing_config(object):
-    '''
+    """
     a class that provides convenient default functions that can be used
     with `rt1.rtprocess.RTprocess`.
 
@@ -32,7 +30,6 @@ class rt1_processing_config(object):
 
     Examples
     --------
-
     >>> from rt1.processing_config import rt1_processing_config
     ...
     ... class run_configuration(rt1_processing_config):
@@ -77,7 +74,7 @@ class rt1_processing_config(object):
     ...         if 'lets catch this exception' in ex:
     ...             ...
 
-    '''
+    """
 
     def __init__(self, **kwargs):
 
@@ -85,13 +82,12 @@ class rt1_processing_config(object):
             parentpath = Path(kwargs['save_path']) / kwargs['dumpfolder']
 
             self.rt1_procsesing_dumppath = parentpath / 'dumps'
-            self.rt1_procsesing_respath  = parentpath / 'results'
-            self.rt1_procsesing_cfgpath  = parentpath / 'cfg'
+            self.rt1_procsesing_respath = parentpath / 'results'
+            self.rt1_procsesing_cfgpath = parentpath / 'cfg'
         else:
             self.rt1_procsesing_dumppath = None
             self.rt1_procsesing_respath = None
             self.rt1_procsesing_cfgpath = None
-
 
         # append all arguments passed as kwargs to the class
         # NOTICE: ALL definitions in the 'PROCESS_SPECS' section of the
@@ -100,9 +96,8 @@ class rt1_processing_config(object):
         for key, val in kwargs.items():
             setattr(self, key, val)
 
-
     def get_names_ids(self, reader_arg):
-        '''
+        """
         A function that returns the file-name based on the passed reader_args
 
         - the filenames are generated from the reader-argument `'gpi'`
@@ -120,7 +115,7 @@ class rt1_processing_config(object):
         error_filename : str
             the file-name that will be used to save the error files in case an
             error occured
-        '''
+        """
 
         # the ID used for indexing the processed sites
         feature_id = reader_arg['gpi']
@@ -135,9 +130,8 @@ class rt1_processing_config(object):
                     filename=filename,
                     error_filename=error_filename)
 
-
     def check_dump_exists(self, reader_arg):
-        '''
+        """
         check if a dump of the fit already exists
         (used to determine if the fit has already been evaluated to avoid
          performing the same fit twice)
@@ -152,7 +146,7 @@ class rt1_processing_config(object):
         rt1_file_already_exists
             If a dump-file with the specified filename already exists
             at "save_path / dumpfolder / dumps /"
-        '''
+        """
 
         # check if the file already exists, and if yes, raise a skip-error
         if self.rt1_procsesing_dumppath is not None:
@@ -160,9 +154,8 @@ class rt1_processing_config(object):
             if (self.rt1_procsesing_dumppath / names_ids['filename']).exists():
                 raise Exception('rt1_file_already_exists')
 
-
     def dump_fit_to_file(self, fit, reader_arg, mini=True):
-        '''
+        """
         pickle to Fits-object to  "save_path / dumpfolder / filename.dump"
 
         Parameters
@@ -175,7 +168,7 @@ class rt1_processing_config(object):
             indicator if a mini-dump should be performed or not.
             (see rt1.rtfits.Fits.dump() for details)
             The default is True.
-        '''
+        """
         if self.rt1_procsesing_dumppath is not None:
             names_ids = self.get_names_ids(reader_arg)
 
@@ -184,34 +177,27 @@ class rt1_processing_config(object):
                 fit.dump(self.rt1_procsesing_dumppath / names_ids['filename'],
                          mini=mini)
 
-
     def preprocess(self, **kwargs):
-        '''
-        a function that is called PRIOR to processing that does the following:
-        '''
+        """a function that is called PRIOR to processing"""
         return
 
-
     def reader(self, reader_arg):
-        '''
-        a function that is called for each site to obtain the dataset
-        '''
+        """a function that is called for each site to obtain the dataset"""
         # get the incidence-angles of the data
         inc = [.1, .2, .3, .4, .5]
         # get the sig0-values of the data
-        sig = [-10, -11. -11.45, -13, -15]
+        sig = [-10, -11., -11.45, -13, -15]
         # get the index-values of the data
         index = pd.date_range('1.1.2020', '1.5.2020', freq='D')
 
         data = pd.DataFrame(dict(inc=inc, sig=sig), index=index)
 
-        aux_data = pd.DataFrame(dict(something=[1,2,3,4,5]))
+        aux_data = pd.DataFrame(dict(something=[1, 2, 3, 4, 5]))
 
         return data, aux_data
 
-
     def postprocess(self, fit, reader_arg):
-        '''
+        """
         A function that is called AFTER processing of each site:
 
         - a pandas.DataFrame with the obtained parameters is returned.
@@ -238,7 +224,7 @@ class rt1_processing_config(object):
         df: pandas.DataFrame
             a pandas dataframe containing the fitted parameterss.
 
-        '''
+        """
 
         # get filenames
         names_ids = self.get_names_ids(reader_arg)
@@ -258,9 +244,8 @@ class rt1_processing_config(object):
 
         return df
 
-
     def finaloutput(self, res, format='table'):
-        '''
+        """
         A function that is called after ALL sites are processed:
 
         First, the obtained parameter-dataframes returned by the
@@ -299,7 +284,7 @@ class rt1_processing_config(object):
         -------
         res: pandas.DataFrame
              the concatenated results (ONLY if `"save_path"` is `None`)
-        '''
+        """
 
         # concatenate the results
         res = pd.concat([i for i in res if i is not None], axis=1)
@@ -326,9 +311,8 @@ class rt1_processing_config(object):
         # flush stdout to see output of child-processes
         sys.stdout.flush()
 
-
     def exceptfunc(self, ex, reader_arg):
-        '''
+        """
         a error-catch function that handles the following errors:
 
         - 'rt1_skip'
@@ -351,7 +335,7 @@ class rt1_processing_config(object):
         reader_arg : dict
             the arguments passed to the reader function.
 
-        '''
+        """
 
         names_ids = self.get_names_ids(reader_arg)
         raise_exception = True
