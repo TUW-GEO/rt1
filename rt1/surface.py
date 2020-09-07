@@ -1,6 +1,4 @@
-"""
-Definition of BRDF functions
-"""
+"""Definition of BRDF functions"""
 
 import numpy as np
 import sympy as sp
@@ -9,10 +7,9 @@ from functools import partial, update_wrapper
 from .scatter import Scatter
 from .rtplots import polarplot, hemreflect
 
+
 class Surface(Scatter):
-    """
-    basic class
-    """
+    """basic surface class"""
 
     def __init__(self, **kwargs):
         # set scattering angle generalization-matrix to [1,1,1] if it is not
@@ -22,13 +19,12 @@ class Surface(Scatter):
         self.a = getattr(self, 'a', [1., 1., 1.])
 
         self.NormBRDF = kwargs.pop('NormBRDF', 1.)
-        #quick way for visualizing the functions as polarplot
+        # quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
-        #quick way for visualizing the associated hemispherical reflectance
+        # quick way for visualizing the associated hemispherical reflectance
         self.hemreflect = partial(hemreflect, SRF=self)
         update_wrapper(self.hemreflect, hemreflect)
-
 
     def brdf(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -76,7 +72,7 @@ class Surface(Scatter):
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
         if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                   **{key:.12 for key in param_dict.keys()}
+                                   **{key: .12 for key in param_dict.keys()}
                                    ), np.ndarray):
             brdffunc = np.vectorize(brdffunc)
 
@@ -135,7 +131,7 @@ class Surface(Scatter):
             (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
 
         Returns
-        --------
+        -------
         sympy - expression
             The legendre - expansion of the BRDF for the chosen geometry
 
@@ -256,7 +252,7 @@ class Surface(Scatter):
             order of derivatives (d^n / d_theta^n)
 
         Returns
-        --------
+        -------
         sympy - expression
             The derivative of the BRDF with espect to the excident angle
             t_ex for the chosen geometry
@@ -319,10 +315,10 @@ class Surface(Scatter):
         if geometry[1] == 'f':
             dfunc_dtheta_0 = 0.
         else:
-            func = self._func.xreplace({sp.Symbol('theta_0') : theta_0,
-                                        sp.Symbol('theta_ex') : theta_ex,
-                                        sp.Symbol('phi_0') : phi_0,
-                                        sp.Symbol('phi_ex') : phi_ex,})
+            func = self._func.xreplace({sp.Symbol('theta_0'): theta_0,
+                                        sp.Symbol('theta_ex'): theta_ex,
+                                        sp.Symbol('phi_0'): phi_0,
+                                        sp.Symbol('phi_ex'): phi_ex})
 
             dfunc_dtheta_0 = sp.diff(func, theta_ex, n)
 
@@ -334,17 +330,17 @@ class Surface(Scatter):
                     sp.Symbol('phi_0'),
                     sp.Symbol('phi_ex')) + tuple(param_dict.keys())
 
-
             brdffunc = sp.lambdify(args, dfunc_dtheta_0,
                                    modules=["numpy", "sympy"])
 
-            # in case _func is a constant, lambdify will produce a function with
-            # scalar output which is not suitable for further processing
+            # in case _func is a constant, lambdify will produce a function
+            # with scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
-            # The following query is implemented to ensure correct array-output:
+            # The following query is implemented to ensure correct array-output
             # TODO this is not a proper test !
-            if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                       **{key:.12 for key in param_dict.keys()}
+            if not isinstance(brdffunc(
+                    np.array([.1, .2, .3]), .1, .1, .1,
+                    **{key: .12 for key in param_dict.keys()}
                                        ), np.ndarray):
                 brdffunc = np.vectorize(brdffunc)
 
@@ -352,7 +348,7 @@ class Surface(Scatter):
 
 
 class LinCombSRF(Surface):
-    '''
+    """
     Class to generate linear-combinations of volume-class elements
 
     For details please look at the documentation
@@ -360,7 +356,6 @@ class LinCombSRF(Surface):
 
     Parameters
     ----------
-
     SRFchoices : [ [float, Surface]  ,  [float, Surface]  ,  ...]
                  A list that contains the the individual BRDF's
                  (Surface-objects) and the associated weighting-factors
@@ -371,7 +366,7 @@ class LinCombSRF(Surface):
 
                ATTENTION: NormBRDF-values provided within the SRFchoices-list
                will not be considered!
-    '''
+    """
 
     def __init__(self, SRFchoices=None, **kwargs):
 
@@ -382,22 +377,18 @@ class LinCombSRF(Surface):
         self._set_legexpansion()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
 
         self._func = self._SRFcombiner()._func
 
     def _set_legexpansion(self):
-        '''
-        set legexpansion to the combined legexpansion
-        '''
+        """set legexpansion to the combined legexpansion"""
 
         self.ncoefs = self._SRFcombiner().ncoefs
         self.legexpansion = self._SRFcombiner().legexpansion
 
     def _SRFcombiner(self):
-        '''
+        """
         Returns a Surface-class element based on an input-array of
         Surface-class elements.
         The array must be shaped in the form:
@@ -412,7 +403,7 @@ class LinCombSRF(Surface):
                    a-parameter of the generalized scattering angle! This does
                    not affect any calculations, since the evaluation is
                    only based on the use of the .legexpansion()-function.
-        '''
+        """
 
         class BRDFfunction(Surface):
             """
@@ -426,9 +417,7 @@ class LinCombSRF(Surface):
                 self._set_legcoefficients()
 
             def _set_function(self):
-                """
-                define phase function as sympy object for later evaluation
-                """
+                """def phase function as sympy object for later evaluation"""
                 self._func = 0.
 
             def _set_legcoefficients(self):
@@ -491,7 +480,7 @@ class Isotropic(Surface):
     Define an isotropic surface brdf
 
     Parameters
-    -----------
+    ----------
     NormBRDF : float, optional (default = 1.)
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
@@ -508,9 +497,7 @@ class Isotropic(Surface):
         self.legcoefs = (1. / sp.pi) * sp.KroneckerDelta(0, n)
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         self._func = 1. / sp.pi
 
 
@@ -519,7 +506,7 @@ class CosineLobe(Surface):
     Define a (possibly generalized) cosine-lobe of power i.
 
     Parameters
-    -----------
+    ----------
     i : scalar(int)
         Power of the cosine lobe, i.e. cos(x)^i
 
@@ -571,9 +558,7 @@ class CosineLobe(Surface):
                                                   sp.Rational(1, 2))))
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -598,7 +583,7 @@ class HenyeyGreenstein(Surface):
     approximation function.
 
     Parameters
-    -----------
+    ----------
     t : scalar(float)
         Asymmetry parameter of the Henyey-Greenstein function
 
@@ -632,9 +617,7 @@ class HenyeyGreenstein(Surface):
         self._set_legcoefficients()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -651,17 +634,13 @@ class HenyeyGreenstein(Surface):
         self.legcoefs = 1. * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
 
 
-
-
-
-
 class HG_nadirnorm(Surface):
     """
     Define a HenyeyGreenstein scattering function for use as BRDF
     approximation function.
 
     Parameters
-    -----------
+    ----------
     t : scalar(float)
         Asymmetry parameter of the Henyey-Greenstein function
 
@@ -695,9 +674,7 @@ class HG_nadirnorm(Surface):
         self._set_legcoefficients()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')

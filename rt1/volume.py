@@ -1,6 +1,4 @@
-"""
-Definition of volume phase scattering functions
-"""
+"""Definition of volume phase scattering functions"""
 
 import numpy as np
 import sympy as sp
@@ -10,6 +8,8 @@ from .rtplots import polarplot
 
 
 class Volume(Scatter):
+    """basic volume class"""
+
     def __init__(self, **kwargs):
         self.omega = kwargs.pop('omega', None)
         self.tau = kwargs.pop('tau', None)
@@ -20,10 +20,9 @@ class Volume(Scatter):
         # phase-functions
         self.a = getattr(self, 'a', [-1., 1., 1.])
 
-        #add a quick way for visualizing the functions as polarplot
+        # add a quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
-
 
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -70,14 +69,14 @@ class Volume(Scatter):
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
         if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                       **{key:.12 for key in param_dict.keys()}
-                                       ), np.ndarray):
+                                **{key: .12 for key in param_dict.keys()}
+                                ), np.ndarray):
             pfunc = np.vectorize(pfunc)
 
         return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
     def p_theta_diff(self, t_0, t_ex, p_0, p_ex, geometry,
-                param_dict={}, return_symbolic=False, n=1):
+                     param_dict={}, return_symbolic=False, n=1):
         """
         Calculation of the derivative of p with respect to
         the scattering-angles t_ex
@@ -125,7 +124,7 @@ class Volume(Scatter):
             order of derivatives (d^n / d_theta^n)
 
         Returns
-        --------
+        -------
         sympy - expression
             The derivative of the BRDF with espect to the excident angle
             t_ex for the chosen geometry
@@ -188,10 +187,10 @@ class Volume(Scatter):
         if geometry[1] == 'f':
             dfunc_dtheta_0 = 0.
         else:
-            func = self._func.xreplace({sp.Symbol('theta_0') : theta_0,
-                                        sp.Symbol('theta_ex') : theta_ex,
-                                        sp.Symbol('phi_0') : phi_0,
-                                        sp.Symbol('phi_ex') : phi_ex,})
+            func = self._func.xreplace({sp.Symbol('theta_0'): theta_0,
+                                        sp.Symbol('theta_ex'): theta_ex,
+                                        sp.Symbol('phi_0'): phi_0,
+                                        sp.Symbol('phi_ex'): phi_ex})
 
             dfunc_dtheta_0 = sp.diff(func, theta_ex, n)
 
@@ -203,25 +202,22 @@ class Volume(Scatter):
                     sp.Symbol('phi_0'),
                     sp.Symbol('phi_ex')) + tuple(param_dict.keys())
 
-
             pfunc = sp.lambdify(args, dfunc_dtheta_0,
                                 modules=["numpy", "sympy"])
 
-            # in case _func is a constant, lambdify will produce a function with
-            # scalar output which is not suitable for further processing
+            # in case _func is a constant, lambdify will produce a function
+            # with scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
-            # The following query is implemented to ensure correct array-output:
+            # The following query is implemented to ensure correct array-output
             # TODO this is not a proper test !
-            if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                       **{key:.12 for key in param_dict.keys()}
-                                       ), np.ndarray):
+            if not isinstance(pfunc(
+                    np.array([.1, .2, .3]), .1, .1, .1,
+                    **{key: .12 for key in param_dict.keys()}), np.ndarray):
                 pfunc = np.vectorize(pfunc)
 
             return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
-
     def legexpansion(self, t_0, t_ex, p_0, p_ex, geometry):
-        assert self.ncoefs > 0
         """
         Definition of the legendre-expansion of the
         volume-scattering phase-function
@@ -275,12 +271,14 @@ class Volume(Scatter):
             (http://rt1.readthedocs.io/en/latest/model_specification.html#evaluation-geometries)
 
         Returns
-        --------
+        -------
         sympy-expression
             The legendre-expansion of the volume-scattering phase-function
             for the chosen geometry
 
         """
+        assert self.ncoefs > 0
+
         theta_s = sp.Symbol('theta_s')
         phi_s = sp.Symbol('phi_s')
 
@@ -349,7 +347,7 @@ class Volume(Scatter):
 
 
 class LinCombV(Volume):
-    '''
+    """
     Class to generate linear-combinations of volume-class elements
 
     For details please look at the documentation
@@ -377,7 +375,7 @@ class LinCombV(Volume):
                a list that contains the the individual phase-functions
                (Volume-objects) and the associated weighting-factors
                (floats) of the linear-combination.
-    '''
+    """
 
     def __init__(self, Vchoices=None, **kwargs):
         super(LinCombV, self).__init__(**kwargs)
@@ -387,22 +385,18 @@ class LinCombV(Volume):
         self._set_legexpansion()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
 
         self._func = self._Vcombiner()._func
 
     def _set_legexpansion(self):
-        '''
-        set legexpansion to the combined legexpansion
-        '''
+        """set legexpansion to the combined legexpansion"""
 
         self.ncoefs = self._Vcombiner().ncoefs
         self.legexpansion = self._Vcombiner().legexpansion
 
     def _Vcombiner(self):
-        '''
+        """
         Returns a Volume-class element based on an input-array of Volume-class
         elements. The array must be shaped in the form:
             Vchoices = [  [ weighting-factor   ,   Volume-class element ]  ,
@@ -412,7 +406,8 @@ class LinCombV(Volume):
         In order to keep the normalization of the phase-functions correct,
         the sum of the weighting factors must equate to 1!
 
-        ATTENTION:
+        Attention
+        ---------
             the .legexpansion()-function of the combined volume-class
             element is no longer related to its legcoefs (which are set to 0.)
             since the individual legexpansions of the combined volume-class
@@ -420,7 +415,7 @@ class LinCombV(Volume):
             of the generalized scattering angle! This does not affect any
             calculations, since the evaluation is exclusively based on the
             use of the .legexpansion()-function.
-        '''
+        """
 
         class Phasefunction(Volume):
             """
@@ -434,9 +429,7 @@ class LinCombV(Volume):
                 self._set_legcoefficients()
 
             def _set_function(self):
-                """
-                define phase function as sympy object for later evaluation
-                """
+                """def phase function as sympy object for later evaluation"""
 
                 self._func = 0.
 
@@ -506,7 +499,7 @@ class Rayleigh(Volume):
     Define a Rayleigh scattering function
 
     Parameters
-    -----------
+    ----------
     tau : scalar(float)
           Optical depth
 
@@ -528,9 +521,7 @@ class Rayleigh(Volume):
         self._set_legcoefficients()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -559,7 +550,7 @@ class HenyeyGreenstein(Volume):
     Define a HenyeyGreenstein scattering function
 
     Parameters
-    -----------
+    ----------
     tau : scalar(float)
           Optical depth
 
@@ -594,9 +585,7 @@ class HenyeyGreenstein(Volume):
         self._set_legcoefficients()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -624,7 +613,7 @@ class HGRayleigh(Volume):
         Appl. Opt., 45(28):7475-7479, Oct 2006. doi: 10.1364/AO.45.'
 
     Parameters
-    -----------
+    ----------
     tau : scalar(float)
           Optical depth
 
@@ -661,9 +650,7 @@ class HGRayleigh(Volume):
         self._set_legcoefficients()
 
     def _set_function(self):
-        """
-        define phase function as sympy object for later evaluation
-        """
+        """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol('theta_0')
         theta_ex = sp.Symbol('theta_ex')
         phi_0 = sp.Symbol('phi_0')
@@ -694,4 +681,3 @@ class HGRayleigh(Volume):
               (n + 1.) ** 2. / (2. * n + 3.) * self.t ** n +
               (5. * n ** 2. - 1.) / (2. * n - 1.) * self.t ** n), True)
         )
-
