@@ -21,13 +21,13 @@ from .rtfits import load
 try:
     import xarray as xar
 except:
-    print('xarray could not imported,',
+    print('xarray could not be imported,',
           'NetCDF-features of RT1_results will not work!')
 
 try:
     from netCDF4 import Dataset
 except:
-    print('netCDF4.Dataset could not imported,',
+    print('netCDF4.Dataset could be not imported,',
           'some NetCDF-features of RT1_results will not work!')
 
 
@@ -895,7 +895,7 @@ class RTresults(object):
                         space = len(max(ncfile.variables.keys(), key=len))
                         for key, val in ncfile.variables.items():
                             if key in ncfile.dimensions.keys():
-                                print(f'dimension: ', *zip(val.dimensions,
+                                print('dimension: ', *zip(val.dimensions,
                                                            val.shape))
                             else:
                                 print(f'{key:<{space + 7}}', val.dimensions)
