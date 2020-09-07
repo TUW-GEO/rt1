@@ -20,13 +20,13 @@ from .rtfits import load
 
 try:
     import xarray as xar
-except:
+except ModuleNotFoundError:
     print('xarray could not be imported,',
           'NetCDF-features of RT1_results will not work!')
 
 try:
     from netCDF4 import Dataset
-except:
+except ModuleNotFoundError:
     print('netCDF4.Dataset could be not imported,',
           'some NetCDF-features of RT1_results will not work!')
 
@@ -76,7 +76,7 @@ def _make_folderstructure(save_path, subfolders):
             save_path.mkdir(parents=True, exist_ok=True)
 
         for folder in subfolders:
-        # generate subfolder if it does not exist
+            # generate subfolder if it does not exist
             mkpath = save_path / folder
             if not mkpath.exists():
                 print(f'"{mkpath}"\ndoes not exist... creating directory')
@@ -119,37 +119,39 @@ def _increase_cnt(process_cnt, start, err=False):
             p_meancnt.value += 1
             # get the remaining time and update the progressbar
             remain = timedelta(
-                seconds = (p_max - p_totcnt.value) / p_ncpu * p_time.value)
-            d,h,m,s = dt_to_hms(remain)
+                seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value)
+            d, h, m, s = dt_to_hms(remain)
 
             update_progress(
                 p_totcnt.value, p_max,
                 title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                finalmsg="finished! " + \
-                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                finalmsg=(
+                    "finished! " +
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
         else:
             # only increase the total counter
             p_totcnt.value += 1
             if p_meancnt.value == 0:
-                title=f"{'estimating time ...':<28}"
+                title = f"{'estimating time ...':<28}"
             else:
                 # get the remaining time and update the progressbar
                 remain = timedelta(
-                    seconds = (p_max - p_totcnt.value
-                               ) / p_ncpu * p_time.value)
-                d,h,m,s = dt_to_hms(remain)
-                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
+                    seconds=(p_max - p_totcnt.value
+                             ) / p_ncpu * p_time.value)
+                d, h, m, s = dt_to_hms(remain)
+                title = f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
 
             update_progress(
                 p_totcnt.value, p_max,
                 title=title,
-                finalmsg="finished! " + \
-                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)",
+                finalmsg=(
+                    "finished! " +
+                    f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
         # release the lock
         lock.release()
-    except:
+    except Exception:
         # release the lock in case an error occured
         lock.release()
         pass
@@ -209,7 +211,6 @@ class RTprocess(object):
                 'the values of "init_kwargs" MUST be strings !')
             self.init_kwargs = init_kwargs
 
-
     def setup(self, copy=True):
         '''
         perform necessary tasks to run a processing-routine
@@ -245,9 +246,8 @@ class RTprocess(object):
 
             self.dumppath = specs['save_path'] / specs['dumpfolder']
 
-
             if mp.current_process().name == 'MainProcess':
-            # initialize the folderstructure and copy the files only from the main process
+                # init folderstructure and copy files only from main process
                 if self.autocontinue is False:
 
                     if self.dumppath.exists():
@@ -265,7 +265,7 @@ class RTprocess(object):
                                  '\n- to abort type NO or N' +
                                  '\n- to remove the existing directory and ' +
                                  'all subdirectories type REMOVE \n \n'),
-                            callbackdict={'REMOVE':[
+                            callbackdict={'REMOVE': [
                                 (f'\n"{self.dumppath}"\n will be removed!' +
                                  ' are you sure? (y, n): '),
                                 remove_folder]})
@@ -273,7 +273,6 @@ class RTprocess(object):
                 # initialize the folderstructure
                 _make_folderstructure(specs['save_path'] / specs['dumpfolder'],
                                       ['results', 'cfg', 'dumps'])
-
 
                 if copy is True:
                     self._copy_cfg_and_modules()
@@ -306,7 +305,6 @@ class RTprocess(object):
         else:
             self.dumppath = None
 
-
         # check if all necessary functions are defined in the  processing-class
         for key in ['preprocess', 'reader', 'postprocess', 'finaloutput',
                     'exceptfunc']:
@@ -316,62 +314,58 @@ class RTprocess(object):
         assert self.parent_fit is not None, (
             'you MUST provide a valid config-file or a parent_fit-object!')
 
-
-
     def _copy_cfg_and_modules(self):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
-            copypath = self.dumppath / 'cfg' / self.cfg.configpath.name
-            if (copypath).exists():
-                warnings.warn(
-                    f'the file \n"{copypath / self.cfg.configpath.name}"\n' +
-                    'already exists... NO copying is performed and the ' +
-                    'existing one is used!\n')
+        copypath = self.dumppath / 'cfg' / self.cfg.configpath.name
+        if (copypath).exists():
+            warnings.warn(
+                f'the file \n"{copypath / self.cfg.configpath.name}"\n' +
+                'already exists... NO copying is performed and the ' +
+                'existing one is used!\n')
+        else:
+            if len(self.init_kwargs) == 0:
+                # if no init_kwargs have been provided, copy the
+                # original file
+                shutil.copy(self.cfg.configpath, copypath.parent)
+                warnings.warn(f'"{self.cfg.configpath.name}" copied to\n' +
+                              f'"{copypath.parent}"')
             else:
-                if len(self.init_kwargs) == 0:
-                    # if no init_kwargs have been provided, copy the
-                    # original file
-                    shutil.copy(self.cfg.configpath, copypath.parent)
-                    warnings.warn(f'"{self.cfg.configpath.name}" copied to\n' +
-                                  f'"{copypath.parent}"')
+                # if init_kwargs have been provided, write the updated
+                # config to the folder
+                with open(copypath.parent /
+                          self.cfg.configpath.name, 'w') as file:
+                    self.cfg.config.write(file)
+
+                warnings.warn(
+                    f'the config-file "{self.cfg.configpath}" has been' +
+                    ' updated with the init_kwargs and saved to' +
+                    f'"{copypath.parent / self.cfg.configpath.name}"')
+
+            # remove the config and re-read the config from the copied path
+            del self.cfg
+            self.cfg = RT1_configparser(copypath)
+
+        # copy modules
+        for key, val in self.cfg.config['CONFIGFILES'].items():
+            if key.startswith('module__'):
+                modulename = key[8:]
+
+                module_path = self.cfg.config[
+                    'CONFIGFILES'][f'module__{modulename}']
+
+                location = Path(module_path.strip())
+
+                copypath = self.dumppath / 'cfg' / location.name
+
+                if copypath.exists():
+                    warnings.warn(f'the file \n"{copypath}" \nalready ' +
+                                  'exists ... NO copying is performed ' +
+                                  'and the existing one is used!\n')
                 else:
-                    # if init_kwargs have been provided, write the updated
-                    # config to the folder
-                    with open(copypath.parent /
-                              self.cfg.configpath.name, 'w') as file:
-                        self.cfg.config.write(file)
-
+                    shutil.copy(location, copypath)
                     warnings.warn(
-                        f'the config-file "{self.cfg.configpath}" has been' +
-                        ' updated with the init_kwargs and saved to' +
-                        f'"{copypath.parent / self.cfg.configpath.name}"')
-
-                # remove the config and re-read the config from the copied path
-                del self.cfg
-                self.cfg = RT1_configparser(copypath)
-
-
-            # copy modules
-            for key, val in self.cfg.config['CONFIGFILES'].items():
-                if key.startswith('module__'):
-                    modulename = key[8:]
-
-                    module_path = self.cfg.config[
-                        'CONFIGFILES'][f'module__{modulename}']
-
-                    location = Path(module_path.strip())
-
-                    copypath = self.dumppath / 'cfg' / location.name
-
-                    if copypath.exists():
-                        warnings.warn(f'the file \n"{copypath}" \nalready ' +
-                                      'exists ... NO copying is performed ' +
-                                      'and the existing one is used!\n')
-                    else:
-                        shutil.copy(location, copypath)
-                        warnings.warn(
-                            f'"{location.name}" copied to \n"{copypath}"')
-
+                        f'"{location.name}" copied to \n"{copypath}"')
 
     def _evalfunc(self, reader_arg=None, process_cnt=None):
         """
@@ -403,7 +397,7 @@ class RTprocess(object):
                   and isinstance(read_data[0], pd.DataFrame)):
                 if len(read_data) == 2:
                     dataset, aux_data = read_data
-                elif  len(read_data) > 2:
+                elif len(read_data) > 2:
                     dataset = read_data[0]
                     aux_data = read_data[1:]
             else:
@@ -442,7 +436,6 @@ class RTprocess(object):
                 return ex_ret
             else:
                 raise ex
-
 
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
@@ -533,21 +526,20 @@ class RTprocess(object):
             reader_args = setupdict['reader_args']
         else:
             assert 'reader_args' not in setupdict, (
-            '"reader_args" is provided as argument to processfunc() ' +
-            'AND via the return-dict of the preprocess() function!')
+                '"reader_args" is provided as argument to processfunc() ' +
+                'AND via the return-dict of the preprocess() function!')
 
         print(f'processing {len(reader_args)} features')
-
 
         if 'pool_kwargs' in setupdict:
             pool_kwargs = setupdict['pool_kwargs']
 
-        if pool_kwargs is None: pool_kwargs = dict()
+        if pool_kwargs is None:
+            pool_kwargs = dict()
 
         if self.parent_fit.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
             self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
-
 
         if print_progress is True:
             # initialize shared values that will be used to track the number
@@ -585,7 +577,6 @@ class RTprocess(object):
             return self.proc_cls.finaloutput(res)
         else:
             return res
-
 
     def run_processing(self, ncpu=1, copy=True, print_progress=True,
                        reader_args=None, pool_kwargs=None,
@@ -738,165 +729,158 @@ class RTresults(object):
                             self._RT1_fitresult(p.stem, p))
 
     class _RT1_fitresult(object):
-            def __init__(self, name, path):
-                self.name = name
-                self.path = Path(path)
-                self._result_path = self.path / 'results'
-                self._dump_path = self.path / 'dumps'
-                self._cfg_path = self.path / 'cfg'
+        def __init__(self, name, path):
+            self.name = name
+            self.path = Path(path)
+            self._result_path = self.path / 'results'
+            self._dump_path = self.path / 'dumps'
+            self._cfg_path = self.path / 'cfg'
+
+        def _get_results(self, ending):
+            assert self._result_path.exists(), f'{self._result_path}' + \
+                ' does not exist'
+
+            results = {i.stem: i for i in self._result_path.iterdir()
+                       if i.suffix == ending}
+
+            assert len(results) > 0, f'there is no "{ending}" file' + \
+                f' in "{self._result_path}"'
+
+            return results
+
+        def load_nc(self, result_name=None, use_xarray=True):
+            '''
+            open a NetCDF file stored in the "results"-folder
+
+            can be used as context-manager, e.g.:
+
+                >>> with result.load_nc() as ncfile:
+                ...     --- do something ---
 
 
-            def _get_results(self, ending):
-                assert self._result_path.exists(), f'{self._result_path}' + \
-                    ' does not exist'
+            Parameters
+            ----------
+            result_name : str, optional
+                The name of the NetCDF-file (without a .nc extension).
+                If None, and only 1 file is available, the available file
+                will be laoded. The default is None.
+            use_xarray : bool, optional
+                Indicator if NetCDF4 or xarray should be used to
+                laod the NetCDF file. The default is True.
 
-                results = {i.stem : i for i in self._result_path.iterdir()
-                           if i.suffix == ending}
+            Returns
+            -------
+            file : a file-handler for the NetCDF file
+                the return of either xarray.Dataset or NetCDF4.Dataset
+            '''
+            results = self._get_results('.nc')
 
-                assert len(results) > 0, f'there is no "{ending}" file' + \
-                    f' in "{self._result_path}"'
+            assert len(results) == 1 or result_name in results, (
+                 ('there is more than 1 result... ' +
+                  'provide "result_name":\n    - ' +
+                  '\n    - '.join(results.keys())))
 
-                return results
+            if result_name is None:
+                result_name = list(results.keys())[0]
 
+            # print(f'loading nc-file for {result_name}')
+            if use_xarray is True:
+                file = xar.open_dataset(results[result_name])
+            else:
+                file = Dataset(results[result_name])
+            return file
 
-            def load_nc(self, result_name=None, use_xarray=True):
-                '''
-                open a NetCDF file stored in the "results"-folder
+        def load_fit(self, ID=None, return_ID=False):
+            '''
+            load one of the available .dump-files located in the "dumps"
+            folder.  (using rt1.rtfits.load() )
 
-                can be used as context-manager, e.g.:
+            Notice: the dump-files are generated using cloudpickle.dump()
+            and might be platform and environment-specific!
 
-                    >>> with result.load_nc() as ncfile:
-                    ...     --- do something ---
+            Parameters
+            ----------
+            ID : str, optional
+                The name of the dump-file to be loaded (without the .dump
+                extension). If None, a random file will be selected.
+                The default is None.
+            return_ID : bool, optional
+                If True, a tuple (fit, ID) is returned, otherwise only
+                the fit is returned
 
+            Returns
+            -------
+            fit : rt1.rtfits.Fits
+                the loaded rt1.rtfits.Fits result.
+            '''
 
-                Parameters
-                ----------
-                result_name : str, optional
-                    The name of the NetCDF-file (without a .nc extension).
-                    If None, and only 1 file is available, the available file
-                    will be laoded. The default is None.
-                use_xarray : bool, optional
-                    Indicator if NetCDF4 or xarray should be used to
-                    laod the NetCDF file. The default is True.
+            if ID is None:
+                allfiles = list(self.dump_files)
+                Nid = np_randint(0, len(allfiles) - 1)
 
-                Returns
-                -------
-                file : a file-handler for the NetCDF file
-                    the return of either xarray.Dataset or NetCDF4.Dataset
-                '''
-                results = self._get_results('.nc')
+                ID = allfiles[Nid].stem
+                print(f'loading random ID ({ID}) from {len(allfiles)} ' +
+                      'available files')
 
-                assert len(results) == 1 or result_name in results, (
-                     ('there is more than 1 result... ' +
-                      'provide "result_name":\n    - ' +
-                      '\n    - '.join(results.keys())))
+            fit = load(self._dump_path / (ID + '.dump'))
 
-                if result_name is None:
-                     result_name = list(results.keys())[0]
+            if return_ID is True:
+                return (fit, ID)
+            else:
+                return fit
 
-                #print(f'loading nc-file for {result_name}')
-                if use_xarray is True:
-                    file = xar.open_dataset(results[result_name])
-                else:
-                    file = Dataset(results[result_name])
-                return file
+        def load_cfg(self, cfg_name=None):
+            '''
+            load the configfile stored in the "cfg" folder
 
+            Parameters
+            ----------
+            cfg_name : str, optional
+                The name of the config-file to laod in case more than 1
+                ".ini"-files are found. The default is None.
 
-            def load_fit(self, ID=None, return_ID=False):
-                '''
-                load one of the available .dump-files located in the "dumps"
-                folder.  (using rt1.rtfits.load() )
+            Returns
+            -------
+            cfg : rt1.rtparse.RT1_configparser
+                a configparser instance of the selected configuration.
 
-                Notice: the dump-files are generated using cloudpickle.dump()
-                and might be platform and environment-specific!
+            '''
+            cfgfiles = list(self._cfg_path.glob('*.ini'))
+            assert len(cfgfiles) > 0, 'NO ".ini"-file found!'
 
-                Parameters
-                ----------
-                ID : str, optional
-                    The name of the dump-file to be loaded (without the .dump
-                    extension). If None, a random file will be selected.
-                    The default is None.
-                return_ID : bool, optional
-                    If True, a tuple (fit, ID) is returned, otherwise only
-                    the fit is returned
+            if cfg_name is None:
+                assert len(cfgfiles) == 1, (
+                    'there is more than 1 .ini file in the cfg folder...' +
+                    'provide a "cfg_name":\n' +
+                    '    - ' + '\n    - '.join([i.name for i in cfgfiles]))
 
-                Returns
-                -------
-                fit : rt1.rtfits.Fits
-                    the loaded rt1.rtfits.Fits result.
-                '''
+                cfg_name = cfgfiles[0].name
 
-                if ID is None:
-                    allfiles = list(self.dump_files)
-                    Nid = np_randint(0, len(allfiles) -1)
+            cfg = RT1_configparser(self._cfg_path / cfg_name)
+            return cfg
 
-                    ID = allfiles[Nid].stem
-                    print(f'loading random ID ({ID}) from {len(allfiles)} ' +
-                          'available files')
+        @property
+        def dump_files(self):
+            '''
+            a generator of the available dump-files
+            '''
+            return (i for i in self._dump_path.iterdir()
+                    if i.suffix == '.dump' and 'error' not in i.stem)
 
-                fit = load(self._dump_path / (ID + '.dump'))
+        @property
+        def NetCDF_variables(self):
+            '''
+            print all available NetCDF-files and their variables
+            '''
+            results = self._get_results('.nc')
 
-                if return_ID is True:
-                    return (fit, ID)
-                else:
-                    return fit
-
-
-            def load_cfg(self, cfg_name=None):
-                '''
-                load the configfile stored in the "cfg" folder
-
-                Parameters
-                ----------
-                cfg_name : str, optional
-                    The name of the config-file to laod in case more than 1
-                    ".ini"-files are found. The default is None.
-
-                Returns
-                -------
-                cfg : rt1.rtparse.RT1_configparser
-                    a configparser instance of the selected configuration.
-
-                '''
-                cfgfiles = list(self._cfg_path.glob('*.ini'))
-                assert len(cfgfiles) > 0, 'NO ".ini"-file found!'
-
-                if cfg_name is None:
-                    assert len(cfgfiles) == 1, (
-                        'there is more than 1 .ini file in the cfg folder...' +
-                        'provide a "cfg_name":\n' +
-                        '    - ' + '\n    - '.join([i.name for i in cfgfiles]))
-
-                    cfg_name = cfgfiles[0].name
-
-                cfg = RT1_configparser(self._cfg_path / cfg_name)
-                return cfg
-
-
-            @property
-            def dump_files(self):
-                '''
-                a generator of the available dump-files
-                '''
-                return (i for i in self._dump_path.iterdir()
-                        if i.suffix == '.dump' and 'error' not in i.stem)
-
-
-            @property
-            def NetCDF_variables(self):
-                '''
-                print all available NetCDF-files and their variables
-                '''
-                results = self._get_results('.nc')
-
-                for r in results:
-                    print('\nresult: ', r)
-                    with self.load_nc(r, use_xarray=False) as ncfile:
-                        space = len(max(ncfile.variables.keys(), key=len))
-                        for key, val in ncfile.variables.items():
-                            if key in ncfile.dimensions.keys():
-                                print('dimension: ', *zip(val.dimensions,
-                                                           val.shape))
-                            else:
-                                print(f'{key:<{space + 7}}', val.dimensions)
-
+            for r in results:
+                print('\nresult: ', r)
+                with self.load_nc(r, use_xarray=False) as ncfile:
+                    space = len(max(ncfile.variables.keys(), key=len))
+                    for key, val in ncfile.variables.items():
+                        if key in ncfile.dimensions.keys():
+                            print('dimension: ', *zip(val.dimensions,
+                                                      val.shape))
+                        else:
+                            print(f'{key:<{space + 7}}', val.dimensions)
