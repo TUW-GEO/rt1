@@ -5,6 +5,7 @@ from functools import lru_cache
 from itertools import chain, repeat, permutations
 from operator import itemgetter
 from decimal import Decimal
+from functools import wraps
 
 from .general_functions import groupby_unsorted
 
@@ -22,7 +23,7 @@ class _metric_keys(object):
         self._datakeys = fit.dataset.select_dtypes(include='number').keys()
         self._modelkeys = ['tot', 'surf', 'vol']
         self._retrievalkeys = fit.res_dict.keys()
-        
+
         if auxdat is not None:
             self._auxkeys = auxdat.keys()
         else:
@@ -577,6 +578,4 @@ class RTmetrics(object):
                 entries += (' ' + '--' * depth + f'{metric}|'.ljust(29 - depth_offset) + '|\n') 
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
                 
-        return entries
-    
-    
+        return entries   
