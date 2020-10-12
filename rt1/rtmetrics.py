@@ -5,12 +5,12 @@ from functools import lru_cache
 from itertools import chain, repeat, permutations
 from operator import itemgetter
 from decimal import Decimal
-from functools import wraps
 
 from .general_functions import groupby_unsorted
 
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 
 class _metric_keys(object):
     """
@@ -70,8 +70,7 @@ class _metric_keys(object):
                               self._auxkeys))
 
         if len(all_keys) != len(set(all_keys)):
-            print('warning, the following keys are present in multiple ' +
-                  'sources!')
+            warnmsg = 'the following keys are present in multiple sources!\n'
 
         suffix = chain(repeat('dataset', len(self._datakeys)),
                        repeat('calc_model',
@@ -86,7 +85,8 @@ class _metric_keys(object):
         src = []
         for key, val in grps.items():
             if len(val) > 1:
-                print(f'"{key}": '.ljust(15) + '[' + ', '.join(val) + ']')
+                warnmsg += f'"{key}": '.ljust(15) + '[' + ', '.join(val) + ']'
+                warnmsg += '\n'
                 for suffix in val:
                     new_all_keys += [key + '__' + suffix]
                     src += [suffix]
@@ -94,6 +94,7 @@ class _metric_keys(object):
                 new_all_keys += [key]
                 src += val
 
+        warnings.warn(warnmsg)
         self._all_keys = dict(zip(new_all_keys, src))
 
 
@@ -161,31 +162,31 @@ class _RTmetrics1(object):
     @property
     def spearman(self):
         return RTmetrics.spearman(self.d1, self.d2)
-    
+
     @property
     def linregress(self):
         return RTmetrics.linregress(self.d1, self.d2)
-    
+
     @property
     def rmsd(self):
         return RTmetrics.rmsd(self.d1, self.d2)
-    
+
     @property
     def ub_rmsd(self):
         return RTmetrics.ub_rmsd(self.d1, self.d2)
-    
+
     @property
     def bias(self):
         return RTmetrics.bias(self.d1, self.d2)
-    
+
     @property
     def mae(self):
         return RTmetrics.mae(self.d1, self.d2)
-    
+
     @property
     def mape(self):
         return RTmetrics.mape(self.d1, self.d2)
-    
+
     @property
     def std_ratio(self):
         return RTmetrics.std_ratio(self.d1, self.d2)
@@ -193,17 +194,17 @@ class _RTmetrics1(object):
     @property
     def allmetrics(self):
         return RTmetrics.allmetrics(self.d1, self.d2)
-    
+
     @property
     def metrics_table(self):
         return RTmetrics.metrics_table(self.d1, self.d2)
-    
+
     def scatterplot(self):
         RTmetrics.scatterplot(self.d1, self.d2, self._d1, self._d2)
 
 
-class RTmetrics(object):         
-    
+class RTmetrics(object):
+
     # registry of metric methods used for allmetrics and metrics_table
     # enter the function name of a new metric in here
     # functions listed in here must have two pandas series d1, d2 as parameters
@@ -218,7 +219,7 @@ class RTmetrics(object):
         'mape',
         'std_ratio'
         ]
-    
+
     def __init__(self):
         pass
 
@@ -232,8 +233,8 @@ class RTmetrics(object):
         d1 : pandas.Series
             time series 1
         d2 : pandas.Series
-            time series 2    
-        
+            time series 2
+
         Returns
         -------
         float
@@ -301,10 +302,10 @@ class RTmetrics(object):
             root mean square deviation
 
         """
-        diff_sq = d1.subtract(d2).pow(2)   
+        diff_sq = d1.subtract(d2).pow(2)
         return np.sqrt(diff_sq.mean())
 
-    @staticmethod    
+    @staticmethod
     def ub_rmsd(d1, d2):
         """
         evaluates unbiased root mean square deviation of given series d1 and d2
@@ -323,11 +324,11 @@ class RTmetrics(object):
 
         """
         d1_corr = d1 - d1.mean()
-        d2_corr = d2 - d2.mean()       
+        d2_corr = d2 - d2.mean()
         diff_sq = d1_corr.subtract(d2_corr).pow(2)
         return np.sqrt(diff_sq.mean())
-    
-    @staticmethod    
+
+    @staticmethod
     def bias(d1, d2):
         """
         evaluates bias of given series d1 and d2
@@ -449,45 +450,45 @@ class RTmetrics(object):
             function/metric name and corresponding value
 
         """
-        
+
         # create plot and axes
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={'width_ratios': [5, 1]})
-        
+
         # create scatterplot
         ax1.scatter(d1, d2)
         ax1.set_xlabel(d1_name)
         ax1.set_ylabel(d2_name)
-        
+
         # get all metrics and define lists for table data
         metrics_dict = cls.allmetrics(d1, d2)
         metric_names = []
         metric_values = []
-        
+
         # flatten metrics array and format float values
-        for key, val in cls._flatten_dictionary(metrics_dict).items():        
+        for key, val in cls._flatten_dictionary(metrics_dict).items():
             metric_names.append(key)
             if isinstance(val, float):
                 metric_values.append('%1.3f' % val)
             else:
                 metric_values.append(val)
-            
+
         # add another dimension for usage in table
         two_dim_metric_values = [[metric_value] for metric_value in metric_values]
-        
+
         # remove border to only show table itself
         ax2.axis('off')
-        
+
         # plot and create table object
         metrics_table = ax2.table(cellText=two_dim_metric_values,
                  rowLabels=metric_names,
                  colLabels=['Value'],
                  loc='center')
-        
+
         # scale for higher cells
         metrics_table.scale(1, 1.5)
-        
+
         plt.show()
-        
+
     @classmethod
     def _flatten_dictionary(cls, dictionary, depth=0):
         """
@@ -515,9 +516,9 @@ class RTmetrics(object):
                 items.extend(cls._flatten_dictionary(val, depth + 1).items())
             elif isinstance(val, float):
                 items.append((new_key, val))
-                
+
         return dict(items)
-    
+
     @classmethod
     def metrics_table(cls, d1, d2):
         """
@@ -537,20 +538,20 @@ class RTmetrics(object):
 
         """
         metrics_dict = cls.allmetrics(d1, d2)
-        
+
         header = '-'*11 + ' METRICS ' + '-'*11 + '\n'
         columns = '     METRIC'.ljust(14) + '|     VALUE'.ljust(15) + ' |' + '\n'
 
         entries = cls._metrics_table_dict_entry(metrics_dict)
-        
+
         outstr = header + columns + entries
         print(outstr)
-    
+
     @classmethod
     def _metrics_table_dict_entry(cls, metrics_dict, depth=0):
         """
         recursively generates entries string for dictionaries in a metrics table
-        entries of sub-dictionaries are indented 
+        entries of sub-dictionaries are indented
 
         Parameters
         ----------
@@ -569,13 +570,13 @@ class RTmetrics(object):
         for key, val in metrics_dict.items():
             depth_offset = 2 * depth
             metric = f'{key:<{13 - depth_offset}}'
-            
-            if isinstance(val, (float, int)):        
+
+            if isinstance(val, (float, int)):
                 valstr = f'{val:.6f}'.ljust(14) if abs(val) < 1e5 else f'{Decimal(val):.6E}'.ljust(14)
-                entries += (' ' + '--' * depth + f'{metric}| {valstr}|\n') 
-                
+                entries += (' ' + '--' * depth + f'{metric}| {valstr}|\n')
+
             elif isinstance(val, dict):
-                entries += (' ' + '--' * depth + f'{metric}|'.ljust(29 - depth_offset) + '|\n') 
+                entries += (' ' + '--' * depth + f'{metric}|'.ljust(29 - depth_offset) + '|\n')
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
-                
-        return entries   
+
+        return entries
