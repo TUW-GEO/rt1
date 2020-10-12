@@ -1,13 +1,12 @@
-"""
-Define general object for scattering calculations
-This is the basis object for any Surface and Vollume objects
-"""
+"""Define general object for scattering calculations"""
 
 # general other imports
 import sympy as sp
 
 
 class Scatter(object):
+    """The basis object for any Surface and Volume objects"""
+
     def __init__(self):
         pass
 
@@ -31,8 +30,7 @@ class Scatter(object):
             related via t_i = pi - t_0
 
         Parameters
-        -----------
-
+        ----------
         t_0 : array_like(float)
               incident zenith-angle
         p_0 : array_like(float)
@@ -45,7 +43,7 @@ class Scatter(object):
             generalized scattering angle parameters
 
         Returns
-        --------
+        -------
         float
               the generalized scattering angle
 

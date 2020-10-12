@@ -678,7 +678,7 @@ class plot:
         fit.R.t_0 = fit.inc
         fit.R.p_0 = np.zeros_like(fit.inc)
 
-        estimates = fit._calc_model(fit.R, fit.res_dict, fit.fixed_dict)
+        estimates = fit._calc_model()
         # calculate the residuals based on masked arrays
         masked_estimates = np.ma.masked_array(estimates, mask=fit.mask)
         masked_data = np.ma.masked_array(fit.data, mask=fit.mask)
@@ -864,7 +864,7 @@ class plot:
 
         # ----------- plot start-values ------------
         if startvals is True:
-            startplot = fit._calc_model(fit.R, fit.start_dict, fit.fixed_dict)
+            startplot = fit._calc_model(res_dict=fit.start_dict)
             for i, val in enumerate(startplot[result_selection]):
                 if i == 0:
                     label = 'fitstart'
