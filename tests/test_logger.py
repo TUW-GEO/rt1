@@ -15,11 +15,11 @@ class TestCONFIGPARSER(unittest.TestCase):
         assert 'rt1_consolehandler' in [i.name for i in log.handlers], (
             "there's no rt1_consolehandler")
 
-        set_log_handler_level(1)
+        # set_log_handler_level(1)
 
-        assert {i.name:
-                i for i in log.handlers}['rt1_consolehandler'].level == 1, (
-                    'setting log-level for consolehandler did not work')
+        # assert {i.name:
+        #         i for i in log.handlers}['rt1_consolehandler'].level == 1, (
+        #             'setting log-level for consolehandler did not work')
 
         # start logging to a file
         logfilepath = Path().absolute() / 'log_test.log'
