@@ -5,7 +5,7 @@ import pandas as pd
 import traceback
 from pathlib import Path
 from .rtfits import load
-
+from . import log
 
 class rt1_processing_config(object):
     """
@@ -290,8 +290,9 @@ class rt1_processing_config(object):
         res = pd.concat([i for i in res if i is not None], axis=1)
 
         if self.rt1_procsesing_respath is None or self.finalout_name is None:
-            print('both save_path and finalout_name must be specified... ',
-                  'otherwise the final results can NOT be saved!')
+            log.info(
+                'both save_path and finalout_name must be specified... ' +
+                'otherwise the final results can NOT be saved!')
             return res
         else:
 
@@ -365,9 +366,9 @@ class rt1_processing_config(object):
         # if `save_path`is NOT specified, raise ONLY exceptions that
         # have not been explicitly catched
         if self.rt1_procsesing_dumppath is None and raise_exception is True:
-            print('`save_path` must be specified otherwise exceptions ' +
-                  'that are not explicitly catched by `exceptfunc()` ' +
-                  ' will be raised!')
+            log.info('`save_path` must be specified otherwise exceptions ' +
+                     'that are not explicitly catched by `exceptfunc()` ' +
+                     ' will be raised!')
             raise ex
         else:
             if 'error_filename' in names_ids:
