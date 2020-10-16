@@ -42,8 +42,9 @@ class TestCONFIGPARSER(unittest.TestCase):
             "there's no rt1_filehandler")
 
         # the file can not be removed if it is not closed!
-        with self.assertRaises(PermissionError):
-            logfilepath.unlink()
+        # ... don't check this... in Linux this is possible!
+        #with self.assertRaises(PermissionError):
+        #    logfilepath.unlink()
 
         # close the file, now removing should be possible
         stop_log_to_file()
