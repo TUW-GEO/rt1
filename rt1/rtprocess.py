@@ -15,7 +15,7 @@ from numpy.random import randint as np_randint
 from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 from .rtparse import RT1_configparser
 from .rtfits import load
-from . import log
+from . import log, _get_logger_formatter
 import logging
 
 
@@ -234,8 +234,7 @@ class RTprocess(object):
         log2 = logging.getLogger()
         log2.setLevel(1)
         h = logging.FileHandler(path)
-        h.setFormatter([i for i in log.handlers if
-                        i.name == 'rt1_consolehandler'][0].formatter)
+        h.setFormatter(_get_logger_formatter())
         h.setLevel(1)
         log2.addHandler(h)
 

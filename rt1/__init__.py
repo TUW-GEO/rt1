@@ -129,20 +129,7 @@ class WrappedFixedIndentingLog(logging.Formatter):
                       ' '*self._indent).strip()
 
 
-def setup_logger(log_name='rt1',
-                 console_out=True,
-                 console_level=logging.WARNING,
-                 simple=True
-                 ):
-
-    logger = logging.getLogger(log_name)
-
-    # check if the logger has a Handler, if yes, it's an already existing
-    # one and so we don't want to re-create it!!
-    if logger.hasHandlers():
-        return logger
-
-    logger.setLevel(logging.DEBUG)
+def _get_logger_formatter(simple=True):
 
     if simple is False:
         logfmt = ('%(asctime)s - ' +
@@ -161,6 +148,23 @@ def setup_logger(log_name='rt1',
 
     formatter = WrappedFixedIndentingLog(logfmt, indent=51,
                                          datefmt='%Y-%m-%d %H:%M:%S')
+    return formatter
+
+def setup_logger(log_name='rt1',
+                 console_out=True,
+                 console_level=logging.WARNING,
+                 simple=True
+                 ):
+
+    logger = logging.getLogger(log_name)
+
+    # check if the logger has a Handler, if yes, it's an already existing
+    # one and so we don't want to re-create it!!
+    if logger.hasHandlers():
+        return logger
+
+    logger.setLevel(logging.DEBUG)
+    formatter = _get_logger_formatter(simple)
 
     if console_out is True:
         # setup a console-handler that prints to sys.stdout
