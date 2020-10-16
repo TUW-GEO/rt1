@@ -5,6 +5,7 @@ __author__ = 'Raphael Quast'
 
 
 import logging
+import logging.handlers
 import sys
 from textwrap import indent
 import multiprocessing as mp
