@@ -109,18 +109,6 @@ class TestRTfits(unittest.TestCase):
         assert Path('tests/proc_test2/dump02/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
-    def test_logfile_exists(self):
-
-        l1 = Path('tests/proc_test/dump01/cfg/RT1_process.log')
-        l2 = Path('tests/proc_test2/dump02/cfg/RT1_process.log')
-
-        assert l1.exists(), f'the log-file "{l1}" does not exist!'
-        assert l2.exists(), f'the log-file "{l2}" does not exist!'
-
-        assert os.stat(l1).st_size != 0, f'the log "{l1}" is empty!'
-        assert os.stat(l2).st_size != 0, f'the log "{l2}"is empty!'
-
-
 if __name__ == "__main__":
     unittest.main()
 
