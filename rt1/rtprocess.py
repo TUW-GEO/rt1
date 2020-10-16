@@ -250,10 +250,11 @@ class RTprocess(object):
                 traceback.print_exc(file=sys.stderr)
 
     @staticmethod
-    def _worker_configurer(queue):
+    def _worker_configurer(queue, loglevel=10):
         log.debug("configuring worker... ")
+        log.setLevel(loglevel)
         h = logging.handlers.QueueHandler(queue)  # Just the one handler needed
-        h.setLevel(1)
+        h.setLevel(loglevel)
         h.name = 'rtprocessing_queuehandler'
         log.addHandler(h)
 
