@@ -377,7 +377,7 @@ class Fits(Scatter):
                 text += [f'{name:<18}:   ' + f'{cinfo}']
             except Exception:
                 text += [f'{name:<18}:   ' + '???']
-        log.info(*text, sep='\n')
+        log.info('\n'.join(text))
 
     @property
     def _cached_arg_number(self):
