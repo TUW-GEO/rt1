@@ -35,67 +35,66 @@ class TestRTMetrics(unittest.TestCase):
         return rtfits.load('./tests/sig0_dB.dump')
 
     def test_pearson(self):     
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         pearson = RTmetrics.pearson(d1, d2)
         
-        self.assertAlmostEqual(pearson, results['pearson'])
+        self.assertAlmostEqual(pearson, expected_values['pearson'])
 
     def test_spearman(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         spearman = RTmetrics.spearman(d1, d2)
 
-        self.assertAlmostEqual(spearman, results['spearman'])
+        self.assertAlmostEqual(spearman, expected_values['spearman'])
         
     def test_linregress(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         linregress = RTmetrics.linregress(d1, d2)
-        linregress_results = results['linregress']
+        linregress_expected = expected_values['linregress']
         
-        self.assertAlmostEqual(linregress['slope'], linregress_results['slope'])
-        self.assertAlmostEqual(linregress['intercept'], linregress_results['intercept'])
-        self.assertAlmostEqual(linregress['pearson'], linregress_results['pearson'])
-        self.assertAlmostEqual(linregress['pvalue'], linregress_results['pvalue'])
-        self.assertAlmostEqual(linregress['stderr'], linregress_results['stderr'])
+        self.assertAlmostEqual(linregress['slope'], linregress_expected['slope'])
+        self.assertAlmostEqual(linregress['intercept'], linregress_expected['intercept'])
+        self.assertAlmostEqual(linregress['pearson'], linregress_expected['pearson'])
+        self.assertAlmostEqual(linregress['pvalue'], linregress_expected['pvalue'])
+        self.assertAlmostEqual(linregress['stderr'], linregress_expected['stderr'])
         
     def test_rmsd(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         rmsd = RTmetrics.rmsd(d1, d2)
         
-        self.assertAlmostEqual(rmsd, results['rmsd'])
+        self.assertAlmostEqual(rmsd, expected_values['rmsd'])
         
     def test_ub_rmsd(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         ub_rmsd = RTmetrics.ub_rmsd(d1, d2)
         
-        self.assertAlmostEqual(ub_rmsd, results['ub_rmsd'])
+        self.assertAlmostEqual(ub_rmsd, expected_values['ub_rmsd'])
         
     def test_bias(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         bias = RTmetrics.bias(d1, d2)
         
-        self.assertAlmostEqual(bias, results['bias'])
+        self.assertAlmostEqual(bias, expected_values['bias'])
         
     def test_mae(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         mae = RTmetrics.mae(d1, d2)
         
-        self.assertAlmostEqual(mae, results['mae'])
+        self.assertAlmostEqual(mae, expected_values['mae'])
         
     def test_mape(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         mape = RTmetrics.mape(d1, d2)
         
-        self.assertAlmostEqual(mape, results['mape'])
+        self.assertAlmostEqual(mape, expected_values['mape'])
         
     def test_std_ratio(self):  
-        d1, d2, results = self.mock_series()
+        d1, d2, expected_values = self.mock_series()
         std_ratio = RTmetrics.std_ratio(d1, d2)
         
-        self.assertAlmostEqual(std_ratio, results['std_ratio'])
+        self.assertAlmostEqual(std_ratio, expected_values['std_ratio'])
         
     def test_pearson_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         pearson_fit = fit.metric.SM.omega.pearson
         pearson_func = RTmetrics.pearson(fit.res_df.SM, fit.res_df.omega)
         
@@ -103,7 +102,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_spearman_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         spearman_fit = fit.metric.SM.omega.spearman
         spearman_func = RTmetrics.spearman(fit.res_df.SM, fit.res_df.omega)
         
@@ -111,7 +109,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_linregress_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         linregress_fit = fit.metric.SM.omega.linregress
         linregress_func = RTmetrics.linregress(fit.res_df.SM, fit.res_df.omega)
         
@@ -119,7 +116,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_rmsd_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         rmsd_fit = fit.metric.SM.omega.rmsd
         rmsd_func = RTmetrics.rmsd(fit.res_df.SM, fit.res_df.omega)
         
@@ -127,7 +123,7 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_ub_rmsd_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
+        _, _, expected_values = self.mock_series()
         ub_rmsd_fit = fit.metric.SM.omega.ub_rmsd
         ub_rmsd_func = RTmetrics.ub_rmsd(fit.res_df.SM, fit.res_df.omega)
         
@@ -135,7 +131,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_mae_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         mae_fit = fit.metric.SM.omega.mae
         mae_func = RTmetrics.mae(fit.res_df.SM, fit.res_df.omega)
         
@@ -143,7 +138,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_mape_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         mape_fit = fit.metric.SM.omega.mape
         mape_func = RTmetrics.mape(fit.res_df.SM, fit.res_df.omega)
         
@@ -151,7 +145,6 @@ class TestRTMetrics(unittest.TestCase):
         
     def test_std_ratio_fit_metric(self):
         fit = self.mock_fit()
-        _, _, results = self.mock_series()
         std_ratio_fit = fit.metric.SM.omega.std_ratio
         std_ratio_func = RTmetrics.std_ratio(fit.res_df.SM, fit.res_df.omega)
         
