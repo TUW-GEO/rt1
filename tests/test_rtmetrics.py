@@ -107,13 +107,13 @@ class TestRTMetrics(unittest.TestCase):
 
                 if metric == 'linregress':
                     for key, val in fit_metric.items():
-                        if np.isnan(val) is True:
+                        if np.isnan(val):
                             assert np.isnan(fit_func[key]), assertmsg
                         else:
                             assert val == fit_func[key], assertmsg
                 else:
-                    if np.isnan(fit_metric) is True:
-                        assert fit_func is np.nan, assertmsg
+                    if np.isnan(fit_metric):
+                        assert np.isnan(fit_func), assertmsg
                     else:
                         assert fit_metric == fit_func, assertmsg
 
