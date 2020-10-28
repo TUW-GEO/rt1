@@ -341,7 +341,7 @@ class Fits(Scatter):
                  'data_weights', '_idx_assigns', '_param_assigns',
                  '_param_assigns_dataset', '_val_assigns', '_order',
                  'interp_vals', '_meandt_interp_assigns',
-                 '_param_dyn_monotonic', '_get_excludesymbs']
+                 '_param_dyn_monotonic', '_get_excludesymbs', 'metric']
 
         for i in ['tau', 'omega', 'N']:
             names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -2338,6 +2338,7 @@ class Fits(Scatter):
         return self._reinit_object(self, **kwargs)
 
     @property
+    @lru_cache()  # cache this since we need a static reference!
     def metric(self):
         """
         a class to evaluate performance-metrics of variables available in
@@ -2358,5 +2359,4 @@ class Fits(Scatter):
         """
 
         return _metric_keys(self)
-
 
