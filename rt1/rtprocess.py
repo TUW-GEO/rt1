@@ -164,7 +164,6 @@ def _increase_cnt(process_cnt, start, err=False):
     sys.stdout.flush()
 
 
-
 class RTprocess(object):
     def __init__(self, config_path=None, autocontinue=False,
                  proc_cls=None, parent_fit=None, init_kwargs=None):

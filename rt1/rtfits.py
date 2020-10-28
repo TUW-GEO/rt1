@@ -301,8 +301,6 @@ class Fits(Scatter):
             self.res_dict = {key: val[0]
                              for key, val in self.res_dict.items()}
 
-
-
     def __setstate__(self, d):
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
@@ -1204,7 +1202,7 @@ class Fits(Scatter):
         """
         if not hasattr(self, 'res_dict'):
             log.warning('you must perform the fit first!' +
-                             ' ...e.g. call performfit()')
+                        ' ...e.g. call performfit()')
             return
 
         vals = self._assignvals(self.res_dict)
@@ -1226,7 +1224,7 @@ class Fits(Scatter):
         """
         if not hasattr(self, 'res_dict'):
             log.warning('you must perform the fit first!' +
-                             ' ...e.g. call performfit()')
+                        ' ...e.g. call performfit()')
             return
 
         series = []
@@ -1934,7 +1932,8 @@ class Fits(Scatter):
             if print_progress:
                 msg = update_progress(next(update_cnt), max_cnt,
                                       title="function evaluations: ",
-                                      finalmsg=f"max_nfev ({max_cnt}) reached!")
+                                      finalmsg=f"max_nfev ({max_cnt}) reached!"
+                                      )
 
                 sys.stdout.write(msg)
                 sys.stdout.flush()
