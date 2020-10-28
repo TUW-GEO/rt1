@@ -9,6 +9,7 @@ from decimal import Decimal
 from .general_functions import groupby_unsorted
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
 
@@ -64,38 +65,40 @@ class _metric_keys(object):
                                     all_keys=self._all_keys))
 
     def _check_keys(self):
-        all_keys = list(chain(self._datakeys,
-                              self._modelkeys,
-                              self._retrievalkeys,
-                              self._auxkeys))
-
-        if len(all_keys) != len(set(all_keys)):
-            warnmsg = 'the following keys are present in multiple sources!\n'
-
+        # a list of all possible keys that can be used for metric calculations
+        all_keys = chain(self._datakeys,
+                         self._modelkeys,
+                         self._retrievalkeys,
+                         self._auxkeys)
+        # a list of the "sources" that belong to the keys
         suffix = chain(repeat('dataset', len(self._datakeys)),
-                       repeat('calc_model',
-                              len(self._modelkeys)),
+                       repeat('calc_model', len(self._modelkeys)),
                        repeat('res_df', len(self._retrievalkeys)),
                        repeat('auxdat', len(self._auxkeys)))
-
+        # group by the sources to check if any key is defined more than once
         grps = groupby_unsorted(zip(suffix, all_keys),
-                                key=itemgetter(1), get=itemgetter(0))
+                                key=itemgetter(1),
+                                get=itemgetter(0))
 
-        new_all_keys = []
-        src = []
+        # make all keys unique (e.g. add a suffix if there are multiple
+        # appearances of the same key -> also warn the user of multiple keys!)
+        newgrps = dict()
+        warnmsg = ''
         for key, val in grps.items():
             if len(val) > 1:
                 warnmsg += f'"{key}": '.ljust(15) + '[' + ', '.join(val) + ']'
                 warnmsg += '\n'
-                for suffix in val:
-                    new_all_keys += [key + '__' + suffix]
-                    src += [suffix]
+                for i in val:
+                    newgrps[key + '__' + i] = i
             else:
-                new_all_keys += [key]
-                src += val
+                newgrps[key] = val[0]
 
-        warnings.warn(warnmsg)
-        self._all_keys = dict(zip(new_all_keys, src))
+        if len(warnmsg) > 0:
+            warnings.warn(
+                'the following keys are present in multiple sources!\n'
+                + warnmsg)
+
+        self._all_keys = newgrps
 
 
 class _RTmetrics0(object):
@@ -149,58 +152,73 @@ class _RTmetrics1(object):
     @lru_cache()
     def d2(self):
         d2 = self._get_data(self._s2, self._d2)
-
-        assert len(self.d1) == len(d2), ('the length of the 2 datasets is' +
-                                         'not the same!' +
-                                         f'({len(self.d1)} != {len(d2)})')
         return d2
 
     @property
+    @lru_cache()
+    def _unify_idx_data(self):
+        if len(self.d1) != len(self.d2):
+            warnings.warn(f'index of "{self._d1}" and "{self._d2}" is not ' +
+                          'the same! -> a concatenation is performed!')
+
+            # try to unify the index
+            df = pd.concat([self.d1, self.d2], axis=1, copy=False)
+            d1 = df[self._d1].dropna()
+            d2 = df[self._d2].dropna()
+
+            assert len(d1) == len(d2), ('the length of the 2 datasets is ' +
+                                        'not the same!' +
+                                        f'({len(self.d1)} != {len(d2)})')
+            return d1, d2
+        else:
+            return self.d1, self.d2
+
+    @property
     def pearson(self):
-        return RTmetrics.pearson(self.d1, self.d2)
+        return RTmetrics.pearson(*self._unify_idx_data)
 
     @property
     def spearman(self):
-        return RTmetrics.spearman(self.d1, self.d2)
+        return RTmetrics.spearman(*self._unify_idx_data)
 
     @property
     def linregress(self):
-        return RTmetrics.linregress(self.d1, self.d2)
+        return RTmetrics.linregress(*self._unify_idx_data)
 
     @property
     def rmsd(self):
-        return RTmetrics.rmsd(self.d1, self.d2)
+        return RTmetrics.rmsd(*self._unify_idx_data)
 
     @property
     def ub_rmsd(self):
-        return RTmetrics.ub_rmsd(self.d1, self.d2)
+        return RTmetrics.ub_rmsd(*self._unify_idx_data)
 
     @property
     def bias(self):
-        return RTmetrics.bias(self.d1, self.d2)
+        return RTmetrics.bias(*self._unify_idx_data)
 
     @property
     def mae(self):
-        return RTmetrics.mae(self.d1, self.d2)
+        return RTmetrics.mae(*self._unify_idx_data)
 
     @property
     def mape(self):
-        return RTmetrics.mape(self.d1, self.d2)
+        return RTmetrics.mape(*self._unify_idx_data)
 
     @property
     def std_ratio(self):
-        return RTmetrics.std_ratio(self.d1, self.d2)
+        return RTmetrics.std_ratio(*self._unify_idx_data)
 
     @property
     def allmetrics(self):
-        return RTmetrics.allmetrics(self.d1, self.d2)
+        return RTmetrics.allmetrics(*self._unify_idx_data)
 
     @property
     def metrics_table(self):
-        return RTmetrics.metrics_table(self.d1, self.d2)
+        return RTmetrics.metrics_table(*self._unify_idx_data)
 
     def scatterplot(self):
-        RTmetrics.scatterplot(self.d1, self.d2, self._d1, self._d2)
+        RTmetrics.scatterplot(*self._unify_idx_data, self._d1, self._d2)
 
 
 class RTmetrics(object):
@@ -489,10 +507,10 @@ class RTmetrics(object):
 
         # scale for higher cells
         metrics_table.scale(1, 1.5)
-        
+
         plt.show()
         return fig
-        
+
     @classmethod
     def _flatten_dictionary(cls, dictionary, depth=0):
         """
