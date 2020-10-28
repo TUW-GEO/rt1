@@ -331,7 +331,7 @@ class RTmetrics(object):
     @staticmethod
     def bias(d1, d2):
         """
-        evaluates bias of given series d1 and d2
+        evaluates bias of given series d1 and d2: mu_1 - mu_2
 
         Parameters
         ----------
@@ -372,7 +372,7 @@ class RTmetrics(object):
     @staticmethod
     def mape(d1, d2):
         """
-        evaluates mean absolute percentage error of given Series d1 and d2
+        evaluates mean absolute percentage error of given Series d1 and d2 with respect to d1
 
         Parameters
         ----------
@@ -393,7 +393,7 @@ class RTmetrics(object):
     @staticmethod
     def std_ratio(d1, d2):
         """
-        evaluates standard deviation ratio of given Series d1 and d2
+        evaluates standard deviation ratio of given Series d1 and d2: sigma_1 / sigma_2
 
         Parameters
         ----------
@@ -443,11 +443,14 @@ class RTmetrics(object):
             time series 1
         d2 : pandas.Series
             time series 2
+        d1_name : string
+            name of time series 1
+        d2_name : string
+            name of time series 2
 
         Returns
         -------
-        dictionary {string: (float or dictionary)}
-            function/metric name and corresponding value
+        scatterplot figure object
 
         """
 
@@ -486,9 +489,10 @@ class RTmetrics(object):
 
         # scale for higher cells
         metrics_table.scale(1, 1.5)
-
+        
         plt.show()
-
+        return fig
+        
     @classmethod
     def _flatten_dictionary(cls, dictionary, depth=0):
         """
