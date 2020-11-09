@@ -21,9 +21,10 @@ from .rtplots import plot as rt1_plots
 from . import surface as rt1_s
 from . import volume as rt1_v
 from . import __version__ as _RT1_version
+from .rtmetrics import _metric_keys
 
 import copy
-from itertools import repeat, count, chain, groupby
+from itertools import repeat, count, chain, groupby, permutations
 from functools import lru_cache, partial, wraps
 from operator import itemgetter, add
 from datetime import datetime
@@ -340,7 +341,7 @@ class Fits(Scatter):
                  'data_weights', '_idx_assigns', '_param_assigns',
                  '_param_assigns_dataset', '_val_assigns', '_order',
                  'interp_vals', '_meandt_interp_assigns',
-                 '_param_dyn_monotonic', '_get_excludesymbs']
+                 '_param_dyn_monotonic', '_get_excludesymbs', 'metric']
 
         for i in ['tau', 'omega', 'N']:
             names += [f'_{i}_symb', f'_{i}_func', f'_{i}_diff_func']
@@ -2335,3 +2336,27 @@ class Fits(Scatter):
 
         """
         return self._reinit_object(self, **kwargs)
+
+    @property
+    @lru_cache()  # cache this since we need a static reference!
+    def metric(self):
+        """
+        a class to evaluate performance-metrics of variables available in
+            - fit.dataset (e.g. the a-priori available datasets)
+            - fit.calc_model()  (e.g. the estimated total- surface- volume- and
+                                 interaction contribution)
+            - fit.res_df (e.g. the retrieved parameters)
+
+        use it via:
+            >>> fit.metric.KEY1.KEY2.pearsson
+            >>> (0.75, 1.234e-10)
+
+        Returns
+        -------
+        class
+            a rtmetrics.RTmetrics class with the datasets set
+            with respect to KEY1 and KEY2
+        """
+
+        return _metric_keys(self)
+
