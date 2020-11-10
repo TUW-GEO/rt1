@@ -1,16 +1,15 @@
-import sys
+import os
 from pathlib import Path
-sys.path.append(str(Path('H:/python_modules/rt_model_python/rt1')))
 import unittest
 import unittest.mock as mock
-from pathlib import Path
 from rt1.rtprocess import RTprocess, RTresults
-import shutil
 
 import warnings
 warnings.simplefilter('ignore')
 
+
 # use "test_0_---"   "test_1_---"   to ensure test-order
+
 
 class TestRTfits(unittest.TestCase):
 
@@ -20,10 +19,10 @@ class TestRTfits(unittest.TestCase):
 
         proc = RTprocess(config_path, autocontinue=True)
 
-        proc.run_processing(ncpu=4, reader_args = reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         # run again to check what happens if files already exist
-        proc.run_processing(ncpu=4, reader_args = reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
@@ -113,5 +112,4 @@ class TestRTfits(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-
-
+    #stop_log_to_file()

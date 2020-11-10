@@ -7,11 +7,11 @@ from operator import itemgetter
 from decimal import Decimal
 
 from .general_functions import groupby_unsorted
+from . import log
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import warnings
 
 class _metric_keys(object):
     """
@@ -94,7 +94,7 @@ class _metric_keys(object):
                 newgrps[key] = val[0]
 
         if len(warnmsg) > 0:
-            warnings.warn(
+            log.warning(
                 'the following keys are present in multiple sources!\n'
                 + warnmsg)
 
@@ -158,7 +158,7 @@ class _RTmetrics1(object):
     @lru_cache()
     def _unify_idx_data(self):
         if len(self.d1) != len(self.d2):
-            warnings.warn(f'index of "{self._d1}" and "{self._d2}" is not ' +
+            log.warning(f'index of "{self._d1}" and "{self._d2}" is not ' +
                           'the same! -> a concatenation is performed!')
 
             # try to unify the index

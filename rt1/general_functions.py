@@ -235,9 +235,7 @@ def update_progress(progress, max_prog=100,
     if progress >= max_prog:
         msg = f'\r{finalmsg:<79}\n'
 
-    sys.stdout.write(msg)
-    sys.stdout.flush()
-
+    return msg
 
 def dt_to_hms(td):
     """

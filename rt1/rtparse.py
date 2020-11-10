@@ -7,7 +7,7 @@ import sys
 import importlib.util
 from pathlib import Path
 from .rtfits import Fits
-
+from . import log
 
 class RT1_configparser(object):
     """
@@ -459,9 +459,10 @@ class RT1_configparser(object):
                     try:
                         process_specs[key[6:]] = Path(val.strip()).resolve()
                     except PermissionError:
-                        print('some paths could not be resolved!',
-                              'avoid using ".." syntax in path-specifications',
-                              ' to circuumvent this issue')
+                        log.warning(
+                            'some paths could not be resolved!' +
+                            'avoid using ".." syntax in path-specifications' +
+                            ' to circuumvent this issue')
                         process_specs[key[6:]] = Path(val.strip())
                 else:
                     process_specs[key[6:]] = Path(val.strip())

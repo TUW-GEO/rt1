@@ -5,7 +5,6 @@ from itertools import repeat
 import ctypes
 import sys
 from textwrap import dedent
-import warnings
 
 from pathlib import Path
 import shutil
@@ -13,22 +12,24 @@ import shutil
 import pandas as pd
 from numpy.random import randint as np_randint
 
-from .general_functions import dt_to_hms, update_progress
+from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 from .rtparse import RT1_configparser
 from .rtfits import load
+from . import log, _get_logger_formatter
+import logging
 
 
 try:
     import xarray as xar
 except ModuleNotFoundError:
-    print('xarray could not be imported,',
-          'NetCDF-features of RT1_results will not work!')
+    log.info('xarray could not be imported, ' +
+             'NetCDF-features of RT1_results will not work!')
 
 try:
     from netCDF4 import Dataset
 except ModuleNotFoundError:
-    print('netCDF4.Dataset could be not imported,',
-          'some NetCDF-features of RT1_results will not work!')
+    log.info('netCDF4.Dataset could be not imported, ' +
+             'some NetCDF-features of RT1_results will not work!')
 
 
 def _confirm_input(msg='are you sure?', stopmsg='STOP', callbackdict=None):
@@ -72,14 +73,14 @@ def _make_folderstructure(save_path, subfolders):
     if save_path is not None:
         # generate "save_path" directory if it does not exist
         if not save_path.exists():
-            print(f'"{save_path}"\ndoes not exist... creating directory')
+            log.info(f'"{save_path}"\ndoes not exist... creating directory')
             save_path.mkdir(parents=True, exist_ok=True)
 
         for folder in subfolders:
             # generate subfolder if it does not exist
             mkpath = save_path / folder
             if not mkpath.exists():
-                print(f'"{mkpath}"\ndoes not exist... creating directory')
+                log.info(f'"{mkpath}"\ndoes not exist... creating directory')
                 mkpath.mkdir(parents=True, exist_ok=True)
 
 
@@ -122,13 +123,14 @@ def _increase_cnt(process_cnt, start, err=False):
                 seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value)
             d, h, m, s = dt_to_hms(remain)
 
-            update_progress(
+            msg = update_progress(
                 p_totcnt.value, p_max,
                 title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
                 finalmsg=(
                     "finished! " +
                     f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
+            log.progress(msg.strip())
         else:
             # only increase the total counter
             p_totcnt.value += 1
@@ -142,19 +144,24 @@ def _increase_cnt(process_cnt, start, err=False):
                 d, h, m, s = dt_to_hms(remain)
                 title = f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
 
-            update_progress(
+            msg = update_progress(
                 p_totcnt.value, p_max,
                 title=title,
                 finalmsg=(
                     "finished! " +
                     f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
+            log.progress(msg.strip())
         # release the lock
         lock.release()
     except Exception:
+        msg = '???'
         # release the lock in case an error occured
         lock.release()
         pass
+
+    sys.stdout.write(msg)
+    sys.stdout.flush()
 
 
 class RTprocess(object):
@@ -198,6 +205,7 @@ class RTprocess(object):
 
 
         '''
+
         self._config_path = config_path
         self.autocontinue = autocontinue
 
@@ -210,6 +218,44 @@ class RTprocess(object):
             assert all([isinstance(i, str) for i in init_kwargs.values()]), (
                 'the values of "init_kwargs" MUST be strings !')
             self.init_kwargs = init_kwargs
+
+    def _listener_process(self, queue):
+        # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
+        # logging-to-a-single-file-from-multiple-processes
+
+        if not hasattr(self, 'dumppath'):
+            log.error('listener process called without dumppath specified!')
+            return
+
+        path = self.dumppath / 'cfg' / 'RT1_process.log'
+        log.debug("listener process started for path: " + str(path))
+
+        log2 = logging.getLogger()
+        log2.setLevel(1)
+        h = logging.FileHandler(path)
+        h.setFormatter(_get_logger_formatter())
+        h.setLevel(1)
+        log2.addHandler(h)
+
+        while True:
+            try:
+                record = queue.get()
+                if record is None:  # quit listener if the message is None
+                    break
+                log2.handle(record)  # ...No level or filter logic applied
+            except Exception:
+                import sys, traceback
+                print('Whoops! Problem:', file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+
+    @staticmethod
+    def _worker_configurer(queue, loglevel=10):
+        log.debug("configuring worker... ")
+        log.setLevel(loglevel)
+        h = logging.handlers.QueueHandler(queue)  # Just the one handler needed
+        h.setLevel(loglevel)
+        h.name = 'rtprocessing_queuehandler'
+        log.addHandler(h)
 
     def setup(self, copy=True):
         '''
@@ -224,6 +270,7 @@ class RTprocess(object):
             indicator if '.ini' files and modules should be copied to
             the dumppath/cfg folder or not. The default is True.
         '''
+
         if self._config_path is not None and self._proc_cls is None:
 
             self.config_path = Path(self._config_path)
@@ -233,11 +280,12 @@ class RTprocess(object):
             self.cfg = RT1_configparser(self.config_path)
 
             # update specs with init_kwargs
+            # remember warnings and log them later in case dumppath is changed
             for key, val in self.init_kwargs.items():
                 if key in self.cfg.config['PROCESS_SPECS']:
-                    warnings.warn(
-                        f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}"' +
-                        'will be overwritten by the definition provided via' +
+                    log.warning(
+                        f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}" ' +
+                        'will be overwritten by the definition provided via ' +
                         f'"init_kwargs": "{key} = {val}" ')
                     # update the parsed config (for import of modules etc.)
                     self.cfg.config['PROCESS_SPECS'][key] = val
@@ -252,10 +300,26 @@ class RTprocess(object):
 
                     if self.dumppath.exists():
                         def remove_folder():
-                            shutil.rmtree(
-                                specs['save_path'] / specs['dumpfolder'])
-                            warnings.warn(
-                               f'"{specs["save_path"]/specs["dumpfolder"]}"' +
+
+                            # try to close existing filehandlers to avoid
+                            # errors if the files are located in the folder
+                            # if they are actually in the cfg folder, delete
+                            # the corresponding handler as well!
+                            for h in log.handlers:
+                                try:
+                                    h.close()
+                                    if Path(h.baseFilename
+                                            ).parent.samefile(
+                                                self.dumppath / 'cfg'):
+                                        log.removeHandler(h)
+                                except Exception:
+                                    pass
+
+                            # remove folderstructure
+                            shutil.rmtree(self.dumppath)
+
+                            log.info(
+                               f'"{self.dumppath}"' +
                                '\nhas successfully been removed.\n')
 
                         _confirm_input(
@@ -265,6 +329,7 @@ class RTprocess(object):
                                  '\n- to abort type NO or N' +
                                  '\n- to remove the existing directory and ' +
                                  'all subdirectories type REMOVE \n \n'),
+                            stopmsg='aborting due to manual input "NO"',
                             callbackdict={'REMOVE': [
                                 (f'\n"{self.dumppath}"\n will be removed!' +
                                  ' are you sure? (y, n): '),
@@ -292,8 +357,8 @@ class RTprocess(object):
             procmodule = self.cfg.get_all_modules(
                 load_copy=copy)[proc_module_name]
 
-            warnings.warn(f'processing config class "{proc_class_name}"' +
-                          f'  will be imported from \n"{procmodule}"')
+            log.debug(f'processing config class "{proc_class_name}"' +
+                      f'  will be imported from \n"{procmodule}"')
 
             self.proc_cls = getattr(procmodule, proc_class_name)(**specs)
 
@@ -319,7 +384,7 @@ class RTprocess(object):
         # from the copied file
         copypath = self.dumppath / 'cfg' / self.cfg.configpath.name
         if (copypath).exists():
-            warnings.warn(
+            log.warning(
                 f'the file \n"{copypath / self.cfg.configpath.name}"\n' +
                 'already exists... NO copying is performed and the ' +
                 'existing one is used!\n')
@@ -328,8 +393,8 @@ class RTprocess(object):
                 # if no init_kwargs have been provided, copy the
                 # original file
                 shutil.copy(self.cfg.configpath, copypath.parent)
-                warnings.warn(f'"{self.cfg.configpath.name}" copied to\n' +
-                              f'"{copypath.parent}"')
+                log.info(f'"{self.cfg.configpath.name}" copied to\n' +
+                         f'"{copypath.parent}"')
             else:
                 # if init_kwargs have been provided, write the updated
                 # config to the folder
@@ -337,7 +402,7 @@ class RTprocess(object):
                           self.cfg.configpath.name, 'w') as file:
                     self.cfg.config.write(file)
 
-                warnings.warn(
+                log.info(
                     f'the config-file "{self.cfg.configpath}" has been' +
                     ' updated with the init_kwargs and saved to' +
                     f'"{copypath.parent / self.cfg.configpath.name}"')
@@ -359,12 +424,12 @@ class RTprocess(object):
                 copypath = self.dumppath / 'cfg' / location.name
 
                 if copypath.exists():
-                    warnings.warn(f'the file \n"{copypath}" \nalready ' +
-                                  'exists ... NO copying is performed ' +
-                                  'and the existing one is used!\n')
+                    log.warning(f'the file \n"{copypath}" \nalready ' +
+                                'exists ... NO copying is performed ' +
+                                'and the existing one is used!\n')
                 else:
                     shutil.copy(location, copypath)
-                    warnings.warn(
+                    log.info(
                         f'"{location.name}" copied to \n"{copypath}"')
 
     def _evalfunc(self, reader_arg=None, process_cnt=None):
@@ -383,6 +448,7 @@ class RTprocess(object):
         -------
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
+
         if process_cnt is not None:
             start = _start_cnt()
         try:
@@ -439,7 +505,8 @@ class RTprocess(object):
 
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
-                    preprocess_kwargs=None):
+                    preprocess_kwargs=None,
+                    queue=None):
         """
         Evaluate a RT-1 model on a single core or in parallel using
 
@@ -529,13 +596,32 @@ class RTprocess(object):
                 '"reader_args" is provided as argument to processfunc() ' +
                 'AND via the return-dict of the preprocess() function!')
 
-        print(f'processing {len(reader_args)} features')
+        log.info(f'processing {len(reader_args)} features')
 
         if 'pool_kwargs' in setupdict:
             pool_kwargs = setupdict['pool_kwargs']
 
         if pool_kwargs is None:
             pool_kwargs = dict()
+
+        #####################################
+        if 'initializer' in pool_kwargs:
+            def init_decorator(f):
+                def inner(*args):
+                    self._worker_configurer(args[-1])
+                    res = f(*args)
+                    return res
+                return inner
+
+            pool_kwargs['initializer'] = init_decorator(
+                pool_kwargs['initializer'])
+
+            pool_kwargs['initargs'].append(queue)
+
+        else:
+            pool_kwargs['initializer'] = self._worker_configurer
+            pool_kwargs['initargs'] = [queue]
+        #####################################
 
         if self.parent_fit.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
@@ -549,7 +635,7 @@ class RTprocess(object):
             process_cnt = None
 
         if ncpu > 1:
-            print('start of parallel evaluation')
+            log.info(f'start of parallel evaluation on {ncpu} cores')
             with mp.Pool(ncpu, **pool_kwargs) as pool:
                 # loop over the reader_args
                 res_async = pool.starmap_async(self._evalfunc,
@@ -560,7 +646,7 @@ class RTprocess(object):
                 pool.join()   # Waits for workers to exit.
                 res = res_async.get()
         else:
-            print('start of single-core evaluation')
+            log.info('start of single-core evaluation')
 
             # call the initializer if it has been provided
             if 'initializer' in pool_kwargs:
@@ -580,7 +666,7 @@ class RTprocess(object):
 
     def run_processing(self, ncpu=1, copy=True, print_progress=True,
                        reader_args=None, pool_kwargs=None,
-                       preprocess_kwargs=None):
+                       preprocess_kwargs=None, logfile_level=1):
         '''
         Start the processing
 
@@ -623,35 +709,84 @@ class RTprocess(object):
             >>> preprocess(**preprocess_kwargs)
 
             The default is None.
+        logfile_level : int
+            the log-level of the log-file that will be generated as
+            "processing folder / cfg / RT1_processing.log"
+
+            If None no log-file will be generated.
+
+            for information on the level values see:
+                https://docs.python.org/3/library/logging.html#logging-levels
 
         '''
-        print('############################################################\n')
+        try:
+            if logfile_level is not None:
+                # start a listener-process that takes care of the logs from
+                # multiprocessing workers
+                queue = mp.Manager().Queue(-1)
+                listener = mp.Process(
+                    target=self._listener_process, args=[queue])
 
-        # initialize all necessary properties
-        self.setup(copy=copy)
+                # make the queue listen also to the MainProcess start the
+                # listener-process that writes the file to disc AFTER
+                # initialization of the  folder-structure!
+                # (otherwise the log-file can not be generated!)
+                self._worker_configurer(queue)
 
-        if preprocess_kwargs is None:
-            preprocess_kwargs = dict()
+            # initialize all necessary properties
+            self.setup(copy=copy)
 
-        # save the used model-definition string to a file
-        if self.dumppath is not None:
-            with open(self.dumppath / 'cfg' / 'model_definition.txt',
-                      'w') as file:
+            if logfile_level is not None:
+                # start the listener after the setup-function completed, since
+                # otherwise the folder-structure does not yet exist and the
+                # file to which the process is writing can not be generated!
+                listener.start()
 
-                outtxt = ''
-                if hasattr(self.proc_cls, 'description'):
-                    outtxt += dedent(self.proc_cls.description)
-                    outtxt += '\n\n'
-                    outtxt += '_'*77
-                    outtxt += '\n\n'
+            if preprocess_kwargs is None:
+                preprocess_kwargs = dict()
 
-                outtxt += self.parent_fit._model_definition
+            # save the used model-definition string to a file
+            if self.dumppath is not None:
+                with open(self.dumppath / 'cfg' / 'model_definition.txt',
+                          'w') as file:
 
-                print(outtxt, file=file)
+                    outtxt = ''
+                    if hasattr(self.proc_cls, 'description'):
+                        outtxt += dedent(self.proc_cls.description)
+                        outtxt += '\n\n'
+                        outtxt += '_'*77
+                        outtxt += '\n\n'
 
-        _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
-                             reader_args=reader_args, pool_kwargs=pool_kwargs,
-                             preprocess_kwargs=preprocess_kwargs)
+                    outtxt += self.parent_fit._model_definition
+                    print(outtxt, file=file)
+
+                    log.info(outtxt)
+
+            _ = self.processfunc(ncpu=ncpu, print_progress=print_progress,
+                                 reader_args=reader_args,
+                                 pool_kwargs=pool_kwargs,
+                                 preprocess_kwargs=preprocess_kwargs,
+                                 queue=queue)
+
+        except Exception as err:
+            log.exception('there has been something wrong during processing!')
+            raise err
+
+        finally:
+            if logfile_level is not None:
+                # tell the queue to stop
+                queue.put_nowait(None)
+                # stop the listener process
+                listener.join()
+
+                # remove any remaining file-handler and queue-handlers after
+                # the processing is done
+                handlers = groupby_unsorted(log.handlers, key=lambda x: x.name)
+                for h in handlers.get('rtprocessing_queuehandler', []):
+                    # close the handler (removing it does not close it!)
+                    h.close()
+                    # remove the file-handler from the log
+                    log.handlers.remove(h)
 
 
 class RTresults(object):
@@ -714,7 +849,7 @@ class RTresults(object):
         if all(i in [i.stem for i in self._parent_path.iterdir()]
                for i in ['cfg', 'results', 'dumps']):
             self._paths[self._parent_path.stem] = self._parent_path
-            print('... adding result', self._parent_path.stem)
+            log.info('... adding result {self._parent_path.stem}')
             setattr(self, self._parent_path.stem,
                     self._RT1_fitresult(self._parent_path.stem,
                                         self._parent_path))
@@ -724,7 +859,7 @@ class RTresults(object):
                 if all(i in [i.stem for i in p.iterdir()]
                        for i in ['cfg', 'results', 'dumps']):
                     self._paths[p.stem] = p
-                    print('... adding result', p.stem)
+                    log.info(f'... adding result {p.stem}')
                     setattr(self, p.stem,
                             self._RT1_fitresult(p.stem, p))
 
@@ -783,7 +918,7 @@ class RTresults(object):
             if result_name is None:
                 result_name = list(results.keys())[0]
 
-            # print(f'loading nc-file for {result_name}')
+            log.info(f'loading nc-file for {result_name}')
             if use_xarray is True:
                 file = xar.open_dataset(results[result_name])
             else:
@@ -819,8 +954,8 @@ class RTresults(object):
                 Nid = np_randint(0, len(allfiles) - 1)
 
                 ID = allfiles[Nid].stem
-                print(f'loading random ID ({ID}) from {len(allfiles)} ' +
-                      'available files')
+                log.info(f'loading random ID ({ID}) from {len(allfiles)} ' +
+                         'available files')
 
             fit = load(self._dump_path / (ID + '.dump'))
 

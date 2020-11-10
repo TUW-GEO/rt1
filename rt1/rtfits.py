@@ -1,5 +1,5 @@
 """Class to perform least_squares fitting of RT-1 models to given datasets."""
-import warnings
+import sys
 
 import numpy as np
 import sympy as sp
@@ -21,6 +21,7 @@ from .rtplots import plot as rt1_plots
 from . import surface as rt1_s
 from . import volume as rt1_v
 from . import __version__ as _RT1_version
+from . import log
 from .rtmetrics import _metric_keys
 
 import copy
@@ -32,7 +33,7 @@ from datetime import datetime
 try:
     import cloudpickle
 except ModuleNotFoundError:
-    warnings.warn('cloudpickle could not be imported, .dump() will not work!')
+    log.warning('cloudpickle could not be imported, .dump() will not work!')
 
 
 def load(path):
@@ -297,7 +298,7 @@ class Fits(Scatter):
             and np.all([isinstance(val[0], list)
                        for _, val in self.res_dict.items()])):
 
-            warnings.warn('updating res-dict to new shape...')
+            log.debug('updating res-dict to new shape...')
             self.res_dict = {key: val[0]
                              for key, val in self.res_dict.items()}
 
@@ -327,7 +328,7 @@ class Fits(Scatter):
         # defining variable is set
         if attr in ['sig0', 'dB', 'dataset', 'defdict', 'set_V_SRF']:
             if not all(i == 0 for i in self._cached_arg_number):
-                warnings.warn(f'{attr} has been set, clearing cache')
+                log.debug(f'{attr} has been set, clearing cache')
                 self._clear_cache()
 
         super().__setattr__(attr, value)
@@ -359,7 +360,7 @@ class Fits(Scatter):
                 else:
                     getattr(Fits, name).cache_clear()
 
-            warnings.warn('...cache cleared')
+            log.debug('...cache cleared')
 
     def _cache_info(self):
         """print the state of the lru_cache for all cached properties"""
@@ -375,7 +376,7 @@ class Fits(Scatter):
                 text += [f'{name:<18}:   ' + f'{cinfo}']
             except Exception:
                 text += [f'{name:<18}:   ' + '???']
-        print(*text, sep='\n')
+        log.info('\n'.join(text))
 
     @property
     def _cached_arg_number(self):
@@ -470,10 +471,10 @@ class Fits(Scatter):
                             res[r % len(res)] += 1
 
                         if rest >= ngrps:
-                            warnings.warn(f'grouping {f} of {freqkeys}' +
-                                          ' is actually between ' +
-                                          f'{min([f+i for i in res])} and ' +
-                                          f'{max([f+i for i in res])}')
+                            log.info(f'grouping {f} of {freqkeys}' +
+                                     ' is actually between ' +
+                                     f'{min([f+i for i in res])} and ' +
+                                     f'{max([f+i for i in res])}')
 
                         # (repetitions + rest + number of elements in group)
                         dyn = chain(*[repeat(ni, f + r) for ni, r in
@@ -1012,7 +1013,7 @@ class Fits(Scatter):
                             f'{key}'] = self.dataset[f'{key}_dyn']
 
                     elif f'{key}_dyn' in self.dataset:
-                        warnings.warn(
+                        log.warning(
                             'the provided manual-dynanics ' +
                             f'column "{key}_dyn" is ignored since ' +
                             f'"defdict[{key}][1]" is set to "{val[2]}".')
@@ -1201,7 +1202,8 @@ class Fits(Scatter):
         (performfit must be called prior to accessing this property!)
         """
         if not hasattr(self, 'res_dict'):
-            print('you must perform the fit first! ...e.g. call performfit()')
+            log.warning('you must perform the fit first!' +
+                        ' ...e.g. call performfit()')
             return
 
         vals = self._assignvals(self.res_dict)
@@ -1222,7 +1224,8 @@ class Fits(Scatter):
         (performfit must be called prior to accessing this property!)
         """
         if not hasattr(self, 'res_dict'):
-            print('you must perform the fit first! ...e.g. call performfit()')
+            log.warning('you must perform the fit first!' +
+                        ' ...e.g. call performfit()')
             return
 
         series = []
@@ -1267,7 +1270,7 @@ class Fits(Scatter):
 
             if key in interp_vals:
                 if self._param_dyn_monotonic[key] is False:
-                    warnings.warn(f'interpolation of non-monotonic {key}')
+                    log.info(f'interpolation of non-monotonic {key} !')
                     # use assignments for unsorted param_dyns
                     useindex = self._meandt_interp_assigns(key)[0]
                     usevals = np.array(
@@ -1302,7 +1305,7 @@ class Fits(Scatter):
                     # assign correct shape
                     use_res_dict[key] = np.take(x, self._idx_assigns)
                 else:
-                    warnings.warn(
+                    log.info(
                         'interpolation not possible for ' +
                         f'({key}) because there are less than 2 values')
 
@@ -1928,9 +1931,13 @@ class Fits(Scatter):
         # for scipy's least_squares function
         def fun(params):
             if print_progress:
-                update_progress(next(update_cnt), max_cnt,
-                                title="function evaluations: ",
-                                finalmsg=f"max_nfev ({max_cnt}) reached!")
+                msg = update_progress(next(update_cnt), max_cnt,
+                                      title="function evaluations: ",
+                                      finalmsg=f"max_nfev ({max_cnt}) reached!"
+                                      )
+
+                sys.stdout.write(msg)
+                sys.stdout.flush()
 
             # generate a dictionary to assign values based on input
             split_vals = split_into(params, splitpos)
@@ -1992,10 +1999,7 @@ class Fits(Scatter):
             self.res_dict = dict()
             self.fit_output = None
 
-        if print_progress:
-            if next(update_cnt) - 1 < max_cnt:
-                update_progress(max_cnt, max_cnt,
-                                finalmsg=f'Done! ({res_lsq.message})')
+        log.info(f'Done! ({res_lsq.message})')
 
         # set _RT1_version after successful call of performfit
         self._RT1_version = _RT1_version
@@ -2300,7 +2304,7 @@ class Fits(Scatter):
         print the model-definition
         (use model_definition = fit._model_definition to get the actual string)
         """
-        print(self._model_definition)
+        log.info(self._model_definition)
 
     @classmethod
     def _reinit_object(cls, self, **kwargs):
