@@ -6,7 +6,7 @@ This file is part of RT1.
 For COPYING and LICENSE details, please refer to the LICENSE file
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 #from setuptools import find_packages
 from rt1 import __version__
 
@@ -16,7 +16,7 @@ setup(name='rt1',
 
       description='RT1 - bistatic single scattering radiative transfer model',
 
-      packages=['rt1'],
+      packages=find_packages(), #['rt1'],
       package_dir={'rt1': 'rt1'},
       include_package_data=False,
 
