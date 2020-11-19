@@ -1,6 +1,6 @@
 """Import module for RT1 module"""
 
-__version__ = '1.2.1'
+__version__ = '1.3'
 __author__ = 'Raphael Quast'
 
 
@@ -11,7 +11,7 @@ from textwrap import indent
 import multiprocessing as mp
 from .general_functions import groupby_unsorted
 
-# add a logging-level "Prog." that is used to report progess (1 below INFO)
+# add a logging-level "Prog." that is used to report progess (1 above INFO)
 _PROGRESS_LEVEL_NUM = 21
 logging.addLevelName(_PROGRESS_LEVEL_NUM, "PROG.")
 
