@@ -87,9 +87,15 @@ def postprocess_xarray(fit,
     saveparams : list, optional
         a list of strings that correspond to parameter-names that should
         be included. The default is None.
-    xindex, yindex : tuple, optional
-        a tuple (name, value) that will be used as the x- and y-index.
-        The default is ('x', -9999) and ('y', -9999).
+    xindex : tuple, optional
+        a tuple (name, value) that will be used as the x-index.
+        The default is ('x', -9999).
+    yindex : tuple, optional
+        a tuple (name, value) that will be used as the y-index.
+        if provided, a multiindex (x, y) will be used!
+        Be warned... when combining xarrays the x- and y- coordinates will
+        be assumed as a rectangular grid!
+        The default is None.
     staticlayers : dict, optional
         a dict with parameter-names and values that will be adde das
         static layers. The default is None.
@@ -155,14 +161,12 @@ def postprocess_xarray(fit,
                                    names=['x', 'y']))
 
     else:
-        df = pd.concat([df], keys=[xindex[1]])
-        df.index.name = xindex[0]
+        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
 
         # set static layers
         statics = pd.DataFrame(staticlayers,
                                index=[xindex[1]])
         statics.index.name = xindex[0]
-
 
     dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
 
