@@ -110,7 +110,7 @@ def postprocess_xarray(fit,
     if staticlayers is None:
         staticlayers = dict()
 
-    defs = rt1_processing_config.defdict_parser(fit.defdict)
+    defs = defdict_parser(fit.defdict)
 
     usedfs = []
     for key in saveparams:
