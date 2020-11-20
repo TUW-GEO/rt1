@@ -67,7 +67,7 @@ def defdict_parser(defdict):
 def postprocess_xarray(fit,
                        saveparams=None,
                        xindex=('x', -9999),
-                       yindex=('y', -9999),
+                       yindex=None,
                        staticlayers=None,
                        auxdata=None):
     '''
@@ -144,14 +144,25 @@ def postprocess_xarray(fit,
     df.columns.names = ['param']
     df.index.names = ['date']
 
-    df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-    df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+    if yindex is not None:
+        df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
+        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
 
-    # set static layers
-    statics = pd.DataFrame(staticlayers,
-                           index=pd.MultiIndex.from_product(
-                               iterables=[[xindex[1]], [yindex[1]]],
-                               names=['x', 'y']))
+        # set static layers
+        statics = pd.DataFrame(staticlayers,
+                               index=pd.MultiIndex.from_product(
+                                   iterables=[[xindex[1]], [yindex[1]]],
+                                   names=['x', 'y']))
+
+    else:
+        df = pd.concat([df], keys=[xindex[1]])
+        df.index.name = xindex[0]
+
+        # set static layers
+        statics = pd.DataFrame(staticlayers,
+                               index=[xindex[1]])
+        statics.index.name = xindex[0]
+
 
     dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
 
