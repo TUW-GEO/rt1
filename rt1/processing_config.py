@@ -504,10 +504,15 @@ class rt1_processing_config(object):
 
         """
 
+        log.debug(f'catched an {type(ex).__name__} {ex.args} for the ' +
+                  f'following reader_args: \n{reader_arg}')
+
         names_ids = self.get_names_ids(reader_arg)
         raise_exception = True
 
         if 'rt1_skip' in ex.args:
+            log.debug('SKIPPED the following error:')
+            log.debug(traceback.format_exc())
             # ignore skip exceptions
             raise_exception = False
 
@@ -516,11 +521,16 @@ class rt1_processing_config(object):
             # file and apply post-processing (e.g. avoid re-processing results)
             raise_exception = False
 
+            log.debug(f"the file '{names_ids['filename']}' already exists... " +
+                      "I'm 'using the existing one!")
+
             try:
                 fit = load(self.rt1_procsesing_dumppath /
                            names_ids['filename'])
                 return self.postprocess(fit, reader_arg)
             except Exception:
+                log.debug("the has been a problem while loading the " +
+                          f"already processed file '{names_ids['filename']}'")
                 pass
 
         elif 'rt1_data_error' in ex.args:
