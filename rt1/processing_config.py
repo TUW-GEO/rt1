@@ -2,10 +2,161 @@
 
 import sys
 import pandas as pd
+import numpy as np
 import traceback
 from pathlib import Path
 from .rtfits import load
 from . import log
+
+try:
+    import xarray as xar
+except:
+    log.debug('xarray could not be imported, ' +
+              'postprocess_xarray will not work!')
+
+
+def defdict_parser(defdict):
+    '''
+    get parameter-dynamics specifications from a given defdict
+
+    Parameters
+    ----------
+    defdict : dict
+        a defdict (e.g. fit.defdict)
+
+    Returns
+    -------
+    parameter_specs : dict
+        a dict that contains lists of parameter-names according to their
+        specifications. (keys should be self-explanatory)
+    '''
+    parameter_specs = dict(fitted=[],
+                           fitted_const=[],
+                           fitted_dynamic=[],
+                           fitted_dynamic_manual=[],
+                           fitted_dynamic_index=[],
+                           fitted_dynamic_datetime=[],
+                           fitted_dynamic_integer=[],
+                           constant=[],
+                           auxiliary=[])
+
+    for key, val in defdict.items():
+        if val[0] is True:
+            parameter_specs['fitted'].append(key)
+            if val[2] is None:
+                parameter_specs['fitted_const'].append(key)
+            else:
+                parameter_specs['fitted_dynamic'].append(key)
+                if val[1] == 'manual':
+                    parameter_specs['fitted_dynamic_manual'].append(key)
+                elif val[1] == 'index':
+                    parameter_specs['fitted_dynamic_index'].append(key)
+                elif isinstance(val[1], str):
+                    parameter_specs['fitted_dynamic_datetime'].append(key)
+                elif isinstance(val[1], int):
+                    parameter_specs['fitted_dynamic_integer'].append(key)
+        else:
+            if val[1] == 'auxiliary':
+                parameter_specs['auxiliary'].append(key)
+            else:
+                parameter_specs['constant'].append(key)
+
+    return parameter_specs
+
+
+def postprocess_xarray(fit,
+                       saveparams=None,
+                       xindex=('x', -9999),
+                       yindex=('y', -9999),
+                       staticlayers=None,
+                       auxdata=None):
+    '''
+    the identification of parameters is as follows:
+
+        1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
+        2) any parameter present in defdict is handled accordingly
+        3) auxdata (a pandas-dataframe) is appended
+
+        4) static layers are generated and added according to the provided dict
+
+
+    Parameters
+    ----------
+    fit : rt1.rtfits.Fits object
+        the fit-object to use
+    saveparams : list, optional
+        a list of strings that correspond to parameter-names that should
+        be included. The default is None.
+    xindex, yindex : tuple, optional
+        a tuple (name, value) that will be used as the x- and y-index.
+        The default is ('x', -9999) and ('y', -9999).
+    staticlayers : dict, optional
+        a dict with parameter-names and values that will be adde das
+        static layers. The default is None.
+    auxdata : pandas.DataFrame, optional
+        a pandas DataFrame that will be concatenated to the DataFrame obtained
+        from combining all 'saveparams'. The default is None.
+
+    Returns
+    -------
+    dfxar : xarray.Dataset
+        a xarray-dataset with all layers defined according to the specs.
+
+    '''
+
+    if saveparams is None:
+        saveparams = []
+
+    if staticlayers is None:
+        staticlayers = dict()
+
+    defs = rt1_processing_config.defdict_parser(fit.defdict)
+
+    usedfs = []
+    for key in saveparams:
+
+        if key == 'sig':
+            if fit.dB is False:
+                usedfs.append(10.*np.log10(fit.dataset.sig))
+            else:
+                usedfs.append(fit.dataset.sig)
+        elif key == 'inc':
+            usedfs.append(np.rad2deg(fit.dataset.inc))
+
+        elif key in fit.defdict:
+            if key in defs['fitted_dynamic']:
+                usedfs.append(fit.res_df[key])
+            elif key in defs['fitted_const']:
+                staticlayers[key] = fit.res_dict[key][0]
+            elif key in defs['constant']:
+                staticlayers[key] = fit.defdict[key][1]
+            elif key in defs['auxiliary']:
+                usedfs.append(fit.dataset[key])
+        else:
+            log.warning(f'the parameter {key} could not be processed' +
+                        'during xarray postprocessing')
+
+    if auxdata is not None:
+        usedfs.append(auxdata)
+
+    # combine all timeseries and set the proper index
+    df = pd.concat(usedfs, axis=1)
+    df.columns.names = ['param']
+    df.index.names = ['date']
+
+    df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
+    df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+
+    # set static layers
+    statics = pd.DataFrame(staticlayers,
+                           index=pd.MultiIndex.from_product(
+                               iterables=[[xindex[1]], [yindex[1]]],
+                               names=['x', 'y']))
+
+    dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
+
+    return dfxar
+
 
 class rt1_processing_config(object):
     """
