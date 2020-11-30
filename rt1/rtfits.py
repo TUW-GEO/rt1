@@ -1127,7 +1127,7 @@ class Fits(Scatter):
         """
         try:
             func = sp.lambdify(
-                getattr(getattr(self, V_SRF), prop).free_symbols,
+                list(getattr(getattr(self, V_SRF), prop).free_symbols),
                 getattr(getattr(self, V_SRF), prop),
                 modules=['numpy'])
         except Exception:
