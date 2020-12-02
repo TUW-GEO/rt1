@@ -1,6 +1,6 @@
 import multiprocessing as mp
 from timeit import default_timer
-from datetime import timedelta
+from datetime import datetime, timedelta
 from itertools import repeat
 import ctypes
 import sys
@@ -227,7 +227,9 @@ class RTprocess(object):
             log.error('listener process called without dumppath specified!')
             return
 
-        path = self.dumppath / 'cfg' / 'RT1_process.log'
+        datestring = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+        path = self.dumppath / 'cfg' / f'RT1_process({datestring}).log'
+
         log.debug("listener process started for path: " + str(path))
 
         log2 = logging.getLogger()
