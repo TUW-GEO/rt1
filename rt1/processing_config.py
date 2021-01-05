@@ -138,6 +138,8 @@ def postprocess_xarray(fit,
                 staticlayers[key] = fit.defdict[key][1]
             elif key in defs['auxiliary']:
                 usedfs.append(fit.dataset[key])
+        elif key in fit.dataset:
+            usedfs.append(fit.dataset[key])
         else:
             log.warning(f'the parameter {key} could not be processed' +
                         'during xarray postprocessing')
