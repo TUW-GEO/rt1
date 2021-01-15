@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from timeit import default_timer
 from datetime import datetime, timedelta
-from itertools import repeat
+from itertools import repeat, islice
 import ctypes
 import sys
 from textwrap import dedent
@@ -936,7 +936,7 @@ class RTresults(object):
                 file = Dataset(results[result_name])
             return file
 
-        def load_fit(self, ID=None, return_ID=False):
+        def load_fit(self, ID=0, return_ID=False):
             '''
             load one of the available .dump-files located in the "dumps"
             folder.  (using rt1.rtfits.load() )
@@ -946,10 +946,13 @@ class RTresults(object):
 
             Parameters
             ----------
-            ID : str, optional
-                The name of the dump-file to be loaded (without the .dump
-                extension). If None, a random file will be selected.
-                The default is None.
+            ID : str or int, optional
+                If str: The name of the dump-file to be loaded
+                        (without the .dump extension).
+                If int: load the nth file found in the dumpfolder
+                If None: load a random file from the folder
+                         (might take some time for very large amounts of files)
+                The default is 0.
             return_ID : bool, optional
                 If True, a tuple (fit, ID) is returned, otherwise only
                 the fit is returned
@@ -961,12 +964,16 @@ class RTresults(object):
             '''
 
             if ID is None:
-                allfiles = list(self.dump_files)
-                Nid = np_randint(0, len(allfiles) - 1)
+                if not hasattr(self, '_n_dump_files'):
+                    self._n_dump_files = len(list(self.dump_files))
+                Nid = np_randint(0, self._n_dump_files)
 
-                ID = allfiles[Nid].stem
-                log.info(f'loading random ID ({ID}) from {len(allfiles)} ' +
-                         'available files')
+                ID = next(islice(self.dump_files, Nid, None)).stem
+
+                log.info(f'loading random ID ({ID}) from {self._n_dump_files}'
+                         + 'available files')
+            elif isinstance(ID, int):
+                ID = next(islice(self.dump_files, ID, None)).stem
 
             fit = load(self._dump_path / (ID + '.dump'))
 
