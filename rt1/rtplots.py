@@ -1375,8 +1375,9 @@ class plot:
                 if len(fit.fixed_dict) > 0:
                     # get the average value of the fixed-parameters
                     # for each group
-                    usefixedparams = fit.dataset[fit.fixed_dict.keys()].groupby(
-                        fit._groupindex).mean().set_index(
+                    usefixedparams = fit.dataset[
+                        fit.fixed_dict.keys()].groupby(
+                            fit._groupindex, sort=False).mean().set_index(
                             pd.to_datetime(fit.meandatetimes_group))
                 else:
                     usefixedparams = dict()
