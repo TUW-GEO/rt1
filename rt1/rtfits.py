@@ -503,7 +503,7 @@ class Fits(Scatter):
                     dd2 = val.str.zfill(len(max(val, key=len)))
                     # generate a combined (unique) integer
                     param_dyn_dict[key] = np.array(np.char.add(dd1, dd2),
-                                                   dtype=int)
+                                                   dtype=float).astype(int)
             return param_dyn_dict
 
     @property
