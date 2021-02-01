@@ -511,6 +511,20 @@ class RTprocess(object):
             else:
                 raise ex
 
+    def _initializer(self, initializer, queue, *args):
+        '''
+        decorate a provided initializer with the "_worker_configurer()" to
+        enable logging from subprocesses while keeping the initializer a
+        pickleable function (e.g. avoid using an actual decorator for this)
+        (>> returns from provided initializer are returned)
+        '''
+        if queue is not None:
+            self._worker_configurer(queue)
+
+        if initializer is not None:
+            res = initializer(*args)
+            return res
+
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
                     preprocess_kwargs=None,
@@ -612,24 +626,12 @@ class RTprocess(object):
         if pool_kwargs is None:
             pool_kwargs = dict()
 
-        #####################################
-        if 'initializer' in pool_kwargs:
-            def init_decorator(f):
-                def inner(*args):
-                    self._worker_configurer(args[-1])
-                    res = f(*args)
-                    return res
-                return inner
-
-            pool_kwargs['initializer'] = init_decorator(
-                pool_kwargs['initializer'])
-
-            pool_kwargs['initargs'].append(queue)
-
-        else:
-            pool_kwargs['initializer'] = self._worker_configurer
-            pool_kwargs['initargs'] = [queue]
-        #####################################
+        # add provided initializer and queue (used for subprocess-logging)
+        # to the initargs and use "self._initializer" as initializer-function
+        # Note: this is a pickleable way for decorating the initializer!
+        pool_kwargs['initargs'] = [pool_kwargs.pop('initializer', None), queue,
+                                    *pool_kwargs.pop('initargs', [])]
+        pool_kwargs['initializer'] = self._initializer
 
         if self.parent_fit.int_Q is True:
             # pre-evaluate the fn-coefficients if interaction terms are used
