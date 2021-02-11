@@ -2,6 +2,7 @@ import multiprocessing as mp
 from timeit import default_timer
 from datetime import datetime, timedelta
 from itertools import repeat, islice
+from functools import partial
 import ctypes
 import sys
 from textwrap import dedent
@@ -809,6 +810,224 @@ class RTprocess(object):
                     h.close()
                     # remove the file-handler from the log
                     log.handlers.remove(h)
+
+
+    def run_finaloutput(self, ncpu=1, use_N_files=None,
+                        finalout_name=None, finaloutput=None,
+                        postprocess=None, print_progress=True,
+                        logfile_level=1):
+        """
+        run postprocess and finaloutput for available .dump files
+
+        Parameters
+        ----------
+        ncpu : int
+            The number of cpu's to use. The default is 1.
+        use_N_files : int, optional
+            The number of files to process (e.g. a subset of all files)
+        finalout_name : str, optional
+            override the finalout_name provided in the ".ini" file
+        finaloutput : callable, optional
+            override the finaloutput function provided via the
+            "processing_config.py" script
+            NOTICE: the call-signature is
+            `finaloutput(proc_cls, ...)` where proc_cls is the
+            used instance of the "processing_cfg" class!
+            -> this way you have access to all arguments specified in
+            proc_cls such as ".save_path", ".dumpfolder" etc.
+        postprocess : callable, optional
+            override the postprocess function provided via the
+            "processing_config.py" script
+            NOTICE: the call signature is similar to finaloutput above!
+        print_progress : bool, optional
+            Indicator if a progress-bar should be printed or not.
+            If True, it might be wise to suppress warnings during runtime
+            to avoid unwanted outputs. This can be achieved by using:
+
+                >>> import warnings
+                ... warnings.simplefilter('ignore')
+
+            The default is True.
+        logfile_level : int
+            the log-level of the log-file that will be generated as
+            "processing folder / cfg / RT1_processing.log"
+
+            If None no log-file will be generated.
+
+            for information on the level values see:
+                https://docs.python.org/3/library/logging.html#logging-levels
+
+        """
+        try:
+            if logfile_level is not None:
+                # start a listener-process that takes care of the logs from
+                # multiprocessing workers
+                queue = mp.Manager().Queue(-1)
+                listener = mp.Process(
+                    target=self._listener_process, args=[queue])
+
+                # make the queue listen also to the MainProcess start the
+                # listener-process that writes the file to disc AFTER
+                # initialization of the  folder-structure!
+                # (otherwise the log-file can not be generated!)
+                self._worker_configurer(queue)
+            else:
+                queue = None
+
+            # initialize all necessary properties with autocontinue=True
+            initial_autocontinue = self.autocontinue
+            self.autocontinue = True
+            self.setup()
+            self.autocontinue = initial_autocontinue
+
+            if logfile_level is not None:
+                # start the listener after the setup-function completed, since
+                # otherwise the folder-structure does not yet exist and the
+                # file to which the process is writing can not be generated!
+                listener.start()
+
+            return self._run_finalout(ncpu, use_N_files=use_N_files,
+                                      finalout_name=finalout_name,
+                                      finaloutput=finaloutput,
+                                      postprocess=postprocess,
+                                      queue=queue,
+                                      print_progress=print_progress)
+
+        except Exception as err:
+            log.exception('there was an error during finalout generation!')
+            raise err
+
+        finally:
+
+            # turn off capturing warnings
+            logging.captureWarnings(False)
+
+            if logfile_level is not None:
+                # tell the queue to stop
+                queue.put_nowait(None)
+
+                # stop the listener process
+                listener.join()
+
+                # remove any remaining file-handler and queue-handlers after
+                # the processing is done
+                handlers = groupby_unsorted(log.handlers, key=lambda x: x.name)
+                for h in handlers.get('rtprocessing_queuehandler', []):
+                    # close the handler (removing it does not close it!)
+                    h.close()
+                    # remove the file-handler from the log
+                    log.handlers.remove(h)
+
+    def _run_postprocess(self, fitpath, process_cnt=None):
+        if process_cnt is not None:
+            start = _start_cnt()
+
+        # load fitobjects based on fit-paths
+        try:
+            fit = load(fitpath)
+        except Exception:
+            log.error(f'there was something wrong with {fitpath.name}')
+            _increase_cnt(process_cnt, start, err=True)
+
+        try:
+            # run postprocessing
+            ret = self.proc_cls.postprocess(fit, fit.reader_arg)
+
+            if process_cnt is not None:
+                _increase_cnt(process_cnt, start, err=False)
+
+            return ret
+
+        except Exception as ex:
+            if callable(self.proc_cls.exceptfunc):
+                ex_ret = self.proc_cls.exceptfunc(ex, fit.reader_arg)
+                if ex_ret is None or ex_ret is False:
+                    _increase_cnt(process_cnt, start, err=True)
+                else:
+                    _increase_cnt(process_cnt, start, err=False)
+                return ex_ret
+            else:
+                raise ex
+
+    def _run_finalout(self, ncpu, use_N_files=None, finalout_name=None,
+                      finaloutput=None, postprocess=None,
+                      queue=None, print_progress=True):
+
+        # override finalout_name
+        if finalout_name is not None:
+            assert isinstance(finalout_name, str), 'finalout_name must be a string'
+            self.proc_cls.finalout_name = finalout_name
+
+        # override finaloutput function
+        if finaloutput is not None:
+            assert callable(finaloutput), 'finaloutput must be callable!'
+            self.proc_cls.finaloutput = partial(finaloutput, self.proc_cls)
+        # override postprocess function
+        if postprocess is not None:
+            assert callable(postprocess), 'postprocess must be callable!'
+            self.proc_cls.postprocess = partial(postprocess, self.proc_cls)
+
+        # initialize RTresults class
+        useres = getattr(RTresults(self.dumppath),
+                          self.proc_cls.dumpfolder)
+
+        # get dump-files
+        dumpiter = useres.dump_files
+
+        if use_N_files is not None:
+            fitlist = list(islice(dumpiter, use_N_files))
+        else:
+            fitlist = list(dumpiter)
+
+
+        # add provided initializer and queue (used for subprocess-logging)
+        # to the initargs and use "self._initializer" as initializer-function
+        # Note: this is a pickleable way for decorating the initializer!
+        pool_kwargs = dict(initializer=self._initializer,
+                           initargs=[None, queue])
+
+        if print_progress is True:
+            # initialize shared values that will be used to track the number
+            # of completed processes and the mean time to complete a process
+            process_cnt = _setup_cnt(N_items=len(fitlist), ncpu=ncpu)
+        else:
+            process_cnt = None
+
+
+        if ncpu > 1:
+            log.info(f'start of finalout generation on {ncpu} cores')
+            with mp.Pool(ncpu, **pool_kwargs) as pool:
+                # loop over the reader_args
+                res_async = pool.starmap_async(self._run_postprocess,
+                                               zip(fitlist,
+                                                   repeat(process_cnt)))
+
+                pool.close()  # Marks the pool as closed.
+                pool.join()   # Waits for workers to exit.
+                res = res_async.get()
+        else:
+            log.info('start of single-core finalout generation')
+
+            # call the initializer if it has been provided
+            if 'initializer' in pool_kwargs:
+                if 'initargs' in pool_kwargs:
+                    pool_kwargs['initializer'](*pool_kwargs['initargs'])
+                else:
+                    pool_kwargs['initializer']()
+            res = []
+            for fitpath in fitlist:
+                res.append(self._run_postprocess(fitpath=fitpath,
+                                                 process_cnt=process_cnt))
+
+
+        if callable(self.proc_cls.finaloutput):
+            return self.proc_cls.finaloutput(res)
+            log.info('finished generation of finaloutput!')
+        else:
+            return res
+
+
+
 
 
 class RTresults(object):
