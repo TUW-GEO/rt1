@@ -789,6 +789,7 @@ class RTprocess(object):
             if logfile_level is not None:
                 # tell the queue to stop
                 queue.put_nowait(None)
+
                 # stop the listener process
                 listener.join()
 
@@ -884,6 +885,8 @@ class RTresults(object):
             self._dump_path = self.path / 'dumps'
             self._cfg_path = self.path / 'cfg'
 
+            self._nc_paths = self._get_results('.nc')
+
         def _get_results(self, ending):
             assert self._result_path.exists(), f'{self._result_path}' + \
                 ' does not exist'
@@ -891,8 +894,7 @@ class RTresults(object):
             results = {i.stem: i for i in self._result_path.iterdir()
                        if i.suffix == ending}
 
-            assert len(results) > 0, f'there is no "{ending}" file' + \
-                f' in "{self._result_path}"'
+            log.info(f'there is no "{ending}" file in "{self._result_path}"')
 
             return results
 
@@ -948,10 +950,11 @@ class RTresults(object):
 
             Parameters
             ----------
-            ID : str or int, optional
-                If str: The name of the dump-file to be loaded
-                        (without the .dump extension).
-                If int: load the nth file found in the dumpfolder
+            ID : str or int, or pathli.Path
+                If str:  The name of the dump-file to be loaded
+                         (without the .dump extension).
+                If int:  load the nth file found in the dumpfolder
+                if Path: the full path to the .dump file
                 If None: load a random file from the folder
                          (might take some time for very large amounts of files)
                 The default is 0.
@@ -965,19 +968,25 @@ class RTresults(object):
                 the loaded rt1.rtfits.Fits result.
             '''
 
-            if ID is None:
-                if not hasattr(self, '_n_dump_files'):
-                    self._n_dump_files = len(list(self.dump_files))
-                Nid = np_randint(0, self._n_dump_files)
+            if isinstance(ID, Path):
+                filepath = ID
+            else:
+                if ID is None:
+                    if not hasattr(self, '_n_dump_files'):
+                        self._n_dump_files = len(list(self.dump_files))
+                    Nid = np_randint(0, self._n_dump_files)
 
-                ID = next(islice(self.dump_files, Nid, None)).stem
+                    filepath = next(islice(self.dump_files, Nid, None))
 
-                log.info(f'loading random ID ({ID}) from {self._n_dump_files}'
-                         + 'available files')
-            elif isinstance(ID, int):
-                ID = next(islice(self.dump_files, ID, None)).stem
+                    log.info(f'loading random ID ({filepath.stem}) from '
+                             + f' {self._n_dump_files} available files')
+                elif isinstance(ID, int):
+                    filepath = next(islice(self.dump_files, ID, None))
+                elif isinstance(ID, str):
+                    filepath = self._dump_path / (ID + '.dump')
 
-            fit = load(self._dump_path / (ID + '.dump'))
+
+            fit = load(filepath)
 
             if return_ID is True:
                 return (fit, ID)
