@@ -165,7 +165,7 @@ def _increase_cnt(process_cnt, start, err=False):
 
 
 class RTprocess(object):
-    def __init__(self, config_path=None, autocontinue=False,
+    def __init__(self, config_path=None, autocontinue=False, copy=True,
                  proc_cls=None, parent_fit=None, init_kwargs=None):
         '''
         A class to perform parallelized processing.
@@ -177,6 +177,10 @@ class RTprocess(object):
         autocontinue : bool, optional
             indicator if user-input should be raised (True) in case the
             dump-folder already exists. The default is False.
+        copy : bool
+            indicator if '.ini' files and modules should be copied to
+            (and imported from) the dumppath/cfg folder or not.
+            The default is True.
         proc_cls : class, optional
             the processing-class. (if None it will be imported use the
             'module__processing_cfg' from the 'CONFIGFILES' section of
@@ -209,6 +213,9 @@ class RTprocess(object):
         self._config_path = config_path
         self.autocontinue = autocontinue
 
+        self._postprocess = True
+        self.copy = copy
+
         self._proc_cls = proc_cls
         self._parent_fit = parent_fit
         if init_kwargs is None:
@@ -222,7 +229,6 @@ class RTprocess(object):
     def _listener_process(self, queue):
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
-
         if not hasattr(self, 'dumppath'):
             log.error('listener process called without dumppath specified!')
             return
@@ -265,18 +271,12 @@ class RTprocess(object):
         warnings_logger
         warnings_logger.addHandler(h)
 
-    def setup(self, copy=True):
+    def setup(self):
         '''
         perform necessary tasks to run a processing-routine
           - initialize the folderstructure (only from MainProcess!)
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
-
-        Parameters
-        ----------
-        copy : bool
-            indicator if '.ini' files and modules should be copied to
-            the dumppath/cfg folder or not. The default is True.
         '''
 
         if self._config_path is not None and self._proc_cls is None:
@@ -347,7 +347,7 @@ class RTprocess(object):
                 _make_folderstructure(specs['save_path'] / specs['dumpfolder'],
                                       ['results', 'cfg', 'dumps'])
 
-                if copy is True:
+                if self.copy is True:
                     self._copy_cfg_and_modules()
 
             # load the processing-class
@@ -363,7 +363,7 @@ class RTprocess(object):
 
             # load ALL modules to ensure that the importer finds them
             procmodule = self.cfg.get_all_modules(
-                load_copy=copy)[proc_module_name]
+                load_copy=self.copy)[proc_module_name]
 
             log.debug(f'processing config class "{proc_class_name}"' +
                       f'  will be imported from \n"{procmodule}"')
@@ -487,14 +487,16 @@ class RTprocess(object):
 
             # append reader_arg
             fit.reader_arg = reader_arg
-            _increase_cnt(process_cnt, start, err=False)
+
+            if process_cnt is not None:
+                _increase_cnt(process_cnt, start, err=False)
 
             # if a post-processing function is provided, return its output,
-            # else return the fit-object directly
-            if callable(self.proc_cls.postprocess):
+            # else return None
+            if self._postprocess and callable(self.proc_cls.postprocess):
                 ret = self.proc_cls.postprocess(fit, reader_arg)
             else:
-                ret = fit
+                ret = None
 
             return ret
 
@@ -518,6 +520,11 @@ class RTprocess(object):
         pickleable function (e.g. avoid using an actual decorator for this)
         (>> returns from provided initializer are returned)
         '''
+
+        # preload ALL modules to ensure that the importer finds them at the
+        # desired locations (e.g. the cfg-folders)
+        _ = self.cfg.get_all_modules(load_copy=self.copy)
+
         if queue is not None:
             self._worker_configurer(queue)
 
@@ -528,7 +535,7 @@ class RTprocess(object):
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
                     preprocess_kwargs=None,
-                    queue=None):
+                    queue=None, postprocess=False):
         """
         Evaluate a RT-1 model on a single core or in parallel using
 
@@ -596,6 +603,7 @@ class RTprocess(object):
             postprocess-function.
 
         """
+        self._postprocess = postprocess
 
         if callable(self.proc_cls.preprocess):
             setupdict = self.proc_cls.preprocess(**preprocess_kwargs)
@@ -669,14 +677,15 @@ class RTprocess(object):
                 res.append(self._evalfunc(reader_arg=reader_arg,
                                           process_cnt=process_cnt))
 
-        if callable(self.proc_cls.finaloutput):
+        if self._postprocess and callable(self.proc_cls.finaloutput):
             return self.proc_cls.finaloutput(res)
         else:
             return res
 
-    def run_processing(self, ncpu=1, copy=True, print_progress=True,
+    def run_processing(self, ncpu=1, print_progress=True,
                        reader_args=None, pool_kwargs=None,
-                       preprocess_kwargs=None, logfile_level=1):
+                       preprocess_kwargs=None, logfile_level=1,
+                       postprocess=False):
         '''
         Start the processing
 
@@ -684,10 +693,6 @@ class RTprocess(object):
         ----------
         ncpu : int
             The number of cpu's to use. The default is 1.
-        copy : bool, optional
-            Indicator if the used config-file and all modules specified in the
-            "CONFIGFILES" section of the config-file should be copied to
-            "/dumpfolder/cfg" or not. The default is True.
         print_progress : bool, optional
             Indicator if a progress-bar should be printed or not.
             If True, it might be wise to suppress warnings during runtime
@@ -729,6 +734,7 @@ class RTprocess(object):
                 https://docs.python.org/3/library/logging.html#logging-levels
 
         '''
+
         try:
             if logfile_level is not None:
                 # start a listener-process that takes care of the logs from
@@ -742,9 +748,11 @@ class RTprocess(object):
                 # initialization of the  folder-structure!
                 # (otherwise the log-file can not be generated!)
                 self._worker_configurer(queue)
+            else:
+                queue = None
 
             # initialize all necessary properties
-            self.setup(copy=copy)
+            self.setup()
 
             if logfile_level is not None:
                 # start the listener after the setup-function completed, since
@@ -776,7 +784,7 @@ class RTprocess(object):
                                  reader_args=reader_args,
                                  pool_kwargs=pool_kwargs,
                                  preprocess_kwargs=preprocess_kwargs,
-                                 queue=queue)
+                                 queue=queue, postprocess=postprocess)
 
         except Exception as err:
             log.exception('there has been something wrong during processing!')
