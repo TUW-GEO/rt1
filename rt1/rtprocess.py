@@ -1208,7 +1208,7 @@ class RTresults(object):
                     log.info(f'loading random ID ({filepath.stem}) from '
                              + f' {self._n_dump_files} available files')
                 elif isinstance(ID, int):
-                    filepath = next(islice(self.dump_files, ID, None))
+                    filepath = next(islice(self.dump_files, ID, ID + 1))
                 elif isinstance(ID, str):
                     filepath = self._dump_path / (ID + '.dump')
 
