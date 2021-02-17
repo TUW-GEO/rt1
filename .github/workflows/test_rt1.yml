@@ -85,12 +85,16 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pytest --cov=rt1 --cov-report=xml
-      # upload coverage to codecov
+      - name: upload to coveralls
+        uses: coverallsapp/github-action@master
+         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          env_vars: ${{ matrix.os }}, ${{ matrix.python-version }}
-          name: rt1_coverage
-          fail_ci_if_error: true
-          verbose: true
+
+      # - name: Upload coverage to Codecov
+      #   uses: codecov/codecov-action@v1
+      #   with:
+      #     env_vars: ${{ matrix.os }}, ${{ matrix.python-version }}
+      #     name: rt1_coverage
+      #     fail_ci_if_error: true
+      #     verbose: true
