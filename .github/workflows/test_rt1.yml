@@ -56,10 +56,17 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
       strategy:
-      matrix:
-      # define operating systems and python versions to use
-        os: [ubuntu-latest]#, windows-latest, macOS-latest]
-        python-version: [3.6]#, 3.7, 3.8]
+        matrix:
+        # define operating systems and python versions to use
+        #, windows-latest, macOS-latest]
+        #, 3.7, 3.8]
+          os: [ubuntu-latest]
+          python-version: [3.6]
+
+      env:
+        OS: ${{ matrix.os }}
+        PYTHON: ${{ matrix.python-version }}
+
 
     name: Python ${{ matrix.python-version }} RT1_test
     steps:
@@ -71,7 +78,6 @@ jobs:
 
           show-channel-urls: true
           use-only-tar-bz2: true
-
 
           python-version: ${{ matrix.python-version }}
 
@@ -95,7 +101,7 @@ jobs:
           files: ./coverage1.xml,./coverage2.xml
           directory: ./coverage/reports/
           flags: unittests
-          env_vars: os,python-version
+          env_vars: OS,PYTHON
           name: codecov-umbrella
           fail_ci_if_error: true
           path_to_write_report: ./coverage/codecov_report.txt
