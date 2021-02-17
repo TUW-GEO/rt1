@@ -40,24 +40,38 @@ on: [push]
 #         pytest
 
 
+# --------------------------------
+# jobs:
+#   build:
+#     runs-on: ${{ matrix.os }}
+#       strategy:
+#       matrix:
+#       # define operating systems and python versions to use
+#         os: [ubuntu-latest, windows-latest, macOS-latest]
+#         python-version: [3.6, 3.7, 3.8]
+#     name: Python ${{ matrix.python-version }} RT1_test
+
+
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.7]
     name: Python ${{ matrix.python-version }} RT1_test
     steps:
       - uses: actions/checkout@v2
-      - name: Setup conda
-        uses: s-weigand/setup-conda@v1
+      - uses: conda-incubator/setup-miniconda@v2
         with:
-          update-conda: true
+          activate-environment: test_rt1
+          environment-file: test_env.yml
           python-version: ${{ matrix.python-version }}
-          conda-channels: anaconda, conda-forge
-      - run: conda --version
-      - run: which python
+          auto-activate-base: false
+          auto-update-conda: true
 
+      - run: conda --version
+      - run: conda info
+      - run: conda list
+      - run: which python
 
 
