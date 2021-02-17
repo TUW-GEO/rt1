@@ -1,0 +1,15 @@
+name: test_rt1
+
+dependencies:
+  - numpy
+  - sympy
+  - scipy
+  - pandas
+  - matplotlib
+  - cloudpickle
+  - pyton-symengine
+  - pytables
+
+  - coveralls
+  - pytest
+  - pytest-cov
