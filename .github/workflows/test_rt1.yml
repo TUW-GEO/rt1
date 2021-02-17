@@ -88,7 +88,6 @@ jobs:
       # upload coverage to codecov
 
       - name: Upload coverage to Codecov
-        shell: bash -l {0}
         uses: codecov/codecov-action@v1
         with:
           env_vars: ${{ matrix.os }}, ${{ matrix.python-version }}
