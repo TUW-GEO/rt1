@@ -75,9 +75,12 @@ jobs:
           auto-activate-base: false
           auto-update-conda: true
 
-      - run: conda --version
-      - run: conda info
-      - run: conda list
-      - run: which python
+      - name: check env activation
+
+        shell: bash -l {0}
+        run: conda --version
+        run: conda info
+        run: conda list
+        run: which python
 
 
