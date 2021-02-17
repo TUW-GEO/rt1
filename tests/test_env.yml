@@ -1,4 +1,7 @@
 name: test_rt1
+channels:
+  - conda-forge
+  - defaults
 
 dependencies:
   - numpy
@@ -7,7 +10,7 @@ dependencies:
   - pandas
   - matplotlib
   - cloudpickle
-  - pyton-symengine
+  - python-symengine
   - pytables
 
   - coveralls
