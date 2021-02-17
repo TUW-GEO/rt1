@@ -84,7 +84,7 @@ jobs:
         # do this to ensure proper activation of conda environment
         shell: bash -l {0}
         run: |
-          python -m pytest -cov=rt1 -cov-report=xml
+          python -m pytest --cov=rt1 --cov-report=xml
       # upload coverage to codecov
 
       - name: Upload coverage to Codecov
