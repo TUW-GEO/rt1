@@ -86,12 +86,18 @@ def _make_folderstructure(save_path, subfolders):
 
 
 def _setup_cnt(N_items, ncpu):
-
-    manager = mp.Manager()
-    lock = manager.Lock()
-    p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-    p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-    p_time = manager.Value(ctypes.c_float, 0)
+    if ncpu > 1:
+        manager = mp.Manager()
+        lock = manager.Lock()
+        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_time = manager.Value(ctypes.c_float, 0)
+    else:
+        # don't use a manager if single-core processing is used
+        p_totcnt = mp.Value(ctypes.c_ulonglong, 0)
+        p_meancnt = mp.Value(ctypes.c_ulonglong, 0)
+        p_time = mp.Value(ctypes.c_float, 0)
+        lock = None
 
     process_cnt = [p_totcnt, p_meancnt, N_items, p_time, ncpu, lock]
     return process_cnt
@@ -106,8 +112,9 @@ def _increase_cnt(process_cnt, start, err=False):
         return
 
     p_totcnt, p_meancnt, p_max, p_time, p_ncpu, lock = process_cnt
-    # ensure that only one process is allowed to write simultaneously
-    lock.acquire()
+    if lock is not None:
+        # ensure that only one process is allowed to write simultaneously
+        lock.acquire()
     try:
         if err is False:
             end = default_timer()
@@ -153,12 +160,15 @@ def _increase_cnt(process_cnt, start, err=False):
                     f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
             log.progress(msg.strip())
-        # release the lock
-        lock.release()
+
+        if lock is not None:
+            # release the lock
+            lock.release()
     except Exception:
         msg = '???'
-        # release the lock in case an error occured
-        lock.release()
+        if lock is not None:
+           # release the lock in case an error occured
+           lock.release()
         pass
 
     sys.stdout.write(msg)
@@ -737,7 +747,7 @@ class RTprocess(object):
         '''
 
         try:
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
@@ -755,7 +765,7 @@ class RTprocess(object):
             # initialize all necessary properties
             self.setup()
 
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
@@ -792,15 +802,17 @@ class RTprocess(object):
             raise err
 
         finally:
-            # turn off capturing warnings
-            logging.captureWarnings(False)
 
             if logfile_level is not None:
-                # tell the queue to stop
-                queue.put_nowait(None)
+                if ncpu > 1:
+                    # turn off capturing warnings
+                    logging.captureWarnings(False)
 
-                # stop the listener process
-                listener.join()
+                    # tell the queue to stop
+                    queue.put_nowait(None)
+
+                    # stop the listener process
+                    listener.join()
 
                 # remove any remaining file-handler and queue-handlers after
                 # the processing is done
