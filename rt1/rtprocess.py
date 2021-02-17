@@ -177,7 +177,8 @@ def _increase_cnt(process_cnt, start, err=False):
 
 class RTprocess(object):
     def __init__(self, config_path=None, autocontinue=False, copy=True,
-                 proc_cls=None, parent_fit=None, init_kwargs=None):
+                 proc_cls=None, parent_fit=None, init_kwargs=None,
+                 setup=True):
         '''
         A class to perform parallelized processing.
 
@@ -217,14 +218,25 @@ class RTprocess(object):
             Additional keyword-arguments passed to the initialization of the
             'proc_cls' class. (used to append-to or partially overwrite
             definitions passed via the config-file). The default is None.
-
-
+        setup : bool, optional
+            indicator if `RTprocess.setup()` should be called during
+            initialization or not. This is required for multiprocessing
+            on Windows since `setup()` needs to be called outside of the
+            `if __name__ == '__main__'` protector to ensure correct import
+            of the used processing_config class.
+            Notice that if setup is set to True (the default) the
+            folder-structure etc. will be initialized as soon as the
+            class object is created!
+            The default is True.
         '''
 
         self._config_path = config_path
         self.autocontinue = autocontinue
 
         self._postprocess = True
+
+        self._setup = False
+
         self.copy = copy
 
         self._proc_cls = proc_cls
@@ -237,7 +249,12 @@ class RTprocess(object):
                 'the values of "init_kwargs" MUST be strings !')
             self.init_kwargs = init_kwargs
 
+        if not self._setup and setup:
+            self.setup()
+
+
     def _listener_process(self, queue):
+
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
         if not hasattr(self, 'dumppath'):
@@ -398,6 +415,8 @@ class RTprocess(object):
         assert self.parent_fit is not None, (
             'you MUST provide a valid config-file or a parent_fit-object!')
 
+        self._setup = True
+
     def _copy_cfg_and_modules(self):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
@@ -546,7 +565,7 @@ class RTprocess(object):
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
                     preprocess_kwargs=None,
-                    queue=None, postprocess=False):
+                    queue=None, postprocess=True):
         """
         Evaluate a RT-1 model on a single core or in parallel using
 
@@ -696,7 +715,7 @@ class RTprocess(object):
     def run_processing(self, ncpu=1, print_progress=True,
                        reader_args=None, pool_kwargs=None,
                        preprocess_kwargs=None, logfile_level=1,
-                       postprocess=False):
+                       postprocess=True):
         '''
         Start the processing
 
@@ -743,7 +762,10 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
-
+        postprocess : bool, optional
+            indicator if postprocess() and finaloutput() functions should be
+            executed or not.
+            The default is True.
         '''
 
         try:
@@ -762,8 +784,9 @@ class RTprocess(object):
             else:
                 queue = None
 
-            # initialize all necessary properties
-            self.setup()
+            # initialize all necessary properties if setup was not yet called
+            if not self._setup:
+                self.setup()
 
             if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
@@ -887,10 +910,12 @@ class RTprocess(object):
                 queue = None
 
             # initialize all necessary properties with autocontinue=True
-            initial_autocontinue = self.autocontinue
-            self.autocontinue = True
-            self.setup()
-            self.autocontinue = initial_autocontinue
+            # if setup was not yet called
+            if not self._setup:
+                initial_autocontinue = self.autocontinue
+                self.autocontinue = True
+                self.setup()
+                self.autocontinue = initial_autocontinue
 
             if logfile_level is not None:
                 # start the listener after the setup-function completed, since
