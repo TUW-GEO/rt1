@@ -54,10 +54,13 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    strategy:
+    runs-on: ${{ matrix.os }}
+      strategy:
       matrix:
-        python-version: [3.7]
+      # define operating systems and python versions to use
+        os: [ubuntu-latest]#, windows-latest, macOS-latest]
+        python-version: [3.6]#, 3.7, 3.8]
+
     name: Python ${{ matrix.python-version }} RT1_test
     steps:
       - uses: actions/checkout@v2
@@ -83,9 +86,17 @@ jobs:
           #conda info
           #conda list
           #which python
-          python -m pytest -cov=rt1
+          python -m pytest -cov=rt1 -cov-report=xml
 
-      - name: Coveralls
-        uses: coverallsapp/github-action@master
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage1.xml,./coverage2.xml
+          directory: ./coverage/reports/
+          flags: unittests
+          env_vars: os,python-version
+          name: codecov-umbrella
+          fail_ci_if_error: true
+          path_to_write_report: ./coverage/codecov_report.txt
+          verbose: true
