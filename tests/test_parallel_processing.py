@@ -65,20 +65,23 @@ class TestRTfits(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
+        with self.assertRaises(SystemExit):
+            with mock.patch('builtins.input', side_effect=['N']):
+                proc = RTprocess(config_path, autocontinue=False,
+                                 setup=False)
+                proc.setup()
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['REMOVE', 'N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, autocontinue=False)
-            proc.setup()
         assert len(list(Path('tests/proc_test/dump01/dumps').iterdir())) == 0, 'user-input REMOVE did not work'
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
-            proc.copy=False
+            proc = RTprocess(config_path, autocontinue=False,
+                             copy=False)
             proc.run_processing(ncpu=1, reader_args = reader_args)
 
         #----------------------------------------- check if files have been copied
