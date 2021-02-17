@@ -1188,6 +1188,7 @@ class RTresults(object):
                 the return of either xarray.Dataset or NetCDF4.Dataset
             '''
             results = self._get_results('.nc')
+            assert len(results) > 0, 'no NetCDF file in the results folder!'
 
             assert len(results) == 1 or result_name in results, (
                  ('there is more than 1 result... ' +
@@ -1301,7 +1302,7 @@ class RTresults(object):
             print all available NetCDF-files and their variables
             '''
             results = self._get_results('.nc')
-
+            assert len(results) > 0, 'no NetCDF file in the results folder!'
             for r in results:
                 print('\nresult: ', r)
                 with self.load_nc(r, use_xarray=False) as ncfile:
