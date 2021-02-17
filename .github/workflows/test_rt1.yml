@@ -76,12 +76,16 @@ jobs:
           auto-update-conda: true
 
       - name: check env activation
-
+        # do this to ensure proper activation of conda environment
         shell: bash -l {0}
         run: |
-          conda --version
-          conda info
-          conda list
-          which python
+          #conda --version
+          #conda info
+          #conda list
+          #which python
+          pytest --cov=rt1
 
-
+    # - name: Coveralls
+    #   uses: coverallsapp/github-action@master
+    #   with:
+    #     github-token: ${{ secrets.GITHUB_TOKEN }}
