@@ -78,9 +78,10 @@ jobs:
       - name: check env activation
 
         shell: bash -l {0}
-        run: conda --version
-        run: conda info
-        run: conda list
-        run: which python
+        run: |
+          conda --version
+          conda info
+          conda list
+          which python
 
 
