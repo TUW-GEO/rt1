@@ -37,9 +37,13 @@ class TestRTfits(unittest.TestCase):
         results = RTresults('tests/proc_test')
         assert hasattr(results, 'dump01'), 'dumpfolder not found by RTresults'
 
+        dumpfiles = [i for i in results.dump01.dump_files]
+        print(dumpfiles)
+
         fit = results.dump01.load_fit()
         cfg = results.dump01.load_cfg()
-        dumpfiles = [i for i in results.dump01.dump_files]
+
+
 
         with self.assertRaises(AssertionError):
             # TODO implement netcdf export and properly test netcdf's !
