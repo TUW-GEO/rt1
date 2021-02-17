@@ -143,7 +143,7 @@ class TestDUMPS(unittest.TestCase):
 
             for key, val in old_results.items():
                 self.assertTrue(np.allclose(fit.res_dict[key],
-                                            old_results[key], atol=1e-4, rtol=1e-4),
+                                            old_results[key], atol=1e-3, rtol=1e-3),
                                 msg=f'fitted values for {msg} fit of {key} ' +
                                      f'differ by {np.subtract(fit.res_dict[key], old_results[key]).mean()}')
 
