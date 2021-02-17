@@ -83,6 +83,7 @@ jobs:
           #conda info
           #conda list
           #which python
+          echo "PYTHONPATH=rt1" >> $GITHUB_ENV
           pytest --cov=rt1
 
     # - name: Coveralls
