@@ -51,17 +51,22 @@ on: [push]
 #         python-version: [3.6, 3.7, 3.8]
 #     name: Python ${{ matrix.python-version }} RT1_test
 
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # set operating systems to test [ubuntu-latest, windows-latest, macOS-latest]
         os: [ubuntu-latest]
+        # set python versions to test [3.6, 3.7, 3.8]
         python-version: ['3.6']
 
     name: RT1_test ${{ matrix.os }}  ${{ matrix.python-version }}
     steps:
+      # checkout the repository
       - uses: actions/checkout@v2
+      # install miniconda environment
       - uses: conda-incubator/setup-miniconda@v2
         with:
           environment-file: tests/test_env.yml
@@ -74,20 +79,19 @@ jobs:
 
           auto-activate-base: false
           auto-update-conda: true
-
+      # run pytest
       - name: test RT1
         # do this to ensure proper activation of conda environment
         shell: bash -l {0}
         run: |
           python -m pytest -cov=rt1 -cov-report=xml
+      # upload coverage to codecov
 
       - name: Upload coverage to Codecov
+        shell: bash -l {0}
         uses: codecov/codecov-action@v1
         with:
-          files: ./coverage1.xml,./coverage2.xml
-          directory: ./coverage/reports/
           env_vars: ${{ matrix.os }}, ${{ matrix.python-version }}
           name: rt1_coverage
           fail_ci_if_error: true
-          path_to_write_report: ./coverage/codecov_report.txt
           verbose: true
