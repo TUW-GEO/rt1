@@ -87,7 +87,7 @@ jobs:
           python -m pytest --cov=rt1 --cov-report=xml
       - name: upload to coveralls
         uses: coverallsapp/github-action@master
-         with:
+        with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
 
