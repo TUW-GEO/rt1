@@ -74,7 +74,8 @@ class TestRTfits(unittest.TestCase):
         assert len(list(Path('tests/proc_test/dump01/dumps').iterdir())) == 0, 'user-input REMOVE did not work'
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
-            proc.run_processing(ncpu=1, reader_args = reader_args, copy=False)
+            proc.copy=False
+            proc.run_processing(ncpu=1, reader_args = reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
