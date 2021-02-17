@@ -51,17 +51,15 @@ on: [push]
 #         python-version: [3.6, 3.7, 3.8]
 #     name: Python ${{ matrix.python-version }} RT1_test
 
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-      strategy:
-        matrix:
-        # define operating systems and python versions to use
-          os: [ubuntu-latest]
-          python-version: [3.6]
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.6']
 
-    name: Python ${{ matrix.python-version }} RT1_test
+    name: RT1_test ${{ matrix.os }}  ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
