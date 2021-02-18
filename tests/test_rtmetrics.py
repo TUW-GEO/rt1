@@ -31,8 +31,7 @@ class TestRTMetrics(unittest.TestCase):
             'bias': -8.462000000000003,
             'mae': 53.084,
             'mape': 2.578235110085792,
-            'std_ratio': 0.682317387225608
-            }
+            'std_ratio': 0.682317387225608}
         return (d1, d2, results)
 
     @staticmethod

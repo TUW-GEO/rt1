@@ -107,7 +107,7 @@ class TestRTfits(unittest.TestCase):
                              dumpfolder='dump02')
                          )
 
-        proc.run_processing(ncpu=4, reader_args = reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test2/dump02/cfg').exists(), 'folder-generation did not work'
@@ -119,5 +119,3 @@ class TestRTfits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-    #stop_log_to_file()

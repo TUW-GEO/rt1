@@ -1250,7 +1250,6 @@ class RTresults(object):
                 elif isinstance(ID, str):
                     filepath = self._dump_path / (ID + '.dump')
 
-
             fit = load(filepath)
 
             if return_ID is True:

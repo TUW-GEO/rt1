@@ -9,3 +9,6 @@ rt1.egg-info
 _additional_and_old_scripts
 rt1/.pylint.d
 .gitmodules
+coverage.xml
+tests/testdump1.dump
+tests/testdump2.dump
