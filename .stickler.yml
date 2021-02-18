@@ -2,7 +2,11 @@
 linters:
     flake8:
        python: 3
-       ignore: 'E501, E203, W503'
+       # E203: 	whitespace before ":"
+       # E501: line too long
+       # W503: line break before binary operator
+       # W504: line break after binary operator
+       ignore: 'E203, E501, W503, W504'
        max-line-length: 88
        fixer: false
 

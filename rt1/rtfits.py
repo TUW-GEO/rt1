@@ -30,7 +30,7 @@ from . import log
 from .rtmetrics import _metric_keys
 
 import copy
-from itertools import repeat, count, chain, groupby, permutations
+from itertools import repeat, count, chain, groupby
 from functools import lru_cache, partial, wraps
 from operator import itemgetter, add
 from datetime import datetime

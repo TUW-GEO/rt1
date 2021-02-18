@@ -5,6 +5,7 @@ from itertools import repeat, islice
 from functools import partial
 import ctypes
 import sys
+import traceback
 from textwrap import dedent
 
 from pathlib import Path
@@ -297,8 +298,6 @@ class RTprocess(object):
                     break
                 log2.handle(record)  # ...No level or filter logic applied
             except Exception:
-                import sys, traceback
-
                 print("Whoops! Problem:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 

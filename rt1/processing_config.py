@@ -10,7 +10,7 @@ from . import log
 
 try:
     import xarray as xar
-except:
+except ModuleNotFoundError:
     log.debug("xarray could not be imported, " + "postprocess_xarray will not work!")
 
 
