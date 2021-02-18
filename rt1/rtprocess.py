@@ -444,7 +444,6 @@ class RTprocess(object):
             self.parent_fit is not None
         ), "you MUST provide a valid config-file or a parent_fit-object!"
 
-
     def _copy_cfg_and_modules(self):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
@@ -556,8 +555,7 @@ class RTprocess(object):
 
             # dump a fit-file
             if self._dump_fit:
-                self.proc_cls.dump_fit_to_file(fit, reader_arg,
-                                               mini=True)
+                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
 
             # if a post-processing function is provided, return its output,
             # else return None
