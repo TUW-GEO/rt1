@@ -245,8 +245,6 @@ class RTprocess(object):
 
         self._postprocess = True
 
-        self._setup = False
-
         self.copy = copy
 
         self._proc_cls = proc_cls
@@ -260,7 +258,7 @@ class RTprocess(object):
             ), 'the values of "init_kwargs" MUST be strings !'
             self.init_kwargs = init_kwargs
 
-        if not self._setup and setup:
+        if setup:
             self.setup()
 
     def _listener_process(self, queue):
@@ -446,7 +444,6 @@ class RTprocess(object):
             self.parent_fit is not None
         ), "you MUST provide a valid config-file or a parent_fit-object!"
 
-        self._setup = True
 
     def _copy_cfg_and_modules(self):
         # if copy is True, copy the config-file and re-import the cfg
@@ -560,7 +557,7 @@ class RTprocess(object):
             # dump a fit-file
             if self._dump_fit:
                 self.proc_cls.dump_fit_to_file(fit, reader_arg,
-                                               mini=self._mini)
+                                               mini=True)
 
             # if a post-processing function is provided, return its output,
             # else return None
@@ -861,8 +858,7 @@ class RTprocess(object):
                 queue = None
 
             # initialize all necessary properties if setup was not yet called
-            if not self._setup:
-                self.setup()
+            self.setup()
 
             if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
@@ -994,12 +990,10 @@ class RTprocess(object):
                 queue = None
 
             # initialize all necessary properties with autocontinue=True
-            # if setup was not yet called
-            if not self._setup:
-                initial_autocontinue = self.autocontinue
-                self.autocontinue = True
-                self.setup()
-                self.autocontinue = initial_autocontinue
+            initial_autocontinue = self.autocontinue
+            self.autocontinue = True
+            self.setup()
+            self.autocontinue = initial_autocontinue
 
             if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since

@@ -80,7 +80,7 @@ class TestRTfits(unittest.TestCase):
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, autocontinue=False,
-                             copy=False)
+                             copy=False, setup=False)
             proc.run_processing(ncpu=1, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
@@ -127,7 +127,7 @@ class TestRTfits(unittest.TestCase):
                                  path__save_path = 'tests/proc_test3',
                                  dumpfolder='dump03'))
 
-            proc.run_processing(ncpu=2, reader_args=reader_args,
+            proc.run_processing(ncpu=4, reader_args=reader_args,
                                 postprocess=False)
 
         results = RTresults('tests/proc_test3')
@@ -140,7 +140,7 @@ class TestRTfits(unittest.TestCase):
         proc.run_finaloutput(ncpu=1, finalout_name='ncpu_1.nc')
         assert Path('tests/proc_test3/dump03/results/ncpu_1.nc').exists(), 'run_finalout with ncpu=1 not work'
 
-        proc.run_finaloutput(ncpu=2, finalout_name='ncpu_2.nc')
+        proc.run_finaloutput(ncpu=4, finalout_name='ncpu_2.nc')
         assert Path('tests/proc_test3/dump03/results/ncpu_2.nc').exists(), 'run_finalout with ncpu=2 not work'
 
 
