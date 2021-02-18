@@ -1,13 +1,10 @@
 # stickler-ci configuration
 linters:
-    flake8:
+    pep8:
        python: 3
-       extend-ignore: E501, E203, W503
+       ignore: 'E501', 'E203', 'W503'
        max-line-length: 88
        fixer: false
-files:
-    ignore: []
-
 
 
 
