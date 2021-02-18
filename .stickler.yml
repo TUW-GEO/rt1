@@ -2,7 +2,7 @@
 linters:
     pep8:
        python: 3
-       ignore: 'E501', 'E203', 'W503'
+       ignore: E501, E203, W503
        max-line-length: 88
        fixer: false
 
