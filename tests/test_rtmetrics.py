@@ -118,11 +118,10 @@ class TestRTMetrics(unittest.TestCase):
                         assert fit_metric == fit_func, assertmsg
 
     def test_scatterplot(self):
+        plt.ion()
         fit = self.mock_fit()
         pl = RTmetrics.scatterplot(fit.res_df.SM, fit.res_df.omega,
                                    "SM", "omega")
-        plt.close(pl)
-
 
 if __name__ == "__main__":
     unittest.main()
