@@ -46,7 +46,7 @@ class TestRTfits(unittest.TestCase):
             processed_ids = list(ncfile.ID.values)
 
         processed_ids.sort()
-        assert processed_ids == [1,2,3], 'NetCDF export does not include all IDs'
+        assert processed_ids == [1, 2, 3], 'NetCDF export does not include all IDs'
 
         # check if NetCDF_variables works as expected
         results.dump01.NetCDF_variables
@@ -116,7 +116,6 @@ class TestRTfits(unittest.TestCase):
         assert Path('tests/proc_test2/dump02/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
-
     def test_4_postprocess_and_finalout(self):
         config_path = Path(__file__).parent.absolute() / 'test_config.ini'
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
@@ -124,7 +123,7 @@ class TestRTfits(unittest.TestCase):
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path,
                              init_kwargs=dict(
-                                 path__save_path = 'tests/proc_test3',
+                                 path__save_path='tests/proc_test3',
                                  dumpfolder='dump03'))
 
             proc.run_processing(ncpu=4, reader_args=reader_args,
