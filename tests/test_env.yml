@@ -7,10 +7,10 @@ dependencies:
   - sympy
   - scipy
   - pandas
+  - xarray
   - matplotlib
   - cloudpickle
   - python-symengine
-  - pytables
 
   - coveralls
   - pytest

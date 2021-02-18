@@ -405,20 +405,25 @@ class rt1_processing_config(object):
 
         # get filenames
         names_ids = self.get_names_ids(reader_arg)
+        # parse defdict to find static and dynamic parameter names
+        params = defdict_parser(fit.defdict)
 
         # make a dump of the fit
         self.dump_fit_to_file(fit, reader_arg)
 
-        # get resulting parameter DataFrame
-        df = fit.res_df
-        # add the feature_id as first column-level
-        df.columns = pd.MultiIndex.from_product([[names_ids["feature_id"]], df.columns])
-        df.columns.names = ["feature_id", "param"]
+        # add all constant (fitted) parameters as static layers
+        staticlayers = dict()
+        for key in params["fitted_const"]:
+            staticlayers[key] = fit.res_dict[key][0]
 
-        # flush stdout to see output of child-processes
-        sys.stdout.flush()
+        ret = postprocess_xarray(
+            fit=fit,
+            saveparams=["inc", "sig", *params["fitted_dynamic"]],
+            xindex=("ID", names_ids["feature_id"]),
+            staticlayers=staticlayers,
+        )
 
-        return df
+        return ret
 
     def finaloutput(self, res, format="table"):
         """
@@ -463,35 +468,17 @@ class rt1_processing_config(object):
         """
 
         # concatenate the results
-        res = pd.concat([i for i in res if i is not None], axis=1)
+        resxar = xar.combine_nested([i for i in res if i is not None], concat_dim="ID")
 
         if self.rt1_procsesing_respath is None or self.finalout_name is None:
             log.info(
                 "both save_path and finalout_name must be specified... "
                 + "otherwise the final results can NOT be saved!"
             )
-            return res
+            return resxar
         else:
-
-            hdf_key = "RT1_result"
-
-            # transpose the dataframe (we want less columns and more rows)
-            res = res.T
-            # ensure that all values are numeric (required for table format)
-            res = res.apply(pd.to_numeric)
-            # ensure that all columns are numeric (required for table format)
-            res.columns = pd.to_numeric(res.columns)
-
-            # create (or append) results to a HDF-store
-            res.to_hdf(
-                self.rt1_procsesing_respath / self.finalout_name,
-                key=hdf_key,
-                format=format,
-                complevel=7,
-            )
-
-        # flush stdout to see output of child-processes
-        sys.stdout.flush()
+            # export netcdf file
+            resxar.to_netcdf(self.rt1_procsesing_respath / self.finalout_name)
 
     def exceptfunc(self, ex, reader_arg):
         """

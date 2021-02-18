@@ -29,14 +29,6 @@ except ModuleNotFoundError:
         + "NetCDF-features of RT1_results will not work!"
     )
 
-try:
-    from netCDF4 import Dataset
-except ModuleNotFoundError:
-    log.info(
-        "netCDF4.Dataset could be not imported, "
-        + "some NetCDF-features of RT1_results will not work!"
-    )
-
 
 def _confirm_input(msg="are you sure?", stopmsg="STOP", callbackdict=None):
     """
@@ -1279,10 +1271,7 @@ class RTresults(object):
                 result_name = list(results.keys())[0]
 
             log.info(f"loading nc-file for {result_name}")
-            if use_xarray is True:
-                file = xar.open_dataset(results[result_name])
-            else:
-                file = Dataset(results[result_name])
+            file = xar.open_dataset(results[result_name])
             return file
 
         def load_fit(self, ID=0, return_ID=False):
@@ -1390,11 +1379,6 @@ class RTresults(object):
             results = self._get_results(".nc")
             assert len(results) > 0, "no NetCDF file in the results folder!"
             for r in results:
-                print("\nresult: ", r)
-                with self.load_nc(r, use_xarray=False) as ncfile:
-                    space = len(max(ncfile.variables.keys(), key=len))
-                    for key, val in ncfile.variables.items():
-                        if key in ncfile.dimensions.keys():
-                            print("dimension: ", *zip(val.dimensions, val.shape))
-                        else:
-                            print(f"{key:<{space + 7}}", val.dimensions)
+                print(f"\n################ result:  {r}.nc")
+                with self.load_nc(r) as ncfile:
+                    print(ncfile)
