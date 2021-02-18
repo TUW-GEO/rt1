@@ -79,7 +79,7 @@ class TestRTfits(unittest.TestCase):
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, autocontinue=False,
                              copy=False)
-            proc.run_processing(ncpu=1, reader_args = reader_args)
+            proc.run_processing(ncpu=1, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
