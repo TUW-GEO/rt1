@@ -213,9 +213,7 @@ class Surface(Scatter):
 
         return sp.Sum(
             self.legcoefs
-            * sp.legendre(
-                n, self.scat_angle(theta_s, theta_ex, phi_s, phi_ex, self.a)
-            ),
+            * sp.legendre(n, self.scat_angle(theta_s, theta_ex, phi_s, phi_ex, self.a)),
             (n, 0, NBRDF - 1),
         )
 
@@ -371,9 +369,7 @@ class Surface(Scatter):
                 sp.Symbol("phi_ex"),
             ) + tuple(param_dict.keys())
 
-            brdffunc = sp.lambdify(
-                args, dfunc_dtheta_0, modules=["numpy", "sympy"]
-            )
+            brdffunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function
             # with scalar output which is not suitable for further processing
@@ -481,10 +477,9 @@ class LinCombSRF(Surface):
         # find BRDF functions with equal a parameters
         equals = [
             np.where(
-                (
-                    np.array([VV[1].a for VV in self.SRFchoices])
-                    == tuple(V[1].a)
-                ).all(axis=1)
+                (np.array([VV[1].a for VV in self.SRFchoices]) == tuple(V[1].a)).all(
+                    axis=1
+                )
             )[0]
             for V in self.SRFchoices
         ]
@@ -519,10 +514,7 @@ class LinCombSRF(Surface):
         # combine legendre-expansions for each a-parameter based on given
         # combined legendre-coefficients
         SRFcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum(
-            [
-                lexp(t_0, t_ex, p_0, p_ex, geometry)
-                for lexp in dummylegexpansion
-            ]
+            [lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion]
         )
 
         for SRF in self.SRFchoices:
@@ -767,8 +759,7 @@ class HG_nadirnorm(Surface):
                 1.0
                 - self.t * (-self.t + self.a[0])
                 - sp.sqrt(
-                    (1 + self.t ** 2 - 2 * self.a[0] * self.t)
-                    * (1 + self.t ** 2)
+                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
                 )
             )
             / (
@@ -791,8 +782,7 @@ class HG_nadirnorm(Surface):
                 1.0
                 - self.t * (-self.t + self.a[0])
                 - sp.sqrt(
-                    (1 + self.t ** 2 - 2 * self.a[0] * self.t)
-                    * (1 + self.t ** 2)
+                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
                 )
             )
             / (

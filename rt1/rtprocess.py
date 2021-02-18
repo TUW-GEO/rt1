@@ -132,9 +132,7 @@ def _increase_cnt(process_cnt, start, err=False):
             # increase the mean counter
             p_meancnt.value += 1
             # get the remaining time and update the progressbar
-            remain = timedelta(
-                seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value
-            )
+            remain = timedelta(seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value)
             d, h, m, s = dt_to_hms(remain)
 
             msg = update_progress(
@@ -424,9 +422,7 @@ class RTprocess(object):
                 proc_class_name = "processing_cfg"
 
             # load ALL modules to ensure that the importer finds them
-            procmodule = self.cfg.get_all_modules(load_copy=self.copy)[
-                proc_module_name
-            ]
+            procmodule = self.cfg.get_all_modules(load_copy=self.copy)[proc_module_name]
 
             log.debug(
                 f'processing config class "{proc_class_name}"'
@@ -477,15 +473,12 @@ class RTprocess(object):
                 # original file
                 shutil.copy(self.cfg.configpath, copypath.parent)
                 log.info(
-                    f'"{self.cfg.configpath.name}" copied to\n'
-                    + f'"{copypath.parent}"'
+                    f'"{self.cfg.configpath.name}" copied to\n' + f'"{copypath.parent}"'
                 )
             else:
                 # if init_kwargs have been provided, write the updated
                 # config to the folder
-                with open(
-                    copypath.parent / self.cfg.configpath.name, "w"
-                ) as file:
+                with open(copypath.parent / self.cfg.configpath.name, "w") as file:
                     self.cfg.config.write(file)
 
                 log.info(
@@ -503,9 +496,7 @@ class RTprocess(object):
             if key.startswith("module__"):
                 modulename = key[8:]
 
-                module_path = self.cfg.config["CONFIGFILES"][
-                    f"module__{modulename}"
-                ]
+                module_path = self.cfg.config["CONFIGFILES"][f"module__{modulename}"]
 
                 location = Path(module_path.strip())
 
@@ -771,9 +762,7 @@ class RTprocess(object):
             res = []
             for reader_arg in reader_args:
                 res.append(
-                    self._evalfunc(
-                        reader_arg=reader_arg, process_cnt=process_cnt
-                    )
+                    self._evalfunc(reader_arg=reader_arg, process_cnt=process_cnt)
                 )
 
         if self._postprocess and callable(self.proc_cls.finaloutput):
@@ -848,9 +837,7 @@ class RTprocess(object):
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
-                listener = mp.Process(
-                    target=self._listener_process, args=[queue]
-                )
+                listener = mp.Process(target=self._listener_process, args=[queue])
 
                 # make the queue listen also to the MainProcess start the
                 # listener-process that writes the file to disc AFTER
@@ -875,9 +862,7 @@ class RTprocess(object):
 
             # save the used model-definition string to a file
             if self.dumppath is not None:
-                with open(
-                    self.dumppath / "cfg" / "model_definition.txt", "w"
-                ) as file:
+                with open(self.dumppath / "cfg" / "model_definition.txt", "w") as file:
 
                     outtxt = ""
                     if hasattr(self.proc_cls, "description"):
@@ -984,9 +969,7 @@ class RTprocess(object):
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
-                listener = mp.Process(
-                    target=self._listener_process, args=[queue]
-                )
+                listener = mp.Process(target=self._listener_process, args=[queue])
 
                 # make the queue listen also to the MainProcess start the
                 # listener-process that writes the file to disc AFTER
@@ -1089,9 +1072,7 @@ class RTprocess(object):
 
         # override finalout_name
         if finalout_name is not None:
-            assert isinstance(
-                finalout_name, str
-            ), "finalout_name must be a string"
+            assert isinstance(finalout_name, str), "finalout_name must be a string"
             self.proc_cls.finalout_name = finalout_name
 
         # override finaloutput function
@@ -1117,9 +1098,7 @@ class RTprocess(object):
         # add provided initializer and queue (used for subprocess-logging)
         # to the initargs and use "self._initializer" as initializer-function
         # Note: this is a pickleable way for decorating the initializer!
-        pool_kwargs = dict(
-            initializer=self._initializer, initargs=[None, queue]
-        )
+        pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
 
         if print_progress is True:
             # initialize shared values that will be used to track the number
@@ -1151,9 +1130,7 @@ class RTprocess(object):
             res = []
             for fitpath in fitlist:
                 res.append(
-                    self._run_postprocess(
-                        fitpath=fitpath, process_cnt=process_cnt
-                    )
+                    self._run_postprocess(fitpath=fitpath, process_cnt=process_cnt)
                 )
 
         if callable(self.proc_cls.finaloutput):
@@ -1258,9 +1235,7 @@ class RTresults(object):
             )
 
             results = {
-                i.stem: i
-                for i in self._result_path.iterdir()
-                if i.suffix == ending
+                i.stem: i for i in self._result_path.iterdir() if i.suffix == ending
             }
 
             log.info(f'there is no "{ending}" file in "{self._result_path}"')
@@ -1421,8 +1396,6 @@ class RTresults(object):
                     space = len(max(ncfile.variables.keys(), key=len))
                     for key, val in ncfile.variables.items():
                         if key in ncfile.dimensions.keys():
-                            print(
-                                "dimension: ", *zip(val.dimensions, val.shape)
-                            )
+                            print("dimension: ", *zip(val.dimensions, val.shape))
                         else:
                             print(f"{key:<{space + 7}}", val.dimensions)

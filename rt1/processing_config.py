@@ -11,9 +11,7 @@ from . import log
 try:
     import xarray as xar
 except:
-    log.debug(
-        "xarray could not be imported, " + "postprocess_xarray will not work!"
-    )
+    log.debug("xarray could not be imported, " + "postprocess_xarray will not work!")
 
 
 def defdict_parser(defdict):
@@ -350,9 +348,7 @@ class rt1_processing_config(object):
         if self.rt1_procsesing_dumppath is not None:
             names_ids = self.get_names_ids(reader_arg)
 
-            if not (
-                self.rt1_procsesing_dumppath / names_ids["filename"]
-            ).exists():
+            if not (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
                 fit.dump(
                     self.rt1_procsesing_dumppath / names_ids["filename"],
                     mini=mini,
@@ -416,9 +412,7 @@ class rt1_processing_config(object):
         # get resulting parameter DataFrame
         df = fit.res_df
         # add the feature_id as first column-level
-        df.columns = pd.MultiIndex.from_product(
-            [[names_ids["feature_id"]], df.columns]
-        )
+        df.columns = pd.MultiIndex.from_product([[names_ids["feature_id"]], df.columns])
         df.columns.names = ["feature_id", "param"]
 
         # flush stdout to see output of child-processes
@@ -550,9 +544,7 @@ class rt1_processing_config(object):
             )
 
             try:
-                fit = load(
-                    self.rt1_procsesing_dumppath / names_ids["filename"]
-                )
+                fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
                 return self.postprocess(fit, reader_arg)
             except Exception:
                 log.debug(
@@ -580,14 +572,10 @@ class rt1_processing_config(object):
             if "error_filename" in names_ids:
                 error_filename = names_ids["error_filename"]
             else:
-                error_filename = (
-                    names_ids["filename"].split(".")[0] + "_error.txt"
-                )
+                error_filename = names_ids["filename"].split(".")[0] + "_error.txt"
 
             # dump the encountered exception to a file
-            with open(
-                self.rt1_procsesing_dumppath / error_filename, "w"
-            ) as file:
+            with open(self.rt1_procsesing_dumppath / error_filename, "w") as file:
                 file.write(traceback.format_exc())
 
         # flush stdout to see output of child-processes

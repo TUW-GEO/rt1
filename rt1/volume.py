@@ -234,9 +234,7 @@ class Volume(Scatter):
                 sp.Symbol("phi_ex"),
             ) + tuple(param_dict.keys())
 
-            pfunc = sp.lambdify(
-                args, dfunc_dtheta_0, modules=["numpy", "sympy"]
-            )
+            pfunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function
             # with scalar output which is not suitable for further processing
@@ -391,9 +389,7 @@ class Volume(Scatter):
             self.legcoefs
             * sp.legendre(
                 n,
-                self.scat_angle(
-                    sp.pi - theta_0, theta_s, phi_0, phi_s, self.a
-                ),
+                self.scat_angle(sp.pi - theta_0, theta_s, phi_0, phi_s, self.a),
             ),
             (n, 0, NP - 1),
         )
@@ -498,10 +494,9 @@ class LinCombV(Volume):
         # find phase functions with equal a parameters
         equals = [
             np.where(
-                (
-                    np.array([VV[1].a for VV in self.Vchoices])
-                    == tuple(V[1].a)
-                ).all(axis=1)
+                (np.array([VV[1].a for VV in self.Vchoices]) == tuple(V[1].a)).all(
+                    axis=1
+                )
             )[0]
             for V in self.Vchoices
         ]
@@ -542,10 +537,7 @@ class LinCombV(Volume):
         # combine legendre-expansions for each a-parameter based on given
         # combined legendre-coefficients
         Vcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum(
-            [
-                lexp(t_0, t_ex, p_0, p_ex, geometry)
-                for lexp in dummylegexpansion
-            ]
+            [lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion]
         )
 
         for V in self.Vchoices:
@@ -764,10 +756,7 @@ class HGRayleigh(Volume):
                 / (2.0 + self.t ** 2)
                 * (
                     n * (n - 1.0) / (2.0 * n - 1.0) * self.t ** (n - 2.0)
-                    + (n + 2.0)
-                    * (n + 1.0)
-                    / (2.0 * n + 3)
-                    * self.t ** (n + 2.0)
+                    + (n + 2.0) * (n + 1.0) / (2.0 * n + 3) * self.t ** (n + 2.0)
                     + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t ** n
                     + (5.0 * n ** 2.0 - 1.0) / (2.0 * n - 1.0) * self.t ** n
                 ),

@@ -6,9 +6,7 @@ from itertools import tee, islice
 from collections import OrderedDict
 
 
-def rectangularize(
-    array, return_mask=False, dim=None, return_masked=False, dtype=None
-):
+def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
     """
     return a rectangularized version of the input-array by repeating the
     last value to obtain the smallest possible rectangular shape.
@@ -208,9 +206,7 @@ def scale(x, out_range=(0, 1), domainfuncs=(np.nanmin, np.nanmax)):
     domain = domainfuncs[0](x), domainfuncs[1](x)
 
     y = (x - (domain[1] + domain[0]) / 2) / (domain[1] - domain[0])
-    return (
-        y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
-    )
+    return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
 
 
 def update_progress(
@@ -231,8 +227,7 @@ def update_progress(
         )
     else:
         msg = (
-            f'\r{title} {"#"*block + "-"*(length-block)}'
-            + f" {progress} / {max_prog}"
+            f'\r{title} {"#"*block + "-"*(length-block)}' + f" {progress} / {max_prog}"
         )
 
     if progress >= max_prog:
@@ -317,16 +312,13 @@ def interpolate_to_index(data, index, data_index=None, **interp1d_kwargs):
         x = f(index.to_julian_date())
         return Series(x, index)
     elif isinstance(data, DataFrame):
-        f = interp1d(
-            data.index.to_julian_date(), data.values, axis=0, **kwargs
-        )
+        f = interp1d(data.index.to_julian_date(), data.values, axis=0, **kwargs)
         x = f(index.to_julian_date())
         return DataFrame(x, index, columns=data.columns)
 
     elif isinstance(data, (list, np.ndarray)):
         assert data_index is not None, (
-            'you must provide "data_index"'
-            + "if data is provided as list or array"
+            'you must provide "data_index"' + "if data is provided as list or array"
         )
 
         f = interp1d(data_index.to_julian_date(), data.values, **kwargs)

@@ -103,8 +103,7 @@ def polarplot(
         "Error: incidence-angles for " + "polarplot must be a list"
     )
     assert isinstance(multip, float), (
-        "Error: plotrange-multiplier "
-        + "for polarplot must be a floating-point number"
+        "Error: plotrange-multiplier " + "for polarplot must be a floating-point number"
     )
 
     if X is None:
@@ -129,9 +128,7 @@ def polarplot(
 
         polarax.fill(
             np.arange(np.pi / 2.0, 3.0 * np.pi / 2.0, 0.01),
-            np.ones_like(np.arange(np.pi / 2.0, 3.0 * np.pi / 2.0, 0.01))
-            * 1
-            * 1.2,
+            np.ones_like(np.arange(np.pi / 2.0, 3.0 * np.pi / 2.0, 0.01)) * 1 * 1.2,
             color=groundcolor,
         )
 
@@ -250,14 +247,10 @@ def polarplot(
 
         if aprox is True:
             legend_lines += [
-                mlines.Line2D(
-                    [], [], color="k", linestyle="--", label="approx."
-                )
+                mlines.Line2D([], [], color="k", linestyle="--", label="approx.")
             ]
 
-        legend = polarax.legend(
-            bbox_to_anchor=legpos, loc=2, handles=legend_lines
-        )
+        legend = polarax.legend(bbox_to_anchor=legpos, loc=2, handles=legend_lines)
         legend.get_frame().set_facecolor("w")
         legend.get_frame().set_alpha(0.5)
 
@@ -451,9 +444,7 @@ class plot:
     def __init__(self, fit=None, **kwargs):
         self.fit = fit
 
-    def scatter(
-        self, fit=None, mima=None, pointsize=0.5, regression=True, **kwargs
-    ):
+    def scatter(self, fit=None, mima=None, pointsize=0.5, regression=True, **kwargs):
         """
         geerate a scatterplot of modelled vs. original backscatter data
 
@@ -644,9 +635,7 @@ class plot:
                 gridspec_kw={"width_ratios": [3, 1]},
                 sharey=True,
             )
-            f.subplots_adjust(
-                left=0.05, right=0.98, top=0.98, bottom=0.1, wspace=0.1
-            )
+            f.subplots_adjust(left=0.05, right=0.98, top=0.98, bottom=0.1, wspace=0.1)
 
             # -------------------
             color = {
@@ -688,9 +677,7 @@ class plot:
 
         else:
             f, ax = plt.subplots(figsize=(12, 5))
-            f.subplots_adjust(
-                left=0.05, right=0.98, top=0.98, bottom=0.1, wspace=0.05
-            )
+            f.subplots_adjust(left=0.05, right=0.98, top=0.98, bottom=0.1, wspace=0.05)
 
         for label, val in contrib.items():
             if label in ["inc"]:
@@ -810,9 +797,7 @@ class plot:
             ax2.set_title("Residuals per incidence-angle")
 
         # the use of masked arrays might cause python 2 compatibility issues!
-        ax.plot(
-            fit.index[result_selection], res[result_selection], ".", alpha=0.5
-        )
+        ax.plot(fit.index[result_selection], res[result_selection], ".", alpha=0.5)
 
         # plot mean residual for each measurement
         ax.plot(
@@ -865,9 +850,7 @@ class plot:
         )
 
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(
-            handles=handles + [res_h_dots] + [res_h] + [res_h_dash], loc=1
-        )
+        ax.legend(handles=handles + [res_h_dots] + [res_h] + [res_h_dash], loc=1)
 
         ax.set_ylabel("Residual")
 
@@ -898,9 +881,7 @@ class plot:
             )
 
         # plot mean residual per incidence-angle
-        ax2.plot(
-            meanincs, mean, "k", linewidth=3, marker="o", fillstyle="none"
-        )
+        ax2.plot(meanincs, mean, "k", linewidth=3, marker="o", fillstyle="none")
 
         # add some legends
         res_h2 = mlines.Line2D(
@@ -1046,9 +1027,7 @@ class plot:
 
         # plot fitted values
         # assign colors
-        colordict = {
-            key: f"C{i%10}" for i, key in enumerate(fit.res_dict.keys())
-        }
+        colordict = {key: f"C{i%10}" for i, key in enumerate(fit.res_dict.keys())}
 
         for key, val in fit.res_df.items():
             ax2.plot(val, alpha=1.0, label=key, color=colordict[key])
@@ -1117,9 +1096,7 @@ class plot:
                 np.abs(
                     fit.fit_index
                     - np.expand_dims(
-                        np.atleast_1d(
-                            np.array(fit_indexes, dtype=fit.index.dtype)
-                        ),
+                        np.atleast_1d(np.array(fit_indexes, dtype=fit.index.dtype)),
                         -1,
                     )
                 ),
@@ -1163,20 +1140,14 @@ class plot:
             # plot data
             nindexes = len(indexsplits[m])
             if nindexes > 1:
-                mindate = np.datetime_as_string(
-                    indexsplits[m][0], unit=datetime_unit
-                )
-                maxdate = np.datetime_as_string(
-                    indexsplits[m][-1], unit=datetime_unit
-                )
+                mindate = np.datetime_as_string(indexsplits[m][0], unit=datetime_unit)
+                maxdate = np.datetime_as_string(indexsplits[m][-1], unit=datetime_unit)
                 if mindate == maxdate:
                     label = f"{mindate} [{nindexes}]"
                 else:
                     label = f"({mindate} - {maxdate}) [{nindexes}]"
             else:
-                label = np.datetime_as_string(
-                    indexsplits[m][0], unit=datetime_unit
-                )
+                label = np.datetime_as_string(indexsplits[m][0], unit=datetime_unit)
 
             xdata = np.rad2deg(fit.inc[m][~fit.mask[m]])
 
@@ -1201,9 +1172,7 @@ class plot:
 
                 # generate colormap that fades from white to the color
                 # of the plotted data  (asdf.get_color())
-                cmap = CustomCmap(
-                    [1.00, 1.00, 1.00], plt.cm.colors.hex2color(color)
-                )
+                cmap = CustomCmap([1.00, 1.00, 1.00], plt.cm.colors.hex2color(color))
                 # setup correct normalizing instance
                 norm = Normalize(vmin=0, vmax=hb.get_array().max())
 
@@ -1339,12 +1308,8 @@ class plot:
         for key in params:
             interres_p = pd.concat(
                 [
-                    pd.DataFrame(
-                        valdict[key], fit.meandatetimes[key], columns=[i]
-                    )
-                    for i, valdict in enumerate(
-                        fit.intermediate_results["parameters"]
-                    )
+                    pd.DataFrame(valdict[key], fit.meandatetimes[key], columns=[i])
+                    for i, valdict in enumerate(fit.intermediate_results["parameters"])
                 ],
                 axis=1,
             )
@@ -1424,9 +1389,7 @@ class plot:
         axsmbounds[2] = axsmbounds[2] - 0.015 * nparam
         axsm.set_position(axsmbounds)
 
-        for [pax, jax, [key, val]] in zip(
-            paramaxes, jacaxes, interparams.items()
-        ):
+        for [pax, jax, [key, val]] in zip(paramaxes, jacaxes, interparams.items()):
             if key not in interjacs:
                 continue
 
@@ -1592,9 +1555,7 @@ class plot:
             sig0_vals = fit.calc_model(return_components=True)
             sig0_vals["data"] = fit.dataset.sig
             sig0_vals["incs"] = fit.dataset.inc
-            sig0_vals = (
-                sig0_vals.groupby(level=0).agg(list).to_dict(orient="list")
-            )
+            sig0_vals = sig0_vals.groupby(level=0).agg(list).to_dict(orient="list")
             sig0_vals = {
                 key: rectangularize(val, return_masked=True)
                 for key, val in sig0_vals.items()
@@ -1662,13 +1623,9 @@ class plot:
                     return_components=True,
                 )
 
-            newsig0_vals = dict(
-                zip(["tot", "surf", "vol", "inter"], newsig0_vals)
-            )
+            newsig0_vals = dict(zip(["tot", "surf", "vol", "inter"], newsig0_vals))
 
-            newsig0_vals["incs"] = np.broadcast_to(
-                inc, newsig0_vals["tot"].shape
-            )
+            newsig0_vals["incs"] = np.broadcast_to(inc, newsig0_vals["tot"].shape)
 
             newsig0_vals_I_linear = dict()
             for key in ["tot", "surf", "vol", "inter"]:
@@ -1951,13 +1908,10 @@ class plot:
             )
 
             halas = [
-                [ha, la]
-                for ha, la in zip(np.array(la)[wherela], np.array(ha)[wherela])
+                [ha, la] for ha, la in zip(np.array(la)[wherela], np.array(ha)[wherela])
             ]
             halas.sort(key=lambda val: sort_order[val[0]])
-            ax.legend(
-                handles=[i[1] for i in halas], labels=[i[0] for i in halas]
-            )
+            ax.legend(handles=[i[1] for i in halas], labels=[i[0] for i in halas])
 
             return lines, lines_frac, linesfull, lines_frac_full
 
@@ -2139,9 +2093,7 @@ class plot:
 
             label.set_position([day0, label.get_position()[1]])
             if dayrange == 1:
-                label.set_text(
-                    sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M")
-                )
+                label.set_text(sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M"))
             elif dayrange > 1:
 
                 lday_0 = sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M")
@@ -2212,18 +2164,14 @@ class plot:
                     i += 1
                     if printcomponents:
                         linesfull[i].set_xdata(day_inc_new[sortp])
-                        linesfull[i].set_ydata(
-                            newsig0_vals["surf"][day][sortp]
-                        )
+                        linesfull[i].set_ydata(newsig0_vals["surf"][day][sortp])
                         i += 1
                         linesfull[i].set_xdata(day_inc_new[sortp])
                         linesfull[i].set_ydata(newsig0_vals["vol"][day][sortp])
                         if fit.int_Q is True:
                             i += 1
                             linesfull[i].set_xdata(day_inc_new[sortp])
-                            linesfull[i].set_ydata(
-                                newsig0_vals["inter"][day][sortp]
-                            )
+                            linesfull[i].set_ydata(newsig0_vals["inter"][day][sortp])
                         i += 1
                 i = 0
                 for day in np.arange(day0, day0 + dayrange, 1):
@@ -2246,9 +2194,7 @@ class plot:
                     if fit.int_Q is True:
                         i += 1
                         lines_frac_full[i].set_xdata(day_inc_new[sortp])
-                        lines_frac_full[i].set_ydata(
-                            (lininter / lintot)[sortp]
-                        )
+                        lines_frac_full[i].set_ydata((lininter / lintot)[sortp])
                     i += 1
 
             return lines
@@ -2262,16 +2208,12 @@ class plot:
 
             # convert to datetime-objects and ensure that they are in the
             # same time-zone as the sig0_vals indexes
-            xend = mpl.dates.num2date(xend).replace(
-                tzinfo=sig0_vals["indexes"].tzinfo
-            )
+            xend = mpl.dates.num2date(xend).replace(tzinfo=sig0_vals["indexes"].tzinfo)
             xstart = mpl.dates.num2date(xstart).replace(
                 tzinfo=sig0_vals["indexes"].tzinfo
             )
 
-            zoomindex = np.where(
-                np.logical_and(indexes > xstart, indexes < xend)
-            )[0]
+            zoomindex = np.where(np.logical_and(indexes > xstart, indexes < xend))[0]
             slider.valmin = zoomindex[0] - 1
             slider.valmax = zoomindex[-1] + 1
 
@@ -2496,15 +2438,11 @@ class plot:
             fixparams["bsf"] = fit.R.bsf
 
         modelresult = dict(
-            zip(
-                ["tot", "surf", "vol", "inter"], fit.calc(startparams, inc=inc)
-            )
+            zip(["tot", "surf", "vol", "inter"], fit.calc(startparams, inc=inc))
         )
         # convert to sig0 and dB if required
         for key, val in modelresult.items():
-            modelresult[key] = dBsig0convert(
-                val[0], inc, dB, sig0, fit.dB, fit.sig0
-            )
+            modelresult[key] = dBsig0convert(val[0], inc, dB, sig0, fit.dB, fit.sig0)
 
         f = plt.figure(figsize=(12, 9))
         f.subplots_adjust(top=0.93, right=0.98, left=0.07)
@@ -2552,10 +2490,7 @@ class plot:
                 0.98,
                 "fixed parameters:\n"
                 + "".join(
-                    [
-                        f"{key}={round(val, 5)}   "
-                        for key, val in fixparams.items()
-                    ]
+                    [f"{key}={round(val, 5)}   " for key, val in fixparams.items()]
                 ),
             )
 
@@ -2583,17 +2518,11 @@ class plot:
             pass
 
         # plot initial curves
-        (ltot,) = ax.plot(
-            inc, modelresult["tot"], "k", label="total contribution"
-        )
+        (ltot,) = ax.plot(inc, modelresult["tot"], "k", label="total contribution")
 
-        (lsurf,) = ax.plot(
-            inc, modelresult["surf"], "b", label="surface contribution"
-        )
+        (lsurf,) = ax.plot(inc, modelresult["surf"], "b", label="surface contribution")
 
-        (lvol,) = ax.plot(
-            inc, modelresult["vol"], "g", label="volume contribution"
-        )
+        (lvol,) = ax.plot(inc, modelresult["vol"], "g", label="volume contribution")
 
         if int_Q is True:
             (lint,) = ax.plot(
@@ -2654,9 +2583,7 @@ class plot:
             paramslider[key].label.set_horizontalalignment("left")
             paramslider[key].valtext.set_position([0.8, 0.5])
 
-        buttons = CheckButtons(
-            buttonax, buttonlabels, [False for i in buttonlabels]
-        )
+        buttons = CheckButtons(buttonax, buttonlabels, [False for i in buttonlabels])
 
         params = startparams.copy()
         # define function to update lines based on slider-input
@@ -2824,9 +2751,7 @@ class plot:
         bounds = dict(
             zip(
                 minparams.keys(),
-                np.array(
-                    [list(minparams.values()), list(maxparams.values())]
-                ).T,
+                np.array([list(minparams.values()), list(maxparams.values())]).T,
             )
         )
 
@@ -2862,9 +2787,7 @@ class plot:
                     0.025,
                 ]
             )
-            text_box0 = TextBox(
-                axbox0, "", initial=str(round(bounds[key][0], 4))
-            )
+            text_box0 = TextBox(axbox0, "", initial=str(round(bounds[key][0], 4)))
             text_box0.on_submit(partial(submit, key=key, minmax=0))
 
             axbox1 = plt.axes(
@@ -2875,9 +2798,7 @@ class plot:
                     0.025,
                 ]
             )
-            text_box1 = TextBox(
-                axbox1, "", initial=str(round(bounds[key][1], 4))
-            )
+            text_box1 = TextBox(axbox1, "", initial=str(round(bounds[key][1], 4)))
             text_box1.on_submit(partial(submit, key=key, minmax=1))
 
             textboxes_buttons[key + "_min"] = text_box0
@@ -3016,9 +2937,7 @@ class plot:
                         .groupby(fit._groupindex)
                         .mean()
                         .values.flatten()
-                        for i in fit.intermediate_results["residuals"][
-                            iter_slice
-                        ]
+                        for i in fit.intermediate_results["residuals"][iter_slice]
                     ]
                 )
                 grpvals = np.arange(resarr.shape[1])
@@ -3040,9 +2959,7 @@ class plot:
                         .groupby(level=0)
                         .mean()
                         .values.flatten()
-                        for i in fit.intermediate_results["residuals"][
-                            iter_slice
-                        ]
+                        for i in fit.intermediate_results["residuals"][iter_slice]
                     ]
                 )
                 grpvals = np.arange(resarr.shape[1])
@@ -3073,9 +2990,7 @@ class plot:
                         .groupby(pd.Grouper(freq=grp))
                         .mean()
                         .values.flatten()
-                        for i in fit.intermediate_results["residuals"][
-                            iter_slice
-                        ]
+                        for i in fit.intermediate_results["residuals"][iter_slice]
                     ]
                 )
                 grpvals = np.arange(resarr.shape[1])
@@ -3093,9 +3008,7 @@ class plot:
         # mask for nan-values
         resarr = np.ma.masked_array(resarr, np.isnan(resarr))
 
-        xvals = np.arange(1, len(fit.intermediate_results["residuals"]) + 1)[
-            iter_slice
-        ]
+        xvals = np.arange(1, len(fit.intermediate_results["residuals"]) + 1)[iter_slice]
         yvals = np.sort(pd.unique(grpvals))
 
         if plottype == "3D":
@@ -3127,8 +3040,7 @@ class plot:
                 )
 
                 ax.set_zlim(
-                    np.nanmin(resarr)
-                    - (np.nanmax(resarr) - np.nanmin(resarr)) * 0.1,
+                    np.nanmin(resarr) - (np.nanmax(resarr) - np.nanmin(resarr)) * 0.1,
                     np.nanmax(resarr),
                 )
 
@@ -3151,9 +3063,7 @@ class plot:
             # plot a connection-line and scatterpoints
             maskp = [
                 i == (True, False, True)
-                for i in pairwise(
-                    [True, *np.all(resarr.mask, axis=0), True], 3
-                )
+                for i in pairwise([True, *np.all(resarr.mask, axis=0), True], 3)
             ]
 
             for i in np.arange(len(maskp))[maskp]:
@@ -3180,9 +3090,7 @@ class plot:
 
             # incorporate the ticker if provided
             if label_formatter is not None:
-                ax.yaxis.set_major_formatter(
-                    ticker.FuncFormatter(label_formatter)
-                )
+                ax.yaxis.set_major_formatter(ticker.FuncFormatter(label_formatter))
 
         elif plottype == "2D":
             # generate a 2D imshow plot
@@ -3218,9 +3126,7 @@ class plot:
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(xformatter))
 
             if label_formatter is not None:
-                ax.yaxis.set_major_formatter(
-                    ticker.FuncFormatter(label_formatter)
-                )
+                ax.yaxis.set_major_formatter(ticker.FuncFormatter(label_formatter))
 
             ax.set_ylim(ymin, ymax)
 

@@ -78,9 +78,7 @@ def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
 
         log = setup_logger()
         # get formatting from consolehandler (always present)
-        hc = [val for val in log.handlers if val.name == "rt1_consolehandler"][
-            0
-        ]
+        hc = [val for val in log.handlers if val.name == "rt1_consolehandler"][0]
 
         # setup a new filehandler
         fh = logging.FileHandler(path, "a")
@@ -92,8 +90,7 @@ def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
         log.addHandler(fh)
 
         log.debug(
-            f"log-file for handler {name} added at location"
-            + f' "{fh.baseFilename}"!'
+            f"log-file for handler {name} added at location" + f' "{fh.baseFilename}"!'
         )
 
     except IndexError as err:
@@ -156,9 +153,7 @@ def _get_logger_formatter(simple=True):
             + "%(message)s"
         )
 
-    formatter = WrappedFixedIndentingLog(
-        logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    formatter = WrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
     return formatter
 
 

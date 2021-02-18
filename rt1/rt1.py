@@ -143,9 +143,7 @@ class RT1(object):
         assert isinstance(geometry, str), (
             "ERROR: geometry must be " + "a 4-character string"
         )
-        assert len(geometry) == 4, (
-            "ERROR: geometry must be " + "a 4-character string"
-        )
+        assert len(geometry) == 4, "ERROR: geometry must be " + "a 4-character string"
         self.geometry = geometry
 
         self.I0 = I0
@@ -293,17 +291,13 @@ class RT1(object):
             # precalculate the expansiion coefficients for the interaction term
             expr_int = self._calc_interaction_expansion()
             toc = timeit.default_timer()
-            self.prv(
-                2, "expansion calculated, it took " + str(toc - tic) + " sec"
-            )
+            self.prv(2, "expansion calculated, it took " + str(toc - tic) + " sec")
 
             # extract the expansion coefficients
             tic = timeit.default_timer()
             self.__fn = self._extract_coefficients(expr_int)
             toc = timeit.default_timer()
-            self.prv(
-                2, "coefficients extracted, it took " + str(toc - tic) + " sec"
-            )
+            self.prv(2, "coefficients extracted, it took " + str(toc - tic) + " sec")
         else:
             self.prv(3, "using provided fn-coefficients")
             self.__fn = fn
@@ -377,9 +371,7 @@ class RT1(object):
             else:
                 self.prv(
                     1,
-                    'lambda_backend "'
-                    + self.lambda_backend
-                    + '" is not available',
+                    'lambda_backend "' + self.lambda_backend + '" is not available',
                 )
 
             toc = timeit.default_timer()
@@ -499,11 +491,7 @@ class RT1(object):
 
         # find f_1 coefficient
         repl1 = dict(
-            [
-                [sp.cos(theta_s) ** i, 0]
-                for i in list(range(N_fn, 0, -1))
-                if i != 1
-            ]
+            [[sp.cos(theta_s) ** i, 0] for i in list(range(N_fn, 0, -1)) if i != 1]
             + [[sp.cos(theta_s), 1]]
         )
         fn = fn + [expr.xreplace(repl1) - fn[0]]
@@ -756,9 +744,7 @@ class RT1(object):
             )
         )
 
-        Isurf = (
-            np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))
-        ) * I_bs
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))) * I_bs
 
         return self.SRF.NormBRDF * ((1.0 - self.bsf) * Isurf + self.bsf * I_bs)
 
@@ -809,16 +795,12 @@ class RT1(object):
             * np.exp(-(2 * self.V.tau / self._mu_0))
             * (
                 self._mu_0 * brdf_slope
-                - (2 * self.V.tau / self._mu_0 + 1)
-                * np.sin(self.t_0)
-                * brdf_val
+                - (2 * self.V.tau / self._mu_0 + 1) * np.sin(self.t_0) * brdf_val
             )
         )
 
         # bare soil contribution
-        I_bs_slope = self.I0 * (
-            self._mu_0 * brdf_slope - np.sin(self.t_0) * brdf_val
-        )
+        I_bs_slope = self.I0 * (self._mu_0 * brdf_slope - np.sin(self.t_0) * brdf_val)
 
         I_slope = self.SRF.NormBRDF * (
             (1.0 - self.bsf) * I_vegs_slope + self.bsf * I_bs_slope
@@ -829,11 +811,7 @@ class RT1(object):
         else:
             I_val = self.surface()
             if sig0 is True and dB is False:
-                return (
-                    4.0
-                    * np.pi
-                    * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
-                )
+                return 4.0 * np.pi * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
             elif sig0 is False and dB is True:
                 return 10.0 / np.log(10) * I_slope / I_val
             elif sig0 is True and dB is True:
@@ -903,10 +881,7 @@ class RT1(object):
                 * brdf_slope
                 * (2.0 * self.V.tau / self._mu_0 + 1.0)
                 + (
-                    4.0
-                    * self.V.tau ** 2
-                    / self._mu_0 ** 3
-                    * np.sin(self.t_0) ** 2
+                    4.0 * self.V.tau ** 2 / self._mu_0 ** 3 * np.sin(self.t_0) ** 2
                     - 2.0 * self.V.tau
                     - self._mu_0
                 )
@@ -941,20 +916,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return (
-                    10.0
-                    / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
-                )
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (
-                        I_curv / I_val
-                        - I_slope ** 2 / I_val ** 2
-                        - self._mu_0 ** (-2)
-                    )
+                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
                 )
 
     def volume(self):
@@ -970,12 +937,7 @@ class RT1(object):
         """
         vol = (
             (self.I0 * self.V.omega * self._mu_0 / (self._mu_0 + self._mu_ex))
-            * (
-                1.0
-                - np.exp(
-                    -(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)
-                )
-            )
+            * (1.0 - np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)))
             * self.V.p(
                 self.t_0,
                 self.t_ex,
@@ -1054,11 +1016,7 @@ class RT1(object):
         else:
             I_val = self.volume()
             if sig0 is True and dB is False:
-                return (
-                    4.0
-                    * np.pi
-                    * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
-                )
+                return 4.0 * np.pi * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
             elif sig0 is False and dB is True:
                 return 10.0 / np.log(10) * I_slope / I_val
             elif sig0 is True and dB is True:
@@ -1158,20 +1116,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return (
-                    10.0
-                    / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
-                )
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (
-                        I_curv / I_val
-                        - I_slope ** 2 / I_val ** 2
-                        - self._mu_0 ** (-2)
-                    )
+                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
                 )
 
     def tot_slope(self, sig0=False, dB=False):
@@ -1205,11 +1155,7 @@ class RT1(object):
         else:
             I_val = self.volume() + self.surface()
             if sig0 is True and dB is False:
-                return (
-                    4.0
-                    * np.pi
-                    * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
-                )
+                return 4.0 * np.pi * (self._mu_0 * I_slope - np.sin(self.t_0) * I_val)
             elif sig0 is False and dB is True:
                 return 10.0 / np.log(10) * I_slope / I_val
             elif sig0 is True and dB is True:
@@ -1244,9 +1190,9 @@ class RT1(object):
         if sig0 is False and dB is False:
             return I_curv
         else:
-            I_slope = self.volume_slope(
+            I_slope = self.volume_slope(dB=False, sig0=False) + self.surface_slope(
                 dB=False, sig0=False
-            ) + self.surface_slope(dB=False, sig0=False)
+            )
             I_val = self.volume() + self.surface()
             if sig0 is True and dB is False:
                 return (
@@ -1259,20 +1205,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return (
-                    10.0
-                    / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
-                )
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (
-                        I_curv / I_val
-                        - I_slope ** 2 / I_val ** 2
-                        - self._mu_0 ** (-2)
-                    )
+                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
                 )
 
     def interaction(self):
@@ -1415,10 +1353,7 @@ class RT1(object):
             return mu ** (-k) * (expn(k + 1.0, tau) - np.exp(-tau / mu) / k)
 
         S2 = np.array(
-            [
-                sum(innerfunc(k) for k in range(1, (n + 1) + 1))
-                for n in range(nmax)
-            ]
+            [sum(innerfunc(k) for k in range(1, (n + 1) + 1)) for n in range(nmax)]
         )
 
         # clear the cache since tau might have changed!
@@ -1444,9 +1379,7 @@ class RT1(object):
                 (1.0 / self._mu_0 + 1.0 / self._mu_ex ** (-1))
                 * np.exp(-self.V.tau / self._mu_0 - self.V.tau / self._mu_ex)
             )
-            * self.V.p(
-                self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict
-            )
+            * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict)
         )
 
         return (1.0 - self.bsf) * dvdt
@@ -1463,15 +1396,8 @@ class RT1(object):
 
         dvdo = (
             (self.I0 * self._mu_0 / (self._mu_0 + self._mu_ex))
-            * (
-                1.0
-                - np.exp(
-                    -(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)
-                )
-            )
-            * self.V.p(
-                self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict
-            )
+            * (1.0 - np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)))
+            * self.V.p(self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict)
         )
 
         return (1.0 - self.bsf) * dvdo
@@ -1488,12 +1414,7 @@ class RT1(object):
 
         vol = (
             (self.I0 * self.V.omega * self._mu_0 / (self._mu_0 + self._mu_ex))
-            * (
-                1.0
-                - np.exp(
-                    -(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)
-                )
-            )
+            * (1.0 - np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)))
             * self.V.p(
                 self.t_0,
                 self.t_ex,
@@ -1535,9 +1456,7 @@ class RT1(object):
             * (-1.0 / self._mu_0 - 1.0 / self._mu_ex)
             * np.exp(-self.V.tau / self._mu_0 - self.V.tau / self._mu_ex)
             * self._mu_0
-            * self.SRF.brdf(
-                self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict
-            )
+            * self.SRF.brdf(self.t_0, self.t_ex, self.p_0, self.p_ex, self.param_dict)
         )
 
         # Incorporate BRDF-normalization factor
@@ -1582,9 +1501,7 @@ class RT1(object):
             )
         )
 
-        Isurf = (
-            np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))
-        ) * I_bs
+        Isurf = (np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))) * I_bs
 
         return (1.0 - self.bsf) * Isurf + self.bsf * I_bs
 
@@ -1643,9 +1560,7 @@ class RT1(object):
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
 
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
-            self.param_dict.keys()
-        )
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(self.param_dict.keys())
 
         return sp.lambdify(
             args,
@@ -1662,9 +1577,7 @@ class RT1(object):
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
 
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(
-            self.param_dict.keys()
-        )
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(self.param_dict.keys())
 
         return sp.lambdify(
             args,
@@ -1696,9 +1609,7 @@ class RT1(object):
             )
         )
 
-        dI_s = (
-            np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))
-        ) * dI_bs
+        dI_s = (np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex))) * dI_bs
 
         return self.SRF.NormBRDF * ((1.0 - self.bsf) * dI_s + self.bsf * dI_bs)
 
@@ -1710,21 +1621,14 @@ class RT1(object):
             * self.V.omega
             * self._mu_0
             / (self._mu_0 + self._mu_ex)
-            * (
-                1.0
-                - np.exp(
-                    -(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)
-                )
-            )
+            * (1.0 - np.exp(-(self.V.tau / self._mu_0) - (self.V.tau / self._mu_ex)))
             * self._d_volume_dummy_lambda(key)(
                 self.t_0, self.t_ex, self.p_0, self.p_ex, **self.param_dict
             )
         )
         return (1.0 - self.bsf) * dIvol
 
-    def jacobian(
-        self, dB=False, sig0=False, param_list=["omega", "tau", "NormBRDF"]
-    ):
+    def jacobian(self, dB=False, sig0=False, param_list=["omega", "tau", "NormBRDF"]):
         """
         Returns the jacobian of the total backscatter with respect
         to the parameters provided in param_list.
@@ -1780,9 +1684,7 @@ class RT1(object):
         for key in param_list:
 
             if key == "omega":
-                jac += [
-                    (self._dsurface_domega() + self._dvolume_domega()) * norm
-                ]
+                jac += [(self._dsurface_domega() + self._dvolume_domega()) * norm]
             elif key == "tau":
                 jac += [(self._dsurface_dtau() + self._dvolume_dtau()) * norm]
             elif key == "NormBRDF":
@@ -1791,8 +1693,7 @@ class RT1(object):
                 jac += [(self._dsurface_dbsf() + self._dvolume_dbsf()) * norm]
             elif key in self.param_dict:
                 jac += [
-                    (self._d_surface_ddummy(key) + self._d_volume_ddummy(key))
-                    * norm
+                    (self._d_surface_ddummy(key) + self._d_volume_ddummy(key)) * norm
                 ]
             else:
                 assert False, (

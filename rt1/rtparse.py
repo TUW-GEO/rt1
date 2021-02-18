@@ -187,9 +187,7 @@ class RT1_configparser(object):
 
         # check if processing-modue is specified
         if "processing_cfg_module" in self.config["CONFIGFILES"]:
-            proc_module_name = self.config["CONFIGFILES"][
-                "processing_cfg_module"
-            ]
+            proc_module_name = self.config["CONFIGFILES"]["processing_cfg_module"]
         else:
             proc_module_name = "processing_cfg"
 
@@ -438,9 +436,7 @@ class RT1_configparser(object):
         )
 
         if load_copy is True:
-            save_path = Path(
-                self.config["PROCESS_SPECS"]["path__save_path"].strip()
-            )
+            save_path = Path(self.config["PROCESS_SPECS"]["path__save_path"].strip())
 
             dumpfolder = self.config["PROCESS_SPECS"]["dumpfolder"].strip()
 
@@ -488,9 +484,7 @@ class RT1_configparser(object):
                 val = None
 
             if key.startswith("datetime__"):
-                date = dict(
-                    zip(["s", "fmt"], [i.strip() for i in val.split("fmt=")])
-                )
+                date = dict(zip(["s", "fmt"], [i.strip() for i in val.split("fmt=")]))
                 process_specs[key[10:]] = self._to_dt(**date)
             elif key.startswith("path__"):
                 # resolve the path in case .. syntax is used to traverse dirs
@@ -515,9 +509,7 @@ class RT1_configparser(object):
                 process_specs[key[5:]] = inp.getint(key)
             elif key.startswith("list__"):
                 listkey = key[6:]
-                if val.startswith("[") and (
-                    val.endswith("]") or "fmt=" in val
-                ):
+                if val.startswith("[") and (val.endswith("]") or "fmt=" in val):
                     # allow direct conversion of values
                     if listkey.startswith("bool__"):
                         listkey = listkey[6:]
@@ -547,8 +539,7 @@ class RT1_configparser(object):
                             return x
 
                     process_specs[listkey] = [
-                        conffunc(i.strip())
-                        for i in val.strip()[1:-1].split(",")
+                        conffunc(i.strip()) for i in val.strip()[1:-1].split(",")
                     ]
 
                 else:

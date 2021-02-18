@@ -54,9 +54,7 @@ class _metric_keys(object):
                         ),
                     )
             elif isinstance(d2, str):
-                setattr(
-                    getattr(self, d1), d2, _RTmetrics1(d1=d1, d2=d2, fit=fit)
-                )
+                setattr(getattr(self, d1), d2, _RTmetrics1(d1=d1, d2=d2, fit=fit))
             else:
                 try:
                     d2name = d2.name
@@ -122,8 +120,7 @@ class _metric_keys(object):
 
         if len(warnmsg) > 0:
             log.warning(
-                "the following keys are present in multiple sources!\n"
-                + warnmsg
+                "the following keys are present in multiple sources!\n" + warnmsg
             )
 
         self._all_keys = newgrps
@@ -483,9 +480,7 @@ class RTmetrics(object):
             function/metric name and corresponding value
 
         """
-        return {
-            func: getattr(cls, func)(d1, d2) for func in cls.metrics_registry
-        }
+        return {func: getattr(cls, func)(d1, d2) for func in cls.metrics_registry}
 
     @classmethod
     def scatterplot(cls, d1, d2, d1_name, d2_name):
@@ -534,9 +529,7 @@ class RTmetrics(object):
                 metric_values.append(val)
 
         # add another dimension for usage in table
-        two_dim_metric_values = [
-            [metric_value] for metric_value in metric_values
-        ]
+        two_dim_metric_values = [[metric_value] for metric_value in metric_values]
 
         # remove border to only show table itself
         ax2.axis("off")
@@ -606,9 +599,7 @@ class RTmetrics(object):
         metrics_dict = cls.allmetrics(d1, d2)
 
         header = "-" * 11 + " METRICS " + "-" * 11 + "\n"
-        columns = (
-            "     METRIC".ljust(14) + "|     VALUE".ljust(15) + " |" + "\n"
-        )
+        columns = "     METRIC".ljust(14) + "|     VALUE".ljust(15) + " |" + "\n"
 
         entries = cls._metrics_table_dict_entry(metrics_dict)
 
@@ -649,10 +640,7 @@ class RTmetrics(object):
 
             elif isinstance(val, dict):
                 entries += (
-                    " "
-                    + "--" * depth
-                    + f"{metric}|".ljust(29 - depth_offset)
-                    + "|\n"
+                    " " + "--" * depth + f"{metric}|".ljust(29 - depth_offset) + "|\n"
                 )
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
 
