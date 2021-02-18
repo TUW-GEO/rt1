@@ -120,7 +120,7 @@ class TestRTMetrics(unittest.TestCase):
         plt.ion()
         fit = self.mock_fit()
         _ = RTmetrics.scatterplot(fit.res_df.SM, fit.res_df.omega,
-                                   "SM", "omega")
+                                  "SM", "omega")
 
 
 if __name__ == "__main__":
