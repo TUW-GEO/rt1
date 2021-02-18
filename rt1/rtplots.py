@@ -188,6 +188,7 @@ def polarplot(X=None,
                           fc=color, ec=color, lw=1, alpha=0.3)
 
             polarax.fill_between(thetass, rad, alpha=0.2, color=color)
+            polarax.set_xticks(np.deg2rad([0,45,90,125,180]))
             polarax.set_xticklabels([r'$0^\circ$', r'$45^\circ$',
                                      r'$90^\circ$', r'$135^\circ$',
                                      r'$180^\circ$'])
@@ -1018,8 +1019,7 @@ class plot:
             color = dummy.get_color()
 
             if hexbinQ is True:
-                args = dict(gridsize=15, mincnt=1,
-                            linewidths=0., vmin=0.5, alpha=0.7)
+                args = dict(gridsize=15, mincnt=1, linewidths=0., alpha=0.7)
                 args.update(hexbinargs)
 
                 # evaluate the hexbinplot once to get the maximum number of

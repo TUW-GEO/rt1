@@ -1,7 +1,6 @@
 name: test_rt1
 channels:
   - conda-forge
-  - defaults
 
 dependencies:
   - numpy
