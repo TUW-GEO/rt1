@@ -882,11 +882,11 @@ class RTprocess(object):
             raise err
 
         finally:
+            # turn off capturing warnings
+            logging.captureWarnings(False)
 
             if logfile_level is not None:
                 if ncpu > 1:
-                    # turn off capturing warnings
-                    logging.captureWarnings(False)
 
                     # tell the queue to stop
                     queue.put_nowait(None)
@@ -956,7 +956,7 @@ class RTprocess(object):
 
         """
         try:
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
@@ -978,7 +978,7 @@ class RTprocess(object):
                 self.setup()
                 self.autocontinue = initial_autocontinue
 
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
@@ -1004,11 +1004,12 @@ class RTprocess(object):
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-                # tell the queue to stop
-                queue.put_nowait(None)
+                if ncpu > 1:
+                    # tell the queue to stop
+                    queue.put_nowait(None)
 
-                # stop the listener process
-                listener.join()
+                    # stop the listener process
+                    listener.join()
 
                 # remove any remaining file-handler and queue-handlers after
                 # the processing is done
