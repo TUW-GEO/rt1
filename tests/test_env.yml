@@ -1,0 +1,17 @@
+name: test_rt1
+channels:
+  - conda-forge
+
+dependencies:
+  - numpy
+  - sympy
+  - scipy
+  - pandas
+  - matplotlib
+  - cloudpickle
+  - python-symengine
+  - pytables
+
+  - coveralls
+  - pytest
+  - pytest-cov

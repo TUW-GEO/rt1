@@ -37,9 +37,13 @@ class TestRTfits(unittest.TestCase):
         results = RTresults('tests/proc_test')
         assert hasattr(results, 'dump01'), 'dumpfolder not found by RTresults'
 
+        dumpfiles = [i for i in results.dump01.dump_files]
+        print(dumpfiles)
+
         fit = results.dump01.load_fit()
         cfg = results.dump01.load_cfg()
-        dumpfiles = [i for i in results.dump01.dump_files]
+
+
 
         with self.assertRaises(AssertionError):
             # TODO implement netcdf export and properly test netcdf's !
@@ -61,20 +65,24 @@ class TestRTfits(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
+        with self.assertRaises(SystemExit):
+            with mock.patch('builtins.input', side_effect=['N']):
+                proc = RTprocess(config_path, autocontinue=False,
+                                 setup=False)
+                proc.setup()
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['REMOVE', 'N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, autocontinue=False)
-            proc.setup()
         assert len(list(Path('tests/proc_test/dump01/dumps').iterdir())) == 0, 'user-input REMOVE did not work'
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
-            proc.run_processing(ncpu=1, reader_args = reader_args, copy=False)
+            proc = RTprocess(config_path, autocontinue=False,
+                             copy=False)
+            proc.run_processing(ncpu=1, reader_args = reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'

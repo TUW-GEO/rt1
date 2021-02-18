@@ -86,12 +86,18 @@ def _make_folderstructure(save_path, subfolders):
 
 
 def _setup_cnt(N_items, ncpu):
-
-    manager = mp.Manager()
-    lock = manager.Lock()
-    p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-    p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-    p_time = manager.Value(ctypes.c_float, 0)
+    if ncpu > 1:
+        manager = mp.Manager()
+        lock = manager.Lock()
+        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+        p_time = manager.Value(ctypes.c_float, 0)
+    else:
+        # don't use a manager if single-core processing is used
+        p_totcnt = mp.Value(ctypes.c_ulonglong, 0)
+        p_meancnt = mp.Value(ctypes.c_ulonglong, 0)
+        p_time = mp.Value(ctypes.c_float, 0)
+        lock = None
 
     process_cnt = [p_totcnt, p_meancnt, N_items, p_time, ncpu, lock]
     return process_cnt
@@ -106,8 +112,9 @@ def _increase_cnt(process_cnt, start, err=False):
         return
 
     p_totcnt, p_meancnt, p_max, p_time, p_ncpu, lock = process_cnt
-    # ensure that only one process is allowed to write simultaneously
-    lock.acquire()
+    if lock is not None:
+        # ensure that only one process is allowed to write simultaneously
+        lock.acquire()
     try:
         if err is False:
             end = default_timer()
@@ -153,12 +160,15 @@ def _increase_cnt(process_cnt, start, err=False):
                     f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"),
                 progress2=p_totcnt.value - p_meancnt.value)
             log.progress(msg.strip())
-        # release the lock
-        lock.release()
+
+        if lock is not None:
+            # release the lock
+            lock.release()
     except Exception:
         msg = '???'
-        # release the lock in case an error occured
-        lock.release()
+        if lock is not None:
+           # release the lock in case an error occured
+           lock.release()
         pass
 
     sys.stdout.write(msg)
@@ -167,7 +177,8 @@ def _increase_cnt(process_cnt, start, err=False):
 
 class RTprocess(object):
     def __init__(self, config_path=None, autocontinue=False, copy=True,
-                 proc_cls=None, parent_fit=None, init_kwargs=None):
+                 proc_cls=None, parent_fit=None, init_kwargs=None,
+                 setup=True):
         '''
         A class to perform parallelized processing.
 
@@ -207,14 +218,25 @@ class RTprocess(object):
             Additional keyword-arguments passed to the initialization of the
             'proc_cls' class. (used to append-to or partially overwrite
             definitions passed via the config-file). The default is None.
-
-
+        setup : bool, optional
+            indicator if `RTprocess.setup()` should be called during
+            initialization or not. This is required for multiprocessing
+            on Windows since `setup()` needs to be called outside of the
+            `if __name__ == '__main__'` protector to ensure correct import
+            of the used processing_config class.
+            Notice that if setup is set to True (the default) the
+            folder-structure etc. will be initialized as soon as the
+            class object is created!
+            The default is True.
         '''
 
         self._config_path = config_path
         self.autocontinue = autocontinue
 
         self._postprocess = True
+
+        self._setup = False
+
         self.copy = copy
 
         self._proc_cls = proc_cls
@@ -227,7 +249,12 @@ class RTprocess(object):
                 'the values of "init_kwargs" MUST be strings !')
             self.init_kwargs = init_kwargs
 
+        if not self._setup and setup:
+            self.setup()
+
+
     def _listener_process(self, queue):
+
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
         if not hasattr(self, 'dumppath'):
@@ -388,6 +415,8 @@ class RTprocess(object):
         assert self.parent_fit is not None, (
             'you MUST provide a valid config-file or a parent_fit-object!')
 
+        self._setup = True
+
     def _copy_cfg_and_modules(self):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
@@ -536,7 +565,7 @@ class RTprocess(object):
     def processfunc(self, ncpu=1, print_progress=True,
                     reader_args=None, pool_kwargs=None,
                     preprocess_kwargs=None,
-                    queue=None, postprocess=False):
+                    queue=None, postprocess=True):
         """
         Evaluate a RT-1 model on a single core or in parallel using
 
@@ -686,7 +715,7 @@ class RTprocess(object):
     def run_processing(self, ncpu=1, print_progress=True,
                        reader_args=None, pool_kwargs=None,
                        preprocess_kwargs=None, logfile_level=1,
-                       postprocess=False):
+                       postprocess=True):
         '''
         Start the processing
 
@@ -733,11 +762,14 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
-
+        postprocess : bool, optional
+            indicator if postprocess() and finaloutput() functions should be
+            executed or not.
+            The default is True.
         '''
 
         try:
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
@@ -752,10 +784,11 @@ class RTprocess(object):
             else:
                 queue = None
 
-            # initialize all necessary properties
-            self.setup()
+            # initialize all necessary properties if setup was not yet called
+            if not self._setup:
+                self.setup()
 
-            if logfile_level is not None:
+            if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
@@ -792,15 +825,17 @@ class RTprocess(object):
             raise err
 
         finally:
-            # turn off capturing warnings
-            logging.captureWarnings(False)
 
             if logfile_level is not None:
-                # tell the queue to stop
-                queue.put_nowait(None)
+                if ncpu > 1:
+                    # turn off capturing warnings
+                    logging.captureWarnings(False)
 
-                # stop the listener process
-                listener.join()
+                    # tell the queue to stop
+                    queue.put_nowait(None)
+
+                    # stop the listener process
+                    listener.join()
 
                 # remove any remaining file-handler and queue-handlers after
                 # the processing is done
@@ -875,10 +910,12 @@ class RTprocess(object):
                 queue = None
 
             # initialize all necessary properties with autocontinue=True
-            initial_autocontinue = self.autocontinue
-            self.autocontinue = True
-            self.setup()
-            self.autocontinue = initial_autocontinue
+            # if setup was not yet called
+            if not self._setup:
+                initial_autocontinue = self.autocontinue
+                self.autocontinue = True
+                self.setup()
+                self.autocontinue = initial_autocontinue
 
             if logfile_level is not None:
                 # start the listener after the setup-function completed, since
@@ -1151,6 +1188,7 @@ class RTresults(object):
                 the return of either xarray.Dataset or NetCDF4.Dataset
             '''
             results = self._get_results('.nc')
+            assert len(results) > 0, 'no NetCDF file in the results folder!'
 
             assert len(results) == 1 or result_name in results, (
                  ('there is more than 1 result... ' +
@@ -1264,7 +1302,7 @@ class RTresults(object):
             print all available NetCDF-files and their variables
             '''
             results = self._get_results('.nc')
-
+            assert len(results) > 0, 'no NetCDF file in the results folder!'
             for r in results:
                 print('\nresult: ', r)
                 with self.load_nc(r, use_xarray=False) as ncfile:
