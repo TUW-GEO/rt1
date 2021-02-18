@@ -557,6 +557,11 @@ class RTprocess(object):
             if process_cnt is not None:
                 _increase_cnt(process_cnt, start, err=False)
 
+            # dump a fit-file
+            if self._dump_fit:
+                self.proc_cls.dump_fit_to_file(fit, reader_arg,
+                                               mini=self._mini)
+
             # if a post-processing function is provided, return its output,
             # else return None
             if self._postprocess and callable(self.proc_cls.postprocess):
@@ -606,6 +611,7 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         queue=None,
+        dump_fit=True,
         postprocess=True,
     ):
         """
@@ -668,6 +674,16 @@ class RTprocess(object):
             >>> preprocess(**preprocess_kwargs)
 
             The default is None.
+        queue : multiprocessing.Manager().queue
+            the queue used for logging
+        dump_fit : bool, optional
+            indicator if a fit-object should be dumped or not.
+            (e.g. by invoking processing_config.dump_fit_to_file() )
+            The default is True
+        postprocess bool, optional
+            indicator if postprocess() and finalout() workflows should be
+            executed or not
+
         Returns
         -------
         res : list
@@ -676,6 +692,7 @@ class RTprocess(object):
 
         """
         self._postprocess = postprocess
+        self._dump_fit = dump_fit
 
         if callable(self.proc_cls.preprocess):
             setupdict = self.proc_cls.preprocess(**preprocess_kwargs)
@@ -769,6 +786,7 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         logfile_level=1,
+        dump_fit=True,
         postprocess=True,
     ):
         """
@@ -817,8 +835,12 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
+        dump_fit: bool, optional
+            indicator if `processing_config.dump_fit_to_file()` should be
+            called after finishing the fit.
+            The default is True
         postprocess : bool, optional
-            indicator if postprocess() and finaloutput() functions should be
+            indicator if postprocess() and finaloutput() workflows should be
             executed or not.
             The default is True.
         """
@@ -874,6 +896,7 @@ class RTprocess(object):
                 pool_kwargs=pool_kwargs,
                 preprocess_kwargs=preprocess_kwargs,
                 queue=queue,
+                dump_fit=dump_fit,
                 postprocess=postprocess,
             )
 
@@ -1194,7 +1217,7 @@ class RTresults(object):
             for i in ["cfg", "results", "dumps"]
         ):
             self._paths[self._parent_path.stem] = self._parent_path
-            log.info("... adding result {self._parent_path.stem}")
+            log.info(f"... adding result {self._parent_path.stem}")
             setattr(
                 self,
                 self._parent_path.stem,
