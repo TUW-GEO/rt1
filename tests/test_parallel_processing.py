@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import unittest
 import unittest.mock as mock
@@ -42,8 +41,6 @@ class TestRTfits(unittest.TestCase):
 
         fit = results.dump01.load_fit()
         cfg = results.dump01.load_cfg()
-
-
 
         with self.assertRaises(AssertionError):
             # TODO implement netcdf export and properly test netcdf's !
