@@ -48,9 +48,11 @@ class Scatter(object):
               the generalized scattering angle
 
         """
-        return a[0] * sp.cos(t_0) * sp.cos(t_ex) + a[1] * sp.sin(t_0) * \
-            sp.sin(t_ex) * sp.cos(p_0) * sp.cos(p_ex) + a[2] * sp.sin(t_0) * \
-            sp.sin(t_ex) * sp.sin(p_0) * sp.sin(p_ex)
+        return (
+            a[0] * sp.cos(t_0) * sp.cos(t_ex)
+            + a[1] * sp.sin(t_0) * sp.sin(t_ex) * sp.cos(p_0) * sp.cos(p_ex)
+            + a[2] * sp.sin(t_0) * sp.sin(t_ex) * sp.sin(p_0) * sp.sin(p_ex)
+        )
 
     def _get_legcoef(self, n0):
         """
@@ -58,7 +60,7 @@ class Scatter(object):
         used mainly for testing purposes
         the actual coefficient are used in the symbolic expansion
         """
-        n = sp.Symbol('n')
+        n = sp.Symbol("n")
         return self.legcoefs.xreplace({n: int(n0)}).evalf()
 
     def _eval_legpoly(self, t_0, t_s, p_0, p_s, geometry=None):
@@ -68,23 +70,23 @@ class Scatter(object):
         the actual coefficient are used in the symbolic expansion
         """
 
-        assert geometry is not None, 'Geometry needs to be specified!'
+        assert geometry is not None, "Geometry needs to be specified!"
 
-        theta_0 = sp.Symbol('theta_0')
-        theta_s = sp.Symbol('theta_s')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_s = sp.Symbol('phi_s')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_s = sp.Symbol("theta_s")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_s = sp.Symbol("phi_s")
+        phi_ex = sp.Symbol("phi_ex")
 
-        res = self.legexpansion(t_0,
-                                t_s,
-                                p_0,
-                                p_s,
-                                geometry).xreplace({theta_0: t_0,
-                                                    theta_s: t_s,
-                                                    phi_0: p_0,
-                                                    phi_s: p_s,
-                                                    theta_ex: t_s,
-                                                    phi_ex: p_s})
+        res = self.legexpansion(t_0, t_s, p_0, p_s, geometry).xreplace(
+            {
+                theta_0: t_0,
+                theta_s: t_s,
+                phi_0: p_0,
+                phi_s: p_s,
+                theta_ex: t_s,
+                phi_ex: p_s,
+            }
+        )
         return res.evalf()
