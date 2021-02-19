@@ -10,7 +10,6 @@ except ModuleNotFoundError:
     pass
 
 
-
 def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
     """
     return a rectangularized version of the input-array by repeating the
