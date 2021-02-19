@@ -1,19 +1,56 @@
+# name: Publish to TestPyPI
+
+# on: [push]
+
+# jobs:
+#   build-n-publish:
+#     name: Publish to TestPyPI
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - uses: actions/checkout@v2
+#       - uses: actions/setup-python@v2
+#       - uses: casperdcl/deploy-pypi@v2
+#         with:
+#           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+#           build: true
+#           # only upload if a tag is pushed (otherwise just build & check)
+#           url: https://test.pypi.org/legacy/
+#           upload: ${{ github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') }}
+
+
+
+
 name: Publish to TestPyPI
 
-on: [push]
+on:
+  push:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
-  build-n-publish:
-    name: Publish to TestPyPI
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v2
+      # Sets up python3
       - uses: actions/setup-python@v2
-      - uses: casperdcl/deploy-pypi@v2
         with:
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-          build: true
-          # only upload if a tag is pushed (otherwise just build & check)
-          url: https://test.pypi.org/legacy/
-          upload: ${{ github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') }}
+          python-version: 3.7
+
+      - name: "install packages"
+        run: |
+          # Upgrade pip
+          python -m pip install --upgrade pip
+          # Install build deps
+          python -m pip install setuptools wheel twine
+
+      # Upload to TestPyPI
+      - name: Build and Upload to TestPyPI
+        run: |
+          python setup.py sdist bdist_wheel
+          python -m twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          TWINE_REPOSITORY: testpypi
