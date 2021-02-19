@@ -81,7 +81,7 @@ class TestCONFIGPARSER(unittest.TestCase):
 
         #----------------------------------------- check parsed process_specs
 
-        process_specs = {'finalout_name' : 'results.h5',
+        process_specs = {'finalout_name' : 'results.nc',
                          'dumpfolder' : 'dump01',
                          'save_path' : Path('tests/proc_test'),
                          'f0' : 1245.,

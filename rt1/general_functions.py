@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """helper functions that are used both in rtfits and rtplots"""
 import sys
-import numpy as np
 from itertools import tee, islice
 from collections import OrderedDict
 
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    pass
 
-def rectangularize(array, return_mask=False, dim=None,
-                   return_masked=False, dtype=None):
+
+def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
     """
     return a rectangularized version of the input-array by repeating the
     last value to obtain the smallest possible rectangular shape.
@@ -92,15 +95,13 @@ def meandatetime(datetimes):
         return datetimes[0]
 
     x = datetimes
-    deltas = (x[0] - x[1:])/len(x)
+    deltas = (x[0] - x[1:]) / len(x)
     meandelta = sum(deltas)
     meandate = x[0] - meandelta
     return meandate
 
 
-def dBsig0convert(val, inc,
-                  dB, sig0,
-                  fitdB, fitsig0):
+def dBsig0convert(val, inc, dB, sig0, fitdB, fitsig0):
     """
     A convenience-function to convert an array of measurements (and it's
     associated incidence-angles).
@@ -134,23 +135,23 @@ def dBsig0convert(val, inc,
         # if results are provided in dB convert them to linear units before
         # applying the sig0-intensity conversion
         if fitdB is True:
-            val = 10**(val/10.)
+            val = 10 ** (val / 10.0)
         # convert sig0 to intensity
         if sig0 is False and fitsig0 is True:
-            val = val/(4.*np.pi*np.cos(inc))
+            val = val / (4.0 * np.pi * np.cos(inc))
         # convert intensity to sig0
         if sig0 is True and fitsig0 is False:
-            val = 4.*np.pi*np.cos(inc)*val
+            val = 4.0 * np.pi * np.cos(inc) * val
         # convert back to dB if required
         if dB is True:
-            val = 10.*np.log10(val)
+            val = 10.0 * np.log10(val)
     elif dB is not fitdB:
         # if dB output is required, convert to dB
         if dB is True and fitdB is False:
-            val = 10.*np.log10(val)
+            val = 10.0 * np.log10(val)
         # if linear output is required, convert to linear units
         if dB is False and fitdB is True:
-            val = 10**(val/10.)
+            val = 10 ** (val / 10.0)
 
     return val
 
@@ -189,13 +190,12 @@ def split_into(iterable, sizes):
             yield list(islice(it, size))
 
 
-def scale(x, out_range=(0, 1),
-          domainfuncs=(np.nanmin, np.nanmax)):
+def scale(x, out_range=(0, 1), domainfuncs=None):
     """
     scale an array between out_range = (min, max) where the range of the
     array is evaluated via the domainfuncs (min-function, max-funcion)
 
-    useful domainfuncs are:
+    the default domainfuncs are:
 
         >>> np.nanmin()
         >>> np.nanmax()
@@ -207,16 +207,18 @@ def scale(x, out_range=(0, 1),
     exceed the specified `out_range`!  (e.g. if the out-range is (0,1),
     a min-function of np.percentile(q=5) might result in negative values!)
     """
-    domain = domainfuncs[0](x), domainfuncs[1](x)
+    if domainfuncs is None:
+        domain = np.nanmin[0](x), np.nanmax[1](x)
+    else:
+        domain = domainfuncs[0](x), domainfuncs[1](x)
 
     y = (x - (domain[1] + domain[0]) / 2) / (domain[1] - domain[0])
-    return y * (out_range[1] - out_range[0]) + (out_range[1] +
-                                                out_range[0]) / 2
+    return y * (out_range[1] - out_range[0]) + (out_range[1] + out_range[0]) / 2
 
 
-def update_progress(progress, max_prog=100,
-                    title="", finalmsg=" DONE\r\n",
-                    progress2=None):
+def update_progress(
+    progress, max_prog=100, title="", finalmsg=" DONE\r\n", progress2=None
+):
     """
     print a progress-bar
 
@@ -224,19 +226,21 @@ def update_progress(progress, max_prog=100,
     """
 
     length = 25  # the length of the progress bar
-    block = int(round(length*progress/max_prog))
+    block = int(round(length * progress / max_prog))
     if progress2 is not None:
-        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
-               f' {progress} [{progress2}] / {max_prog}')
+        msg = (
+            f'\r{title} {"#"*block + "-"*(length-block)}'
+            + f" {progress} [{progress2}] / {max_prog}"
+        )
     else:
-        msg = (f'\r{title} {"#"*block + "-"*(length-block)}' +
-               f' {progress} / {max_prog}')
+        msg = (
+            f'\r{title} {"#"*block + "-"*(length-block)}' + f" {progress} / {max_prog}"
+        )
 
     if progress >= max_prog:
-        msg = f'\r{finalmsg:<79}\n'
+        msg = f"\r{finalmsg:<79}\n"
 
-    sys.stdout.write(msg)
-    sys.stdout.flush()
+    return msg
 
 
 def dt_to_hms(td):
@@ -246,7 +250,7 @@ def dt_to_hms(td):
     """
 
     days, hours, minutes = td.days, td.seconds // 3600, td.seconds % 3600 // 60
-    seconds = td.seconds - hours*3600 - minutes*60
+    seconds = td.seconds - hours * 3600 - minutes * 60
     return days, hours, minutes, seconds
 
 
@@ -315,14 +319,14 @@ def interpolate_to_index(data, index, data_index=None, **interp1d_kwargs):
         x = f(index.to_julian_date())
         return Series(x, index)
     elif isinstance(data, DataFrame):
-        f = interp1d(data.index.to_julian_date(),  data.values, axis=0,
-                     **kwargs)
+        f = interp1d(data.index.to_julian_date(), data.values, axis=0, **kwargs)
         x = f(index.to_julian_date())
         return DataFrame(x, index, columns=data.columns)
 
     elif isinstance(data, (list, np.ndarray)):
-        assert data_index is not None, ('you must provide "data_index"' +
-                                        'if data is provided as list or array')
+        assert data_index is not None, (
+            'you must provide "data_index"' + "if data is provided as list or array"
+        )
 
         f = interp1d(data_index.to_julian_date(), data.values, **kwargs)
         x = f(index.to_julian_date())

@@ -11,14 +11,14 @@ class Volume(Scatter):
     """basic volume class"""
 
     def __init__(self, **kwargs):
-        self.omega = kwargs.pop('omega', None)
-        self.tau = kwargs.pop('tau', None)
+        self.omega = kwargs.pop("omega", None)
+        self.tau = kwargs.pop("tau", None)
 
         # set scattering angle generalization-matrix to [-1,1,1] if it is not
         # explicitly provided by the chosen class this results in a peak in
         # forward-direction which is suitable for describing volume-scattering
         # phase-functions
-        self.a = getattr(self, 'a', [-1., 1., 1.])
+        self.a = getattr(self, "a", [-1.0, 1.0, 1.0])
 
         # add a quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
@@ -49,10 +49,10 @@ class Volume(Scatter):
             Numerical value of the volume-scattering phase-function
         """
         # define sympy objects
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
@@ -68,15 +68,31 @@ class Volume(Scatter):
         # (this happens e.g. for the Isotropic brdf).
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(pfunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                **{key: .12 for key in param_dict.keys()}
-                                ), np.ndarray):
+        if not isinstance(
+            pfunc(
+                np.array([0.1, 0.2, 0.3]),
+                0.1,
+                0.1,
+                0.1,
+                **{key: 0.12 for key in param_dict.keys()}
+            ),
+            np.ndarray,
+        ):
             pfunc = np.vectorize(pfunc)
 
         return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
 
-    def p_theta_diff(self, t_0, t_ex, p_0, p_ex, geometry,
-                     param_dict={}, return_symbolic=False, n=1):
+    def p_theta_diff(
+        self,
+        t_0,
+        t_ex,
+        p_0,
+        p_ex,
+        geometry,
+        param_dict={},
+        return_symbolic=False,
+        n=1,
+    ):
         """
         Calculation of the derivative of p with respect to
         the scattering-angles t_ex
@@ -132,11 +148,13 @@ class Volume(Scatter):
         """
 
         # define sympy variables based on chosen geometry
-        if geometry == 'mono':
-            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
-                'single unique value for monostatic geometry'
+        if geometry == "mono":
+            assert len(np.unique(p_0)) == 1, (
+                "p_0 must contain only a "
+                + "single unique value for monostatic geometry"
+            )
 
-            theta_0 = sp.Symbol('theta_0')
+            theta_0 = sp.Symbol("theta_0")
             theta_ex = theta_0
             phi_0 = np.unique(p_0)[0]
             phi_ex = np.unique(p_0)[0] + sp.pi
@@ -144,75 +162,95 @@ class Volume(Scatter):
             t_ex = t_0
             p_ex = p_0 + np.pi
         else:
-            if geometry[0] == 'v':
-                theta_0 = sp.Symbol('theta_0')
-            elif geometry[0] == 'f':
-                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
-                    'single unique value for geometry[0] == f'
+            if geometry[0] == "v":
+                theta_0 = sp.Symbol("theta_0")
+            elif geometry[0] == "f":
+                assert len(np.unique(t_0)) == 1, (
+                    "t_0 must contain only a "
+                    + "single unique value for geometry[0] == f"
+                )
 
                 theta_0 = np.unique(t_0)[0]
             else:
-                raise AssertionError('wrong choice of theta_0 geometry')
+                raise AssertionError("wrong choice of theta_0 geometry")
 
-            if geometry[1] == 'v':
-                theta_ex = sp.Symbol('theta_ex')
-            elif geometry[1] == 'f':
-                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
-                    ' a single unique value for geometry[1] == f'
+            if geometry[1] == "v":
+                theta_ex = sp.Symbol("theta_ex")
+            elif geometry[1] == "f":
+                assert len(np.unique(t_ex)) == 1, (
+                    "t_ex must contain only"
+                    + " a single unique value for geometry[1] == f"
+                )
 
                 theta_ex = np.unique(t_ex)[0]
             else:
-                raise AssertionError('wrong choice of theta_ex geometry')
+                raise AssertionError("wrong choice of theta_ex geometry")
 
-            if geometry[2] == 'v':
-                phi_0 = sp.Symbol('phi_0')
-            elif geometry[2] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
-                    ' a single unique value for geometry[2] == f'
+            if geometry[2] == "v":
+                phi_0 = sp.Symbol("phi_0")
+            elif geometry[2] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_0 must contain only"
+                    + " a single unique value for geometry[2] == f"
+                )
 
                 phi_0 = np.unique(p_0)[0]
             else:
-                raise AssertionError('wrong choice of phi_0 geometry')
+                raise AssertionError("wrong choice of phi_0 geometry")
 
-            if geometry[3] == 'v':
-                phi_ex = sp.Symbol('phi_ex')
-            elif geometry[3] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
-                    ' a single unique value for geometry[3] == f'
+            if geometry[3] == "v":
+                phi_ex = sp.Symbol("phi_ex")
+            elif geometry[3] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_ex must contain only"
+                    + " a single unique value for geometry[3] == f"
+                )
 
                 phi_ex = np.unique(p_ex)[0]
             else:
-                raise AssertionError('wrong choice of phi_ex geometry')
+                raise AssertionError("wrong choice of phi_ex geometry")
 
-        if geometry[1] == 'f':
-            dfunc_dtheta_0 = 0.
+        if geometry[1] == "f":
+            dfunc_dtheta_0 = 0.0
         else:
-            func = self._func.xreplace({sp.Symbol('theta_0'): theta_0,
-                                        sp.Symbol('theta_ex'): theta_ex,
-                                        sp.Symbol('phi_0'): phi_0,
-                                        sp.Symbol('phi_ex'): phi_ex})
+            func = self._func.xreplace(
+                {
+                    sp.Symbol("theta_0"): theta_0,
+                    sp.Symbol("theta_ex"): theta_ex,
+                    sp.Symbol("phi_0"): phi_0,
+                    sp.Symbol("phi_ex"): phi_ex,
+                }
+            )
 
             dfunc_dtheta_0 = sp.diff(func, theta_ex, n)
 
         if return_symbolic is True:
             return dfunc_dtheta_0
         else:
-            args = (sp.Symbol('theta_0'),
-                    sp.Symbol('theta_ex'),
-                    sp.Symbol('phi_0'),
-                    sp.Symbol('phi_ex')) + tuple(param_dict.keys())
+            args = (
+                sp.Symbol("theta_0"),
+                sp.Symbol("theta_ex"),
+                sp.Symbol("phi_0"),
+                sp.Symbol("phi_ex"),
+            ) + tuple(param_dict.keys())
 
-            pfunc = sp.lambdify(args, dfunc_dtheta_0,
-                                modules=["numpy", "sympy"])
+            pfunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function
             # with scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
             # The following query is implemented to ensure correct array-output
             # TODO this is not a proper test !
-            if not isinstance(pfunc(
-                    np.array([.1, .2, .3]), .1, .1, .1,
-                    **{key: .12 for key in param_dict.keys()}), np.ndarray):
+            if not isinstance(
+                pfunc(
+                    np.array([0.1, 0.2, 0.3]),
+                    0.1,
+                    0.1,
+                    0.1,
+                    **{key: 0.12 for key in param_dict.keys()}
+                ),
+                np.ndarray,
+            ):
                 pfunc = np.vectorize(pfunc)
 
             return pfunc(t_0, t_ex, p_0, p_ex, **param_dict)
@@ -279,71 +317,82 @@ class Volume(Scatter):
         """
         assert self.ncoefs > 0
 
-        theta_s = sp.Symbol('theta_s')
-        phi_s = sp.Symbol('phi_s')
+        theta_s = sp.Symbol("theta_s")
+        phi_s = sp.Symbol("phi_s")
 
         NP = self.ncoefs
-        n = sp.Symbol('n')
+        n = sp.Symbol("n")
 
         # define sympy variables based on chosen geometry
-        if geometry == 'mono':
+        if geometry == "mono":
 
-            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
-                'single unique value for monostatic geometry'
+            assert len(np.unique(p_0)) == 1, (
+                "p_0 must contain only a "
+                + "single unique value for monostatic geometry"
+            )
 
-            theta_0 = sp.Symbol('theta_0')
+            theta_0 = sp.Symbol("theta_0")
             theta_ex = theta_0
             phi_0 = np.unique(p_0)[0]
             phi_ex = np.unique(p_0)[0] + sp.pi
         else:
-            if geometry[0] == 'v':
-                theta_0 = sp.Symbol('theta_0')
-            elif geometry[0] == 'f':
-                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
-                    'single unique value for geometry[0] == f'
+            if geometry[0] == "v":
+                theta_0 = sp.Symbol("theta_0")
+            elif geometry[0] == "f":
+                assert len(np.unique(t_0)) == 1, (
+                    "t_0 must contain only a "
+                    + "single unique value for geometry[0] == f"
+                )
 
                 theta_0 = np.unique(t_0)[0]
             else:
-                raise AssertionError('wrong choice of theta_i geometry')
+                raise AssertionError("wrong choice of theta_i geometry")
 
-            if geometry[1] == 'v':
-                theta_ex = sp.Symbol('theta_ex')
-            elif geometry[1] == 'f':
-                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
-                    ' a single unique value for geometry[1] == f'
+            if geometry[1] == "v":
+                theta_ex = sp.Symbol("theta_ex")
+            elif geometry[1] == "f":
+                assert len(np.unique(t_ex)) == 1, (
+                    "t_ex must contain only"
+                    + " a single unique value for geometry[1] == f"
+                )
 
                 theta_ex = np.unique(t_ex)[0]
             else:
-                raise AssertionError('wrong choice of theta_ex geometry')
+                raise AssertionError("wrong choice of theta_ex geometry")
 
-            if geometry[2] == 'v':
-                phi_0 = sp.Symbol('phi_0')
-            elif geometry[2] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
-                    ' a single unique value for geometry[2] == f'
+            if geometry[2] == "v":
+                phi_0 = sp.Symbol("phi_0")
+            elif geometry[2] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_0 must contain only"
+                    + " a single unique value for geometry[2] == f"
+                )
 
                 phi_0 = np.unique(p_0)[0]
             else:
-                raise AssertionError('wrong choice of phi_i geometry')
+                raise AssertionError("wrong choice of phi_i geometry")
 
-            if geometry[3] == 'v':
-                phi_ex = sp.Symbol('phi_ex')
-            elif geometry[3] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
-                    ' a single unique value for geometry[3] == f'
+            if geometry[3] == "v":
+                phi_ex = sp.Symbol("phi_ex")
+            elif geometry[3] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_ex must contain only"
+                    + " a single unique value for geometry[3] == f"
+                )
 
                 phi_ex = np.unique(p_ex)[0]
             else:
-                raise AssertionError('wrong choice of phi_ex geometry')
+                raise AssertionError("wrong choice of phi_ex geometry")
 
         # correct for backscattering
-        return sp.Sum(self.legcoefs *
-                      sp.legendre(n,
-                                  self.scat_angle(sp.pi - theta_0,
-                                                  theta_s,
-                                                  phi_0,
-                                                  phi_s,
-                                                  self.a)), (n, 0, NP - 1))
+        return sp.Sum(
+            self.legcoefs
+            * sp.legendre(
+                n,
+                self.scat_angle(sp.pi - theta_0, theta_s, phi_0, phi_s, self.a),
+            ),
+            (n, 0, NP - 1),
+        )
 
 
 class LinCombV(Volume):
@@ -431,7 +480,7 @@ class LinCombV(Volume):
             def _set_function(self):
                 """def phase function as sympy object for later evaluation"""
 
-                self._func = 0.
+                self._func = 0.0
 
             def _set_legcoefficients(self):
                 """
@@ -440,12 +489,17 @@ class LinCombV(Volume):
                 subsituting 'n'
                 """
 
-                self.legcoefs = 0.
+                self.legcoefs = 0.0
 
         # find phase functions with equal a parameters
-        equals = [np.where((np.array([VV[1].a for VV in self.Vchoices]) ==
-                            tuple(V[1].a)).all(axis=1))[0]
-                  for V in self.Vchoices]
+        equals = [
+            np.where(
+                (np.array([VV[1].a for VV in self.Vchoices]) == tuple(V[1].a)).all(
+                    axis=1
+                )
+            )[0]
+            for V in self.Vchoices
+        ]
 
         # evaluate index of phase-functions that have equal a parameter
         equal_a = list({tuple(row) for row in equals})
@@ -483,8 +537,8 @@ class LinCombV(Volume):
         # combine legendre-expansions for each a-parameter based on given
         # combined legendre-coefficients
         Vcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum(
-            [lexp(t_0, t_ex, p_0, p_ex, geometry)
-             for lexp in dummylegexpansion])
+            [lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion]
+        )
 
         for V in self.Vchoices:
             # set parameters based on chosen classes to define analytic
@@ -522,12 +576,12 @@ class Rayleigh(Volume):
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = 3. / (16. * sp.pi) * (1. + x ** 2.)
+        self._func = 3.0 / (16.0 * sp.pi) * (1.0 + x ** 2.0)
 
     def _set_legcoefficients(self):
         """
@@ -537,12 +591,14 @@ class Rayleigh(Volume):
         # only 3 coefficients are needed to correctly represent
         # the Rayleigh scattering function
         self.ncoefs = 3
-        n = sp.Symbol('n')
-        self.legcoefs = ((3. / (16. * sp.pi)) * ((4. / 3.) *
-                                                 sp.KroneckerDelta(0, n) +
-                                                 (2. / 3.) *
-                                                 sp.KroneckerDelta(2, n))
-                         ).expand()
+        n = sp.Symbol("n")
+        self.legcoefs = (
+            (3.0 / (16.0 * sp.pi))
+            * (
+                (4.0 / 3.0) * sp.KroneckerDelta(0, n)
+                + (2.0 / 3.0) * sp.KroneckerDelta(2, n)
+            )
+        ).expand()
 
 
 class HenyeyGreenstein(Volume):
@@ -569,16 +625,18 @@ class HenyeyGreenstein(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
 
-    def __init__(self, t=None, ncoefs=None, a=[-1., 1., 1.], **kwargs):
-        assert t is not None, 't parameter needs to be provided!'
-        assert ncoefs is not None, 'Number of coeffs needs to be specified'
+    def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
+        assert t is not None, "t parameter needs to be provided!"
+        assert ncoefs is not None, "Number of coeffs needs to be specified"
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
         self.a = a
-        assert isinstance(self.a, list), 'Error: Generalization-parameter ' + \
-            'needs to be a list'
-        assert len(a) == 3, 'Error: Generalization-parameter list must ' + \
-            'contain 3 values'
+        assert isinstance(self.a, list), (
+            "Error: Generalization-parameter " + "needs to be a list"
+        )
+        assert len(a) == 3, (
+            "Error: Generalization-parameter list must " + "contain 3 values"
+        )
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self._set_function()
@@ -586,22 +644,22 @@ class HenyeyGreenstein(Volume):
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = (1. - self.t ** 2.) / ((4. * sp.pi) *
-                                            (1. + self.t ** 2. -
-                                             2. * self.t * x) ** 1.5)
+        self._func = (1.0 - self.t ** 2.0) / (
+            (4.0 * sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5
+        )
 
     def _set_legcoefficients(self):
         """
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
-        n = sp.Symbol('n')
-        self.legcoefs = (1. / (4. * sp.pi)) * (2. * n + 1) * self.t ** n
+        n = sp.Symbol("n")
+        self.legcoefs = (1.0 / (4.0 * sp.pi)) * (2.0 * n + 1) * self.t ** n
 
 
 class HGRayleigh(Volume):
@@ -632,18 +690,22 @@ class HGRayleigh(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
 
-    def __init__(self, t=None, ncoefs=None, a=[-1., 1., 1.], **kwargs):
-        assert t is not None, 't parameter needs to be provided!'
-        assert ncoefs is not None, 'Number of coeffs needs to be specified'
+    def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
+        assert t is not None, "t parameter needs to be provided!"
+        assert ncoefs is not None, "Number of coeffs needs to be specified"
         super(HGRayleigh, self).__init__(**kwargs)
         self.t = t
         self.a = a
-        assert isinstance(self.a, list), 'Error: Generalization-parameter ' + \
-            'needs to be a list'
-        assert len(a) == 3, 'Error: Generalization-parameter list must ' + \
-            'contain 3 values'
-        assert all(type(x) == float for x in a), 'Error: Generalization-' + \
-            'parameter array must contain only floating-point values!'
+        assert isinstance(self.a, list), (
+            "Error: Generalization-parameter " + "needs to be a list"
+        )
+        assert len(a) == 3, (
+            "Error: Generalization-parameter list must " + "contain 3 values"
+        )
+        assert all(type(x) == float for x in a), (
+            "Error: Generalization-"
+            + "parameter array must contain only floating-point values!"
+        )
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
         self._set_function()
@@ -651,33 +713,53 @@ class HGRayleigh(Volume):
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = 3. / (8. * sp.pi) * (1. /
-                                          (2. + self.t ** 2) *
-                                          (1 + x ** 2) *
-                                          (1. - self.t ** 2.) /
-                                          ((1. + self.t ** 2. -
-                                            2. * self.t * x) ** 1.5))
+        self._func = (
+            3.0
+            / (8.0 * sp.pi)
+            * (
+                1.0
+                / (2.0 + self.t ** 2)
+                * (1 + x ** 2)
+                * (1.0 - self.t ** 2.0)
+                / ((1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+            )
+        )
 
     def _set_legcoefficients(self):
         """
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
-        n = sp.Symbol('n')
+        n = sp.Symbol("n")
         self.legcoefs = sp.Piecewise(
-            (3. / (8. * sp.pi) * 1. / (2. + self.t ** 2) *
-             ((n + 2.) * (n + 1.) /
-              (2. * n + 3) * self.t ** (n + 2.) +
-              (n + 1.) ** 2. / (2. * n + 3.) * self.t ** n +
-              (5. * n ** 2. - 1.) / (2. * n - 1.) * self.t ** n), n < 2),
-            (3. / (8. * sp.pi) * 1. / (2. + self.t ** 2) *
-             (n * (n - 1.) / (2. * n - 1.) * self.t ** (n - 2.) +
-              (n + 2.) * (n + 1.) / (2. * n + 3) * self.t ** (n + 2.) +
-              (n + 1.) ** 2. / (2. * n + 3.) * self.t ** n +
-              (5. * n ** 2. - 1.) / (2. * n - 1.) * self.t ** n), True)
+            (
+                3.0
+                / (8.0 * sp.pi)
+                * 1.0
+                / (2.0 + self.t ** 2)
+                * (
+                    (n + 2.0) * (n + 1.0) / (2.0 * n + 3) * self.t ** (n + 2.0)
+                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t ** n
+                    + (5.0 * n ** 2.0 - 1.0) / (2.0 * n - 1.0) * self.t ** n
+                ),
+                n < 2,
+            ),
+            (
+                3.0
+                / (8.0 * sp.pi)
+                * 1.0
+                / (2.0 + self.t ** 2)
+                * (
+                    n * (n - 1.0) / (2.0 * n - 1.0) * self.t ** (n - 2.0)
+                    + (n + 2.0) * (n + 1.0) / (2.0 * n + 3) * self.t ** (n + 2.0)
+                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t ** n
+                    + (5.0 * n ** 2.0 - 1.0) / (2.0 * n - 1.0) * self.t ** n
+                ),
+                True,
+            ),
         )

@@ -2,9 +2,183 @@
 
 import sys
 import pandas as pd
+import numpy as np
 import traceback
 from pathlib import Path
 from .rtfits import load
+from . import log
+
+try:
+    import xarray as xar
+except ModuleNotFoundError:
+    log.debug("xarray could not be imported, " + "postprocess_xarray will not work!")
+
+
+def defdict_parser(defdict):
+    """
+    get parameter-dynamics specifications from a given defdict
+
+    Parameters
+    ----------
+    defdict : dict
+        a defdict (e.g. fit.defdict)
+
+    Returns
+    -------
+    parameter_specs : dict
+        a dict that contains lists of parameter-names according to their
+        specifications. (keys should be self-explanatory)
+    """
+    parameter_specs = dict(
+        fitted=[],
+        fitted_const=[],
+        fitted_dynamic=[],
+        fitted_dynamic_manual=[],
+        fitted_dynamic_index=[],
+        fitted_dynamic_datetime=[],
+        fitted_dynamic_integer=[],
+        constant=[],
+        auxiliary=[],
+    )
+
+    for key, val in defdict.items():
+        if val[0] is True:
+            parameter_specs["fitted"].append(key)
+            if val[2] is None:
+                parameter_specs["fitted_const"].append(key)
+            else:
+                parameter_specs["fitted_dynamic"].append(key)
+                if val[1] == "manual":
+                    parameter_specs["fitted_dynamic_manual"].append(key)
+                elif val[1] == "index":
+                    parameter_specs["fitted_dynamic_index"].append(key)
+                elif isinstance(val[1], str):
+                    parameter_specs["fitted_dynamic_datetime"].append(key)
+                elif isinstance(val[1], int):
+                    parameter_specs["fitted_dynamic_integer"].append(key)
+        else:
+            if val[1] == "auxiliary":
+                parameter_specs["auxiliary"].append(key)
+            else:
+                parameter_specs["constant"].append(key)
+
+    return parameter_specs
+
+
+def postprocess_xarray(
+    fit,
+    saveparams=None,
+    xindex=("x", -9999),
+    yindex=None,
+    staticlayers=None,
+    auxdata=None,
+):
+    """
+    the identification of parameters is as follows:
+
+        1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
+        2) any parameter present in defdict is handled accordingly
+        3) auxdata (a pandas-dataframe) is appended
+
+        4) static layers are generated and added according to the provided dict
+
+
+    Parameters
+    ----------
+    fit : rt1.rtfits.Fits object
+        the fit-object to use
+    saveparams : list, optional
+        a list of strings that correspond to parameter-names that should
+        be included. The default is None.
+    xindex : tuple, optional
+        a tuple (name, value) that will be used as the x-index.
+        The default is ('x', -9999).
+    yindex : tuple, optional
+        a tuple (name, value) that will be used as the y-index.
+        if provided, a multiindex (x, y) will be used!
+        Be warned... when combining xarrays the x- and y- coordinates will
+        be assumed as a rectangular grid!
+        The default is None.
+    staticlayers : dict, optional
+        a dict with parameter-names and values that will be adde das
+        static layers. The default is None.
+    auxdata : pandas.DataFrame, optional
+        a pandas DataFrame that will be concatenated to the DataFrame obtained
+        from combining all 'saveparams'. The default is None.
+
+    Returns
+    -------
+    dfxar : xarray.Dataset
+        a xarray-dataset with all layers defined according to the specs.
+
+    """
+
+    if saveparams is None:
+        saveparams = []
+
+    if staticlayers is None:
+        staticlayers = dict()
+
+    defs = defdict_parser(fit.defdict)
+
+    usedfs = []
+    for key in saveparams:
+
+        if key == "sig":
+            if fit.dB is False:
+                usedfs.append(10.0 * np.log10(fit.dataset.sig))
+            else:
+                usedfs.append(fit.dataset.sig)
+        elif key == "inc":
+            usedfs.append(np.rad2deg(fit.dataset.inc))
+
+        elif key in fit.defdict:
+            if key in defs["fitted_dynamic"]:
+                usedfs.append(fit.res_df[key])
+            elif key in defs["fitted_const"]:
+                staticlayers[key] = fit.res_dict[key][0]
+            elif key in defs["constant"]:
+                staticlayers[key] = fit.defdict[key][1]
+            elif key in defs["auxiliary"]:
+                usedfs.append(fit.dataset[key])
+        elif key in fit.dataset:
+            usedfs.append(fit.dataset[key])
+        else:
+            log.warning(
+                f"the parameter {key} could not be processed"
+                + "during xarray postprocessing"
+            )
+
+    if auxdata is not None:
+        usedfs.append(auxdata)
+
+    # combine all timeseries and set the proper index
+    df = pd.concat(usedfs, axis=1)
+    df.columns.names = ["param"]
+    df.index.names = ["date"]
+
+    if yindex is not None:
+        df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
+        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+
+        # set static layers
+        statics = pd.DataFrame(
+            staticlayers,
+            index=pd.MultiIndex.from_product(
+                iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
+            ),
+        )
+
+    else:
+        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+
+        # set static layers
+        statics = pd.DataFrame(staticlayers, index=[xindex[1]])
+        statics.index.name = xindex[0]
+
+    dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
+
+    return dfxar
 
 
 class rt1_processing_config(object):
@@ -78,12 +252,12 @@ class rt1_processing_config(object):
 
     def __init__(self, **kwargs):
 
-        if 'save_path' in kwargs and 'dumpfolder' in kwargs:
-            parentpath = Path(kwargs['save_path']) / kwargs['dumpfolder']
+        if "save_path" in kwargs and "dumpfolder" in kwargs:
+            parentpath = Path(kwargs["save_path"]) / kwargs["dumpfolder"]
 
-            self.rt1_procsesing_dumppath = parentpath / 'dumps'
-            self.rt1_procsesing_respath = parentpath / 'results'
-            self.rt1_procsesing_cfgpath = parentpath / 'cfg'
+            self.rt1_procsesing_dumppath = parentpath / "dumps"
+            self.rt1_procsesing_respath = parentpath / "results"
+            self.rt1_procsesing_cfgpath = parentpath / "cfg"
         else:
             self.rt1_procsesing_dumppath = None
             self.rt1_procsesing_respath = None
@@ -118,7 +292,7 @@ class rt1_processing_config(object):
         """
 
         # the ID used for indexing the processed sites
-        feature_id = reader_arg['gpi']
+        feature_id = reader_arg["gpi"]
 
         # the filename of the dump-file
         filename = f"{feature_id}.dump"
@@ -126,9 +300,11 @@ class rt1_processing_config(object):
         # the filename of the error-dumpfile
         error_filename = f"{feature_id}_error.txt"
 
-        return dict(feature_id=feature_id,
-                    filename=filename,
-                    error_filename=error_filename)
+        return dict(
+            feature_id=feature_id,
+            filename=filename,
+            error_filename=error_filename,
+        )
 
     def check_dump_exists(self, reader_arg):
         """
@@ -151,8 +327,8 @@ class rt1_processing_config(object):
         # check if the file already exists, and if yes, raise a skip-error
         if self.rt1_procsesing_dumppath is not None:
             names_ids = self.get_names_ids(reader_arg)
-            if (self.rt1_procsesing_dumppath / names_ids['filename']).exists():
-                raise Exception('rt1_file_already_exists')
+            if (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
+                raise Exception("rt1_file_already_exists")
 
     def dump_fit_to_file(self, fit, reader_arg, mini=True):
         """
@@ -172,10 +348,11 @@ class rt1_processing_config(object):
         if self.rt1_procsesing_dumppath is not None:
             names_ids = self.get_names_ids(reader_arg)
 
-            if not (self.rt1_procsesing_dumppath /
-                    names_ids['filename']).exists():
-                fit.dump(self.rt1_procsesing_dumppath / names_ids['filename'],
-                         mini=mini)
+            if not (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
+                fit.dump(
+                    self.rt1_procsesing_dumppath / names_ids["filename"],
+                    mini=mini,
+                )
 
     def preprocess(self, **kwargs):
         """a function that is called PRIOR to processing"""
@@ -184,11 +361,11 @@ class rt1_processing_config(object):
     def reader(self, reader_arg):
         """a function that is called for each site to obtain the dataset"""
         # get the incidence-angles of the data
-        inc = [.1, .2, .3, .4, .5]
+        inc = [0.1, 0.2, 0.3, 0.4, 0.5]
         # get the sig0-values of the data
-        sig = [-10, -11., -11.45, -13, -15]
+        sig = [-10, -11.0, -11.45, -13, -15]
         # get the index-values of the data
-        index = pd.date_range('1.1.2020', '1.5.2020', freq='D')
+        index = pd.date_range("1.1.2020", "1.5.2020", freq="D")
 
         data = pd.DataFrame(dict(inc=inc, sig=sig), index=index)
 
@@ -228,23 +405,27 @@ class rt1_processing_config(object):
 
         # get filenames
         names_ids = self.get_names_ids(reader_arg)
+        # parse defdict to find static and dynamic parameter names
+        params = defdict_parser(fit.defdict)
 
         # make a dump of the fit
         self.dump_fit_to_file(fit, reader_arg)
 
-        # get resulting parameter DataFrame
-        df = fit.res_df
-        # add the feature_id as first column-level
-        df.columns = pd.MultiIndex.from_product([[names_ids['feature_id']],
-                                                 df.columns])
-        df.columns.names = ['feature_id', 'param']
+        # add all constant (fitted) parameters as static layers
+        staticlayers = dict()
+        for key in params["fitted_const"]:
+            staticlayers[key] = fit.res_dict[key][0]
 
-        # flush stdout to see output of child-processes
-        sys.stdout.flush()
+        ret = postprocess_xarray(
+            fit=fit,
+            saveparams=["inc", "sig", *params["fitted_dynamic"]],
+            xindex=("ID", names_ids["feature_id"]),
+            staticlayers=staticlayers,
+        )
 
-        return df
+        return ret
 
-    def finaloutput(self, res, format='table'):
+    def finaloutput(self, res, format="table"):
         """
         A function that is called after ALL sites are processed:
 
@@ -287,29 +468,17 @@ class rt1_processing_config(object):
         """
 
         # concatenate the results
-        res = pd.concat([i for i in res if i is not None], axis=1)
+        resxar = xar.combine_nested([i for i in res if i is not None], concat_dim="ID")
 
         if self.rt1_procsesing_respath is None or self.finalout_name is None:
-            print('both save_path and finalout_name must be specified... ',
-                  'otherwise the final results can NOT be saved!')
-            return res
+            log.info(
+                "both save_path and finalout_name must be specified... "
+                + "otherwise the final results can NOT be saved!"
+            )
+            return resxar
         else:
-
-            hdf_key = 'RT1_result'
-
-            # transpose the dataframe (we want less columns and more rows)
-            res = res.T
-            # ensure that all values are numeric (required for table format)
-            res = res.apply(pd.to_numeric)
-            # ensure that all columns are numeric (required for table format)
-            res.columns = pd.to_numeric(res.columns)
-
-            # create (or append) results to a HDF-store
-            res.to_hdf(self.rt1_procsesing_respath / self.finalout_name,
-                       key=hdf_key, format=format, complevel=7)
-
-        # flush stdout to see output of child-processes
-        sys.stdout.flush()
+            # export netcdf file
+            resxar.to_netcdf(self.rt1_procsesing_respath / self.finalout_name)
 
     def exceptfunc(self, ex, reader_arg):
         """
@@ -337,26 +506,41 @@ class rt1_processing_config(object):
 
         """
 
+        log.debug(
+            f"catched an {type(ex).__name__} {ex.args} for the "
+            + f"following reader_args: \n{reader_arg}"
+        )
+
         names_ids = self.get_names_ids(reader_arg)
         raise_exception = True
 
-        if 'rt1_skip' in ex.args:
+        if "rt1_skip" in ex.args:
+            log.debug("SKIPPED the following error:")
+            log.debug(traceback.format_exc())
             # ignore skip exceptions
             raise_exception = False
 
-        elif 'rt1_file_already_exists' in ex.args:
+        elif "rt1_file_already_exists" in ex.args:
             # if the fit-dump file already exists, try loading the existing
             # file and apply post-processing (e.g. avoid re-processing results)
             raise_exception = False
 
+            log.debug(
+                f"the file '{names_ids['filename']}' already exists... "
+                + "I'm 'using the existing one!"
+            )
+
             try:
-                fit = load(self.rt1_procsesing_dumppath /
-                           names_ids['filename'])
+                fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
                 return self.postprocess(fit, reader_arg)
             except Exception:
+                log.debug(
+                    "the has been a problem while loading the "
+                    + f"already processed file '{names_ids['filename']}'"
+                )
                 pass
 
-        elif 'rt1_data_error' in ex.args:
+        elif "rt1_data_error" in ex.args:
             # raised if there was a problem with the data, ignore and continue
             raise_exception = False
 
@@ -365,20 +549,20 @@ class rt1_processing_config(object):
         # if `save_path`is NOT specified, raise ONLY exceptions that
         # have not been explicitly catched
         if self.rt1_procsesing_dumppath is None and raise_exception is True:
-            print('`save_path` must be specified otherwise exceptions ' +
-                  'that are not explicitly catched by `exceptfunc()` ' +
-                  ' will be raised!')
+            log.info(
+                "`save_path` must be specified otherwise exceptions "
+                + "that are not explicitly catched by `exceptfunc()` "
+                + " will be raised!"
+            )
             raise ex
         else:
-            if 'error_filename' in names_ids:
-                error_filename = names_ids['error_filename']
+            if "error_filename" in names_ids:
+                error_filename = names_ids["error_filename"]
             else:
-                error_filename = names_ids[
-                    'filename'].split('.')[0] + '_error.txt'
+                error_filename = names_ids["filename"].split(".")[0] + "_error.txt"
 
             # dump the encountered exception to a file
-            with open(self.rt1_procsesing_dumppath /
-                      error_filename, 'w') as file:
+            with open(self.rt1_procsesing_dumppath / error_filename, "w") as file:
                 file.write(traceback.format_exc())
 
         # flush stdout to see output of child-processes
