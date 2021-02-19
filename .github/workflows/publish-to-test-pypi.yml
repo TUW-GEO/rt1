@@ -1,11 +1,12 @@
 name: Publish to TestPyPI
 
 on:
-  # trigger only on release
-  release:
-    types: [created]
-  # to trigger workflow manually from actions-tab
-  workflow_dispatch:
+  push:
+  # # trigger only on release
+  # release:
+  #   types: [created]
+  # # to trigger workflow manually from actions-tab
+  # workflow_dispatch:
 
 jobs:
   build:
