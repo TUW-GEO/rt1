@@ -41,5 +41,5 @@ jobs:
       - name: Test build on TestPyPI
         run: |
           VERSION=$(python setup.py --version)
-          python -m pip install -i https://test.pypi.org/simple/ rt1==VERSION
+          python -m pip install -i https://test.pypi.org/simple/ rt1==$VERSION
           python -c "exec(\"import rt1\nprint('successfully imported RT1 v', rt1.__version__)\")"
