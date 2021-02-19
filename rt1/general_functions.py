@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 """helper functions that are used both in rtfits and rtplots"""
 import sys
-import numpy as np
 from itertools import tee, islice
 from collections import OrderedDict
+
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    pass
+
 
 
 def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
