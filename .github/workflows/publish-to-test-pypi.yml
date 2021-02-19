@@ -1,31 +1,10 @@
-# name: Publish to TestPyPI
-
-# on: [push]
-
-# jobs:
-#   build-n-publish:
-#     name: Publish to TestPyPI
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - uses: actions/checkout@v2
-#       - uses: actions/setup-python@v2
-#       - uses: casperdcl/deploy-pypi@v2
-#         with:
-#           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-#           build: true
-#           # only upload if a tag is pushed (otherwise just build & check)
-#           url: https://test.pypi.org/legacy/
-#           upload: ${{ github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags') }}
-
-
-
-
 name: Publish to TestPyPI
 
 on:
-  push:
-  # Allows you to run this workflow manually from the Actions tab
+  # trigger only on release
+  release:
+    types: [created]
+  # to trigger workflow manually from actions-tab
   workflow_dispatch:
 
 jobs:
@@ -38,11 +17,14 @@ jobs:
         with:
           python-version: 3.7
 
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
       - name: "install packages"
         run: |
           # Upgrade pip
           python -m pip install --upgrade pip
-          # Install build deps
+          # Install build dependencies
           python -m pip install setuptools wheel twine
 
       # Upload to TestPyPI
@@ -54,3 +36,9 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
           TWINE_REPOSITORY: testpypi
+
+      - name: Test build on TestPyPI
+        run: |
+          VERSION=$(python setup.py --version)
+          python -m pip install -i https://test.pypi.org/simple/ rt1==VERSION
+          python -c "exec(\"import rt1\nprint('successfully imported RT1 v', rt1.__version__)\")"
