@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import unittest
 import unittest.mock as mock
@@ -37,16 +36,20 @@ class TestRTfits(unittest.TestCase):
         results = RTresults('tests/proc_test')
         assert hasattr(results, 'dump01'), 'dumpfolder not found by RTresults'
 
+        dumpfiles = [i for i in results.dump01.dump_files]
+        print(dumpfiles)
+
         fit = results.dump01.load_fit()
         cfg = results.dump01.load_cfg()
-        dumpfiles = [i for i in results.dump01.dump_files]
 
-        with self.assertRaises(AssertionError):
-            # TODO implement netcdf export and properly test netcdf's !
-            ncfile = results.dump01.load_nc()
-        with self.assertRaises(AssertionError):
-            # TODO implement netcdf export and properly test netcdf's !
-            ncfile = results.dump01.NetCDF_variables
+        with results.dump01.load_nc() as ncfile:
+            processed_ids = list(ncfile.ID.values)
+
+        processed_ids.sort()
+        assert processed_ids == [1, 2, 3], 'NetCDF export does not include all IDs'
+
+        # check if NetCDF_variables works as expected
+        results.dump01.NetCDF_variables
 
         # remove the save_path directory
         #print('deleting save_path directory...')
@@ -61,20 +64,24 @@ class TestRTfits(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
+        with self.assertRaises(SystemExit):
+            with mock.patch('builtins.input', side_effect=['N']):
+                proc = RTprocess(config_path, autocontinue=False,
+                                 setup=False)
+                proc.setup()
         with self.assertRaises(SystemExit):
             with mock.patch('builtins.input', side_effect=['REMOVE', 'N']):
                 proc = RTprocess(config_path, autocontinue=False)
-                proc.setup()
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
             proc = RTprocess(config_path, autocontinue=False)
-            proc.setup()
         assert len(list(Path('tests/proc_test/dump01/dumps').iterdir())) == 0, 'user-input REMOVE did not work'
 
         with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
-            proc.run_processing(ncpu=1, reader_args = reader_args, copy=False)
+            proc = RTprocess(config_path, autocontinue=False,
+                             copy=False, setup=False)
+            proc.run_processing(ncpu=1, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test/dump01/cfg').exists(), 'folder-generation did not work'
@@ -99,7 +106,7 @@ class TestRTfits(unittest.TestCase):
                              dumpfolder='dump02')
                          )
 
-        proc.run_processing(ncpu=4, reader_args = reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         #----------------------------------------- check if files have been copied
         assert Path('tests/proc_test2/dump02/cfg').exists(), 'folder-generation did not work'
@@ -109,7 +116,32 @@ class TestRTfits(unittest.TestCase):
         assert Path('tests/proc_test2/dump02/cfg/parallel_processing_config.py').exists(), 'copying did not work'
 
 
+    def test_4_postprocess_and_finalout(self):
+        config_path = Path(__file__).parent.absolute() / 'test_config.ini'
+        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+
+        with mock.patch('builtins.input', side_effect=['REMOVE', 'Y']):
+            proc = RTprocess(config_path,
+                             init_kwargs=dict(
+                                 path__save_path='tests/proc_test3',
+                                 dumpfolder='dump03'))
+
+            proc.run_processing(ncpu=4, reader_args=reader_args,
+                                postprocess=False)
+
+        results = RTresults('tests/proc_test3')
+        assert hasattr(results, 'dump03'), 'dumpfolder dump02 not found by RTresults'
+
+        finalout_name = results.dump03.load_cfg().get_process_specs()['finalout_name']
+
+        assert not Path(f'tests/proc_test3/dump03/results/{finalout_name}.nc').exists(), 'disabling postprocess did not work'
+
+        proc.run_finaloutput(ncpu=1, finalout_name='ncpu_1.nc')
+        assert Path('tests/proc_test3/dump03/results/ncpu_1.nc').exists(), 'run_finalout with ncpu=1 not work'
+
+        proc.run_finaloutput(ncpu=4, finalout_name='ncpu_2.nc')
+        assert Path('tests/proc_test3/dump03/results/ncpu_2.nc').exists(), 'run_finalout with ncpu=2 not work'
+
+
 if __name__ == "__main__":
     unittest.main()
-
-    #stop_log_to_file()

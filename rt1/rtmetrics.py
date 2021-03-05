@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 class _metric_keys(object):
     """
     a class to get all available variable-keys that can be used to
@@ -21,8 +22,8 @@ class _metric_keys(object):
 
     def __init__(self, fit, d1=None, d2=None, auxdat=None):
 
-        self._datakeys = fit.dataset.select_dtypes(include='number').keys()
-        self._modelkeys = ['tot', 'surf', 'vol']
+        self._datakeys = fit.dataset.select_dtypes(include="number").keys()
+        self._modelkeys = ["tot", "surf", "vol"]
         self._retrievalkeys = fit.res_dict.keys()
 
         if auxdat is not None:
@@ -31,72 +32,96 @@ class _metric_keys(object):
             self._auxkeys = []
 
         if fit.int_Q is True:
-            self._modelkeys += ['inter']
+            self._modelkeys += ["inter"]
 
         self._check_keys()
 
         if d1 is not None:
-            assert isinstance(d1, str), 'd1 must be a string!'
+            assert isinstance(d1, str), "d1 must be a string!"
             setattr(self, d1, _RTmetrics0())
 
             if d2 is None:
                 for k2 in self._all_keys:
-                    setattr(getattr(self, d1), k2,
-                            _RTmetrics1(d1=d1, d2=k2, fit=fit, auxdat=auxdat,
-                                        all_keys=self._all_keys))
+                    setattr(
+                        getattr(self, d1),
+                        k2,
+                        _RTmetrics1(
+                            d1=d1,
+                            d2=k2,
+                            fit=fit,
+                            auxdat=auxdat,
+                            all_keys=self._all_keys,
+                        ),
+                    )
             elif isinstance(d2, str):
-                setattr(getattr(self, d1), d2,
-                        _RTmetrics1(d1=d1, d2=d2, fit=fit))
+                setattr(getattr(self, d1), d2, _RTmetrics1(d1=d1, d2=d2, fit=fit))
             else:
                 try:
                     d2name = d2.name
                 except AttributeError:
-                    d2name = 'aux'
-                setattr(getattr(self, d1), d2name,
-                        _RTmetrics1(d1=d1, d2=d2, fit=fit, auxdat=auxdat,
-                                    all_keys=self._all_keys))
+                    d2name = "aux"
+                setattr(
+                    getattr(self, d1),
+                    d2name,
+                    _RTmetrics1(
+                        d1=d1,
+                        d2=d2,
+                        fit=fit,
+                        auxdat=auxdat,
+                        all_keys=self._all_keys,
+                    ),
+                )
         else:
             for k1, k2 in permutations(self._all_keys, 2):
                 if not hasattr(self, k1):
                     setattr(self, k1, _RTmetrics0())
 
-                setattr(getattr(self, k1), k2,
-                        _RTmetrics1(d1=k1, d2=k2, fit=fit, auxdat=auxdat,
-                                    all_keys=self._all_keys))
+                setattr(
+                    getattr(self, k1),
+                    k2,
+                    _RTmetrics1(
+                        d1=k1,
+                        d2=k2,
+                        fit=fit,
+                        auxdat=auxdat,
+                        all_keys=self._all_keys,
+                    ),
+                )
 
     def _check_keys(self):
         # a list of all possible keys that can be used for metric calculations
-        all_keys = chain(self._datakeys,
-                         self._modelkeys,
-                         self._retrievalkeys,
-                         self._auxkeys)
+        all_keys = chain(
+            self._datakeys, self._modelkeys, self._retrievalkeys, self._auxkeys
+        )
         # a list of the "sources" that belong to the keys
-        suffix = chain(repeat('dataset', len(self._datakeys)),
-                       repeat('calc_model', len(self._modelkeys)),
-                       repeat('res_df', len(self._retrievalkeys)),
-                       repeat('auxdat', len(self._auxkeys)))
+        suffix = chain(
+            repeat("dataset", len(self._datakeys)),
+            repeat("calc_model", len(self._modelkeys)),
+            repeat("res_df", len(self._retrievalkeys)),
+            repeat("auxdat", len(self._auxkeys)),
+        )
         # group by the sources to check if any key is defined more than once
-        grps = groupby_unsorted(zip(suffix, all_keys),
-                                key=itemgetter(1),
-                                get=itemgetter(0))
+        grps = groupby_unsorted(
+            zip(suffix, all_keys), key=itemgetter(1), get=itemgetter(0)
+        )
 
         # make all keys unique (e.g. add a suffix if there are multiple
         # appearances of the same key -> also warn the user of multiple keys!)
         newgrps = dict()
-        warnmsg = ''
+        warnmsg = ""
         for key, val in grps.items():
             if len(val) > 1:
-                warnmsg += f'"{key}": '.ljust(15) + '[' + ', '.join(val) + ']'
-                warnmsg += '\n'
+                warnmsg += f'"{key}": '.ljust(15) + "[" + ", ".join(val) + "]"
+                warnmsg += "\n"
                 for i in val:
-                    newgrps[key + '__' + i] = i
+                    newgrps[key + "__" + i] = i
             else:
                 newgrps[key] = val[0]
 
         if len(warnmsg) > 0:
             log.warning(
-                'the following keys are present in multiple sources!\n'
-                + warnmsg)
+                "the following keys are present in multiple sources!\n" + warnmsg
+            )
 
         self._all_keys = newgrps
 
@@ -117,13 +142,13 @@ class _RTmetrics1(object):
         self._s1 = all_keys[d1]
         self._s2 = all_keys[d2]
 
-        if d1.endswith(f'__{self._s1}'):
-            self._d1 = d1[:-len(f'__{self._s1}')]
+        if d1.endswith(f"__{self._s1}"):
+            self._d1 = d1[: -len(f"__{self._s1}")]
         else:
             self._d1 = d1
 
-        if d2.endswith(f'__{self._s2}'):
-            self._d2 = d2[:-len(f'__{self._s2}')]
+        if d2.endswith(f"__{self._s2}"):
+            self._d2 = d2[: -len(f"__{self._s2}")]
         else:
             self._d2 = d2
 
@@ -131,15 +156,15 @@ class _RTmetrics1(object):
         self.auxdat = auxdat
 
     def _get_data(self, source, key):
-        if source == 'auxdat':
+        if source == "auxdat":
             return self.auxdat[key]
-        elif source == 'dataset':
+        elif source == "dataset":
             return self.fit.dataset[key]
-        elif source == 'calc_model' and key == 'tot':
+        elif source == "calc_model" and key == "tot":
             return self.fit.calc_model(return_components=False)[key]
-        elif source == 'calc_model':
+        elif source == "calc_model":
             return self.fit.calc_model(return_components=True)[key]
-        elif source == 'res_df':
+        elif source == "res_df":
             return self.fit.res_df[key]
 
     @property
@@ -158,17 +183,21 @@ class _RTmetrics1(object):
     @lru_cache()
     def _unify_idx_data(self):
         if len(self.d1) != len(self.d2):
-            log.warning(f'index of "{self._d1}" and "{self._d2}" is not ' +
-                          'the same! -> a concatenation is performed!')
+            log.warning(
+                f'index of "{self._d1}" and "{self._d2}" is not '
+                + "the same! -> a concatenation is performed!"
+            )
 
             # try to unify the index
             df = pd.concat([self.d1, self.d2], axis=1, copy=False)
             d1 = df[self._d1].dropna()
             d2 = df[self._d2].dropna()
 
-            assert len(d1) == len(d2), ('the length of the 2 datasets is ' +
-                                        'not the same!' +
-                                        f'({len(self.d1)} != {len(d2)})')
+            assert len(d1) == len(d2), (
+                "the length of the 2 datasets is "
+                + "not the same!"
+                + f"({len(self.d1)} != {len(d2)})"
+            )
             return d1, d2
         else:
             return self.d1, self.d2
@@ -227,16 +256,16 @@ class RTmetrics(object):
     # enter the function name of a new metric in here
     # functions listed in here must have two pandas series d1, d2 as parameters
     metrics_registry = [
-        'pearson',
-        'spearman',
-        'linregress',
-        'rmsd',
-        'ub_rmsd',
-        'bias',
-        'mae',
-        'mape',
-        'std_ratio'
-        ]
+        "pearson",
+        "spearman",
+        "linregress",
+        "rmsd",
+        "ub_rmsd",
+        "bias",
+        "mae",
+        "mape",
+        "std_ratio",
+    ]
 
     def __init__(self):
         pass
@@ -259,7 +288,7 @@ class RTmetrics(object):
             pearson correlation coefficient
 
         """
-        return d1.corr(d2, method='pearson')
+        return d1.corr(d2, method="pearson")
 
     @staticmethod
     def spearman(d1, d2):
@@ -279,7 +308,7 @@ class RTmetrics(object):
             spearman's rank correlation coefficient
 
         """
-        return d1.corr(d2, method='spearman')
+        return d1.corr(d2, method="spearman")
 
     @staticmethod
     def linregress(d1, d2):
@@ -299,8 +328,12 @@ class RTmetrics(object):
             float values for slope, intercept, pearson, pvalue, stderr
 
         """
-        return dict(zip(['slope', 'intercept', 'pearson', 'pvalue', 'stderr'],
-                        stats.linregress(d1, d2)))
+        return dict(
+            zip(
+                ["slope", "intercept", "pearson", "pvalue", "stderr"],
+                stats.linregress(d1, d2),
+            )
+        )
 
     @staticmethod
     def rmsd(d1, d2):
@@ -447,7 +480,7 @@ class RTmetrics(object):
             function/metric name and corresponding value
 
         """
-        return { func: getattr(cls, func)(d1,d2) for func in cls.metrics_registry }
+        return {func: getattr(cls, func)(d1, d2) for func in cls.metrics_registry}
 
     @classmethod
     def scatterplot(cls, d1, d2, d1_name, d2_name):
@@ -473,7 +506,9 @@ class RTmetrics(object):
         """
 
         # create plot and axes
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={'width_ratios': [5, 1]})
+        fig, (ax1, ax2) = plt.subplots(
+            1, 2, figsize=(14, 6), gridspec_kw={"width_ratios": [5, 1]}
+        )
 
         # create scatterplot
         ax1.scatter(d1, d2)
@@ -489,7 +524,7 @@ class RTmetrics(object):
         for key, val in cls._flatten_dictionary(metrics_dict).items():
             metric_names.append(key)
             if isinstance(val, float):
-                metric_values.append('%1.3f' % val)
+                metric_values.append("%1.3f" % val)
             else:
                 metric_values.append(val)
 
@@ -497,13 +532,15 @@ class RTmetrics(object):
         two_dim_metric_values = [[metric_value] for metric_value in metric_values]
 
         # remove border to only show table itself
-        ax2.axis('off')
+        ax2.axis("off")
 
         # plot and create table object
-        metrics_table = ax2.table(cellText=two_dim_metric_values,
-                 rowLabels=metric_names,
-                 colLabels=['Value'],
-                 loc='center')
+        metrics_table = ax2.table(
+            cellText=two_dim_metric_values,
+            rowLabels=metric_names,
+            colLabels=["Value"],
+            loc="center",
+        )
 
         # scale for higher cells
         metrics_table.scale(1, 1.5)
@@ -532,9 +569,9 @@ class RTmetrics(object):
         """
         items = []
         for key, val in dictionary.items():
-            new_key = '-' * depth + ' ' + key
+            new_key = "-" * depth + " " + key
             if isinstance(val, dict):
-                items.append((new_key, ''))
+                items.append((new_key, ""))
                 items.extend(cls._flatten_dictionary(val, depth + 1).items())
             elif isinstance(val, float):
                 items.append((new_key, val))
@@ -561,8 +598,8 @@ class RTmetrics(object):
         """
         metrics_dict = cls.allmetrics(d1, d2)
 
-        header = '-'*11 + ' METRICS ' + '-'*11 + '\n'
-        columns = '     METRIC'.ljust(14) + '|     VALUE'.ljust(15) + ' |' + '\n'
+        header = "-" * 11 + " METRICS " + "-" * 11 + "\n"
+        columns = "     METRIC".ljust(14) + "|     VALUE".ljust(15) + " |" + "\n"
 
         entries = cls._metrics_table_dict_entry(metrics_dict)
 
@@ -588,17 +625,23 @@ class RTmetrics(object):
             multiline string containing all floating point entries of a dictionary and its sub-dictionaries
 
         """
-        entries = ''
+        entries = ""
         for key, val in metrics_dict.items():
             depth_offset = 2 * depth
-            metric = f'{key:<{13 - depth_offset}}'
+            metric = f"{key:<{13 - depth_offset}}"
 
             if isinstance(val, (float, int)):
-                valstr = f'{val:.6f}'.ljust(14) if abs(val) < 1e5 else f'{Decimal(val):.6E}'.ljust(14)
-                entries += (' ' + '--' * depth + f'{metric}| {valstr}|\n')
+                valstr = (
+                    f"{val:.6f}".ljust(14)
+                    if abs(val) < 1e5
+                    else f"{Decimal(val):.6E}".ljust(14)
+                )
+                entries += " " + "--" * depth + f"{metric}| {valstr}|\n"
 
             elif isinstance(val, dict):
-                entries += (' ' + '--' * depth + f'{metric}|'.ljust(29 - depth_offset) + '|\n')
+                entries += (
+                    " " + "--" * depth + f"{metric}|".ljust(29 - depth_offset) + "|\n"
+                )
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
 
         return entries

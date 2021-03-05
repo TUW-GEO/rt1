@@ -16,9 +16,9 @@ class Surface(Scatter):
         # explicitly provided by the chosen class.
         # this results in a peak in specular-direction which is suitable
         # for describing surface BRDF's
-        self.a = getattr(self, 'a', [1., 1., 1.])
+        self.a = getattr(self, "a", [1.0, 1.0, 1.0])
 
-        self.NormBRDF = kwargs.pop('NormBRDF', 1.)
+        self.NormBRDF = kwargs.pop("NormBRDF", 1.0)
         # quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
@@ -52,10 +52,10 @@ class Surface(Scatter):
         """
 
         # define sympy objects
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
@@ -71,9 +71,16 @@ class Surface(Scatter):
         # (this happens e.g. for the Isotropic brdf).
         # The following query is implemented to ensure correct array-output:
         # TODO this is not a proper test !
-        if not isinstance(brdffunc(np.array([.1, .2, .3]), .1, .1, .1,
-                                   **{key: .12 for key in param_dict.keys()}
-                                   ), np.ndarray):
+        if not isinstance(
+            brdffunc(
+                np.array([0.1, 0.2, 0.3]),
+                0.1,
+                0.1,
+                0.1,
+                **{key: 0.12 for key in param_dict.keys()}
+            ),
+            np.ndarray,
+        ):
             brdffunc = np.vectorize(brdffunc)
 
         return brdffunc(t_0, t_ex, p_0, p_ex, **param_dict)
@@ -138,73 +145,89 @@ class Surface(Scatter):
         """
         assert self.ncoefs > 0
 
-        theta_s = sp.Symbol('theta_s')
-        phi_s = sp.Symbol('phi_s')
+        theta_s = sp.Symbol("theta_s")
+        phi_s = sp.Symbol("phi_s")
 
         NBRDF = self.ncoefs
-        n = sp.Symbol('n')
+        n = sp.Symbol("n")
 
         # define sympy variables based on chosen geometry
-        if geometry == 'mono':
-            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
-                'single unique value for monostatic geometry'
+        if geometry == "mono":
+            assert len(np.unique(p_0)) == 1, (
+                "p_0 must contain only a "
+                + "single unique value for monostatic geometry"
+            )
 
-            theta_0 = sp.Symbol('theta_0')
+            theta_0 = sp.Symbol("theta_0")
             theta_ex = theta_0
             phi_0 = np.unique(p_0)[0]
             phi_ex = np.unique(p_0)[0] + sp.pi
         else:
-            if geometry[0] == 'v':
-                theta_0 = sp.Symbol('theta_0')
-            elif geometry[0] == 'f':
-                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
-                    'single unique value for geometry[0] == f'
+            if geometry[0] == "v":
+                theta_0 = sp.Symbol("theta_0")
+            elif geometry[0] == "f":
+                assert len(np.unique(t_0)) == 1, (
+                    "t_0 must contain only a "
+                    + "single unique value for geometry[0] == f"
+                )
 
                 theta_0 = np.unique(t_0)[0]
             else:
-                raise AssertionError('wrong choice of theta_0 geometry')
+                raise AssertionError("wrong choice of theta_0 geometry")
 
-            if geometry[1] == 'v':
-                theta_ex = sp.Symbol('theta_ex')
-            elif geometry[1] == 'f':
-                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
-                    ' a single unique value for geometry[1] == f'
+            if geometry[1] == "v":
+                theta_ex = sp.Symbol("theta_ex")
+            elif geometry[1] == "f":
+                assert len(np.unique(t_ex)) == 1, (
+                    "t_ex must contain only"
+                    + " a single unique value for geometry[1] == f"
+                )
 
                 theta_ex = np.unique(t_ex)[0]
             else:
-                raise AssertionError('wrong choice of theta_ex geometry')
+                raise AssertionError("wrong choice of theta_ex geometry")
 
-            if geometry[2] == 'v':
-                phi_0 = sp.Symbol('phi_0')
-            elif geometry[2] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
-                    ' a single unique value for geometry[2] == f'
+            if geometry[2] == "v":
+                phi_0 = sp.Symbol("phi_0")
+            elif geometry[2] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_0 must contain only"
+                    + " a single unique value for geometry[2] == f"
+                )
 
                 phi_0 = np.unique(p_0)[0]
             else:
-                raise AssertionError('wrong choice of phi_0 geometry')
+                raise AssertionError("wrong choice of phi_0 geometry")
 
-            if geometry[3] == 'v':
-                phi_ex = sp.Symbol('phi_ex')
-            elif geometry[3] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
-                    ' a single unique value for geometry[3] == f'
+            if geometry[3] == "v":
+                phi_ex = sp.Symbol("phi_ex")
+            elif geometry[3] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_ex must contain only"
+                    + " a single unique value for geometry[3] == f"
+                )
 
                 phi_ex = np.unique(p_ex)[0]
             else:
-                raise AssertionError('wrong choice of phi_ex geometry')
+                raise AssertionError("wrong choice of phi_ex geometry")
 
-        return sp.Sum(self.legcoefs *
-                      sp.legendre(n, self.scat_angle(theta_s,
-                                                     theta_ex,
-                                                     phi_s,
-                                                     phi_ex, self.a)),
-                      (n, 0, NBRDF - 1))
+        return sp.Sum(
+            self.legcoefs
+            * sp.legendre(n, self.scat_angle(theta_s, theta_ex, phi_s, phi_ex, self.a)),
+            (n, 0, NBRDF - 1),
+        )
 
-    def brdf_theta_diff(self, t_0, t_ex, p_0, p_ex,
-                        geometry, param_dict={},
-                        return_symbolic=False,
-                        n=1):
+    def brdf_theta_diff(
+        self,
+        t_0,
+        t_ex,
+        p_0,
+        p_ex,
+        geometry,
+        param_dict={},
+        return_symbolic=False,
+        n=1,
+    ):
         """
         Calculation of the derivative of the BRDF with respect to
         the scattering-angles t_ex
@@ -260,11 +283,13 @@ class Surface(Scatter):
         """
 
         # define sympy variables based on chosen geometry
-        if geometry == 'mono':
-            assert len(np.unique(p_0)) == 1, 'p_0 must contain only a ' + \
-                'single unique value for monostatic geometry'
+        if geometry == "mono":
+            assert len(np.unique(p_0)) == 1, (
+                "p_0 must contain only a "
+                + "single unique value for monostatic geometry"
+            )
 
-            theta_0 = sp.Symbol('theta_0')
+            theta_0 = sp.Symbol("theta_0")
             theta_ex = theta_0
             phi_0 = np.unique(p_0)[0]
             phi_ex = np.unique(p_0)[0] + sp.pi
@@ -272,76 +297,95 @@ class Surface(Scatter):
             t_ex = t_0
             p_ex = p_0 + np.pi
         else:
-            if geometry[0] == 'v':
-                theta_0 = sp.Symbol('theta_0')
-            elif geometry[0] == 'f':
-                assert len(np.unique(t_0)) == 1, 't_0 must contain only a ' + \
-                    'single unique value for geometry[0] == f'
+            if geometry[0] == "v":
+                theta_0 = sp.Symbol("theta_0")
+            elif geometry[0] == "f":
+                assert len(np.unique(t_0)) == 1, (
+                    "t_0 must contain only a "
+                    + "single unique value for geometry[0] == f"
+                )
 
                 theta_0 = np.unique(t_0)[0]
             else:
-                raise AssertionError('wrong choice of theta_0 geometry')
+                raise AssertionError("wrong choice of theta_0 geometry")
 
-            if geometry[1] == 'v':
-                theta_ex = sp.Symbol('theta_ex')
-            elif geometry[1] == 'f':
-                assert len(np.unique(t_ex)) == 1, 't_ex must contain only' + \
-                    ' a single unique value for geometry[1] == f'
+            if geometry[1] == "v":
+                theta_ex = sp.Symbol("theta_ex")
+            elif geometry[1] == "f":
+                assert len(np.unique(t_ex)) == 1, (
+                    "t_ex must contain only"
+                    + " a single unique value for geometry[1] == f"
+                )
 
                 theta_ex = np.unique(t_ex)[0]
             else:
-                raise AssertionError('wrong choice of theta_ex geometry')
+                raise AssertionError("wrong choice of theta_ex geometry")
 
-            if geometry[2] == 'v':
-                phi_0 = sp.Symbol('phi_0')
-            elif geometry[2] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_0 must contain only' + \
-                    ' a single unique value for geometry[2] == f'
+            if geometry[2] == "v":
+                phi_0 = sp.Symbol("phi_0")
+            elif geometry[2] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_0 must contain only"
+                    + " a single unique value for geometry[2] == f"
+                )
 
                 phi_0 = np.unique(p_0)[0]
             else:
-                raise AssertionError('wrong choice of phi_0 geometry')
+                raise AssertionError("wrong choice of phi_0 geometry")
 
-            if geometry[3] == 'v':
-                phi_ex = sp.Symbol('phi_ex')
-            elif geometry[3] == 'f':
-                assert len(np.unique(p_0)) == 1, 'p_ex must contain only' + \
-                    ' a single unique value for geometry[3] == f'
+            if geometry[3] == "v":
+                phi_ex = sp.Symbol("phi_ex")
+            elif geometry[3] == "f":
+                assert len(np.unique(p_0)) == 1, (
+                    "p_ex must contain only"
+                    + " a single unique value for geometry[3] == f"
+                )
 
                 phi_ex = np.unique(p_ex)[0]
             else:
-                raise AssertionError('wrong choice of phi_ex geometry')
+                raise AssertionError("wrong choice of phi_ex geometry")
 
-        if geometry[1] == 'f':
-            dfunc_dtheta_0 = 0.
+        if geometry[1] == "f":
+            dfunc_dtheta_0 = 0.0
         else:
-            func = self._func.xreplace({sp.Symbol('theta_0'): theta_0,
-                                        sp.Symbol('theta_ex'): theta_ex,
-                                        sp.Symbol('phi_0'): phi_0,
-                                        sp.Symbol('phi_ex'): phi_ex})
+            func = self._func.xreplace(
+                {
+                    sp.Symbol("theta_0"): theta_0,
+                    sp.Symbol("theta_ex"): theta_ex,
+                    sp.Symbol("phi_0"): phi_0,
+                    sp.Symbol("phi_ex"): phi_ex,
+                }
+            )
 
             dfunc_dtheta_0 = sp.diff(func, theta_ex, n)
 
         if return_symbolic is True:
             return dfunc_dtheta_0
         else:
-            args = (sp.Symbol('theta_0'),
-                    sp.Symbol('theta_ex'),
-                    sp.Symbol('phi_0'),
-                    sp.Symbol('phi_ex')) + tuple(param_dict.keys())
+            args = (
+                sp.Symbol("theta_0"),
+                sp.Symbol("theta_ex"),
+                sp.Symbol("phi_0"),
+                sp.Symbol("phi_ex"),
+            ) + tuple(param_dict.keys())
 
-            brdffunc = sp.lambdify(args, dfunc_dtheta_0,
-                                   modules=["numpy", "sympy"])
+            brdffunc = sp.lambdify(args, dfunc_dtheta_0, modules=["numpy", "sympy"])
 
             # in case _func is a constant, lambdify will produce a function
             # with scalar output which is not suitable for further processing
             # (this happens e.g. for the Isotropic brdf).
             # The following query is implemented to ensure correct array-output
             # TODO this is not a proper test !
-            if not isinstance(brdffunc(
-                    np.array([.1, .2, .3]), .1, .1, .1,
-                    **{key: .12 for key in param_dict.keys()}
-                                       ), np.ndarray):
+            if not isinstance(
+                brdffunc(
+                    np.array([0.1, 0.2, 0.3]),
+                    0.1,
+                    0.1,
+                    0.1,
+                    **{key: 0.12 for key in param_dict.keys()}
+                ),
+                np.ndarray,
+            ):
                 brdffunc = np.vectorize(brdffunc)
 
             return brdffunc(t_0, t_ex, p_0, p_ex, **param_dict)
@@ -418,10 +462,10 @@ class LinCombSRF(Surface):
 
             def _set_function(self):
                 """def phase function as sympy object for later evaluation"""
-                self._func = 0.
+                self._func = 0.0
 
             def _set_legcoefficients(self):
-                self.legcoefs = 0.
+                self.legcoefs = 0.0
 
         # initialize a combined phase-function class element
         SRFcomb = BRDFfunction(NormBRDf=self.NormBRDF)
@@ -431,9 +475,14 @@ class LinCombSRF(Surface):
         #   (this is necessary for correct evaluation of fn-coefficients)
 
         # find BRDF functions with equal a parameters
-        equals = [np.where((np.array([VV[1].a for VV in self.SRFchoices]) ==
-                            tuple(V[1].a)).all(axis=1))[0]
-                  for V in self.SRFchoices]
+        equals = [
+            np.where(
+                (np.array([VV[1].a for VV in self.SRFchoices]) == tuple(V[1].a)).all(
+                    axis=1
+                )
+            )[0]
+            for V in self.SRFchoices
+        ]
 
         # evaluate index of BRDF-functions that have equal a parameter
 
@@ -465,8 +514,8 @@ class LinCombSRF(Surface):
         # combine legendre-expansions for each a-parameter based on given
         # combined legendre-coefficients
         SRFcomb.legexpansion = lambda t_0, t_ex, p_0, p_ex, geometry: np.sum(
-            [lexp(t_0, t_ex, p_0, p_ex, geometry)
-             for lexp in dummylegexpansion])
+            [lexp(t_0, t_ex, p_0, p_ex, geometry) for lexp in dummylegexpansion]
+        )
 
         for SRF in self.SRFchoices:
             # set parameters based on chosen classes to define analytic
@@ -493,12 +542,12 @@ class Isotropic(Surface):
 
     def _set_legcoefficients(self):
         self.ncoefs = 1
-        n = sp.Symbol('n')
-        self.legcoefs = (1. / sp.pi) * sp.KroneckerDelta(0, n)
+        n = sp.Symbol("n")
+        self.legcoefs = (1.0 / sp.pi) * sp.KroneckerDelta(0, n)
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        self._func = 1. / sp.pi
+        self._func = 1.0 / sp.pi
 
 
 class CosineLobe(Surface):
@@ -523,46 +572,62 @@ class CosineLobe(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
-    def __init__(self, ncoefs=None, i=None, a=[1., 1., 1.], **kwargs):
-        assert ncoefs is not None, ('Error: number of coefficients ' +
-                                    'needs to be provided!')
-        assert i is not None, 'Error: Cosine lobe power needs to be specified!'
+    def __init__(self, ncoefs=None, i=None, a=[1.0, 1.0, 1.0], **kwargs):
+        assert ncoefs is not None, (
+            "Error: number of coefficients " + "needs to be provided!"
+        )
+        assert i is not None, "Error: Cosine lobe power needs to be specified!"
         super(CosineLobe, self).__init__(**kwargs)
         assert ncoefs > 0
         self.i = i
-        assert isinstance(self.i, int), ('Error: Cosine lobe power needs ' +
-                                         'to be an integer!')
-        assert i >= 0, 'ERROR: Power of Cosine-Lobe needs to be greater than 0'
+        assert isinstance(self.i, int), (
+            "Error: Cosine lobe power needs " + "to be an integer!"
+        )
+        assert i >= 0, "ERROR: Power of Cosine-Lobe needs to be greater than 0"
         self.a = a
-        assert isinstance(self.a, list), ('Error: Generalization-parameter ' +
-                                          'needs to be a list')
-        assert len(a) == 3, ('Error: Generalization-parameter list must ' +
-                             'contain 3 values')
-        assert all(type(x) == float for x in a), ('Error: Generalization-' +
-                                                  'parameter array must ' +
-                                                  'contain only floating-' +
-                                                  'point values!')
+        assert isinstance(self.a, list), (
+            "Error: Generalization-parameter " + "needs to be a list"
+        )
+        assert len(a) == 3, (
+            "Error: Generalization-parameter list must " + "contain 3 values"
+        )
+        assert all(type(x) == float for x in a), (
+            "Error: Generalization-"
+            + "parameter array must "
+            + "contain only floating-"
+            + "point values!"
+        )
         self.ncoefs = int(ncoefs)
         self._set_function()
         self._set_legcoefficients()
 
     def _set_legcoefficients(self):
-        n = sp.Symbol('n')
+        n = sp.Symbol("n")
         # A13   The Rational(is needed as otherwise a Gamma function
         # Pole error is issued)
-        self.legcoefs = 1. / sp.pi * ((2 ** (-2 - self.i) * (1 + 2 * n) *
-                                       sp.sqrt(sp.pi) * sp.gamma(1 + self.i)) /
-                                      (sp.gamma((2 - n + self.i) *
-                                                sp.Rational(1, 2))
-                                       * sp.gamma((3 + n + self.i) *
-                                                  sp.Rational(1, 2))))
+        self.legcoefs = (
+            1.0
+            / sp.pi
+            * (
+                (
+                    2 ** (-2 - self.i)
+                    * (1 + 2 * n)
+                    * sp.sqrt(sp.pi)
+                    * sp.gamma(1 + self.i)
+                )
+                / (
+                    sp.gamma((2 - n + self.i) * sp.Rational(1, 2))
+                    * sp.gamma((3 + n + self.i) * sp.Rational(1, 2))
+                )
+            )
+        )
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
 
         # self._func = sp.Max(self.scat_angle(theta_i,
         #                                    theta_s,
@@ -574,7 +639,7 @@ class CosineLobe(Surface):
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")
         #      generates a function that can not interpret array inputs.)
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
-        self._func = 1. / sp.pi * (x * (1. + sp.sign(x)) / 2.) ** self.i
+        self._func = 1.0 / sp.pi * (x * (1.0 + sp.sign(x)) / 2.0) ** self.i
 
 
 class HenyeyGreenstein(Surface):
@@ -600,38 +665,42 @@ class HenyeyGreenstein(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
-    def __init__(self, t=None, ncoefs=None, a=[1., 1., 1.], **kwargs):
-        assert t is not None, 't parameter needs to be provided!'
-        assert ncoefs is not None, 'Number of coeff. needs to be specified'
+    def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
+        assert t is not None, "t parameter needs to be provided!"
+        assert ncoefs is not None, "Number of coeff. needs to be specified"
         super(HenyeyGreenstein, self).__init__(**kwargs)
         self.t = t
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
 
         self.a = a
-        assert isinstance(self.a, list), 'Error: Generalization-parameter ' + \
-            'needs to be a list'
-        assert len(a) == 3, 'Error: Generalization-parameter list must ' + \
-            'contain 3 values'
+        assert isinstance(self.a, list), (
+            "Error: Generalization-parameter " + "needs to be a list"
+        )
+        assert len(a) == 3, (
+            "Error: Generalization-parameter list must " + "contain 3 values"
+        )
         self._set_function()
         self._set_legcoefficients()
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
 
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
-        self._func = 1. * (1. - self.t ** 2.) / ((sp.pi) *
-                                                 (1. + self.t ** 2. -
-                                                  2. * self.t * x) ** 1.5)
+        self._func = (
+            1.0
+            * (1.0 - self.t ** 2.0)
+            / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+        )
 
     def _set_legcoefficients(self):
-        n = sp.Symbol('n')
-        self.legcoefs = 1. * (1. / (sp.pi)) * (2. * n + 1) * self.t ** n
+        n = sp.Symbol("n")
+        self.legcoefs = 1.0 * (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
 
 
 class HG_nadirnorm(Surface):
@@ -657,56 +726,74 @@ class HG_nadirnorm(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
 
-    def __init__(self, t=None, ncoefs=None, a=[1., 1., 1.], **kwargs):
-        assert t is not None, 't parameter needs to be provided!'
-        assert ncoefs is not None, 'Number of coeffs needs to be specified'
+    def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
+        assert t is not None, "t parameter needs to be provided!"
+        assert ncoefs is not None, "Number of coeffs needs to be specified"
         super(HG_nadirnorm, self).__init__(**kwargs)
         self.t = t
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
 
         self.a = a
-        assert isinstance(self.a, list), 'Error: Generalization-parameter ' + \
-            'needs to be a list'
-        assert len(a) == 3, 'Error: Generalization-parameter list must ' + \
-            'contain 3 values'
+        assert isinstance(self.a, list), (
+            "Error: Generalization-parameter " + "needs to be a list"
+        )
+        assert len(a) == 3, (
+            "Error: Generalization-parameter list must " + "contain 3 values"
+        )
         self._set_function()
         self._set_legcoefficients()
 
     def _set_function(self):
         """define phase function as sympy object for later evaluation"""
-        theta_0 = sp.Symbol('theta_0')
-        theta_ex = sp.Symbol('theta_ex')
-        phi_0 = sp.Symbol('phi_0')
-        phi_ex = sp.Symbol('phi_ex')
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
 
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
-        nadir_hemreflect = 4 * ((1. - self.t**2.) *
-                                (1. - self.t * (-self.t + self.a[0]) -
-                                 sp.sqrt((1 + self.t**2 -
-                                          2 * self.a[0] * self.t) *
-                                         (1 + self.t**2))) /
-                                (2. * self.a[0]**2. * self.t**2. *
-                                 sp.sqrt(1. + self.t**2. -
-                                         2. * self.a[0] * self.t)))
+        nadir_hemreflect = 4 * (
+            (1.0 - self.t ** 2.0)
+            * (
+                1.0
+                - self.t * (-self.t + self.a[0])
+                - sp.sqrt(
+                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
+                )
+            )
+            / (
+                2.0
+                * self.a[0] ** 2.0
+                * self.t ** 2.0
+                * sp.sqrt(1.0 + self.t ** 2.0 - 2.0 * self.a[0] * self.t)
+            )
+        )
 
-        self._func = (1. / nadir_hemreflect) * ((1. - self.t ** 2.) /
-                                                ((sp.pi) *
-                                                 (1. + self.t ** 2. -
-                                                  2. * self.t * x) ** 1.5))
+        self._func = (1.0 / nadir_hemreflect) * (
+            (1.0 - self.t ** 2.0)
+            / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+        )
 
     def _set_legcoefficients(self):
-        nadir_hemreflect = 4 * ((1. - self.t**2.) *
-                                (1. - self.t *
-                                 (-self.t + self.a[0]) -
-                                 sp.sqrt((1 + self.t**2 -
-                                          2 * self.a[0] * self.t) *
-                                         (1 + self.t**2))) /
-                                (2. * self.a[0]**2. * self.t**2. *
-                                 sp.sqrt(1. + self.t**2. -
-                                         2. * self.a[0] * self.t)))
+        nadir_hemreflect = 4 * (
+            (1.0 - self.t ** 2.0)
+            * (
+                1.0
+                - self.t * (-self.t + self.a[0])
+                - sp.sqrt(
+                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
+                )
+            )
+            / (
+                2.0
+                * self.a[0] ** 2.0
+                * self.t ** 2.0
+                * sp.sqrt(1.0 + self.t ** 2.0 - 2.0 * self.a[0] * self.t)
+            )
+        )
 
-        n = sp.Symbol('n')
-        self.legcoefs = (1. / nadir_hemreflect) * ((1. / (sp.pi)) *
-                                                   (2. * n + 1) * self.t ** n)
+        n = sp.Symbol("n")
+        self.legcoefs = (1.0 / nadir_hemreflect) * (
+            (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
+        )

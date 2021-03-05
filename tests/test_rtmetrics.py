@@ -31,8 +31,7 @@ class TestRTMetrics(unittest.TestCase):
             'bias': -8.462000000000003,
             'mae': 53.084,
             'mape': 2.578235110085792,
-            'std_ratio': 0.682317387225608
-            }
+            'std_ratio': 0.682317387225608}
         return (d1, d2, results)
 
     @staticmethod
@@ -118,10 +117,10 @@ class TestRTMetrics(unittest.TestCase):
                         assert fit_metric == fit_func, assertmsg
 
     def test_scatterplot(self):
+        plt.ion()
         fit = self.mock_fit()
-        pl = RTmetrics.scatterplot(fit.res_df.SM, fit.res_df.omega,
-                                   "SM", "omega")
-        plt.close(pl)
+        _ = RTmetrics.scatterplot(fit.res_df.SM, fit.res_df.omega,
+                                  "SM", "omega")
 
 
 if __name__ == "__main__":

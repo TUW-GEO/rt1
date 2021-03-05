@@ -16,7 +16,7 @@ setup(name='rt1',
 
       description='RT1 - bistatic single scattering radiative transfer model',
 
-      packages=find_packages(), #['rt1'],
+      packages=find_packages(),  # ['rt1'],
       package_dir={'rt1': 'rt1'},
       include_package_data=False,
 
@@ -38,7 +38,7 @@ setup(name='rt1',
 
       install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2",
                         "pandas>=0.24", "matplotlib>=3.0"],
-      extras_require={'symengine' : ["symengine>=0.4"]},
+      extras_require={'full' : ["symengine>=0.4", "xarray>=0.16"]},
 
       keywords=["physics", "radiative transfer"],
 

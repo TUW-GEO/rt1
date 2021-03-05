@@ -1,13 +1,18 @@
 # stickler-ci configuration
 linters:
-#    flake8:
-#       ignore: 'E501'
-#       max-line-length: 255
-    pep8:
-      ignore: 'E501'
-files:
-    ignore: []
-    
-    
-    
+    flake8:
+       python: 3
+       # E203: 	whitespace before ":"
+       # E501: line too long
+       # W503: line break before binary operator
+       # W504: line break after binary operator
+       ignore: 'E203, E501, W503, W504'
+       max-line-length: 88
+       fixer: false
+
+review:
+    # Don't use 'failure' build status when
+    # a pull request contains style errors.
+    fail_on_comments: false
+
 

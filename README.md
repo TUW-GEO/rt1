@@ -1,7 +1,8 @@
-[![Build Status](https://travis-ci.org/TUW-GEO/rt1.svg?branch=dev)](https://travis-ci.org/TUW-GEO/rt1)
-[![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/)
-[![Coverage Status](https://coveralls.io/repos/github/TUW-GEO/rt1/badge.svg?branch=dev)](https://coveralls.io/github/TUW-GEO/rt1?branch=dev)
+[![Windows_build](https://github.com/TUW-GEO/rt1/workflows/RT1_windows/badge.svg)](https://github.com/TUW-GEO/rt1/actions/workflows/RT1_windows.yml)
+[![Ubuntu_build](https://github.com/TUW-GEO/rt1/workflows/RT1_ubuntu/badge.svg)](https://github.com/TUW-GEO/rt1/actions/workflows/RT1_ubuntu.yml)
+[![Coverage Status](https://codecov.io/gh/TUW-GEO/rt1/branch/dev/graph/badge.svg?token=tVCw5zvIe3)](https://codecov.io/gh/TUW-GEO/rt1)
 [![pypi version](https://img.shields.io/pypi/v/rt1)](https://pypi.org/project/rt1/)
+[![Documentation Status](https://readthedocs.org/projects/rt1/badge/?version=latest)](http://rt1.readthedocs.io/)
 [![DOI](https://zenodo.org/badge/69531751.svg)](https://zenodo.org/badge/latestdoi/69531751)
 
 # RT1 - bistatic scattering model for first order scattering of random media
@@ -58,11 +59,11 @@ For a basic install, the following line should be fine:
 
     pip install rt1
 
-In order to get a significant speedup in the symbolic computations,
-it is recommended to install the module with the optional
-symengine-dependency, i.e.:
+In order to get a significant speedup in the symbolic computations and enable
+NetCDF functionalities, it is recommended to install the module with the
+optional dependencies `symengine` and `xarray` by using:
 
-    pip install rt1[symengine]
+    pip install rt1[full]
 
 ## References
 * Quast & Wagner (2016): [doi:10.1364/AO.55.005379](https://doi.org/10.1364/AO.55.005379)
