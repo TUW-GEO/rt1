@@ -1220,10 +1220,9 @@ class RTresults(object):
         if all(
             i in [i.stem for i in self._parent_path.iterdir()]
             for i in ["cfg", "results", "dumps"]
-            ):
-
+        ):
             self._paths[self._parent_path.stem] = self._parent_path
-            log.info(f'... adding result {self._parent_path.stem}')
+            log.info(f"... adding result {self._parent_path.stem}")
             setattr(
                 self,
                 self._parent_path.stem,
