@@ -166,8 +166,9 @@ def _increase_cnt(process_cnt, start, err=False):
 
 
 class RTprocess(object):
-    def __init__(self, config_path=None, autocontinue=False, copy=True,
-                 proc_cls=None, parent_fit=None, init_kwargs=None):
+    def __init__(self, config_path=None, save_dumps=True,
+                 autocontinue=False, copy=True, proc_cls=None,
+                 parent_fit=None, init_kwargs=None):
         '''
         A class to perform parallelized processing.
 
@@ -175,6 +176,11 @@ class RTprocess(object):
         ----------
         config_path : str, optional
             The path to the config-file to be used. The default is None.
+        save_dumps : bool, optional
+            Indicator if dump-files should be saved or not.
+            The saving is performed via the function
+            processing_config.dump_fit_to_file(fit, reader_arg)
+
         autocontinue : bool, optional
             indicator if user-input should be raised (True) in case the
             dump-folder already exists. The default is False.
@@ -214,6 +220,7 @@ class RTprocess(object):
         self._config_path = config_path
         self.autocontinue = autocontinue
 
+        self.save_dumps = True
         self._postprocess = True
         self.copy = copy
 
@@ -494,6 +501,9 @@ class RTprocess(object):
 
             # if a post-processing function is provided, return its output,
             # else return None
+            if self.save_dumps and hasattr(self.proc_cls, 'dump_fit_to_file'):
+                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+
             if self._postprocess and callable(self.proc_cls.postprocess):
                 ret = self.proc_cls.postprocess(fit, reader_arg)
             else:
@@ -792,6 +802,9 @@ class RTprocess(object):
             raise err
 
         finally:
+            if hasattr(self.proc_cls, 'finalizer'):
+                self.proc_cls.finalizer()
+
             # turn off capturing warnings
             logging.captureWarnings(False)
 
@@ -1090,7 +1103,7 @@ class RTresults(object):
         if all(i in [i.stem for i in self._parent_path.iterdir()]
                for i in ['cfg', 'results', 'dumps']):
             self._paths[self._parent_path.stem] = self._parent_path
-            log.info('... adding result {self._parent_path.stem}')
+            log.info(f'... adding result {self._parent_path.stem}')
             setattr(self, self._parent_path.stem,
                     self._RT1_fitresult(self._parent_path.stem,
                                         self._parent_path))
