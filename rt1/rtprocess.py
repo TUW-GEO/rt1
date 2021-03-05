@@ -179,15 +179,17 @@ def _increase_cnt(process_cnt, start, err=False):
 
 
 class RTprocess(object):
-    def __init__(self,
-                 config_path=None,
-                 save_dumps=True,
-                 autocontinue=False,
-                 copy=True,
-                 proc_cls=None,
-                 parent_fit=None,
-                 init_kwargs=None,
-                 setup=True):
+    def __init__(
+            self,
+            config_path=None,
+            save_dumps=True,
+            autocontinue=False,
+            copy=True,
+            proc_cls=None,
+            parent_fit=None,
+            init_kwargs=None,
+            setup=True
+            ):
         """
         A class to perform parallelized processing.
 
@@ -247,7 +249,7 @@ class RTprocess(object):
         self._config_path = config_path
         self.autocontinue = autocontinue
 
-        self.save_dumps = True
+        self.save_dumps = save_dumps
         self._postprocess = True
 
         self.copy = copy
