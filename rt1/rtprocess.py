@@ -182,7 +182,6 @@ class RTprocess(object):
     def __init__(
         self,
         config_path=None,
-        save_dumps=True,
         autocontinue=False,
         copy=True,
         proc_cls=None,
@@ -197,11 +196,6 @@ class RTprocess(object):
         ----------
         config_path : str, optional
             The path to the config-file to be used. The default is None.
-        save_dumps : bool, optional
-            Indicator if dump-files should be saved or not.
-            The saving is performed via the function
-            processing_config.dump_fit_to_file(fit, reader_arg)
-
         autocontinue : bool, optional
             indicator if user-input should be raised (True) in case the
             dump-folder already exists. The default is False.
@@ -249,7 +243,6 @@ class RTprocess(object):
         self._config_path = config_path
         self.autocontinue = autocontinue
 
-        self.save_dumps = save_dumps
         self._postprocess = True
 
         self.copy = copy
@@ -560,19 +553,18 @@ class RTprocess(object):
             if process_cnt is not None:
                 _increase_cnt(process_cnt, start, err=False)
 
-            # dump a fit-file
-            if self._dump_fit:
-                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-
             # if a post-processing function is provided, return its output,
             # else return None
-            if self.save_dumps and hasattr(self.proc_cls, 'dump_fit_to_file'):
-                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-
             if self._postprocess and callable(self.proc_cls.postprocess):
                 ret = self.proc_cls.postprocess(fit, reader_arg)
             else:
                 ret = None
+
+            # dump a fit-file
+            # save dumps AFTER prostprocessing has been performed
+            # (it might happen that some parts change during postprocessing)
+            if self._dump_fit and hasattr(self.proc_cls, 'dump_fit_to_file'):
+                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
 
             return ret
 
