@@ -187,7 +187,7 @@ class RTprocess(object):
         proc_cls=None,
         parent_fit=None,
         init_kwargs=None,
-        setup=True
+        setup=True,
     ):
         """
         A class to perform parallelized processing.
@@ -563,7 +563,7 @@ class RTprocess(object):
             # dump a fit-file
             # save dumps AFTER prostprocessing has been performed
             # (it might happen that some parts change during postprocessing)
-            if self._dump_fit and hasattr(self.proc_cls, 'dump_fit_to_file'):
+            if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
                 self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
 
             return ret
@@ -901,7 +901,7 @@ class RTprocess(object):
             raise err
 
         finally:
-            if hasattr(self.proc_cls, 'finalizer'):
+            if hasattr(self.proc_cls, "finalizer"):
                 self.proc_cls.finalizer()
 
             # turn off capturing warnings
@@ -1218,7 +1218,7 @@ class RTresults(object):
             setattr(
                 self,
                 self._parent_path.stem,
-                self._RT1_fitresult(self._parent_path.stem, self._parent_path)
+                self._RT1_fitresult(self._parent_path.stem, self._parent_path),
             )
 
         for p in self._parent_path.iterdir():
