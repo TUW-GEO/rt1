@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """helper functions that are used both in rtfits and rtplots"""
-import sys
 from itertools import tee, islice
 from collections import OrderedDict
 
