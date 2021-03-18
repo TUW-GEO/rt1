@@ -240,7 +240,7 @@ class RTprocess(object):
             The default is True.
         """
 
-        self._config_path = config_path
+        self.config_path = config_path
         self.autocontinue = autocontinue
 
         self._postprocess = True
@@ -314,9 +314,9 @@ class RTprocess(object):
           - load modules and set parent-fit-object
         """
 
-        if self._config_path is not None and self._proc_cls is None:
+        if self.config_path is not None and self._proc_cls is None:
 
-            self.config_path = Path(self._config_path)
+            self.config_path = Path(self.config_path)
             assert self.config_path.exists(), (
                 f"the file {self.config_path} " + "does not exist!"
             )
