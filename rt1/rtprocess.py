@@ -294,6 +294,44 @@ class RTprocess(object):
         warnings_logger
         warnings_logger.addHandler(h)
 
+    def override_config(self, override=True, **kwargs):
+        """
+        set the init_kwargs to change parts of the specifications provided in the
+        used ".ini"-file.
+
+        by default, already present `init_kwargs` will be overritten!
+        (use override=False to update `init_kwargs`)
+
+        kwargs must be passed in the form:
+        ```
+        section = dict( key1 = val1,
+                        key2 = val2, ... )
+        ```
+
+        Parameters
+        ----------
+        override : bool, optional
+            indicator if "init_kwargs" should be overritten (True) or updated (False).
+            The default is True
+        """
+        cfg = RT1_configparser(self.config_path)
+
+        init_kwargs = dict()
+        for section, init_defs in kwargs.items():
+            assert (
+                section in cfg.config
+            ), "the section you provided in init_kwargs is not present in the .ini file!"
+
+            init_kwargs[section] = {
+                str(key): str(val) for key, val in init_defs.items()
+            }
+
+        if override is True:
+            self.init_kwargs = init_kwargs
+        else:
+            for section, init_defs in self.init_kwargs.items():
+                init_defs.update(init_kwargs[section])
+
     def setup(self):
         """
         perform necessary tasks to run a processing-routine
@@ -313,15 +351,20 @@ class RTprocess(object):
 
             # update specs with init_kwargs
             # remember warnings and log them later in case dumppath is changed
-            for key, val in self.init_kwargs.items():
-                if key in self.cfg.config["PROCESS_SPECS"]:
-                    log.warning(
-                        f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}" '
-                        + "will be overwritten by the definition provided via "
-                        + f'"init_kwargs": "{key} = {val}" '
-                    )
-                    # update the parsed config (for import of modules etc.)
-                    self.cfg.config["PROCESS_SPECS"][key] = val
+            for section, init_defs in self.init_kwargs.items():
+                assert (
+                    section in self.cfg.config
+                ), f"the init_kwargs section {section} is not present in the .ini file!"
+
+                for key, val in init_defs.items():
+                    if key in self.cfg.config[section]:
+                        log.warning(
+                            f'"{key} = {self.cfg.config[section][key]}" '
+                            + "will be overwritten by the definition provided via "
+                            + f'"init_kwargs[{section}]": "{key} = {val}" '
+                        )
+                        # update the parsed config (for import of modules etc.)
+                        self.cfg.config[section][key] = val
 
             specs = self.cfg.get_process_specs()
 
