@@ -72,23 +72,22 @@ class TestRTfits(unittest.TestCase):
         with self.assertRaises(SystemExit):
             with mock.patch("builtins.input", side_effect=["N"]):
                 proc = RTprocess(config_path, autocontinue=False)
+                proc.setup()
 
         with self.assertRaises(SystemExit):
             with mock.patch("builtins.input", side_effect=["N"]):
-                proc = RTprocess(config_path, autocontinue=False, setup=False)
-                proc.setup()
-        with self.assertRaises(SystemExit):
-            with mock.patch("builtins.input", side_effect=["REMOVE", "N"]):
                 proc = RTprocess(config_path, autocontinue=False)
+                proc.setup()
 
         with mock.patch("builtins.input", side_effect=["REMOVE", "Y"]):
             proc = RTprocess(config_path, autocontinue=False)
+            proc.setup()
         assert (
             len(list(Path("tests/proc_test/dump01/dumps").iterdir())) == 0
         ), "user-input REMOVE did not work"
 
         with mock.patch("builtins.input", side_effect=["REMOVE", "Y"]):
-            proc = RTprocess(config_path, autocontinue=False, copy=False, setup=False)
+            proc = RTprocess(config_path, autocontinue=False, copy=False)
             proc.run_processing(ncpu=1, reader_args=reader_args)
 
         # ----------------------------------------- check if files have been copied
@@ -117,10 +116,13 @@ class TestRTfits(unittest.TestCase):
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
-        proc = RTprocess(
-            config_path,
-            autocontinue=True,
-            init_kwargs=dict(path__save_path="tests/proc_test2", dumpfolder="dump02"),
+        proc = RTprocess(config_path, autocontinue=True)
+
+        proc.override_config(
+            PROCESS_SPECS=dict(
+                path__save_path="tests/proc_test2",
+                dumpfolder="dump02",
+            )
         )
 
         proc.run_processing(ncpu=4, reader_args=reader_args)
@@ -147,11 +149,12 @@ class TestRTfits(unittest.TestCase):
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
         with mock.patch("builtins.input", side_effect=["REMOVE", "Y"]):
-            proc = RTprocess(
-                config_path,
-                init_kwargs=dict(
+            proc = RTprocess(config_path)
+
+            proc.override_config(
+                PROCESS_SPECS=dict(
                     path__save_path="tests/proc_test3", dumpfolder="dump03"
-                ),
+                )
             )
 
             proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=False)
