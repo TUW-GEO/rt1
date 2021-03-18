@@ -1381,15 +1381,22 @@ class RTresults(object):
             cfg = RT1_configparser(self._cfg_path / cfg_name)
             return cfg
 
+        @staticmethod
+        def _check_filename(p):
+            return p.endswith(".dump") and "error" not in p.split(os.sep)[-1]
+
         @property
         def dump_files(self):
             """
-            a generator of the available dump-files
+            a generator returning the paths to the available dump-files
+
+            NOTICE: only files that do NOT contain "error" in the filename and
+            whose file-ending is ".dump" are returned!
             """
             return (
-                i
-                for i in self._dump_path.iterdir()
-                if i.suffix == ".dump" and "error" not in i.stem
+                i.path
+                for i in os.scandir(self._dump_path)
+                if self._check_filename(i.path)
             )
 
         @property
