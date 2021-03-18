@@ -148,16 +148,12 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
-        with mock.patch("builtins.input", side_effect=["REMOVE", "Y"]):
-            proc = RTprocess(config_path)
+        proc = RTprocess(config_path, autocontinue=True)
+        proc.override_config(
+            PROCESS_SPECS=dict(path__save_path="tests/proc_test3", dumpfolder="dump03")
+        )
 
-            proc.override_config(
-                PROCESS_SPECS=dict(
-                    path__save_path="tests/proc_test3", dumpfolder="dump03"
-                )
-            )
-
-            proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=False)
+        proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=False)
 
         results = RTresults("tests/proc_test3")
         assert hasattr(results, "dump03"), "dumpfolder dump02 not found by RTresults"
