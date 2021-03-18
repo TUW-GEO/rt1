@@ -188,7 +188,6 @@ class RTprocess(object):
         proc_cls=None,
         parent_fit=None,
         init_kwargs=None,
-        setup=True,
     ):
         """
         A class to perform parallelized processing.
