@@ -229,16 +229,6 @@ class RTprocess(object):
             Additional keyword-arguments passed to the initialization of the
             'proc_cls' class. (used to append-to or partially overwrite
             definitions passed via the config-file). The default is None.
-        setup : bool, optional
-            indicator if `RTprocess.setup()` should be called during
-            initialization or not. This is required for multiprocessing
-            on Windows since `setup()` needs to be called outside of the
-            `if __name__ == '__main__'` protector to ensure correct import
-            of the used processing_config class.
-            Notice that if setup is set to True (the default) the
-            folder-structure etc. will be initialized as soon as the
-            class object is created!
-            The default is True.
         """
 
         self.config_path = config_path
@@ -258,9 +248,6 @@ class RTprocess(object):
                 [isinstance(i, str) for i in init_kwargs.values()]
             ), 'the values of "init_kwargs" MUST be strings !'
             self.init_kwargs = init_kwargs
-
-        if setup:
-            self.setup()
 
     def _listener_process(self, queue):
 
@@ -590,9 +577,9 @@ class RTprocess(object):
         (>> returns from provided initializer are returned)
         """
 
-        # preload ALL modules to ensure that the importer finds them at the
-        # desired locations (e.g. the cfg-folders)
-        _ = self.cfg.get_all_modules(load_copy=self.copy)
+        # call setup() on each worker-process to ensure that the importer loads
+        # all required modules from the desired locations
+        self.setup()
 
         if queue is not None:
             self._worker_configurer(queue)
