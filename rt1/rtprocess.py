@@ -5,6 +5,7 @@ from itertools import repeat, islice
 from functools import partial
 import ctypes
 import sys
+import os
 import traceback
 from textwrap import dedent
 
@@ -1241,14 +1242,20 @@ class RTresults(object):
 
             self._nc_paths = self._get_results(".nc")
 
+        @staticmethod
+        def _check_dump_filename(p):
+            return p.endswith(".dump") and "error" not in p.split(os.sep)[-1]
+
         def _get_results(self, ending):
             assert self._result_path.exists(), (
                 f"{self._result_path}" + " does not exist"
             )
 
-            results = {
-                i.stem: i for i in self._result_path.iterdir() if i.suffix == ending
-            }
+            results = dict()
+            for i in os.scandir(self._result_path):
+                if i.is_file() and i.path.endswith(ending):
+                    res = Path(i)
+                    results[res.stem] = res
 
             log.info(f'there is no "{ending}" file in "{self._result_path}"')
 
@@ -1381,10 +1388,6 @@ class RTresults(object):
             cfg = RT1_configparser(self._cfg_path / cfg_name)
             return cfg
 
-        @staticmethod
-        def _check_filename(p):
-            return p.endswith(".dump") and "error" not in p.split(os.sep)[-1]
-
         @property
         def dump_files(self):
             """
@@ -1396,7 +1399,7 @@ class RTresults(object):
             return (
                 i.path
                 for i in os.scandir(self._dump_path)
-                if self._check_filename(i.path)
+                if self._check_dump_filename(i.path)
             )
 
         @property
