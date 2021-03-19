@@ -657,9 +657,10 @@ class RTprocess(object):
         (>> returns from provided initializer are returned)
         """
 
-        # call setup() on each worker-process to ensure that the importer loads
-        # all required modules from the desired locations
-        self.setup()
+        if not mp.current_process().name == "MainProcess":
+            # call setup() on each worker-process to ensure that the importer loads
+            # all required modules from the desired locations
+            self.setup()
 
         if queue is not None:
             self._worker_configurer(queue)
@@ -849,11 +850,15 @@ class RTprocess(object):
                 res.append(
                     self._evalfunc(reader_arg=reader_arg, process_cnt=process_cnt)
                 )
+
+        # TODO incorporate this in run_finalout
         # call finaloutput if post-processing has been performed and a finaloutput
         # function is provided
         if self._postprocess and callable(self.proc_cls.finaloutput):
             if len(self.cfg.config_names) > 0:
-                for i, res_i in enumerate(zip_longest(*res)):
+                for i, res_i in enumerate(
+                    zip_longest(*(i for i in res if i is not None))
+                ):
                     self.proc_cls.rt1_procsesing_respath = (
                         self.dumppath / "results" / self.parent_fit[i][0]
                     )
@@ -1123,6 +1128,7 @@ class RTprocess(object):
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
                 listener.start()
+
             if len(self.cfg.config_names) > 0:
                 for config_name in self.cfg.config_names:
                     self.proc_cls.rt1_procsesing_respath = (
