@@ -408,9 +408,6 @@ class rt1_processing_config(object):
         # parse defdict to find static and dynamic parameter names
         params = defdict_parser(fit.defdict)
 
-        # make a dump of the fit
-        self.dump_fit_to_file(fit, reader_arg)
-
         # add all constant (fitted) parameters as static layers
         staticlayers = dict()
         for key in params["fitted_const"]:
