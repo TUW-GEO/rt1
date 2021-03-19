@@ -174,6 +174,93 @@ class TestRTfits(unittest.TestCase):
             "tests/proc_test3/dump03/results/ncpu_2.nc"
         ).exists(), "run_finalout with ncpu=2 not work"
 
+    def test_5_multiconfig(self):
+
+        config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
+        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+
+        proc = RTprocess(config_path)
+        proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=True)
+
+        for cfg in ["cfg_0", "cfg_1"]:
+            # check if all folders are properly initialized
+            assert Path(
+                f"tests/proc_multi/dump01/dumps/{cfg}"
+            ).exists(), "multiconfig folder generation did not work"
+            assert Path(
+                f"tests/proc_multi/dump01/dumps/{cfg}"
+            ).exists(), "multiconfig folder generation did not work"
+
+            # check if model-definition files are written correctly
+            assert Path(
+                f"tests/proc_multi/dump01/cfg/model_definition__{cfg}.txt"
+            ).exists(), "multiconfig model_definition.txt export did not work"
+
+            # check if netcdf have been exported
+            assert Path(
+                f"tests/proc_multi/dump01/results/{cfg}/results.nc"
+            ).exists(), "multiconfig NetCDF export did not work"
+
+    def test_7_multiconfig_finalout(self):
+        config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
+
+        proc = RTprocess(config_path)
+
+        proc.run_finaloutput(
+            ncpu=1,
+            finalout_name="ncpu1.nc",
+        )
+
+        proc.run_finaloutput(
+            ncpu=3,
+            finalout_name="ncpu3.nc",
+        )
+
+        for cfg in ["cfg_0", "cfg_1"]:
+            # check if all folders are properly initialized
+            assert Path(
+                f"tests/proc_multi/dump01/results/{cfg}/ncpu1.nc"
+            ).exists(), "multiconfig finaloutput with ncpu=1 did not work"
+            assert Path(
+                f"tests/proc_multi/dump01/results/{cfg}/ncpu3.nc"
+            ).exists(), "multiconfig finaloutput with ncpu=3 did not work"
+
+    def test_8_multiconfig_rtresults(self):
+        res = RTresults("tests/proc_multi")
+
+        for cfg in ["cfg_0", "cfg_1"]:
+            assert hasattr(
+                res, f"dump01__{cfg}"
+            ), "multi-results are not properly added"
+
+            assert (
+                getattr(res, f"dump01__{cfg}")._dump_path.stem == cfg
+            ), "multi-result dump-path is not properly set"
+
+    def test_6_multiconfig_props(self):
+        # check if properties have been set correctly
+
+        res = RTresults("tests/proc_multi")
+
+        fit = getattr(res, "dump01__cfg_0").load_fit()
+        assert fit.defdict["omega"][0] is False, "multiconfig props not correct"
+        assert fit.defdict["omega"][1] == 0.5, "multiconfig props not correct"
+        assert fit.int_Q is False, "multiconfig props not correct"
+
+        assert str(fit.V.t) == "t_v", "multiconfig props not correct"
+        assert fit.SRF.ncoefs == 10, "multiconfig props not correct"
+
+        # -----------------------------
+
+        fit = getattr(res, "dump01__cfg_1").load_fit()
+        assert fit.defdict["omega"][0] is True, "multiconfig props not correct"
+        assert fit.defdict["omega"][1] == 0.05, "multiconfig props not correct"
+        assert fit.defdict["omega"][2] == "2M", "multiconfig props not correct"
+        assert fit.int_Q is True, "multiconfig props not correct"
+
+        assert fit.V.t == 0.25, "multiconfig props not correct"
+        assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
+
 
 if __name__ == "__main__":
     unittest.main()
