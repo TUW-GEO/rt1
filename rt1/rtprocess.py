@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from timeit import default_timer
 from datetime import datetime, timedelta
-from itertools import repeat, islice
+from itertools import repeat, islice, zip_longest
 from functools import partial
 import ctypes
 import sys
@@ -188,7 +188,6 @@ class RTprocess(object):
         proc_cls=None,
         parent_fit=None,
         init_kwargs=None,
-        setup=True,
     ):
         """
         A class to perform parallelized processing.
@@ -229,19 +228,14 @@ class RTprocess(object):
             Additional keyword-arguments passed to the initialization of the
             'proc_cls' class. (used to append-to or partially overwrite
             definitions passed via the config-file). The default is None.
-        setup : bool, optional
-            indicator if `RTprocess.setup()` should be called during
-            initialization or not. This is required for multiprocessing
-            on Windows since `setup()` needs to be called outside of the
-            `if __name__ == '__main__'` protector to ensure correct import
-            of the used processing_config class.
-            Notice that if setup is set to True (the default) the
-            folder-structure etc. will be initialized as soon as the
-            class object is created!
-            The default is True.
         """
+        assert config_path is not None, "Please provide a config-path!"
+        self.config_path = Path(config_path)
 
-        self.config_path = config_path
+        assert self.config_path.exists(), (
+            f"the file {self.config_path} " + "does not exist!"
+        )
+
         self.autocontinue = autocontinue
 
         self._postprocess = True
@@ -258,9 +252,6 @@ class RTprocess(object):
                 [isinstance(i, str) for i in init_kwargs.values()]
             ), 'the values of "init_kwargs" MUST be strings !'
             self.init_kwargs = init_kwargs
-
-        if setup:
-            self.setup()
 
     def _listener_process(self, queue):
 
@@ -307,6 +298,65 @@ class RTprocess(object):
         warnings_logger
         warnings_logger.addHandler(h)
 
+    def override_config(self, override=True, **kwargs):
+        """
+        set the init_kwargs to change parts of the specifications provided in the
+        used ".ini"-file.
+
+        by default, already present `init_kwargs` will be overritten!
+        (use override=False to update `init_kwargs`)
+
+        kwargs must be passed in the form:
+        ```
+        section = dict( key1 = val1,
+                        key2 = val2, ... )
+        ```
+
+        Parameters
+        ----------
+        override : bool, optional
+            indicator if "init_kwargs" should be overritten (True) or updated (False).
+            The default is True
+        """
+        cfg = RT1_configparser(self.config_path)
+
+        init_kwargs = dict()
+        for section, init_defs in kwargs.items():
+            assert (
+                section in cfg.config
+            ), "the section you provided in init_kwargs is not present in the .ini file!"
+
+            init_kwargs[section] = {
+                str(key): str(val) for key, val in init_defs.items()
+            }
+
+        if override is False:
+            for section, init_defs in init_kwargs.items():
+                init_kwargs[section] = {
+                    **self.init_kwargs.get(section, {}),
+                    **init_defs,
+                }
+
+        self.init_kwargs = init_kwargs
+
+    def _remove_dumpfolder(self):
+        # try to close existing filehandlers to avoid
+        # errors if the files are located in the folder
+        # if they are actually in the cfg folder, delete
+        # the corresponding handler as well!
+        for h in log.handlers:
+            try:
+                h.close()
+                if Path(h.baseFilename).parent.samefile(self.dumppath / "cfg"):
+                    log.removeHandler(h)
+            except Exception:
+                pass
+
+        # remove folderstructure
+        shutil.rmtree(self.dumppath)
+
+        log.info(f'"{self.dumppath}"' + "\nhas successfully been removed.\n")
+
     def setup(self):
         """
         perform necessary tasks to run a processing-routine
@@ -315,104 +365,86 @@ class RTprocess(object):
           - load modules and set parent-fit-object
         """
 
-        if self.config_path is not None and self._proc_cls is None:
+        self.cfg = RT1_configparser(self.config_path)
 
-            self.config_path = Path(self.config_path)
-            assert self.config_path.exists(), (
-                f"the file {self.config_path} " + "does not exist!"
-            )
+        # update specs with init_kwargs
+        for section, init_defs in self.init_kwargs.items():
+            assert (
+                section in self.cfg.config
+            ), f"the init_kwargs section {section} is not present in the .ini file!"
 
-            self.cfg = RT1_configparser(self.config_path)
-
-            # update specs with init_kwargs
-            # remember warnings and log them later in case dumppath is changed
-            for key, val in self.init_kwargs.items():
-                if key in self.cfg.config["PROCESS_SPECS"]:
+            for key, val in init_defs.items():
+                if key in self.cfg.config[section]:
                     log.warning(
-                        f'"{key} = {self.cfg.config["PROCESS_SPECS"][key]}" '
+                        f'"{key} = {self.cfg.config[section][key]}" '
                         + "will be overwritten by the definition provided via "
-                        + f'"init_kwargs": "{key} = {val}" '
+                        + f'"init_kwargs[{section}]": "{key} = {val}" '
                     )
                     # update the parsed config (for import of modules etc.)
-                    self.cfg.config["PROCESS_SPECS"][key] = val
+                    self.cfg.config[section][key] = val
 
-            specs = self.cfg.get_process_specs()
+        specs = self.cfg.get_process_specs()
+        self.dumppath = specs["save_path"] / specs["dumpfolder"]
 
-            self.dumppath = specs["save_path"] / specs["dumpfolder"]
+        if mp.current_process().name == "MainProcess":
+            # init folderstructure and copy files only from main process
+            if self.autocontinue is False:
 
-            if mp.current_process().name == "MainProcess":
-                # init folderstructure and copy files only from main process
-                if self.autocontinue is False:
+                if self.dumppath.exists():
+                    _confirm_input(
+                        msg=(
+                            f'the path \n "{self.dumppath}"\n'
+                            + " already exists..."
+                            + "\n- to continue type YES or Y"
+                            + "\n- to abort type NO or N"
+                            + "\n- to remove the existing directory and "
+                            + "all subdirectories type REMOVE \n \n"
+                        ),
+                        stopmsg='aborting due to manual input "NO"',
+                        callbackdict={
+                            "REMOVE": [
+                                (
+                                    f'\n"{self.dumppath}"\n will be removed!'
+                                    + " are you sure? (y, n): "
+                                ),
+                                self._remove_dumpfolder,
+                            ]
+                        },
+                    )
 
-                    if self.dumppath.exists():
+            # initialize the folderstructure
+            _make_folderstructure(
+                specs["save_path"] / specs["dumpfolder"],
+                ["results", "cfg", "dumps"],
+            )
 
-                        def remove_folder():
-
-                            # try to close existing filehandlers to avoid
-                            # errors if the files are located in the folder
-                            # if they are actually in the cfg folder, delete
-                            # the corresponding handler as well!
-                            for h in log.handlers:
-                                try:
-                                    h.close()
-                                    if Path(h.baseFilename).parent.samefile(
-                                        self.dumppath / "cfg"
-                                    ):
-                                        log.removeHandler(h)
-                                except Exception:
-                                    pass
-
-                            # remove folderstructure
-                            shutil.rmtree(self.dumppath)
-
-                            log.info(
-                                f'"{self.dumppath}"'
-                                + "\nhas successfully been removed.\n"
-                            )
-
-                        _confirm_input(
-                            msg=(
-                                f'the path \n "{self.dumppath}"\n'
-                                + " already exists..."
-                                + "\n- to continue type YES or Y"
-                                + "\n- to abort type NO or N"
-                                + "\n- to remove the existing directory and "
-                                + "all subdirectories type REMOVE \n \n"
-                            ),
-                            stopmsg='aborting due to manual input "NO"',
-                            callbackdict={
-                                "REMOVE": [
-                                    (
-                                        f'\n"{self.dumppath}"\n will be removed!'
-                                        + " are you sure? (y, n): "
-                                    ),
-                                    remove_folder,
-                                ]
-                            },
-                        )
-
-                # initialize the folderstructure
+            # in case multiple configurations are provided, initialize subfolders
+            # in the "dumps" and "results" directories
+            if len(self.cfg.config_names) > 0:
                 _make_folderstructure(
-                    specs["save_path"] / specs["dumpfolder"],
-                    ["results", "cfg", "dumps"],
+                    specs["save_path"] / specs["dumpfolder"] / "dumps",
+                    self.cfg.config_names,
+                )
+                _make_folderstructure(
+                    specs["save_path"] / specs["dumpfolder"] / "results",
+                    self.cfg.config_names,
                 )
 
-                if self.copy is True:
-                    self._copy_cfg_and_modules()
+        # copy modules and config-files and ensure that they are loaded from the
+        # right direction (NO files will be overwritten!!)
+        if self.copy is True:
+            self._copy_cfg_and_modules()
 
-            # load the processing-class
-            if "processing_cfg_module" in specs:
-                proc_module_name = specs["processing_cfg_module"]
-            else:
-                proc_module_name = "processing_cfg"
+        # get the name of the processing-module and the processing-class
+        proc_module_name = specs.get("processing_cfg_module", "processing_cfg")
+        proc_class_name = specs.get("processing_cfg_class", "processing_cfg")
 
-            if "processing_cfg_class" in specs:
-                proc_class_name = specs["processing_cfg_class"]
-            else:
-                proc_class_name = "processing_cfg"
+        # load ALL modules to ensure that the importer finds them
+        procmodule = self.cfg.get_all_modules(load_copy=self.copy)[proc_module_name]
 
-            # load ALL modules to ensure that the importer finds them
-            procmodule = self.cfg.get_all_modules(load_copy=self.copy)[proc_module_name]
+        # only import proc_cls if it is not yet set
+        # (to allow overriding already set properties during runtime)
+        if self._proc_cls is None:
 
             log.debug(
                 f'processing config class "{proc_class_name}"'
@@ -420,14 +452,14 @@ class RTprocess(object):
             )
 
             self.proc_cls = getattr(procmodule, proc_class_name)(**specs)
-
-            # get the parent fit-object
-            if self._parent_fit is None:
-                self.parent_fit = self.cfg.get_fitobject()
-            else:
-                self.parent_fit = self._parent_fit
         else:
-            self.dumppath = None
+            self.proc_cls = self._proc_cls
+
+        # get the parent fit-object
+        if self._parent_fit is None:
+            self.parent_fit = self.cfg.get_fitobject()
+        else:
+            self.parent_fit = self._parent_fit
 
         # check if all necessary functions are defined in the  processing-class
         for key in [
@@ -449,9 +481,9 @@ class RTprocess(object):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
         copypath = self.dumppath / "cfg" / self.cfg.configpath.name
-        if (copypath).exists():
+        if (copypath).exists() and len(self.init_kwargs) == 0:
             log.warning(
-                f'the file \n"{copypath / self.cfg.configpath.name}"\n'
+                f'the file \n"{copypath}"\n'
                 + "already exists... NO copying is performed and the "
                 + "existing one is used!\n"
             )
@@ -466,18 +498,18 @@ class RTprocess(object):
             else:
                 # if init_kwargs have been provided, write the updated
                 # config to the folder
-                with open(copypath.parent / self.cfg.configpath.name, "w") as file:
+                with open(copypath, "w") as file:
                     self.cfg.config.write(file)
 
-                log.info(
+                log.warning(
                     f'the config-file "{self.cfg.configpath}" has been'
                     + " updated with the init_kwargs and saved to"
-                    + f'"{copypath.parent / self.cfg.configpath.name}"'
+                    + f'"{copypath}"'
                 )
 
-            # remove the config and re-read the config from the copied path
-            del self.cfg
-            self.cfg = RT1_configparser(copypath)
+        # remove the config and re-read the config from the copied path
+        del self.cfg
+        self.cfg = RT1_configparser(copypath)
 
         # copy modules
         for key, val in self.cfg.config["CONFIGFILES"].items():
@@ -541,32 +573,67 @@ class RTprocess(object):
                     + "must be a pandas DataFrame"
                 )
             # initialize a new fits-object and perform the fit
-            fit = self.parent_fit.reinit_object(dataset=dataset)
-            fit.performfit()
+            if len(self.cfg.config_names) > 0:
+                # in case multiple configs are provided, evaluate them one by one
+                ret = []
+                for cfg_name, parent_fit in self.parent_fit:
 
-            # append auxiliary data
-            if aux_data is not None:
-                fit.aux_data = aux_data
+                    if self.dumppath is not None:
+                        self.proc_cls.rt1_procsesing_dumppath = (
+                            self.dumppath / "dumps" / cfg_name
+                        )
 
-            # append reader_arg
-            fit.reader_arg = reader_arg
+                    fit = parent_fit.reinit_object(dataset=dataset)
+                    fit.performfit()
 
-            if process_cnt is not None:
-                _increase_cnt(process_cnt, start, err=False)
+                    # append auxiliary data
+                    if aux_data is not None:
+                        fit.aux_data = aux_data
+                    # append reader_arg
+                    fit.reader_arg = reader_arg
 
-            # if a post-processing function is provided, return its output,
-            # else return None
-            if self._postprocess and callable(self.proc_cls.postprocess):
-                ret = self.proc_cls.postprocess(fit, reader_arg)
+                    # if a post-processing function is provided, return its output,
+                    # else return None
+                    if self._postprocess and callable(self.proc_cls.postprocess):
+                        ret.append(self.proc_cls.postprocess(fit, reader_arg))
+                    else:
+                        ret.append(None)
+
+                    # dump a fit-file
+                    # save dumps AFTER prostprocessing has been performed
+                    # (it might happen that some parts change during postprocessing)
+                    if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
+                        self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+
+                if process_cnt is not None:
+                    _increase_cnt(process_cnt, start, err=False)
+
             else:
-                ret = None
+                fit = self.parent_fit.reinit_object(dataset=dataset)
+                fit.performfit()
 
-            # dump a fit-file
-            # save dumps AFTER prostprocessing has been performed
-            # (it might happen that some parts change during postprocessing)
-            if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+                # append auxiliary data
+                if aux_data is not None:
+                    fit.aux_data = aux_data
 
+                # append reader_arg
+                fit.reader_arg = reader_arg
+
+                if process_cnt is not None:
+                    _increase_cnt(process_cnt, start, err=False)
+
+                # if a post-processing function is provided, return its output,
+                # else return None
+                if self._postprocess and callable(self.proc_cls.postprocess):
+                    ret = self.proc_cls.postprocess(fit, reader_arg)
+                else:
+                    ret = None
+
+                # dump a fit-file
+                # save dumps AFTER prostprocessing has been performed
+                # (it might happen that some parts change during postprocessing)
+                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
+                    self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
             return ret
 
         except Exception as ex:
@@ -590,9 +657,10 @@ class RTprocess(object):
         (>> returns from provided initializer are returned)
         """
 
-        # preload ALL modules to ensure that the importer finds them at the
-        # desired locations (e.g. the cfg-folders)
-        _ = self.cfg.get_all_modules(load_copy=self.copy)
+        if not mp.current_process().name == "MainProcess":
+            # call setup() on each worker-process to ensure that the importer loads
+            # all required modules from the desired locations
+            self.setup()
 
         if queue is not None:
             self._worker_configurer(queue)
@@ -734,9 +802,14 @@ class RTprocess(object):
         ]
         pool_kwargs["initializer"] = self._initializer
 
-        if self.parent_fit.int_Q is True:
-            # pre-evaluate the fn-coefficients if interaction terms are used
-            self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+        # pre-evaluate the fn-coefficients if interaction terms are used
+        if len(self.cfg.config_names) > 0:
+            for i, [cfg_name, parent_fit] in enumerate(self.parent_fit):
+                if parent_fit.int_Q is True:
+                    parent_fit._fnevals_input = parent_fit.R._fnevals
+        else:
+            if self.parent_fit.int_Q is True:
+                self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
         if print_progress is True:
             # initialize shared values that will be used to track the number
@@ -758,6 +831,10 @@ class RTprocess(object):
                 res = res_async.get()
         else:
             log.info("start of single-core evaluation")
+            # force autocontinue=True when calling the initializer since setup() has
+            # already been called in the main process so all folders will already exist!
+            init_autocontinue = self.autocontinue
+            self.autocontinue = True
 
             # call the initializer if it has been provided
             if "initializer" in pool_kwargs:
@@ -765,14 +842,29 @@ class RTprocess(object):
                     pool_kwargs["initializer"](*pool_kwargs["initargs"])
                 else:
                     pool_kwargs["initializer"]()
+
+            self.autocontinue = init_autocontinue
+
             res = []
             for reader_arg in reader_args:
                 res.append(
                     self._evalfunc(reader_arg=reader_arg, process_cnt=process_cnt)
                 )
 
+        # TODO incorporate this in run_finalout
+        # call finaloutput if post-processing has been performed and a finaloutput
+        # function is provided
         if self._postprocess and callable(self.proc_cls.finaloutput):
-            return self.proc_cls.finaloutput(res)
+            if len(self.cfg.config_names) > 0:
+                for i, res_i in enumerate(
+                    zip_longest(*(i for i in res if i is not None))
+                ):
+                    self.proc_cls.rt1_procsesing_respath = (
+                        self.dumppath / "results" / self.parent_fit[i][0]
+                    )
+                    self.proc_cls.finaloutput(res_i)
+            else:
+                return self.proc_cls.finaloutput(res)
         else:
             return res
 
@@ -872,19 +964,42 @@ class RTprocess(object):
 
             # save the used model-definition string to a file
             if self.dumppath is not None:
-                with open(self.dumppath / "cfg" / "model_definition.txt", "w") as file:
 
-                    outtxt = ""
-                    if hasattr(self.proc_cls, "description"):
-                        outtxt += dedent(self.proc_cls.description)
-                        outtxt += "\n\n"
-                        outtxt += "_" * 77
-                        outtxt += "\n\n"
+                if len(self.cfg.config_names) > 0:
+                    # if multiple configs are provided, save an individual file for each
+                    for cfg_name, parent_fit in self.parent_fit:
+                        with open(
+                            self.dumppath / "cfg" / f"model_definition__{cfg_name}.txt",
+                            "w",
+                        ) as file:
 
-                    outtxt += self.parent_fit._model_definition
-                    print(outtxt, file=file)
+                            outtxt = ""
+                            if hasattr(self.proc_cls, "description"):
+                                outtxt += dedent(self.proc_cls.description)
+                                outtxt += "\n\n"
+                                outtxt += "_" * 77
+                                outtxt += "\n\n"
 
-                    log.info(outtxt)
+                            outtxt += parent_fit._model_definition
+                            print(outtxt, file=file)
+
+                            log.info(outtxt)
+                else:
+                    with open(
+                        self.dumppath / "cfg" / "model_definition.txt", "w"
+                    ) as file:
+
+                        outtxt = ""
+                        if hasattr(self.proc_cls, "description"):
+                            outtxt += dedent(self.proc_cls.description)
+                            outtxt += "\n\n"
+                            outtxt += "_" * 77
+                            outtxt += "\n\n"
+
+                        outtxt += self.parent_fit._model_definition
+                        print(outtxt, file=file)
+
+                        log.info(outtxt)
 
             _ = self.processfunc(
                 ncpu=ncpu,
@@ -993,6 +1108,15 @@ class RTprocess(object):
             else:
                 queue = None
 
+            # override finalout_name
+            # do this BEFORE self.setup() is called !!
+            if finalout_name is not None:
+                assert isinstance(finalout_name, str), "finalout_name must be a string"
+                # self.proc_cls.finalout_name = finalout_name
+                self.override_config(
+                    PROCESS_SPECS=dict(finalout_name=finalout_name), override=False
+                )
+
             # initialize all necessary properties with autocontinue=True
             initial_autocontinue = self.autocontinue
             self.autocontinue = True
@@ -1005,15 +1129,35 @@ class RTprocess(object):
                 # file to which the process is writing can not be generated!
                 listener.start()
 
-            return self._run_finalout(
-                ncpu,
-                use_N_files=use_N_files,
-                finalout_name=finalout_name,
-                finaloutput=finaloutput,
-                postprocess=postprocess,
-                queue=queue,
-                print_progress=print_progress,
-            )
+            if len(self.cfg.config_names) > 0:
+                for config_name in self.cfg.config_names:
+                    self.proc_cls.rt1_procsesing_respath = (
+                        self.dumppath / "results" / config_name
+                    )
+
+                    fitlist = self._get_files(
+                        use_N_files=use_N_files, use_config=config_name
+                    )
+
+                    self._run_finalout(
+                        ncpu,
+                        fitlist=fitlist,
+                        finaloutput=finaloutput,
+                        postprocess=postprocess,
+                        queue=queue,
+                        print_progress=print_progress,
+                    )
+            else:
+                fitlist = self._get_files(use_N_files=use_N_files)
+
+                return self._run_finalout(
+                    ncpu,
+                    fitlist=fitlist,
+                    finaloutput=finaloutput,
+                    postprocess=postprocess,
+                    queue=queue,
+                    print_progress=print_progress,
+                )
 
         except Exception as err:
             log.exception("there was an error during finalout generation!")
@@ -1041,7 +1185,7 @@ class RTprocess(object):
                     # remove the file-handler from the log
                     log.handlers.remove(h)
 
-    def _run_postprocess(self, fitpath, process_cnt=None):
+    def _run_postprocess(self, fitpath, process_cnt=None, postprocess=None):
         if process_cnt is not None:
             start = _start_cnt()
 
@@ -1054,7 +1198,10 @@ class RTprocess(object):
 
         try:
             # run postprocessing
-            ret = self.proc_cls.postprocess(fit, fit.reader_arg)
+            if postprocess is None:
+                ret = self.proc_cls.postprocess(fit, fit.reader_arg)
+            else:
+                ret = postprocess(fit, fit.reader_arg)
 
             if process_cnt is not None:
                 _increase_cnt(process_cnt, start, err=False)
@@ -1072,34 +1219,17 @@ class RTprocess(object):
             else:
                 raise ex
 
-    def _run_finalout(
-        self,
-        ncpu,
-        use_N_files=None,
-        finalout_name=None,
-        finaloutput=None,
-        postprocess=None,
-        queue=None,
-        print_progress=True,
-    ):
-
-        # override finalout_name
-        if finalout_name is not None:
-            assert isinstance(finalout_name, str), "finalout_name must be a string"
-            self.proc_cls.finalout_name = finalout_name
-
-        # override finaloutput function
-        if finaloutput is not None:
-            assert callable(finaloutput), "finaloutput must be callable!"
-            self.proc_cls.finaloutput = partial(finaloutput, self.proc_cls)
-        # override postprocess function
-        if postprocess is not None:
-            assert callable(postprocess), "postprocess must be callable!"
-            self.proc_cls.postprocess = partial(postprocess, self.proc_cls)
+    def _get_files(self, use_N_files=None, use_config=None):
+        # get the relevant files that have to be processed for `run_finaloutput`
 
         # initialize RTresults class
-        useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
-
+        if use_config is None:
+            useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
+        else:
+            useres = getattr(
+                RTresults(self.dumppath),
+                f"{self.proc_cls.dumpfolder}__{use_config}",
+            )
         # get dump-files
         dumpiter = useres.dump_files
 
@@ -1107,6 +1237,21 @@ class RTprocess(object):
             fitlist = list(islice(dumpiter, use_N_files))
         else:
             fitlist = list(dumpiter)
+        return fitlist
+
+    def _run_finalout(
+        self,
+        ncpu,
+        fitlist=None,
+        finaloutput=None,
+        postprocess=None,
+        queue=None,
+        print_progress=True,
+    ):
+
+        # override postprocess function
+        if postprocess is not None:
+            assert callable(postprocess), "postprocess must be callable!"
 
         # add provided initializer and queue (used for subprocess-logging)
         # to the initargs and use "self._initializer" as initializer-function
@@ -1125,7 +1270,12 @@ class RTprocess(object):
             with mp.Pool(ncpu, **pool_kwargs) as pool:
                 # loop over the reader_args
                 res_async = pool.starmap_async(
-                    self._run_postprocess, zip(fitlist, repeat(process_cnt))
+                    self._run_postprocess,
+                    zip(
+                        fitlist,
+                        repeat(process_cnt),
+                        repeat(postprocess),
+                    ),
                 )
 
                 pool.close()  # Marks the pool as closed.
@@ -1133,6 +1283,10 @@ class RTprocess(object):
                 res = res_async.get()
         else:
             log.info("start of single-core finalout generation")
+            # force autocontinue=True when calling the initializer since setup() has
+            # already been called in the main process so all folders will already exist!
+            init_autocontinue = self.autocontinue
+            self.autocontinue = True
 
             # call the initializer if it has been provided
             if "initializer" in pool_kwargs:
@@ -1140,15 +1294,23 @@ class RTprocess(object):
                     pool_kwargs["initializer"](*pool_kwargs["initargs"])
                 else:
                     pool_kwargs["initializer"]()
+
+            self.autocontinue = init_autocontinue
             res = []
             for fitpath in fitlist:
                 res.append(
-                    self._run_postprocess(fitpath=fitpath, process_cnt=process_cnt)
+                    self._run_postprocess(
+                        fitpath=fitpath,
+                        process_cnt=process_cnt,
+                        postprocess=postprocess,
+                    )
                 )
 
-        if callable(self.proc_cls.finaloutput):
-            return self.proc_cls.finaloutput(res)
+        if callable(finaloutput):
+            return finaloutput(res)
             log.info("finished generation of finaloutput!")
+        elif hasattr(self.proc_cls, "finaloutput"):
+            return self.proc_cls.finaloutput(res)
         else:
             return res
 
@@ -1160,6 +1322,8 @@ class RTresults(object):
     and recognize any sub-folder that matches the expected folder-structure
     as a sub-result.
 
+    NOTE: only the first 100 entries of each directory will be checked
+    to avoid performance issues in case a folder with a lot of sub-files is selected
 
     Assuming a folder-structure as indicated below, the class can be used via:
 
@@ -1173,8 +1337,14 @@ class RTresults(object):
         ...         dumps/..   (.dump files)
         ...         cfg/..     (.ini files)
         ...
-        ...     sub_RESULT2
-        ...         ....
+        ...     sub_RESULT2_with_multiple_configs
+        ...         results/.. (.nc files)
+        ...             config1/.. (.nc files)
+        ...             config2/.. (.nc files)
+        ...         dumps/..
+        ...             config1/.. (.dump files)
+        ...             config2/.. (.dump files)
+        ...         cfg/..     (.ini files)
 
 
         >>> results = RT1_results(parent_path)
@@ -1209,36 +1379,69 @@ class RTresults(object):
         self._parent_path = Path(parent_path)
 
         self._paths = dict()
+        if self._check_folderstructure(self._parent_path):
+            # check if the path is already a valid folder-structure
+            self._addresult(Path(self._parent_path))
+        else:
+            # otherwise, check if a subfolder has a valid folder-structure
+            # (only 1 level is checked)
+            for p in islice(os.scandir(self._parent_path), 100):
+                if p.is_dir():
+                    self._addresult(Path(p.path))
 
-        if all(
-            i in [i.stem for i in self._parent_path.iterdir()]
-            for i in ["cfg", "results", "dumps"]
-        ):
-            self._paths[self._parent_path.stem] = self._parent_path
-            log.info(f"... adding result {self._parent_path.stem}")
-            setattr(
-                self,
-                self._parent_path.stem,
-                self._RT1_fitresult(self._parent_path.stem, self._parent_path),
-            )
+    @staticmethod
+    def _check_folderstructure(path):
+        return all(
+            folder in [i.name for i in islice(os.scandir(path), 100) if i.is_dir()]
+            for folder in [
+                "cfg",
+                "results",
+                "dumps",
+            ]
+        )
 
-        for p in self._parent_path.iterdir():
-            if p.is_dir():
-                if all(
-                    i in [i.stem for i in p.iterdir()]
-                    for i in ["cfg", "results", "dumps"]
-                ):
-                    self._paths[p.stem] = p
-                    log.info(f"... adding result {p.stem}")
-                    setattr(self, p.stem, self._RT1_fitresult(p.stem, p))
+    def _addresult(self, path):
+        # use os.scandir since it is a lot faster than any other method right now
+        if self._check_folderstructure(path):
+            # check the first 1000 files for subdirectories
+            # avoid checking more for performance reasons
+            subresults = [
+                Path(i.path)
+                for i in islice(os.scandir(path / "dumps"), 100)
+                if i.is_dir()
+            ]
+
+            if len(subresults) > 0:
+                for subres in subresults:
+                    self._paths[path.stem + f"__{subres.stem}"] = path
+                    log.info(f"... adding conifg-result {path.stem}__{subres.stem}")
+                    setattr(
+                        self,
+                        path.stem + f"__{subres.stem}",
+                        self._RT1_fitresult(path.stem, path, subres.stem),
+                    )
+
+            else:
+                self._paths[path.stem] = path
+                log.info(f"... adding result {path.stem}")
+                setattr(
+                    self,
+                    path.stem,
+                    self._RT1_fitresult(path.stem, path),
+                )
 
     class _RT1_fitresult(object):
-        def __init__(self, name, path):
+        def __init__(self, name, path, use_config=None):
             self.name = name
             self.path = Path(path)
-            self._result_path = self.path / "results"
-            self._dump_path = self.path / "dumps"
-            self._cfg_path = self.path / "cfg"
+            if use_config is None:
+                self._result_path = self.path / "results"
+                self._dump_path = self.path / "dumps"
+                self._cfg_path = self.path / "cfg"
+            else:
+                self._result_path = self.path / "results" / use_config
+                self._dump_path = self.path / "dumps" / use_config
+                self._cfg_path = self.path / "cfg"
 
             self._nc_paths = self._get_results(".nc")
 

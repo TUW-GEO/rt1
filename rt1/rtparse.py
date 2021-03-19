@@ -324,24 +324,62 @@ class RT1_configparser(object):
             fmt = "%Y-%m-%d %H:%M:%S.%f"
         return datetime.strptime(s, fmt)
 
-    def get_config(self):
+    def get_config(self, config=None):
         """
-        get configuration dictionary
+        get the RT1 model-configuration dict
+
+        Parameters
+        ----------
+        config : str, optional
+            The name of the config to be loaded if multiple configurations
+            are specified in the .ini file. The default is None
 
         Returns
         -------
         dict
             a dict with the model-configuration.
-
         """
-        lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
 
+        lsq_kwargs = self._parse_dict(**self.lsq_parse_props)
         fits_kwargs = self._parse_dict(**self.fitargs_parse_props)
         defdict = self._parse_defdict("defdict")
         set_V_SRF = dict(
             V_props=self._parse_V_SRF("RT1_V"),
             SRF_props=self._parse_V_SRF("RT1_SRF"),
         )
+
+        # update configurations in case a specific config is selected
+        if config is not None:
+            # update least_squares_kwargs
+            if f"#config {config} {self.lsq_parse_props['section']}" in self.config:
+                new_lsq_parse_props = {
+                    **self.lsq_parse_props,
+                    "section": f"#config {config} {self.lsq_parse_props['section']}",
+                }
+                lsq_kwargs.update(self._parse_dict(**new_lsq_parse_props))
+
+            # update fits_kwargs
+            if f"#config {config} {self.fitargs_parse_props['section']}" in self.config:
+                new_fitargs_parse_props = {
+                    **self.fitargs_parse_props,
+                    "section": f"#config {config} {self.fitargs_parse_props['section']}",
+                }
+                fits_kwargs.update(self._parse_dict(**new_fitargs_parse_props))
+
+            # update defdict
+            if f"#config {config} defdict" in self.config:
+                defdict.update(self._parse_defdict(f"#config {config} defdict"))
+
+            # update RT1_V
+            if f"#config {config} RT1_V" in self.config:
+                V_props = self._parse_V_SRF("RT1_V")
+                V_props.update(self._parse_V_SRF(f"#config {config} RT1_V"))
+                set_V_SRF["V_props"] = V_props
+            # update RT1_SRF
+            if f"#config {config} RT1_SRF" in self.config:
+                SRF_props = self._parse_V_SRF("RT1_SRF")
+                SRF_props.update(self._parse_V_SRF(f"#config {config} RT1_SRF"))
+                set_V_SRF["SRF_props"] = SRF_props
 
         return dict(
             lsq_kwargs=lsq_kwargs,
@@ -350,25 +388,54 @@ class RT1_configparser(object):
             fits_kwargs=fits_kwargs,
         )
 
+    @property
+    def config_names(self):
+        config_sections = []
+        for i in self.config:
+            if i.startswith("#config"):
+                i_split = i.split(" ")
+                assert (
+                    len(i_split) == 3
+                ), f"there is something wrong in section {i} of the .ini file"
+
+                if i_split[0] == "#config":
+                    name, section = i_split[1:]
+                    assert (
+                        section in self.config
+                    ), f"the provided config section {i} is invalid"
+
+                    config_sections.append(name)
+
+        return set(config_sections)
+
     def get_fitobject(self):
-        """
-        get the rt1.rtfits.Fits object
+        configs = self.config_names
+        if len(configs) > 0:
+            rt1_fits = []
+            for config in configs:
+                cfg = self.get_config(config)
 
-        Returns
-        -------
-        rt1_fits : rt1.rtfits.Fits
-            the used Fits object.
-
-        """
-        cfg = self.get_config()
-
-        rt1_fits = Fits(
-            dataset=None,
-            defdict=cfg["defdict"],
-            set_V_SRF=cfg["set_V_SRF"],
-            lsq_kwargs=cfg["lsq_kwargs"],
-            **cfg["fits_kwargs"],
-        )
+                rt1_fits.append(
+                    [
+                        config,
+                        Fits(
+                            dataset=None,
+                            defdict=cfg["defdict"],
+                            set_V_SRF=cfg["set_V_SRF"],
+                            lsq_kwargs=cfg["lsq_kwargs"],
+                            **cfg["fits_kwargs"],
+                        ),
+                    ]
+                )
+        else:
+            cfg = self.get_config()
+            rt1_fits = Fits(
+                dataset=None,
+                defdict=cfg["defdict"],
+                set_V_SRF=cfg["set_V_SRF"],
+                lsq_kwargs=cfg["lsq_kwargs"],
+                **cfg["fits_kwargs"],
+            )
 
         return rt1_fits
 

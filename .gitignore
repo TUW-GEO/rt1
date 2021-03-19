@@ -18,3 +18,4 @@ tests/testdump2.dump
 tests/proc_test
 tests/proc_test2
 tests/proc_test3
+tests/proc_multi
