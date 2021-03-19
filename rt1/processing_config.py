@@ -425,46 +425,19 @@ class rt1_processing_config(object):
 
         return ret
 
-    def finaloutput(self, res, format="table"):
+    def finaloutput(self, res):
         """
         A function that is called after ALL sites are processed:
-
-        First, the obtained parameter-dataframes returned by the
-        `postprocess()` function are concatenated, then:
-
-            - if `"save_path"` is defined, the resulting dataframe will be
-              saved (or appended) to a hdf-store.
-              the used key will be either the value of `"hdf_key"` or
-              `"dumpfolder`" or in case both are `None`, the key `"result`"
-              will be used
-            - if `"save_path"` is None, the DataFrame of the concatenated
-              results will be returned
-
-        Notice:
-        Since hdf is a row-based format, the HDF-file will contain a transposed
-        version of the multiindexed "res"-DataFrame.
-        Furthermore all values will be converted to numerical values
-        by using `pd.to_numeric()`   -> timestaps need to be re-converted using
-        `pd.to_datetime()`!
-
 
         Parameters
         ----------
         res: list
             A list of return-values from the "postprocess()" function.
-        save_path: str, optional
-            The path where the finalout-file will be stored.
-            The default is None.
-        format: str
-            the format used when exporting the hdf-file.
 
-            Notice: if there are more than 2000 entries, the 'table' format
-            will not work and the 'fixed' format must be used!
-            The default is 'fixed'
         Returns
         -------
-        res: pandas.DataFrame
-             the concatenated results (ONLY if `"save_path"` is `None`)
+        res: xarray.Dataset
+             the concatenated results
         """
 
         # concatenate the results
