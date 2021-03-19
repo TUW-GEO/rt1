@@ -148,7 +148,7 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
-        proc = RTprocess(config_path, autocontinue=True)
+        proc = RTprocess(config_path)
         proc.override_config(
             PROCESS_SPECS=dict(path__save_path="tests/proc_test3", dumpfolder="dump03")
         )
