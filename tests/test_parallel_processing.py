@@ -205,7 +205,6 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
 
         proc = RTprocess(config_path)
-
         proc.run_finaloutput(
             ncpu=1,
             finalout_name="ncpu1.nc",
@@ -237,7 +236,7 @@ class TestRTfits(unittest.TestCase):
                 getattr(res, f"dump01__{cfg}")._dump_path.stem == cfg
             ), "multi-result dump-path is not properly set"
 
-    def test_6_multiconfig_props(self):
+    def test_9_multiconfig_props(self):
         # check if properties have been set correctly
 
         res = RTresults("tests/proc_multi")
@@ -250,6 +249,8 @@ class TestRTfits(unittest.TestCase):
         assert str(fit.V.t) == "t_v", "multiconfig props not correct"
         assert fit.SRF.ncoefs == 10, "multiconfig props not correct"
 
+        assert fit.lsq_kwargs["ftol"] == 0.0001, "multiconfig props not correct"
+
         # -----------------------------
 
         fit = getattr(res, "dump01__cfg_1").load_fit()
@@ -260,6 +261,7 @@ class TestRTfits(unittest.TestCase):
 
         assert fit.V.t == 0.25, "multiconfig props not correct"
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
+        assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
 
 if __name__ == "__main__":
