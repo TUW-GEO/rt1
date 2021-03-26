@@ -2525,7 +2525,27 @@ class Fits(Scatter):
         log.info(self._model_definition)
 
     @classmethod
-    def _reinit_object(cls, self, **kwargs):
+    def _reinit_object(cls, self, share_fnevals=False, **kwargs):
+        """
+
+        Parameters
+        ----------
+        share_fnevals : bool, optional
+            Indicator if `_fnevals_input` should be shared or not.
+            NOTICE: sharing `_fnevals_input` means that the interaction-term is
+            not updated if parameters of V and SRF change! Use with care!
+            The default is False.
+
+        Returns
+        -------
+        rtfits.Fits
+            a Fits object
+        """
+
+        if share_fnevals is True:
+            use_fnevals = self._fnevals_input
+        else:
+            use_fnevals = None
 
         args = {
             "sig0": self.sig0,
@@ -2545,13 +2565,26 @@ class Fits(Scatter):
 
         return fit
 
-    def reinit_object(self, **kwargs):
+    def reinit_object(self, share_fnevals=False, **kwargs):
         """
         initialize a new fits-object that share all attributes except
         for the ones passed as kwargs.
 
+        NOTICE:
+        the dictionaries `defdict`, `set_V_SRF` and `lsq_kwargs` are deep-copied on
+        initialization of the Fits object, so changes will NOT propagate to the parent
+        fit object.
+        However, if not provided explicitly, the dataset is in fact shared
+        between the Fits instances!
+
         Parameters
         ----------
+        share_fnevals : bool, optional
+            Indicator if `_fnevals_input` should be shared or not.
+            NOTICE: sharing `_fnevals_input` means that the interaction-term is
+            not updated if parameters of V and SRF change! Use with care!
+            The default is False.
+
         **kwargs :
             Keyword arguments that will be used to initialize a new Fits-object
             (all other arguments will be taken from the parent object!)
