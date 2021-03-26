@@ -2536,8 +2536,7 @@ class Fits(Scatter):
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,
             "lambda_backend": self.lambda_backend,
-            "_fnevals_input": self._fnevals_input,
-            "interp_vals": self.interp_vals,
+            "_fnevals_input": use_fnevals,
         }
 
         args.update(**kwargs)
