@@ -2525,7 +2525,7 @@ class Fits(Scatter):
         log.info(self._model_definition)
 
     @classmethod
-    def _reinit_object(cls, self, share_fnevals=False, **kwargs):
+    def _reinit_object(cls, self, share_fnevals=False, share_auxdata=True, **kwargs):
         """
 
         Parameters
@@ -2535,6 +2535,10 @@ class Fits(Scatter):
             NOTICE: sharing `_fnevals_input` means that the interaction-term is
             not updated if parameters of V and SRF change! Use with care!
             The default is False.
+        share_auxdata : bool, optional
+            Indicator if the property `aux_data` should be shared or not.
+            (it is initialized by rt1.RTprocess in case auxiliary data is read)
+            The default is True.
 
         Returns
         -------
@@ -2563,9 +2567,13 @@ class Fits(Scatter):
 
         fit = cls(**args)
 
+        if share_auxdata is True:
+            if hasattr(self, "aux_data"):
+                fit.aux_data = self.aux_data
+
         return fit
 
-    def reinit_object(self, share_fnevals=False, **kwargs):
+    def reinit_object(self, share_fnevals=False, share_auxdata=True, **kwargs):
         """
         initialize a new fits-object that share all attributes except
         for the ones passed as kwargs.
@@ -2584,6 +2592,10 @@ class Fits(Scatter):
             NOTICE: sharing `_fnevals_input` means that the interaction-term is
             not updated if parameters of V and SRF change! Use with care!
             The default is False.
+        share_auxdata : bool, optional
+            Indicator if the property `aux_data` should be shared or not.
+            (it is initialized by rt1.RTprocess in case auxiliary data is read)
+            The default is True.
 
         **kwargs :
             Keyword arguments that will be used to initialize a new Fits-object
