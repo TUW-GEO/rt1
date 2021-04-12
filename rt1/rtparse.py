@@ -6,7 +6,7 @@ from functools import partial
 import sys
 import importlib.util
 from pathlib import Path
-from .rtfits import Fits
+from .rtfits import Fits, MultiFits
 from . import log
 
 
@@ -394,39 +394,59 @@ class RT1_configparser(object):
         for i in self.config:
             if i.startswith("#config"):
                 i_split = i.split(" ")
-                assert (
-                    len(i_split) == 3
-                ), f"there is something wrong in section {i} of the .ini file"
 
                 if i_split[0] == "#config":
-                    name, section = i_split[1:]
-                    assert (
-                        section in self.config
-                    ), f"the provided config section {i} is invalid"
+                    if len(i_split) == 2:
+                        config_sections.append(i_split[1])
+                    elif len(i_split) == 3:
+                        name, section = i_split[1:]
+                        assert (
+                            section in self.config
+                        ), f"the provided config section {i} is invalid"
 
-                    config_sections.append(name)
+                        config_sections.append(name)
+                    else:
+                        raise AssertionError(
+                            f"there is something wrong in section {i} "
+                            + "of the .ini file"
+                        )
 
         return set(config_sections)
 
     def get_fitobject(self):
         configs = self.config_names
         if len(configs) > 0:
-            rt1_fits = []
+            rt1_fits = MultiFits()
             for config in configs:
                 cfg = self.get_config(config)
 
-                rt1_fits.append(
-                    [
-                        config,
-                        Fits(
-                            dataset=None,
-                            defdict=cfg["defdict"],
-                            set_V_SRF=cfg["set_V_SRF"],
-                            lsq_kwargs=cfg["lsq_kwargs"],
-                            **cfg["fits_kwargs"],
-                        ),
-                    ]
+                rt1_fits.add_config(
+                    config,
+                    Fits(
+                        dataset=None,
+                        defdict=cfg["defdict"],
+                        set_V_SRF=cfg["set_V_SRF"],
+                        lsq_kwargs=cfg["lsq_kwargs"],
+                        **cfg["fits_kwargs"],
+                    ),
                 )
+
+            # rt1_fits = []
+            # for config in configs:
+            #     cfg = self.get_config(config)
+
+            #     rt1_fits.append(
+            #         [
+            #             config,
+            #             Fits(
+            #                 dataset=None,
+            #                 defdict=cfg["defdict"],
+            #                 set_V_SRF=cfg["set_V_SRF"],
+            #                 lsq_kwargs=cfg["lsq_kwargs"],
+            #                 **cfg["fits_kwargs"],
+            #             ),
+            #         ]
+            #     )
         else:
             cfg = self.get_config()
             rt1_fits = Fits(

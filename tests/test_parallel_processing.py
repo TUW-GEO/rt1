@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 import unittest.mock as mock
 from rt1.rtprocess import RTprocess, RTresults
-
+from rt1.rtfits import MultiFits
 import warnings
 
 warnings.simplefilter("ignore")
@@ -184,21 +184,25 @@ class TestRTfits(unittest.TestCase):
 
         for cfg in ["cfg_0", "cfg_1"]:
             # check if all folders are properly initialized
-            assert Path(
-                f"tests/proc_multi/dump01/dumps/{cfg}"
-            ).exists(), "multiconfig folder generation did not work"
-            assert Path(
-                f"tests/proc_multi/dump01/dumps/{cfg}"
-            ).exists(), "multiconfig folder generation did not work"
+            # assert Path(
+            #     f"tests/proc_multi/dump01/dumps/{cfg}"
+            # ).exists(), "multiconfig folder generation did not work"
+            # assert Path(
+            #     f"tests/proc_multi/dump01/dumps/{cfg}"
+            # ).exists(), "multiconfig folder generation did not work"
 
             # check if model-definition files are written correctly
             assert Path(
                 f"tests/proc_multi/dump01/cfg/model_definition__{cfg}.txt"
             ).exists(), "multiconfig model_definition.txt export did not work"
 
+            # # check if netcdf have been exported
+            # assert Path(
+            #     f"tests/proc_multi/dump01/results/{cfg}/results.nc"
+            # ).exists(), "multiconfig NetCDF export did not work"
             # check if netcdf have been exported
             assert Path(
-                f"tests/proc_multi/dump01/results/{cfg}/results.nc"
+                f"tests/proc_multi/dump01/results/results__{cfg}.nc"
             ).exists(), "multiconfig NetCDF export did not work"
 
     def test_7_multiconfig_finalout(self):
@@ -218,30 +222,29 @@ class TestRTfits(unittest.TestCase):
         for cfg in ["cfg_0", "cfg_1"]:
             # check if all folders are properly initialized
             assert Path(
-                f"tests/proc_multi/dump01/results/{cfg}/ncpu1.nc"
+                f"tests/proc_multi/dump01/results/ncpu1__{cfg}.nc"
             ).exists(), "multiconfig finaloutput with ncpu=1 did not work"
             assert Path(
-                f"tests/proc_multi/dump01/results/{cfg}/ncpu3.nc"
+                f"tests/proc_multi/dump01/results/ncpu3__{cfg}.nc"
             ).exists(), "multiconfig finaloutput with ncpu=3 did not work"
 
     def test_8_multiconfig_rtresults(self):
         res = RTresults("tests/proc_multi")
 
-        for cfg in ["cfg_0", "cfg_1"]:
-            assert hasattr(
-                res, f"dump01__{cfg}"
-            ), "multi-results are not properly added"
+        mfit = res.dump01.load_fit()
+        assert isinstance(mfit, MultiFits), "the dumped fitobject is not a MultiFits!"
 
-            assert (
-                getattr(res, f"dump01__{cfg}")._dump_path.stem == cfg
-            ), "multi-result dump-path is not properly set"
+        for cfg in ["cfg_0", "cfg_1"]:
+            # check if all configs are added
+            assert hasattr(mfit.configs, cfg), "multi-results are not properly added"
 
     def test_9_multiconfig_props(self):
         # check if properties have been set correctly
 
         res = RTresults("tests/proc_multi")
+        mfit = res.dump01.load_fit()
 
-        fit = getattr(res, "dump01__cfg_0").load_fit()
+        fit = mfit.configs.cfg_0
         assert fit.defdict["omega"][0] is False, "multiconfig props not correct"
         assert fit.defdict["omega"][1] == 0.5, "multiconfig props not correct"
         assert fit.int_Q is False, "multiconfig props not correct"
@@ -253,7 +256,7 @@ class TestRTfits(unittest.TestCase):
 
         # -----------------------------
 
-        fit = getattr(res, "dump01__cfg_1").load_fit()
+        fit = mfit.configs.cfg_1
         assert fit.defdict["omega"][0] is True, "multiconfig props not correct"
         assert fit.defdict["omega"][1] == 0.05, "multiconfig props not correct"
         assert fit.defdict["omega"][2] == "2M", "multiconfig props not correct"

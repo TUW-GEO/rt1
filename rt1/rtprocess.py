@@ -17,7 +17,7 @@ from numpy.random import randint as np_randint
 
 from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 from .rtparse import RT1_configparser
-from .rtfits import load
+from .rtfits import load, MultiFits
 from . import log, _get_logger_formatter
 import logging
 
@@ -418,17 +418,6 @@ class RTprocess(object):
                 ["results", "cfg", "dumps"],
             )
 
-            # in case multiple configurations are provided, initialize subfolders
-            # in the "dumps" and "results" directories
-            if len(self.cfg.config_names) > 0:
-                _make_folderstructure(
-                    specs["save_path"] / specs["dumpfolder"] / "dumps",
-                    self.cfg.config_names,
-                )
-                _make_folderstructure(
-                    specs["save_path"] / specs["dumpfolder"] / "results",
-                    self.cfg.config_names,
-                )
 
         # copy modules and config-files and ensure that they are loaded from the
         # right direction (NO files will be overwritten!!)
@@ -572,41 +561,74 @@ class RTprocess(object):
                     "the first return-value of reader function "
                     + "must be a pandas DataFrame"
                 )
-            # initialize a new fits-object and perform the fit
-            if len(self.cfg.config_names) > 0:
-                # in case multiple configs are provided, evaluate them one by one
-                ret = []
-                for cfg_name, parent_fit in self.parent_fit:
 
-                    if self.dumppath is not None:
-                        self.proc_cls.rt1_procsesing_dumppath = (
-                            self.dumppath / "dumps" / cfg_name
+            # take proper care of MultiFit objects
+            if isinstance(self.parent_fit, MultiFits):
+                # set the dataset
+                self.parent_fit.set_dataset(dataset)
+                # set the aux_data
+                if aux_data is not None:
+                    self.parent_fit.set_aux_data(aux_data)
+                # append reader_arg to all configs
+                self.parent_fit.set_reader_arg(reader_arg)
+
+                do_performfit = self.parent_fit.accessor.performfit()
+                _ = [doit() for doit in do_performfit.values()]
+
+                # if a post-processing function is provided, return its output,
+                # else return None
+                if self._postprocess and callable(self.proc_cls.postprocess):
+                    ret = dict(
+                        self.parent_fit.apply(
+                            self.proc_cls.postprocess, reader_arg=reader_arg
                         )
+                    )
+                else:
+                    ret = dict()
 
-                    fit = parent_fit.reinit_object(dataset=dataset)
-                    fit.performfit()
-
-                    # append auxiliary data
-                    if aux_data is not None:
-                        fit.aux_data = aux_data
-                    # append reader_arg
-                    fit.reader_arg = reader_arg
-
-                    # if a post-processing function is provided, return its output,
-                    # else return None
-                    if self._postprocess and callable(self.proc_cls.postprocess):
-                        ret.append(self.proc_cls.postprocess(fit, reader_arg))
-                    else:
-                        ret.append(None)
-
-                    # dump a fit-file
-                    # save dumps AFTER prostprocessing has been performed
-                    # (it might happen that some parts change during postprocessing)
-                    if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                        self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
+                    self.proc_cls.dump_fit_to_file(
+                        self.parent_fit, reader_arg, mini=True
+                    )
 
                 if process_cnt is not None:
                     _increase_cnt(process_cnt, start, err=False)
+
+            # # initialize a new fits-object and perform the fit
+            # if len(self.cfg.config_names) > 0:
+            #     # in case multiple configs are provided, evaluate them one by one
+            #     ret = []
+            #     for cfg_name, parent_fit in self.parent_fit:
+
+            #         if self.dumppath is not None:
+            #             self.proc_cls.rt1_procsesing_dumppath = (
+            #                 self.dumppath / "dumps" / cfg_name
+            #             )
+
+            #         fit = parent_fit.reinit_object(dataset=dataset)
+            #         fit.performfit()
+
+            #         # append auxiliary data
+            #         if aux_data is not None:
+            #             fit.aux_data = aux_data
+            #         # append reader_arg
+            #         fit.reader_arg = reader_arg
+
+            #         # if a post-processing function is provided, return its output,
+            #         # else return None
+            #         if self._postprocess and callable(self.proc_cls.postprocess):
+            #             ret.append(self.proc_cls.postprocess(fit, reader_arg))
+            #         else:
+            #             ret.append(None)
+
+            #         # dump a fit-file
+            #         # save dumps AFTER prostprocessing has been performed
+            #         # (it might happen that some parts change during postprocessing)
+            #         if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
+            #             self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+
+            #     if process_cnt is not None:
+            #         _increase_cnt(process_cnt, start, err=False)
 
             else:
                 fit = self.parent_fit.reinit_object(dataset=dataset)
@@ -803,10 +825,14 @@ class RTprocess(object):
         pool_kwargs["initializer"] = self._initializer
 
         # pre-evaluate the fn-coefficients if interaction terms are used
-        if len(self.cfg.config_names) > 0:
-            for i, [cfg_name, parent_fit] in enumerate(self.parent_fit):
+        if isinstance(self.parent_fit, MultiFits):
+            for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
                     parent_fit._fnevals_input = parent_fit.R._fnevals
+        # if len(self.cfg.config_names) > 0:
+        #     for i, [cfg_name, parent_fit] in enumerate(self.parent_fit):
+        #         if parent_fit.int_Q is True:
+        #             parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
@@ -855,14 +881,27 @@ class RTprocess(object):
         # call finaloutput if post-processing has been performed and a finaloutput
         # function is provided
         if self._postprocess and callable(self.proc_cls.finaloutput):
-            if len(self.cfg.config_names) > 0:
-                for i, res_i in enumerate(
-                    zip_longest(*(i for i in res if i is not None))
-                ):
-                    self.proc_cls.rt1_procsesing_respath = (
-                        self.dumppath / "results" / self.parent_fit[i][0]
+            # in case of a multi-config, results will be dicts!
+            if isinstance(self.parent_fit, MultiFits):
+                # store original finalout_name
+                finalout_name, ending = self.proc_cls.finalout_name.split(".")
+
+                for name in self.parent_fit.config_names:
+                    self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
+                    self.proc_cls.finaloutput(
+                        (i.get(name) for i in res if i is not None)
                     )
-                    self.proc_cls.finaloutput(res_i)
+                # reset initial finalout_name
+                self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
+
+            # if len(self.cfg.config_names) > 0:
+            #     for i, res_i in enumerate(
+            #         zip_longest(*(i for i in res if i is not None))
+            #     ):
+            #         self.proc_cls.rt1_procsesing_respath = (
+            #             self.dumppath / "results" / self.parent_fit[i][0]
+            #         )
+            #         self.proc_cls.finaloutput(res_i)
             else:
                 return self.proc_cls.finaloutput(res)
         else:
@@ -964,10 +1003,12 @@ class RTprocess(object):
 
             # save the used model-definition string to a file
             if self.dumppath is not None:
-
-                if len(self.cfg.config_names) > 0:
+                if isinstance(self.parent_fit, MultiFits):
                     # if multiple configs are provided, save an individual file for each
-                    for cfg_name, parent_fit in self.parent_fit:
+                    for (
+                        cfg_name,
+                        parent_fit,
+                    ) in self.parent_fit.accessor.config_fits.items():
                         with open(
                             self.dumppath / "cfg" / f"model_definition__{cfg_name}.txt",
                             "w",
@@ -984,6 +1025,7 @@ class RTprocess(object):
                             print(outtxt, file=file)
 
                             log.info(outtxt)
+
                 else:
                     with open(
                         self.dumppath / "cfg" / "model_definition.txt", "w"
@@ -1017,8 +1059,9 @@ class RTprocess(object):
             raise err
 
         finally:
-            if hasattr(self.proc_cls, "finalizer"):
-                self.proc_cls.finalizer()
+            if hasattr(self, 'proc_cls'):
+                if hasattr(self.proc_cls, "finalizer"):
+                    self.proc_cls.finalizer()
 
             # turn off capturing warnings
             logging.captureWarnings(False)
@@ -1045,6 +1088,7 @@ class RTprocess(object):
         self,
         ncpu=1,
         use_N_files=None,
+        use_config=None,
         finalout_name=None,
         finaloutput=None,
         postprocess=None,
@@ -1060,6 +1104,10 @@ class RTprocess(object):
             The number of cpu's to use. The default is 1.
         use_N_files : int, optional
             The number of files to process (e.g. a subset of all files)
+        use_config : str or list, optional
+            Only relevant if a multi-config .ini file has been used.
+            The names of the configs to use.
+            The default is None, in which case all configs are used!
         finalout_name : str, optional
             override the finalout_name provided in the ".ini" file
         finaloutput : callable, optional
@@ -1129,35 +1177,17 @@ class RTprocess(object):
                 # file to which the process is writing can not be generated!
                 listener.start()
 
-            if len(self.cfg.config_names) > 0:
-                for config_name in self.cfg.config_names:
-                    self.proc_cls.rt1_procsesing_respath = (
-                        self.dumppath / "results" / config_name
-                    )
+            fitlist = self._get_files(use_N_files=use_N_files)
 
-                    fitlist = self._get_files(
-                        use_N_files=use_N_files, use_config=config_name
-                    )
-
-                    self._run_finalout(
-                        ncpu,
-                        fitlist=fitlist,
-                        finaloutput=finaloutput,
-                        postprocess=postprocess,
-                        queue=queue,
-                        print_progress=print_progress,
-                    )
-            else:
-                fitlist = self._get_files(use_N_files=use_N_files)
-
-                return self._run_finalout(
-                    ncpu,
-                    fitlist=fitlist,
-                    finaloutput=finaloutput,
-                    postprocess=postprocess,
-                    queue=queue,
-                    print_progress=print_progress,
-                )
+            return self._run_finalout(
+                ncpu,
+                fitlist=fitlist,
+                use_config=use_config,
+                finaloutput=finaloutput,
+                postprocess=postprocess,
+                queue=queue,
+                print_progress=print_progress,
+            )
 
         except Exception as err:
             log.exception("there was an error during finalout generation!")
@@ -1185,7 +1215,9 @@ class RTprocess(object):
                     # remove the file-handler from the log
                     log.handlers.remove(h)
 
-    def _run_postprocess(self, fitpath, process_cnt=None, postprocess=None):
+    def _run_postprocess(
+        self, fitpath, use_config=None, process_cnt=None, postprocess=None
+    ):
         if process_cnt is not None:
             start = _start_cnt()
 
@@ -1195,13 +1227,31 @@ class RTprocess(object):
         except Exception:
             log.error(f"there was something wrong with {fitpath.name}")
             _increase_cnt(process_cnt, start, err=True)
-
+        # TODO fix reader_arg argument of postprocess
         try:
-            # run postprocessing
-            if postprocess is None:
-                ret = self.proc_cls.postprocess(fit, fit.reader_arg)
+            if isinstance(fit, MultiFits):
+                if postprocess is None:
+                    ret = dict(
+                        fit.apply(
+                            self.proc_cls.postprocess,
+                            use_config=use_config,
+                            reader_arg=fit.reader_arg,
+                        )
+                    )
+                else:
+                    ret = dict(
+                        fit.apply(
+                            postprocess,
+                            use_config=use_config,
+                            reader_arg=fit.reader_arg,
+                        )
+                    )
             else:
-                ret = postprocess(fit, fit.reader_arg)
+                # run postprocessing
+                if postprocess is None:
+                    ret = self.proc_cls.postprocess(fit, reader_arg=fit.reader_arg)
+                else:
+                    ret = postprocess(fit, reader_arg=fit.reader_arg)
 
             if process_cnt is not None:
                 _increase_cnt(process_cnt, start, err=False)
@@ -1219,17 +1269,10 @@ class RTprocess(object):
             else:
                 raise ex
 
-    def _get_files(self, use_N_files=None, use_config=None):
+    def _get_files(self, use_N_files=None):
         # get the relevant files that have to be processed for `run_finaloutput`
 
-        # initialize RTresults class
-        if use_config is None:
-            useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
-        else:
-            useres = getattr(
-                RTresults(self.dumppath),
-                f"{self.proc_cls.dumpfolder}__{use_config}",
-            )
+        useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
         # get dump-files
         dumpiter = useres.dump_files
 
@@ -1243,6 +1286,7 @@ class RTprocess(object):
         self,
         ncpu,
         fitlist=None,
+        use_config=None,
         finaloutput=None,
         postprocess=None,
         queue=None,
@@ -1273,6 +1317,7 @@ class RTprocess(object):
                     self._run_postprocess,
                     zip(
                         fitlist,
+                        repeat(use_config),
                         repeat(process_cnt),
                         repeat(postprocess),
                     ),
@@ -1301,18 +1346,40 @@ class RTprocess(object):
                 res.append(
                     self._run_postprocess(
                         fitpath=fitpath,
+                        use_config=use_config,
                         process_cnt=process_cnt,
                         postprocess=postprocess,
                     )
                 )
 
-        if callable(finaloutput):
-            return finaloutput(res)
-            log.info("finished generation of finaloutput!")
-        elif hasattr(self.proc_cls, "finaloutput"):
-            return self.proc_cls.finaloutput(res)
+        # in case of a multi-config, results will be dicts!
+        if isinstance(self.parent_fit, MultiFits):
+            # store original finalout_name
+            finalout_name, ending = self.proc_cls.finalout_name.split(".")
+
+            if use_config is None:
+                use_config = self.parent_fit.config_names
+
+            for name in use_config:
+                self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
+                self.proc_cls.config_name = name
+                if callable(finaloutput):
+                    finaloutput((i.get(name) for i in res if i is not None))
+                elif hasattr(self.proc_cls, "finaloutput"):
+                    self.proc_cls.finaloutput(
+                        (i.get(name) for i in res if i is not None)
+                    )
+
+            # reset initial finalout_name
+            self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
         else:
-            return res
+            if callable(finaloutput):
+                return finaloutput(res)
+                log.info("finished generation of finaloutput!")
+            elif hasattr(self.proc_cls, "finaloutput"):
+                return self.proc_cls.finaloutput(res)
+            else:
+                return res
 
 
 class RTresults(object):
@@ -1401,47 +1468,22 @@ class RTresults(object):
         )
 
     def _addresult(self, path):
-        # use os.scandir since it is a lot faster than any other method right now
         if self._check_folderstructure(path):
-            # check the first 1000 files for subdirectories
-            # avoid checking more for performance reasons
-            subresults = [
-                Path(i.path)
-                for i in islice(os.scandir(path / "dumps"), 100)
-                if i.is_dir()
-            ]
-
-            if len(subresults) > 0:
-                for subres in subresults:
-                    self._paths[path.stem + f"__{subres.stem}"] = path
-                    log.info(f"... adding conifg-result {path.stem}__{subres.stem}")
-                    setattr(
-                        self,
-                        path.stem + f"__{subres.stem}",
-                        self._RT1_fitresult(path.stem, path, subres.stem),
-                    )
-
-            else:
-                self._paths[path.stem] = path
-                log.info(f"... adding result {path.stem}")
-                setattr(
-                    self,
-                    path.stem,
-                    self._RT1_fitresult(path.stem, path),
-                )
+            self._paths[path.stem] = path
+            log.info(f"... adding result {path.stem}")
+            setattr(
+                self,
+                path.stem,
+                self._RT1_fitresult(path.stem, path),
+            )
 
     class _RT1_fitresult(object):
-        def __init__(self, name, path, use_config=None):
+        def __init__(self, name, path):
             self.name = name
             self.path = Path(path)
-            if use_config is None:
-                self._result_path = self.path / "results"
-                self._dump_path = self.path / "dumps"
-                self._cfg_path = self.path / "cfg"
-            else:
-                self._result_path = self.path / "results" / use_config
-                self._dump_path = self.path / "dumps" / use_config
-                self._cfg_path = self.path / "cfg"
+            self._result_path = self.path / "results"
+            self._dump_path = self.path / "dumps"
+            self._cfg_path = self.path / "cfg"
 
             self._nc_paths = self._get_results(".nc")
 
