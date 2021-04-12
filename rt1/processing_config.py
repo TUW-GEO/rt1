@@ -373,7 +373,7 @@ class rt1_processing_config(object):
 
         return data, aux_data
 
-    def postprocess(self, fit, reader_arg):
+    def postprocess(self, fit, reader_arg=None):
         """
         A function that is called AFTER processing of each site:
 
@@ -392,7 +392,7 @@ class rt1_processing_config(object):
         Parameters
         ----------
         fit: rt1.rtfits.Fits object
-            The fits objec.
+            The fits object.
         reader_arg: dict
             the arguments passed to the reader function.
 
@@ -402,6 +402,8 @@ class rt1_processing_config(object):
             a pandas dataframe containing the fitted parameterss.
 
         """
+        if reader_arg is None:
+            reader_arg = fit.reader_arg
 
         # get filenames
         names_ids = self.get_names_ids(reader_arg)
