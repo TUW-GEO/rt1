@@ -1,8 +1,7 @@
 import multiprocessing as mp
 from timeit import default_timer
 from datetime import datetime, timedelta
-from itertools import repeat, islice, zip_longest
-from functools import partial
+from itertools import repeat, islice
 import ctypes
 import sys
 import os
@@ -322,9 +321,10 @@ class RTprocess(object):
 
         init_kwargs = dict()
         for section, init_defs in kwargs.items():
-            assert (
-                section in cfg.config
-            ), "the section you provided in init_kwargs is not present in the .ini file!"
+            assert section in cfg.config, (
+                f"the section '{section}' you provided in init_kwargs "
+                + " is not present in the .ini file!"
+            )
 
             init_kwargs[section] = {
                 str(key): str(val) for key, val in init_defs.items()
@@ -417,7 +417,6 @@ class RTprocess(object):
                 specs["save_path"] / specs["dumpfolder"],
                 ["results", "cfg", "dumps"],
             )
-
 
         # copy modules and config-files and ensure that they are loaded from the
         # right direction (NO files will be overwritten!!)
@@ -1059,7 +1058,7 @@ class RTprocess(object):
             raise err
 
         finally:
-            if hasattr(self, 'proc_cls'):
+            if hasattr(self, "proc_cls"):
                 if hasattr(self.proc_cls, "finalizer"):
                     self.proc_cls.finalizer()
 
