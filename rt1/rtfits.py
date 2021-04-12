@@ -31,8 +31,8 @@ from .rtmetrics import _metric_keys
 
 import copy
 from itertools import repeat, count, chain, groupby
-from functools import lru_cache, partial, wraps
-from operator import itemgetter, add
+from functools import lru_cache, partial, wraps, update_wrapper
+from operator import itemgetter, add, methodcaller
 from datetime import datetime
 
 try:
@@ -805,7 +805,7 @@ class Fits(Scatter):
         values of each row to fit in length.
         """
 
-        return self.__get_data(prop="inc")
+        return self._get_data(prop="inc")
 
     @property
     @lru_cache()
@@ -815,7 +815,7 @@ class Fits(Scatter):
         (see 'inc', and 'data' properties for details)
         """
 
-        return self.__get_data(prop="mask")
+        return self._get_data(prop="mask")
 
     @property
     @lru_cache()
@@ -826,7 +826,7 @@ class Fits(Scatter):
         of each row to fit in length
         """
 
-        return self.__get_data(prop="sig")
+        return self._get_data(prop="sig")
 
     @property
     @lru_cache()
@@ -838,7 +838,7 @@ class Fits(Scatter):
         """
 
         if "data_weights" in self.dataset:
-            return self.__get_data(prop="data_weights")
+            return self._get_data(prop="data_weights")
         else:
             return 1.0
 
@@ -1234,7 +1234,7 @@ class Fits(Scatter):
 
         return R
 
-    def __get_V_SRF_symbs(self, V_SRF, prop):
+    def _get_V_SRF_symbs(self, V_SRF, prop):
         """the symbols used to define tau, omega and NormBRDF of V and SRF"""
         try:
             symbs = list(map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
@@ -1242,7 +1242,7 @@ class Fits(Scatter):
             symbs = list()
         return symbs
 
-    def __get_V_SRF_funcs(self, V_SRF, prop):
+    def _get_V_SRF_funcs(self, V_SRF, prop):
         """
         the lambdified functions used to define tau, omega and NormBRDF
         of V and SRF
@@ -1257,16 +1257,16 @@ class Fits(Scatter):
             func = None
         return func
 
-    def __get_V_SRF_diff_funcs(self, V_SRF, prop):
+    def _get_V_SRF_diff_funcs(self, V_SRF, prop):
         """
         a dict containing the lambdified partial derivatives of the functions
         used to define tau, omega and NormBRDF of V and SRF
         """
 
         d_inner = dict()
-        for param in self.__get_V_SRF_symbs(V_SRF, prop) & self.param_dyn_dict.keys():
+        for param in self._get_V_SRF_symbs(V_SRF, prop) & self.param_dyn_dict.keys():
             d_inner[param] = sp.lambdify(
-                self.__get_V_SRF_symbs(V_SRF, prop),
+                self._get_V_SRF_symbs(V_SRF, prop),
                 sp.diff(getattr(getattr(self, V_SRF), prop), sp.Symbol(param)),
                 modules=["numpy"],
             )
@@ -1275,47 +1275,47 @@ class Fits(Scatter):
     @property
     @lru_cache()
     def _tau_symb(self):
-        return self.__get_V_SRF_symbs("V", "tau")
+        return self._get_V_SRF_symbs("V", "tau")
 
     @property
     @lru_cache()
     def _tau_func(self):
-        return self.__get_V_SRF_funcs("V", "tau")
+        return self._get_V_SRF_funcs("V", "tau")
 
     @property
     @lru_cache()
     def _tau_diff_func(self):
-        return self.__get_V_SRF_diff_funcs("V", "tau")
+        return self._get_V_SRF_diff_funcs("V", "tau")
 
     @property
     @lru_cache()
     def _omega_symb(self):
-        return self.__get_V_SRF_symbs("V", "omega")
+        return self._get_V_SRF_symbs("V", "omega")
 
     @property
     @lru_cache()
     def _omega_func(self):
-        return self.__get_V_SRF_funcs("V", "omega")
+        return self._get_V_SRF_funcs("V", "omega")
 
     @property
     @lru_cache()
     def _omega_diff_func(self):
-        return self.__get_V_SRF_diff_funcs("V", "omega")
+        return self._get_V_SRF_diff_funcs("V", "omega")
 
     @property
     @lru_cache()
     def _N_symb(self):
-        return self.__get_V_SRF_symbs("SRF", "NormBRDF")
+        return self._get_V_SRF_symbs("SRF", "NormBRDF")
 
     @property
     @lru_cache()
     def _N_func(self):
-        return self.__get_V_SRF_funcs("SRF", "NormBRDF")
+        return self._get_V_SRF_funcs("SRF", "NormBRDF")
 
     @property
     @lru_cache()
     def _N_diff_func(self):
-        return self.__get_V_SRF_diff_funcs("SRF", "NormBRDF")
+        return self._get_V_SRF_diff_funcs("SRF", "NormBRDF")
 
     @property
     def res_df(self):
@@ -1813,7 +1813,7 @@ class Fits(Scatter):
 
         return jac_lsq
 
-    def __get_data(self, prop):
+    def _get_data(self, prop):
         """
         a function to retrieve properties from the provided dataset
 
@@ -2525,7 +2525,31 @@ class Fits(Scatter):
         log.info(self._model_definition)
 
     @classmethod
-    def _reinit_object(cls, self, **kwargs):
+    def _reinit_object(cls, self, share_fnevals=False, share_auxdata=True, **kwargs):
+        """
+
+        Parameters
+        ----------
+        share_fnevals : bool, optional
+            Indicator if `_fnevals_input` should be shared or not.
+            NOTICE: sharing `_fnevals_input` means that the interaction-term is
+            not updated if parameters of V and SRF change! Use with care!
+            The default is False.
+        share_auxdata : bool, optional
+            Indicator if the property `aux_data` should be shared or not.
+            (it is initialized by rt1.RTprocess in case auxiliary data is read)
+            The default is True.
+
+        Returns
+        -------
+        rtfits.Fits
+            a Fits object
+        """
+
+        if share_fnevals is True:
+            use_fnevals = self._fnevals_input
+        else:
+            use_fnevals = None
 
         args = {
             "sig0": self.sig0,
@@ -2536,23 +2560,43 @@ class Fits(Scatter):
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,
             "lambda_backend": self.lambda_backend,
-            "_fnevals_input": self._fnevals_input,
-            "interp_vals": self.interp_vals,
+            "_fnevals_input": use_fnevals,
         }
 
         args.update(**kwargs)
 
         fit = cls(**args)
 
+        if share_auxdata is True:
+            if hasattr(self, "aux_data"):
+                fit.aux_data = self.aux_data
+
         return fit
 
-    def reinit_object(self, **kwargs):
+    def reinit_object(self, share_fnevals=False, share_auxdata=True, **kwargs):
         """
         initialize a new fits-object that share all attributes except
         for the ones passed as kwargs.
 
+        NOTICE:
+        the dictionaries `defdict`, `set_V_SRF` and `lsq_kwargs` are deep-copied on
+        initialization of the Fits object, so changes will NOT propagate to the parent
+        fit object.
+        However, if not provided explicitly, the dataset is in fact shared
+        between the Fits instances!
+
         Parameters
         ----------
+        share_fnevals : bool, optional
+            Indicator if `_fnevals_input` should be shared or not.
+            NOTICE: sharing `_fnevals_input` means that the interaction-term is
+            not updated if parameters of V and SRF change! Use with care!
+            The default is False.
+        share_auxdata : bool, optional
+            Indicator if the property `aux_data` should be shared or not.
+            (it is initialized by rt1.RTprocess in case auxiliary data is read)
+            The default is True.
+
         **kwargs :
             Keyword arguments that will be used to initialize a new Fits-object
             (all other arguments will be taken from the parent object!)
@@ -2587,3 +2631,299 @@ class Fits(Scatter):
         """
 
         return _metric_keys(self)
+
+
+def get_fitobject(self):
+    configs = self.config_names
+    if len(configs) > 0:
+        rt1_fits = []
+        for config in configs:
+            cfg = self.get_config(config)
+
+            rt1_fits.append(
+                [
+                    config,
+                    Fits(
+                        dataset=None,
+                        defdict=cfg["defdict"],
+                        set_V_SRF=cfg["set_V_SRF"],
+                        lsq_kwargs=cfg["lsq_kwargs"],
+                        **cfg["fits_kwargs"],
+                    ),
+                ]
+            )
+    else:
+        cfg = self.get_config()
+        rt1_fits = Fits(
+            dataset=None,
+            defdict=cfg["defdict"],
+            set_V_SRF=cfg["set_V_SRF"],
+            lsq_kwargs=cfg["lsq_kwargs"],
+            **cfg["fits_kwargs"],
+        )
+
+    return rt1_fits
+
+
+# %%
+
+
+class _MultiAccessors:
+    """
+    a class to run functions and access properties on all `Fits` objects
+    attached to the `MultiFit` container.
+    """
+
+    def __init__(self, FitContainer):
+
+        self._FitContainer = FitContainer
+
+        # add all functions and attributes
+        allattrs = list(i for i in dir(Fits()) if not i.startswith("__"))
+        classattrs = list(i for i in dir(Fits) if not i.startswith("__"))
+        for prop in classattrs:
+            if callable(getattr(Fits, prop)):
+                setattr(
+                    self,
+                    prop,
+                    update_wrapper(
+                        partial(self._applyit, prop=prop), getattr(Fits(), prop)
+                    ),
+                )
+            elif isinstance(getattr(Fits, prop), property):
+                setattr(
+                    _MultiAccessors,
+                    prop,
+                    property(self._getit(prop)),
+                )
+
+        for prop in (set(allattrs) ^ set(classattrs)) - set(["dataset", "aux_data"]):
+            setattr(
+                _MultiAccessors,
+                prop,
+                property(self._getit(prop)),
+            )
+
+    @property
+    def config_fits(self):
+        return self._FitContainer.__dict__
+
+    def _getit(self, prop):
+        def _get_all(self):
+            print(prop)
+            return {name: getattr(fit, prop) for name, fit in self.config_fits.items()}
+
+        return _get_all
+
+    def lazy(self, val, prop, *args, **kwargs):
+        start_args = args
+        start_kwargs = kwargs
+
+        @wraps(getattr(Fits, prop))
+        def cb(*args, **kwargs):
+            for i, arg in enumerate(args):
+                # update args and kwargs with new provided ones in case the function is
+                # called explicitly
+                if i < len(start_args):
+                    start_args[i] = arg
+                else:
+                    start_args.append(arg)
+            start_kwargs.update(kwargs)
+
+            return methodcaller(prop, *start_args, **start_kwargs)(val)
+
+        return cb
+
+    def _applyit(self, prop, *args, **kwargs):
+        return {
+            key: self.lazy(val, prop, *args, **kwargs)
+            for key, val in self.config_fits.items()
+        }
+
+
+class _FitContainer:
+    pass
+
+
+class MultiFits:
+    """
+    a container for multiple-configuration fits
+
+    The sub-class `MultiFit.accessor` can be used to call functions or get properties
+    for ALL attached configurations.
+    The accessor will always return a dict.
+
+    - if you access a property, the values will be returned
+    - if you call a function, the dict will contain (lazy) callback-functions that
+      can be executed to invoke the function-call on the specific configurations.
+
+    Examples
+    --------
+
+    >>> mf = MultiFit()
+    >>> mf.add_config('cfg_0', fit0)
+    >>> mf.add_config('cfg_1', fit1)
+    >>>
+    >>> # get callbacks to run performfit on all configs
+    >>> do_performfit = mf.accessor.performfit(print_progress=True)
+    >>> # (arguments will be passed to the calls, but can be overwritten manually)
+    >>> for config_name, callback in do_performfit.items():
+    >>>     callback()
+    >>>     # execute "performfit" on the individual configs
+    >>>     #  (you can pass kwargs that will overwrite defaults)
+
+    """
+
+    def __init__(self, dataset=None, aux_data=None, reader_arg=None):
+
+        self.config_names = []
+
+        self.configs = _FitContainer()
+        self._accessor = _MultiAccessors(self.configs)
+
+        self.set_dataset(dataset)
+        self.set_aux_data(aux_data)
+        if reader_arg is None:
+            self.set_reader_arg({})
+        else:
+            self.set_reader_arg(reader_arg)
+
+    @property
+    def dataset(self):
+        return self._dataset
+
+    @dataset.setter
+    def dataset(self, value):
+        raise AttributeError(
+            "use `set_dataset` to set 'dataset' on ALL configs of the MultiFits object!"
+        )
+
+    @property
+    def aux_data(self):
+        return self._aux_data
+
+    @aux_data.setter
+    def aux_data(self, value):
+        raise AttributeError(
+            "use `set_aux_data` to set 'aux_data' on ALL configs of the MultiFits object!"
+        )
+
+    @property
+    def reader_arg(self):
+        return self._reader_arg
+
+    @reader_arg.setter
+    def reader_arg(self, value):
+        raise AttributeError(
+            "use `set_reader_arg` to set 'reader_arg' on ALL configs of the MultiFits object!"
+        )
+
+    def set_dataset(self, dataset):
+        self._dataset = dataset
+        for name in self.config_names:
+            getattr(self.configs, name).dataset = self._dataset
+
+    def set_aux_data(self, aux_data):
+        self._aux_data = aux_data
+        for name in self.config_names:
+            getattr(self.configs, name).aux_data = self._aux_data
+
+    def set_reader_arg(self, reader_arg):
+        self._reader_arg = reader_arg
+        for name in self.config_names:
+            getattr(self.configs, name).reader_arg = self._reader_arg
+
+    @property
+    def accessor(self):
+        return self._accessor
+
+    def apply(self, f, use_config=None, **kwargs):
+        """
+        apply a function f(fit, *args, **kwargs) to all attached configs.
+
+        Parameters
+        ----------
+        f : callable
+            the function that should be called with each fit-object
+        use_config : str or list
+            The names of the configs to use.
+            The default is None in which case all configs will be used.
+
+        Returns
+        -------
+        iter :
+            an iterator that yields tuples of the following shape:
+            (config-name, return-value)
+
+        """
+
+        if use_config is None:
+            return (
+                (name, f(fit=fit, **kwargs))
+                for name, fit in self.accessor.config_fits.items()
+            )
+        elif isinstance(use_config, str):
+            return [
+                (use_config, f(fit=self.accessor.config_fits[use_config], **kwargs))
+            ]
+        elif isinstance(use_config, list):
+            return (
+                (name, f(fit=self.accessor.config_fits[name], **kwargs))
+                for name in use_config
+            )
+        else:
+            assert (
+                False
+            ), "you must provide either a list or a string or None as use_config!"
+
+    def add_config(self, name, fit_object):
+        """
+        add a new configuration to the container
+
+        Parameters
+        ----------
+        name : str
+            the name of the configuration
+            (MUST be a valid name for a python object!)
+        fit_object : rt1.rtfits.Fits
+            the fit-object
+        """
+        if name in self.config_names:
+            log.warning(f"the config {name} will be overwritten by the new definition!")
+
+        assert str.isidentifier(
+            name
+        ), f"the name {name} is not a valid python identifier!"
+
+        # make sure that the config-name do not overwrite any definitions
+        assert name not in set(self.__dict__) ^ set(
+            self.config_names
+        ), f"you can not use {name} as the name for a configuration!"
+        self.config_names.append(name)
+
+        fit_object.dataset = self.dataset
+        fit_object.aux_data = self.aux_data
+        setattr(self.configs, name, fit_object)
+
+    def dump(self, path, mini=True):
+        """
+        dump the Multifit-object
+        (see `Fits.dump` for details)
+        """
+        # add version number to dump
+        self._RT1_version = _RT1_version
+
+        for name, fit in self.accessor.config_fits.items():
+            if mini is True:
+                fit._rt1_dump_mini = True
+            else:
+                try:
+                    delattr(fit, "_rt1_dump_mini")
+                except AttributeError:
+                    pass
+
+        with open(path, "wb") as file:
+            cloudpickle.dump(self, file)
+
+
+# %%

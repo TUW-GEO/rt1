@@ -3,14 +3,11 @@ Class for quick visualization of results and used phasefunctions
 """
 
 from functools import partial
-import copy
 import datetime
 
 import numpy as np
 import sympy as sp
 import pandas as pd
-
-pd.plotting.register_matplotlib_converters()
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -23,16 +20,16 @@ import matplotlib.ticker as ticker
 
 try:
     from mpl_toolkits.mplot3d import Axes3D
-except:
+except ImportError:
     pass
 
 from .general_functions import (
     rectangularize,
     dBsig0convert,
-    meandatetime,
     pairwise,
-    split_into,
 )
+
+pd.plotting.register_matplotlib_converters()
 
 
 def polarplot(
@@ -695,7 +692,7 @@ class plot:
                 alpha=0.5,
             )
         # overprint parameters
-        if params != None:
+        if params is not None:
             paramdf = fit.res_df
 
             if years is not None:
@@ -980,7 +977,7 @@ class plot:
             labels = pd.to_datetime(fit.fit_index).strftime(legend_fmt)[
                 result_selection
             ]
-        except:
+        except Exception:
             labels = result_selection
 
         for i in result_selection:
@@ -1763,7 +1760,7 @@ class plot:
                 axparamplot.tick_params(axis="y", colors=l.get_color())
                 # shift twin-axes if necessary
                 i += 1
-            except:
+            except Exception:
                 pass
         axparamplot.legend(
             handles=handles,
@@ -2514,7 +2511,7 @@ class plot:
                 markeredgecolor="k",
             )
 
-        except:
+        except Exception:
             pass
 
         # plot initial curves
@@ -2586,6 +2583,7 @@ class plot:
         buttons = CheckButtons(buttonax, buttonlabels, [False for i in buttonlabels])
 
         params = startparams.copy()
+
         # define function to update lines based on slider-input
         def animate(value, key):
             # params = copy.deepcopy(startparams)

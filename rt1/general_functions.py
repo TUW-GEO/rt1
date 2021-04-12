@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """helper functions that are used both in rtfits and rtplots"""
-import sys
 from itertools import tee, islice
 from collections import OrderedDict
 
@@ -208,7 +207,7 @@ def scale(x, out_range=(0, 1), domainfuncs=None):
     a min-function of np.percentile(q=5) might result in negative values!)
     """
     if domainfuncs is None:
-        domain = np.nanmin[0](x), np.nanmax[1](x)
+        domain = np.nanmin(x), np.nanmax(x)
     else:
         domain = domainfuncs[0](x), domainfuncs[1](x)
 
