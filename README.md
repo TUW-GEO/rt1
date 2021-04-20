@@ -14,14 +14,14 @@ for random volume over ground as documented in *Quast & Wagner (2016)* and
 The documentation of the package is found [here](http://rt1.readthedocs.io/).
 (Note that the documentation is still under construction.)
 
-- **rt1.rt1**
+- 🔨 **rt1.rt1**
 
   - generic implementation of radiative transfer calculations for a random
     volume over ground
 
   - symbolic evaluation of first-order interaction contribution estimates
 
-- **rt1.rtfits**
+- ⚙️ **rt1.rtfits**
 
   - a flexible interface to perform parameter estimation for incidence-angle
     dependent data-timeseries via non-linear least-squares fitting routines.
@@ -29,15 +29,15 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
   - integrates with a set of pre-defined plot-functions and interactive
     widgets that can be used to quickly analyze the obtained results
 
-- **rt1.rtprocess**
+- :rocket: **rt1.rtprocess**
 
   - a versatile interface to setup and run parallelized processing
 
-- **rt1.rtparse**
+- 📑 **rt1.rtparse**
 
   - a configparser to set up processing-routines via .ini files
 
-- **rt1.volume** and **rt1.surface**
+- 🏞️ **rt1.volume** and **rt1.surface**
 
   - a collection of useful surface- and volume scattering functions
 
