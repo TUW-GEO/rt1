@@ -1224,8 +1224,9 @@ class RTprocess(object):
         try:
             fit = load(fitpath)
         except Exception:
-            log.error(f"there was something wrong with {fitpath.name}")
+            log.error(f"there was an error while loading {fitpath}")
             _increase_cnt(process_cnt, start, err=True)
+            return
         # TODO fix reader_arg argument of postprocess
         try:
             if isinstance(fit, MultiFits):
