@@ -46,13 +46,12 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 ## Usage
 Any usage of this code is subject to the following conditions:
 
-- Full compliance with the license (see LICENSE file) is given
-- In publications or public presentations, credit should be given to the
+❗ Full compliance with the license (see LICENSE file) is given  
+❗ In publications or public presentations, credit should be given to the
   authors by:
 
-  - citing the references below
-
-  - pointing to this github repository
+  - citing the references below ✔️
+  - pointing to this github repository ✔️
 
 ## Installation
 For a basic install, the following line should be fine:
