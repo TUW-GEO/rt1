@@ -420,6 +420,7 @@ class RTprocess(object):
 
         # copy modules and config-files and ensure that they are loaded from the
         # right direction (NO files will be overwritten!!)
+        # copying is only performed in the main-process!
         if self.copy is True:
             self._copy_cfg_and_modules()
 
@@ -469,56 +470,59 @@ class RTprocess(object):
         # if copy is True, copy the config-file and re-import the cfg
         # from the copied file
         copypath = self.dumppath / "cfg" / self.cfg.configpath.name
-        if (copypath).exists() and len(self.init_kwargs) == 0:
-            log.warning(
-                f'the file \n"{copypath}"\n'
-                + "already exists... NO copying is performed and the "
-                + "existing one is used!\n"
-            )
-        else:
-            if len(self.init_kwargs) == 0:
-                # if no init_kwargs have been provided, copy the
-                # original file
-                shutil.copy(self.cfg.configpath, copypath.parent)
-                log.info(
-                    f'"{self.cfg.configpath.name}" copied to\n' + f'"{copypath.parent}"'
+        if mp.current_process().name == "MainProcess":
+            if (copypath).exists() and len(self.init_kwargs) == 0:
+                log.warning(
+                    f'the file \n"{copypath}"\n'
+                    + "already exists... NO copying is performed and the "
+                    + "existing one is used!\n"
                 )
             else:
-                # if init_kwargs have been provided, write the updated
-                # config to the folder
-                with open(copypath, "w") as file:
-                    self.cfg.config.write(file)
+                if len(self.init_kwargs) == 0:
+                    # if no init_kwargs have been provided, copy the
+                    # original file
+                    shutil.copy(self.cfg.configpath, copypath.parent)
+                    log.info(
+                        f'"{self.cfg.configpath.name}" copied to\n'
+                        + f'"{copypath.parent}"'
+                    )
+                else:
+                    # if init_kwargs have been provided, write the updated
+                    # config to the folder
+                    with open(copypath, "w") as file:
+                        self.cfg.config.write(file)
 
-                log.warning(
-                    f'the config-file "{self.cfg.configpath}" has been'
-                    + " updated with the init_kwargs and saved to"
-                    + f'"{copypath}"'
-                )
+                    log.warning(
+                        f'the config-file "{self.cfg.configpath}" has been'
+                        + " updated with the init_kwargs and saved to"
+                        + f'"{copypath}"'
+                    )
 
+            # copy modules
+            for key, val in self.cfg.config["CONFIGFILES"].items():
+                if key.startswith("module__"):
+                    modulename = key[8:]
+
+                    module_path = self.cfg.config["CONFIGFILES"][
+                        f"module__{modulename}"
+                    ]
+
+                    location = Path(module_path.strip())
+
+                    module_copypath = self.dumppath / "cfg" / location.name
+
+                    if module_copypath.exists():
+                        log.warning(
+                            f'the file \n"{module_copypath}" \nalready '
+                            + "exists ... NO copying is performed "
+                            + "and the existing one is used!\n"
+                        )
+                    else:
+                        shutil.copy(location, module_copypath)
+                        log.info(f'"{location.name}" copied to \n"{module_copypath}"')
         # remove the config and re-read the config from the copied path
         del self.cfg
         self.cfg = RT1_configparser(copypath)
-
-        # copy modules
-        for key, val in self.cfg.config["CONFIGFILES"].items():
-            if key.startswith("module__"):
-                modulename = key[8:]
-
-                module_path = self.cfg.config["CONFIGFILES"][f"module__{modulename}"]
-
-                location = Path(module_path.strip())
-
-                copypath = self.dumppath / "cfg" / location.name
-
-                if copypath.exists():
-                    log.warning(
-                        f'the file \n"{copypath}" \nalready '
-                        + "exists ... NO copying is performed "
-                        + "and the existing one is used!\n"
-                    )
-                else:
-                    shutil.copy(location, copypath)
-                    log.info(f'"{location.name}" copied to \n"{copypath}"')
 
     def _evalfunc(self, reader_arg=None, process_cnt=None):
         """
@@ -1297,9 +1301,8 @@ class RTprocess(object):
         if postprocess is not None:
             assert callable(postprocess), "postprocess must be callable!"
 
-        # add provided initializer and queue (used for subprocess-logging)
-        # to the initargs and use "self._initializer" as initializer-function
-        # Note: this is a pickleable way for decorating the initializer!
+        # don't call additional initializers, only use the default initializer
+        # (to enable subprocess-logging)
         pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
 
         if print_progress is True:
