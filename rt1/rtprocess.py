@@ -1502,7 +1502,8 @@ class RTresults(object):
                     res = Path(i)
                     results[res.stem] = res
 
-            log.info(f'there is no "{ending}" file in "{self._result_path}"')
+            if len(results) == 0:
+                log.info(f'there is no "{ending}" file in "{self._result_path}"')
 
             return results
 
