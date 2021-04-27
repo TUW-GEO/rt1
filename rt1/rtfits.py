@@ -327,10 +327,19 @@ class Fits(Scatter):
             delattr(self, "_rt1_dump_mini")
 
             # remove unnecessary data to save storage
-            removekeys = ["fit_output", "_fnevals_input"]
+            removekeys = ["_fnevals_input"]
             returndict = {key: val for key, val in self.__dict__.items()}
             for key in removekeys:
                 returndict[key] = None
+
+            # save only a minimal subset of the fit-output
+            if hasattr(self, "fit_output"):
+                fit_props = dict()
+                fit_props["fit_success"] = self.fit_output.success
+                fit_props["fit_status"] = self.fit_output.status
+                fit_props["fit_optimality"] = self.fit_output.optimality
+
+            returndict["fit_output"] = fit_props
 
             return returndict
         else:
