@@ -48,14 +48,14 @@ def defdict_parser(defdict):
                 parameter_specs["fitted_const"].append(key)
             else:
                 parameter_specs["fitted_dynamic"].append(key)
-                if val[1] == "manual":
+                if val[2] == "manual":
                     parameter_specs["fitted_dynamic_manual"].append(key)
-                elif val[1] == "index":
+                elif val[2] == "index":
                     parameter_specs["fitted_dynamic_index"].append(key)
-                elif isinstance(val[1], str):
-                    parameter_specs["fitted_dynamic_datetime"].append(key)
-                elif isinstance(val[1], int):
-                    parameter_specs["fitted_dynamic_integer"].append(key)
+                elif isinstance(val[2], str):
+                    parameter_specs["fitted_dynamic_datetime"].append((key, val[2]))
+                elif isinstance(val[2], int):
+                    parameter_specs["fitted_dynamic_integer"].append((key, val[2]))
         else:
             if val[1] == "auxiliary":
                 parameter_specs["auxiliary"].append(key)
