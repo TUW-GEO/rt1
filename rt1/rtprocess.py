@@ -364,7 +364,6 @@ class RTprocess(object):
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
         """
-
         self.cfg = RT1_configparser(self.config_path)
 
         # update specs with init_kwargs
@@ -682,13 +681,14 @@ class RTprocess(object):
         (>> returns from provided initializer are returned)
         """
 
+        if queue is not None:
+            self._worker_configurer(queue)
+
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
             # all required modules from the desired locations
+            log.warning("setting up RTprocess-worker")
             self.setup()
-
-        if queue is not None:
-            self._worker_configurer(queue)
 
         if initializer is not None:
             res = initializer(*args)
