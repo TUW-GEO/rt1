@@ -2,7 +2,7 @@
 
 import numpy as np
 import sympy as sp
-from functools import partial, update_wrapper
+from functools import partial, update_wrapper, lru_cache
 from .scatter import Scatter
 from .rtplots import polarplot
 
@@ -23,6 +23,25 @@ class Volume(Scatter):
         # add a quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
+
+    @lru_cache()
+    def _lambda_func(self, *args):
+        # define sympy objects
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
+
+        # replace arguments and evaluate expression
+        # sp.lambdify is used to allow array-inputs
+        # for python > 3.5 unpacking could be used, i.e.:
+        # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
+        #                     *param_dict.keys()),
+        #                    self._func, modules=["numpy", "sympy"])
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(args)
+        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
+        return pfunc
+
 
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -49,10 +68,10 @@ class Volume(Scatter):
             Numerical value of the volume-scattering phase-function
         """
         # define sympy objects
-        theta_0 = sp.Symbol("theta_0")
-        theta_ex = sp.Symbol("theta_ex")
-        phi_0 = sp.Symbol("phi_0")
-        phi_ex = sp.Symbol("phi_ex")
+        #theta_0 = sp.Symbol("theta_0")
+        #theta_ex = sp.Symbol("theta_ex")
+        #phi_0 = sp.Symbol("phi_0")
+        #phi_ex = sp.Symbol("phi_ex")
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
@@ -60,9 +79,10 @@ class Volume(Scatter):
         # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
         #                     *param_dict.keys()),
         #                    self._func, modules=["numpy", "sympy"])
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
-        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
-
+        #args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
+        #pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
+        pfunc = self._lambda_func(*param_dict.keys())
+        #pfunc = self._func_numeric
         # in case _func is a constant, lambdify will produce a function with
         # scalar output which is not suitable for further processing
         # (this happens e.g. for the Isotropic brdf).
