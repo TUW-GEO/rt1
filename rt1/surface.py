@@ -466,7 +466,7 @@ class LinCombSRF(Surface):
                 super(BRDFfunction, self).__init__(**kwargs)
 
                 self._func = 0.0
-                self._legcoefs = 0.0
+                self.legcoefs = 0.0
 
         # initialize a combined phase-function class element
         SRFcomb = BRDFfunction(NormBRDf=self.NormBRDF)
