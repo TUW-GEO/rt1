@@ -565,6 +565,14 @@ class Rayleigh(Volume):
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
 
+
+    @property
+    def ncoefs(self):
+        # make ncoefs a property since it is fixed and should not be changed
+        # only 3 coefficients are needed to correctly represent
+        # the Rayleigh scattering function
+        return 3
+
     @property
     @lru_cache()
     def _func(self):
@@ -585,7 +593,6 @@ class Rayleigh(Volume):
         """
         # only 3 coefficients are needed to correctly represent
         # the Rayleigh scattering function
-        self.ncoefs = 3
         n = sp.Symbol("n")
         return (
             (3.0 / (16.0 * sp.pi))

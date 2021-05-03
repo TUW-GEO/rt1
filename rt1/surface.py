@@ -540,9 +540,15 @@ class Isotropic(Surface):
         super(Isotropic, self).__init__(**kwargs)
 
     @property
+    def ncoefs(self):
+        # make ncoefs a property since it is fixed and should not be changed
+        # only 1 coefficient is needed to correctly represent
+        # the Isotropic scattering function
+        return 1
+
+    @property
     @lru_cache()
     def legcoefs(self):
-        self.ncoefs = 1
         n = sp.Symbol("n")
         return (1.0 / sp.pi) * sp.KroneckerDelta(0, n)
 
