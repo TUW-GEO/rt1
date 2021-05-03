@@ -138,7 +138,7 @@ def _increase_cnt(process_cnt, start, err=False):
                 ),
                 progress2=p_totcnt.value - p_meancnt.value,
             )
-            log.progress(msg.strip())
+
         else:
             # only increase the total counter
             p_totcnt.value += 1
@@ -162,7 +162,9 @@ def _increase_cnt(process_cnt, start, err=False):
                 ),
                 progress2=p_totcnt.value - p_meancnt.value,
             )
-            log.progress(msg.strip())
+
+            # log to file if an error occured during processing
+            log.debug(msg.strip())
 
         if lock is not None:
             # release the lock
@@ -697,7 +699,7 @@ class RTprocess(object):
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
             # all required modules from the desired locations
-            log.warning("setting up RTprocess-worker")
+            log.progress("setting up RTprocess-worker")
             self.setup()
 
         if initializer is not None:
