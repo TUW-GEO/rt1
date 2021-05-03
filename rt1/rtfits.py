@@ -383,6 +383,7 @@ class Fits(Scatter):
             "_param_dyn_monotonic",
             "_get_excludesymbs",
             "metric",
+            "V", "SRF", "set_model"
         ]
 
         for i in ["tau", "omega", "N"]:
@@ -437,6 +438,25 @@ class Fits(Scatter):
             except Exception:
                 pass
         return nums
+
+    @lru_cache()
+    def set_model(self):
+        # call this prior to performfit to ensure that cached properties
+        # are properly assigned before starting the fit
+        self.V
+        self.SRF
+
+        self._tau_symb
+        self._tau_func
+        self._tau_diff_func
+
+        self._omega_symb
+        self._omega_func
+        self._omega_diff_func
+
+        self._N_symb
+        self._N_func
+        self._N_diff_func
 
     @property
     @lru_cache()
@@ -1171,13 +1191,13 @@ class Fits(Scatter):
         # check of general input-requirements
         # check if all parameters have been provided
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         paramset = (
             set(map(str, self._startvaldict.keys()))
             ^ set(map(str, self.fixed_dict.keys()))
-        ) - {"tau", "omega", "NormBRDF"}
+        )
 
         assert paramset >= (vsymb | srfsymb), (
             "the parameters "
@@ -1185,6 +1205,7 @@ class Fits(Scatter):
             + " must be provided in param_dict"
         )
 
+        # TODO
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
         for i in set(toNlist - vsymb - srfsymb):
@@ -1194,6 +1215,7 @@ class Fits(Scatter):
         return param_R
 
     @property
+    @lru_cache()
     def V(self):
         """new initialization of the rt1.volume object used"""
 
@@ -1201,11 +1223,12 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(self.set_V_SRF["V_props"], setdict=self._setdict)
-
+            V = self._init_V_SRF(
+                self.set_V_SRF["V_props"], setdict=self._setdict)
         return V
 
     @property
+    @lru_cache()
     def SRF(self):
         """new initialization of the rt1.surface object used"""
 
@@ -1220,7 +1243,6 @@ class Fits(Scatter):
     @property
     def R(self):
         """new initialization of the rt1.RT1 object used"""
-
         R = RT1(
             1.0,
             self.inc,
@@ -1416,7 +1438,8 @@ class Fits(Scatter):
                     log.info(f"interpolation of non-monotonic {key} !")
                     # use assignments for unsorted param_dyns
                     useindex = self._meandt_interp_assigns(key)[0]
-                    usevals = np.array(val)[self._meandt_interp_assigns(key)[1]]
+                    usevals = np.array(
+                        val)[self._meandt_interp_assigns(key)[1]]
                 else:
                     useindex = self.meandatetimes[key]
                     usevals = val
@@ -1476,12 +1499,35 @@ class Fits(Scatter):
 
         return use_res_dict
 
+    @property
+    def _Vsymb(self):
+        # do this check to allow both functions and strings for set_V_SRF
+        # ... check _init_V_SRF() for more details
+        if hasattr(self.V, "free_symbols"):
+            symb = set(map(str, self.V.free_symbols))
+        else:
+            symb = set(map(str, self.V._func.free_symbols))
+
+        return symb
+
+    @property
+    def _SRFsymb(self):
+        # do this check to allow both functions and strings for set_V_SRF
+        # ... check _init_V_SRF() for more details
+        if hasattr(self.SRF, "free_symbols"):
+            symb = set(map(str, self.SRF.free_symbols))
+        else:
+            symb = set(map(str, self.SRF._func.free_symbols))
+
+        return symb
+
+    @property
     @lru_cache()
     def _get_excludesymbs(self):
         # symbols used to define the functions
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         # a list of all symbols used to define tau, omega and NormBRDF
         toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
@@ -1500,6 +1546,58 @@ class Fits(Scatter):
         )
 
         return excludekeys
+
+    def _set_calc_values(self, R=None, res_dict=None, fixed_dict=None, interp_vals=None,
+                         assign=True):
+
+        # ensure correct array-processing
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        if assign is True:
+            res_dict = self._assignvals(res_dict, interp_vals)
+        res_dict.update(fixed_dict)
+
+        # update the numeric representations of omega, tau and NormBRDF
+        # based on the values for the used symbols provided in res_dict
+        if self._omega_func is None:
+            if "omega" in res_dict:
+                R.V.omega = res_dict["omega"]
+        else:
+            R.V.omega = self._omega_func(
+                **{key: res_dict[key] for key in self._omega_symb}
+            )
+
+        if self._tau_func is None:
+            if "tau" in res_dict:
+                R.V.tau = res_dict["tau"]
+        else:
+            R.V.tau = self._tau_func(
+                **{key: res_dict[key] for key in self._tau_symb})
+
+        if self._N_func is None:
+            if "NormBRDF" in res_dict:
+                R.SRF.NormBRDF = res_dict["NormBRDF"]
+        else:
+            R.SRF.NormBRDF = self._N_func(
+                **{key: res_dict[key] for key in self._N_symb}
+            )
+
+        if "bsf" in res_dict:
+            R.bsf = res_dict["bsf"]
+
+        # remove all unwanted symbols that are NOT needed for evaluation
+        # of the fn-coefficients from res_dict to generate a dict that
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
+        # and the symbols used to define them must be removed)
+
+        strparam_fn = {
+            str(key): val for key, val in res_dict.items() if key not in self._get_excludesymbs
+        }
+
+        # set the param-dict to the newly generated dict
+        R.param_dict = strparam_fn
+
+        return R
 
     def _calc_model(
         self,
@@ -1543,6 +1641,7 @@ class Fits(Scatter):
                     in linear-units or dB corresponding to the specifications
                     defined in the rtfits-class.
         """
+        self.set_model()
 
         if R is None:
             R = self.R
@@ -1553,52 +1652,10 @@ class Fits(Scatter):
         if interp_vals is None:
             interp_vals = self.interp_vals
 
-        # ensure correct array-processing
-        # res_dict = {key:val[:,np.newaxis] for
-        #             key, val in self._assignvals(res_dict).items()}
-        if assign is True:
-            res_dict = self._assignvals(res_dict, interp_vals)
-        res_dict.update(fixed_dict)
-
-        # update the numeric representations of omega, tau and NormBRDF
-        # based on the values for the used symbols provided in res_dict
-        if self._omega_func is None:
-            if "omega" in res_dict:
-                R.V.omega = res_dict["omega"]
-        else:
-            R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
-            )
-
-        if self._tau_func is None:
-            if "tau" in res_dict:
-                R.V.tau = res_dict["tau"]
-        else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
-
-        if self._N_func is None:
-            if "NormBRDF" in res_dict:
-                R.SRF.NormBRDF = res_dict["NormBRDF"]
-        else:
-            R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
-            )
-
-        if "bsf" in res_dict:
-            R.bsf = res_dict["bsf"]
-
-        # remove all unwanted symbols that are NOT needed for evaluation
-        # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
-        # and the symbols used to define them must be removed)
-
-        excludekeys = self._get_excludesymbs()
-        strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in excludekeys
-        }
-
-        # set the param-dict to the newly generated dict
-        R.param_dict = strparam_fn
+        R = self._set_calc_values(R=R, res_dict=res_dict,
+                                  fixed_dict=fixed_dict,
+                                  interp_vals=interp_vals,
+                                  assign=assign)
 
         # calculate total backscatter-values
         if return_components is True:
@@ -1624,6 +1681,7 @@ class Fits(Scatter):
         fixed_dict=None,
         param_dyn_dict=None,
         order=None,
+        interp_vals=None,
     ):
         """
         function to evaluate the jacobian in the shape as required
@@ -1643,6 +1701,7 @@ class Fits(Scatter):
              the jacobian corresponding to the fit-parameters in the
              shape applicable to scipy's least_squres-function
         """
+        self.set_model()
 
         if R is None:
             R = self.R
@@ -1650,74 +1709,18 @@ class Fits(Scatter):
             res_dict = self.res_dict
         if fixed_dict is None:
             fixed_dict = self.fixed_dict
+        if interp_vals is None:
+            interp_vals = self.interp_vals
+
         if param_dyn_dict is None:
             param_dyn_dict = self.param_dyn_df
         if order is None:
             order = self._order
 
-        # ensure correct array-processing
-        # res_dict = {key:val[:,np.newaxis] for
-        #             key, val in self._assignvals(res_dict).items()}
-        res_dict = self._assignvals(res_dict)
-        res_dict.update(fixed_dict)
-
-        # update the numeric representations of omega, tau and NormBRDF
-        # based on the values for the used symbols provided in res_dict
-        if self._omega_func is None:
-            if "omega" in res_dict:
-                R.V.omega = res_dict["omega"]
-        else:
-            R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
-            )
-
-        if self._tau_func is None:
-            if "tau" in res_dict:
-                R.V.tau = res_dict["tau"]
-        else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
-
-        if self._N_func is None:
-            if "NormBRDF" in res_dict:
-                R.SRF.NormBRDF = res_dict["NormBRDF"]
-        else:
-            R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
-            )
-
-        if "bsf" in res_dict:
-            R.bsf = res_dict["bsf"]
-
-        # remove all unwanted symbols that are NOT needed for evaluation
-        # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF",
-        # "bsf" and the symbols used to define them must be removed)
-
-        # symbols used in the definitions of the functions
-        angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
-
-        # exclude all keys that are not needed to calculate the fn-coefficients
-        # vsymb and srfsymb must be subtracted in case the same symbol is used
-        # for omega, tau or NormBRDF definition and in the function definiton
-        excludekeys = [
-            "omega",
-            "tau",
-            "NormBRDF",
-            "bsf",
-            *[str(i) for i in set(toNlist - vsymb - srfsymb)],
-        ]
-
-        strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in excludekeys
-        }
-
-        # set the param-dict to the newly generated dict
-        R.param_dict = strparam_fn
+        R = self._set_calc_values(R=R, res_dict=res_dict,
+                                  fixed_dict=fixed_dict,
+                                  interp_vals=interp_vals,
+                                  assign=True)
 
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
@@ -1949,8 +1952,8 @@ class Fits(Scatter):
 
         # symbols used to define the functions
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         # a list of all symbols used to define tau, omega and NormBRDF
         toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
@@ -2037,14 +2040,22 @@ class Fits(Scatter):
             "V_name" in props and "SRF_name" in props
         ), 'provide either "V_name" or "SRF_name" not both!'
 
+        ignore_keys = ['omega', 'tau', 'NormBRDF', 'bsf']
+
         set_dict = dict()
+        free_symbols = set()
         for key, val in props.items():
             if key == "V_name" or key == "SRF_name":
                 continue
 
             # check if val is directly provided in setdict, if yes use it
+            # (e.g. this means the key is simply another name for a parameter
+            # and not an  equation)
             if val in setdict:
                 useval = setdict[val]
+                if key not in ignore_keys and isinstance(setdict[val], sp.Symbol):
+                    free_symbols.add(setdict[val])
+
             # check if val is a number, if yes use it directly
             elif isinstance(val, (int, float, np.ndarray)):
                 useval = val
@@ -2062,15 +2073,19 @@ class Fits(Scatter):
                         replacements[val_i] = setdict[str(val_i)]
                 useval = useval.xreplace(replacements)
 
+                if key not in ignore_keys:
+                    free_symbols.update(set(useval.free_symbols))
             set_dict[key] = useval
 
         if "V_name" in props:
             # initialize the volume-scattering function
             V = getattr(rt1_v, props["V_name"])(**set_dict)
+            V.free_symbols = free_symbols
             return V
         elif "SRF_name" in props:
             # initialize the surface-scattering function
             SRF = getattr(rt1_s, props["SRF_name"])(**set_dict)
+            SRF.free_symbols = free_symbols
             return SRF
 
     def performfit(
@@ -2103,6 +2118,9 @@ class Fits(Scatter):
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
+
+        self.set_model()
+
         # maintain R object during fit
         R = self.R
 
