@@ -36,10 +36,6 @@ class Surface(Scatter):
 
         # replace arguments and evaluate expression
         # sp.lambdify is used to allow array-inputs
-        # for python > 3.5 unpacking could be used, i.e.:
-        # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
-        #                     *param_dict.keys()),
-        #                    self._func, modules=["numpy", "sympy"])
         args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(args)
         pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
         return pfunc
@@ -69,21 +65,13 @@ class Surface(Scatter):
                           Numerical value of the BRDF
         """
 
-        # define sympy objects
-        # theta_0 = sp.Symbol("theta_0")
-        # theta_ex = sp.Symbol("theta_ex")
-        # phi_0 = sp.Symbol("phi_0")
-        # phi_ex = sp.Symbol("phi_ex")
+        # if an explicit numeric function is provided, use it, otherwise
+        # lambdify the available sympy-function
+        if hasattr(self, "_func_numeric"):
+            brdffunc = self._func_numeric
+        else:
+            brdffunc = self._lambda_func(*param_dict.keys())
 
-        # replace arguments and evaluate expression
-        # sp.lambdify is used to allow array-inputs
-        # for python >3.5 unpacking could be used, i.e.:
-        # brdffunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
-        #                        *param_dict.keys()),
-        #                       self._func, modules=["numpy", "sympy"])
-        # args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
-        # brdffunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
-        brdffunc = self._lambda_func(*param_dict.keys())
         # in case _func is a constant, lambdify will produce a function with
         # scalar output which is not suitable for further processing
         # (this happens e.g. for the Isotropic brdf).
@@ -435,13 +423,14 @@ class LinCombSRF(Surface):
         super(LinCombSRF, self).__init__(**kwargs)
 
         self.SRFchoices = SRFchoices
-        self._set_function()
         self._set_legexpansion()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
+        return self._SRFcombiner()._func
 
-        self._func = self._SRFcombiner()._func
 
     def _set_legexpansion(self):
         """set legexpansion to the combined legexpansion"""
@@ -475,15 +464,9 @@ class LinCombSRF(Surface):
 
             def __init__(self, **kwargs):
                 super(BRDFfunction, self).__init__(**kwargs)
-                self._set_function()
-                self._set_legcoefficients()
 
-            def _set_function(self):
-                """def phase function as sympy object for later evaluation"""
                 self._func = 0.0
-
-            def _set_legcoefficients(self):
-                self.legcoefs = 0.0
+                self._legcoefs = 0.0
 
         # initialize a combined phase-function class element
         SRFcomb = BRDFfunction(NormBRDf=self.NormBRDF)
@@ -555,17 +538,19 @@ class Isotropic(Surface):
 
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_legcoefficients(self):
+    @property
+    @lru_cache()
+    def legcoefs(self):
         self.ncoefs = 1
         n = sp.Symbol("n")
-        self.legcoefs = (1.0 / sp.pi) * sp.KroneckerDelta(0, n)
+        return (1.0 / sp.pi) * sp.KroneckerDelta(0, n)
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
-        self._func = 1.0 / sp.pi
+        return 1.0 / sp.pi
 
 
 class CosineLobe(Surface):
@@ -616,14 +601,14 @@ class CosineLobe(Surface):
             + "point values!"
         )
         self.ncoefs = int(ncoefs)
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_legcoefficients(self):
+    @property
+    @lru_cache()
+    def legcoefs(self):
         n = sp.Symbol("n")
         # A13   The Rational(is needed as otherwise a Gamma function
         # Pole error is issued)
-        self.legcoefs = (
+        return (
             1.0
             / sp.pi
             * (
@@ -640,7 +625,9 @@ class CosineLobe(Surface):
             )
         )
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
@@ -657,7 +644,7 @@ class CosineLobe(Surface):
         #     (this is done because   sp.lambdify('x',sp.Max(x), "numpy")
         #      generates a function that can not interpret array inputs.)
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
-        self._func = 1.0 / sp.pi * (x * (1.0 + sp.sign(x)) / 2.0) ** self.i
+        return 1.0 / sp.pi * (x * (1.0 + sp.sign(x)) / 2.0) ** self.i
 
 
 class HenyeyGreenstein(Surface):
@@ -698,10 +685,10 @@ class HenyeyGreenstein(Surface):
         assert len(a) == 3, (
             "Error: Generalization-parameter list must " + "contain 3 values"
         )
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
@@ -710,15 +697,17 @@ class HenyeyGreenstein(Surface):
 
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
-        self._func = (
+        return (
             1.0
             * (1.0 - self.t ** 2.0)
             / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
         )
 
-    def _set_legcoefficients(self):
+    @property
+    @lru_cache()
+    def legcoefs(self):
         n = sp.Symbol("n")
-        self.legcoefs = 1.0 * (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
+        return 1.0 * (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
 
 
 class HG_nadirnorm(Surface):
@@ -759,10 +748,10 @@ class HG_nadirnorm(Surface):
         assert len(a) == 3, (
             "Error: Generalization-parameter list must " + "contain 3 values"
         )
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
@@ -788,12 +777,50 @@ class HG_nadirnorm(Surface):
             )
         )
 
-        self._func = (1.0 / nadir_hemreflect) * (
+        func = (1.0 / nadir_hemreflect) * (
             (1.0 - self.t ** 2.0)
             / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
         )
 
-    def _set_legcoefficients(self):
+        return func
+
+    def _func_numeric(self, theta_0, theta_ex, phi_0, phi_ex, **kwargs):
+        """direct numeric version of _func"""
+
+        if isinstance(self.t, sp.Symbol):
+            t = kwargs[str(self.t)]
+        else:
+            t = self.t
+
+        x = self._scat_angle_numeric(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
+
+        nadir_hemreflect = 4 * (
+            (1.0 - t ** 2.0)
+            * (
+                1.0
+                - t * (-t + self.a[0])
+                - np.sqrt(
+                    (1 + t ** 2 - 2 * self.a[0] * t) * (1 + t ** 2)
+                )
+            )
+            / (
+                2.0
+                * self.a[0] ** 2.0
+                * t ** 2.0
+                * np.sqrt(1.0 + t ** 2.0 - 2.0 * self.a[0] * t)
+            )
+        )
+
+        func = (1.0 / nadir_hemreflect) * (
+            (1.0 - t ** 2.0)
+            / ((np.pi) * (1.0 + t ** 2.0 - 2.0 * t * x) ** 1.5)
+        )
+
+        return func
+
+    @property
+    @lru_cache()
+    def legcoefs(self):
         nadir_hemreflect = 4 * (
             (1.0 - self.t ** 2.0)
             * (
@@ -812,6 +839,8 @@ class HG_nadirnorm(Surface):
         )
 
         n = sp.Symbol("n")
-        self.legcoefs = (1.0 / nadir_hemreflect) * (
+        legcoefs = (1.0 / nadir_hemreflect) * (
             (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
         )
+
+        return legcoefs

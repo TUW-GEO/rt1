@@ -2,7 +2,7 @@
 
 # general other imports
 import sympy as sp
-
+import numpy as np
 
 class Scatter(object):
     """The basis object for any Surface and Volume objects"""
@@ -52,6 +52,14 @@ class Scatter(object):
             a[0] * sp.cos(t_0) * sp.cos(t_ex)
             + a[1] * sp.sin(t_0) * sp.sin(t_ex) * sp.cos(p_0) * sp.cos(p_ex)
             + a[2] * sp.sin(t_0) * sp.sin(t_ex) * sp.sin(p_0) * sp.sin(p_ex)
+        )
+
+    def _scat_angle_numeric(self, t_0, t_ex, p_0, p_ex, a):
+        # a numeric version of scat_angle
+        return (
+            a[0] * np.cos(t_0) * np.cos(t_ex)
+            + a[1] * np.sin(t_0) * np.sin(t_ex) * np.cos(p_0) * np.cos(p_ex)
+            + a[2] * np.sin(t_0) * np.sin(t_ex) * np.sin(p_0) * np.sin(p_ex)
         )
 
     def _get_legcoef(self, n0):
