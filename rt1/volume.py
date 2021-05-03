@@ -652,8 +652,8 @@ class HenyeyGreenstein(Volume):
 
     def _func_numeric(self, theta_0, theta_ex, phi_0, phi_ex, **kwargs):
         """direct numeric version of _func"""
-        if len(self.free_symbols) > 0:
-            t = kwargs[list(self.free_symbols)[0]]
+        if isinstance(self.t, sp.Symbol):
+            t = kwargs[str(self.t)]
         else:
             t = self.t
         x = self._scat_angle_numeric(theta_0, theta_ex, phi_0, phi_ex, self.a)
