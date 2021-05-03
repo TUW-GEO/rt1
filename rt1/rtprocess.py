@@ -470,11 +470,16 @@ class RTprocess(object):
         # from the copied file
         copypath = self.dumppath / "cfg" / self.cfg.configpath.name
         if mp.current_process().name == "MainProcess":
-            if (copypath).exists() and len(self.init_kwargs) == 0:
+            if copypath.exists() and len(self.init_kwargs) == 0:
+
                 log.warning(
-                    f'the file \n"{copypath}"\n'
+                    f'the file "{Path(*copypath.parts[-3:])} "'
                     + "already exists... NO copying is performed and the "
                     + "existing one is used!\n"
+                )
+
+                log.debug(
+                    f'{copypath.name} imported from \n"{copypath}"\n'
                 )
             else:
                 if len(self.init_kwargs) == 0:
@@ -512,10 +517,15 @@ class RTprocess(object):
 
                     if module_copypath.exists():
                         log.warning(
-                            f'the file \n"{module_copypath}" \nalready '
-                            + "exists ... NO copying is performed "
-                            + "and the existing one is used!\n"
+                            f'the file "{Path(*module_copypath.parts[-3:])} "'
+                            + "already exists... NO copying is performed and the "
+                            + "existing one is used!\n"
                         )
+
+                        log.debug(
+                            f'{module_copypath.name} imported from \n"{module_copypath}"\n'
+                        )
+
                     else:
                         shutil.copy(location, module_copypath)
                         log.info(f'"{location.name}" copied to \n"{module_copypath}"')
@@ -832,10 +842,6 @@ class RTprocess(object):
             for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
                     parent_fit._fnevals_input = parent_fit.R._fnevals
-        # if len(self.cfg.config_names) > 0:
-        #     for i, [cfg_name, parent_fit] in enumerate(self.parent_fit):
-        #         if parent_fit.int_Q is True:
-        #             parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
