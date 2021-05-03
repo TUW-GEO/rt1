@@ -473,7 +473,8 @@ class Fits(Scatter):
         else:
 
             # the names of the parameters that will be fitted
-            dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
+            dyn_keys = [key for key, val in self.defdict.items()
+                        if val[0] is True]
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
@@ -605,7 +606,8 @@ class Fits(Scatter):
         """
 
         # find the max. length of the parameters
-        maxdict = {key: len(str(max(val))) for key, val in self.param_dyn_dict.items()}
+        maxdict = {key: len(str(max(val)))
+                   for key, val in self.param_dyn_dict.items()}
         # find the max. length of the parameters
 
         def doit(x, N):
@@ -615,7 +617,8 @@ class Fits(Scatter):
             if i == 0:
                 conclist = list(map(partial(doit, N=maxdict[key]), val))
             else:
-                conclist = map(add, conclist, map(partial(doit, N=maxdict[key]), val))
+                conclist = map(add, conclist, map(
+                    partial(doit, N=maxdict[key]), val))
         return np.array(list(map(int, conclist)))
 
     @property
@@ -632,7 +635,8 @@ class Fits(Scatter):
             return
         # don't use keys that are not provided in defdict
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
-        usekeys = ["sig", "inc"] + [key for key in self.defdict if key in self.dataset]
+        usekeys = ["sig", "inc"] + \
+            [key for key in self.defdict if key in self.dataset]
         if "data_weights" in self.dataset:
             usekeys += ["data_weights"]
 
@@ -909,7 +913,8 @@ class Fits(Scatter):
         """indices of each parameter-group (to re-assign to the data-index)"""
         assigndict = dict()
         for key, val in self.param_dyn_dict.items():
-            assigndict[key] = groupby_unsorted(range(len(val)), key=lambda x: val[x])
+            assigndict[key] = groupby_unsorted(
+                range(len(val)), key=lambda x: val[x])
 
         return assigndict
 
@@ -996,7 +1001,8 @@ class Fits(Scatter):
                     )
                     meanstartvals = list(
                         groupby_unsorted(
-                            zip(self._groupindex, self.dataset[key + "_start"]),
+                            zip(self._groupindex,
+                                self.dataset[key + "_start"]),
                             key=itemgetter(0),
                             get=itemgetter(1),
                         ).values()
@@ -1207,7 +1213,8 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(self.set_V_SRF["SRF_props"], setdict=self._setdict)
+            SRF = self._init_V_SRF(
+                self.set_V_SRF["SRF_props"], setdict=self._setdict)
         return SRF
 
     @property
@@ -1246,7 +1253,8 @@ class Fits(Scatter):
     def _get_V_SRF_symbs(self, V_SRF, prop):
         """the symbols used to define tau, omega and NormBRDF of V and SRF"""
         try:
-            symbs = list(map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
+            symbs = list(
+                map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
         except Exception:
             symbs = list()
         return symbs
@@ -1343,7 +1351,8 @@ class Fits(Scatter):
             vals[key] = vals[key][~self.mask]
 
         resdf = (
-            pd.DataFrame(vals, list(chain(*self._orig_index))).groupby(level=0).first()
+            pd.DataFrame(vals, list(chain(*self._orig_index))
+                         ).groupby(level=0).first()
         )
 
         return resdf
@@ -1793,7 +1802,8 @@ class Fits(Scatter):
 
         # same for NormBRDF
         for i in set(self._N_symb) & set(param_dyn_dict.keys()):
-            df_dx = self._N_diff_func[i](**{key: res_dict[key] for key in self._N_symb})
+            df_dx = self._N_diff_func[i](
+                **{key: res_dict[key] for key in self._N_symb})
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
@@ -1918,7 +1928,8 @@ class Fits(Scatter):
             if "tau" in res_dict:
                 R.V.tau = res_dict["tau"]
         else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
+            R.V.tau = self._tau_func(
+                **{key: res_dict[key] for key in self._tau_symb})
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
@@ -2391,7 +2402,8 @@ class Fits(Scatter):
                 else:
                     vari = "      -       "
 
-                boun = (f"{val[3][0][0]:.5}" + "-" + f"{val[3][1][0]:.5}").ljust(13)
+                boun = (f"{val[3][0][0]:.5}" + "-" +
+                        f"{val[3][1][0]:.5}").ljust(13)
                 try:
                     inte = f"{str(val[4]):<14}"
                 except IndexError:
@@ -2417,7 +2429,8 @@ class Fits(Scatter):
             vvals = list(vprop.values())
 
             srfnames = list(srfprop.keys())
-            srfnames = [i.ljust(max(map(len, srfnames))) + ":" for i in srfnames]
+            srfnames = [i.ljust(max(map(len, srfnames))) +
+                        ":" for i in srfnames]
             srfvals = list(srfprop.values())
 
             while len(vnames) < max(len(vnames), len(srfnames)):
@@ -2505,7 +2518,7 @@ class Fits(Scatter):
         if len(lsqkw) > 0:
             outstr += "\n\n# LSQ PARAMETERS " + "\n"
             for key1, key2 in zip(
-                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2 :]
+                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2:]
             ):
                 outstr += (
                     f" {key1:<15}= {lsqkw[key1]}".ljust(37)
@@ -2696,7 +2709,8 @@ class _MultiAccessors:
                     self,
                     prop,
                     update_wrapper(
-                        partial(self._applyit, prop=prop), getattr(Fits(), prop)
+                        partial(self._applyit, prop=prop), getattr(
+                            Fits(), prop)
                     ),
                 )
             elif isinstance(getattr(Fits, prop), property):
@@ -2873,7 +2887,8 @@ class MultiFits:
             )
         elif isinstance(use_config, str):
             return [
-                (use_config, f(fit=self.accessor.config_fits[use_config], **kwargs))
+                (use_config, f(
+                    fit=self.accessor.config_fits[use_config], **kwargs))
             ]
         elif isinstance(use_config, list):
             return (
@@ -2898,7 +2913,8 @@ class MultiFits:
             the fit-object
         """
         if name in self.config_names:
-            log.warning(f"the config {name} will be overwritten by the new definition!")
+            log.warning(
+                f"the config {name} will be overwritten by the new definition!")
 
         assert str.isidentifier(
             name
