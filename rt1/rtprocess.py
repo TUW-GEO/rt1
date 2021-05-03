@@ -1235,6 +1235,22 @@ class RTprocess(object):
         # load fitobjects based on fit-paths
         try:
             fit = load(fitpath)
+            if use_config is None:
+                use_config = fit.config_names
+
+            # assign pre-evaluated fn-coefficients
+            for config_name in use_config:
+                config_fit = self.parent_fit.accessor.config_fits[config_name]
+                if config_fit.int_Q is True:
+                    try:
+                        getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
+                    except AttributeError:
+                        log.error("could not assign pre-evaluated fn-coefficients to " +
+                                  f"the config {config_name}... " +
+                                  "available configs of the loaded Fits object:" +
+                                  f" {fit.config_names}")
+
+
         except Exception:
             log.error(f"there was an error while loading {fitpath}")
             _increase_cnt(process_cnt, start, err=True)
@@ -1313,6 +1329,21 @@ class RTprocess(object):
         # (to enable subprocess-logging)
         pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
 
+        # pre-evaluate the fn-coefficients if interaction terms are used
+        # since finalout might involve calling "calc_model()" or similar functions
+        # that require a re-evaluation of the fn_coefficients
+        if isinstance(self.parent_fit, MultiFits):
+            if use_config is None:
+                use_config = self.parent_fit.config_names
+
+            for fit_name in use_config:
+                parent_fit = self.parent_fit.accessor.config_fits[fit_name]
+                if parent_fit.int_Q is True:
+                    parent_fit._fnevals_input = parent_fit.R._fnevals
+        else:
+            if self.parent_fit.int_Q is True:
+                self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+
         if print_progress is True:
             # initialize shared values that will be used to track the number
             # of completed processes and the mean time to complete a process
@@ -1367,9 +1398,6 @@ class RTprocess(object):
         if isinstance(self.parent_fit, MultiFits):
             # store original finalout_name
             finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-            if use_config is None:
-                use_config = self.parent_fit.config_names
 
             for name in use_config:
                 self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
