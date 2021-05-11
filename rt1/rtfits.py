@@ -163,7 +163,17 @@ class Fits(Scatter):
                >>>     return V, SRF
 
                or a dict that will be passed to _init_V_SRF() to initialize
-               the V- and SRF-objects
+               the V- and SRF-objects of the form:
+
+               >>> dict(
+               >>>    V_props=dict(
+               >>>            V_name="Volume-function",
+               >>>            ... volume-keys ...),
+               >>>    SRF_props=dict(
+               >>>            SRF_name="Surface-function",
+               >>>            ... surface-keys ...)
+               >>>    )
+
     lsq_kwargs: dict (default = dict())
                 a dictionary with keyword-arguments passed to
                 scipy.optimize.least_squares

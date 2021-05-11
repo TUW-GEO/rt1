@@ -308,10 +308,9 @@ class RTprocess(object):
         (use override=False to update `init_kwargs`)
 
         kwargs must be passed in the form:
-        ```
-        section = dict( key1 = val1,
-                        key2 = val2, ... )
-        ```
+
+        >>> section = dict( key1 = val1,
+        >>>                 key2 = val2, ... )
 
         Parameters
         ----------

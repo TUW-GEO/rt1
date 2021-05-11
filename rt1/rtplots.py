@@ -89,6 +89,11 @@ def polarplot(
 
                  >>> polarax = fig.add_subplot(111, projection='polar')
 
+    param_dict : list of dict's
+                 a dictionary (or a list of dictionaries) that contains the
+                 names and values of the symbolic parameters required to define
+                 the V/SRF functions
+
     Returns
     ---------
     polarfig : figure
