@@ -1704,6 +1704,8 @@ class plot:
 
         for key, val in sig0_vals.items():
             sig0_vals[key] = val[inc_sortp]
+        for key, val in sig0_vals_I_linear.items():
+            sig0_vals_I_linear[key] = val[inc_sortp]
         for key, val in newsig0_vals.items():
             newsig0_vals[key] = val[inc_sortp]
         for key, val in newsig0_vals_I_linear.items():
