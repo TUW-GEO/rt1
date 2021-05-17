@@ -2839,6 +2839,13 @@ class MultiFits:
         else:
             self.set_reader_arg(reader_arg)
 
+    def __setstate__(self, d):
+        self.__dict__ = d
+        # this is done to support downward-compatibility with pickled results
+        for name, fit in self.accessor.config_fits.items():
+            if not hasattr(fit, "config_name"):
+                fit.config_name = name
+
     @property
     def dataset(self):
         return self._dataset
