@@ -1378,9 +1378,9 @@ class Fits(Scatter):
             )
             return
 
-        vals = self._assignvals(self.res_dict)
+        vals = dict()
         for key, val in self._assignvals(self.res_dict).items():
-            vals[key] = vals[key][~self.mask]
+            vals[key] = val[~self.mask]
 
         resdf = (
             pd.DataFrame(vals, list(chain(*self._orig_index))
@@ -2948,14 +2948,14 @@ class MultiFits:
             name
         ), f"the name {name} is not a valid python identifier!"
 
-        # make sure that the config-name do not overwrite any definitions
-        assert name not in set(self.__dict__) ^ set(
-            self.config_names
-        ), f"you can not use {name} as the name for a configuration!"
+        # make sure that the config-name does not overwrite any definitions
+        assert name not in set(self.__dict__),(
+            f"you can not use {name} as the name for a configuration!")
         self.config_names.append(name)
 
         fit_object.dataset = self.dataset
         fit_object.aux_data = self.aux_data
+        fit_object.config_name = name
         setattr(self.configs, name, fit_object)
 
     def dump(self, path, mini=True):
