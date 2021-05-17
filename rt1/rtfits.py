@@ -104,7 +104,6 @@ class Fits(Scatter):
                >>> defdict = {"X" : [False, 'auxiliary']}
                >>> dataset["X"] = ... the data to use for the "X" parameter...
 
-
     defdict: dict (default = None)
              a dictionary of the following structure:
              (the dict will be copied internally using copy.deepcopy(dict))
@@ -283,7 +282,7 @@ class Fits(Scatter):
 
         self.sig0 = sig0
         self.dB = dB
-        self.dataset = dataset
+        self.dataset = self._check_monotonic_dataset_index(dataset)
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
         if lsq_kwargs is None:
@@ -337,6 +336,11 @@ class Fits(Scatter):
             self.res_dict = {key: val[0] for key, val in self.res_dict.items()}
 
     def __setstate__(self, d):
+        # downward-compatibility for the dataset property
+        if "_dataset" not in d:
+            if "dataset" in d:
+                d["_dataset"] = d.pop("dataset")
+
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
         self.__update__()
@@ -375,6 +379,26 @@ class Fits(Scatter):
                 self._clear_cache()
 
         super().__setattr__(attr, value)
+
+    @property
+    def dataset(self):
+        return self._dataset
+
+    @dataset.setter
+    def dataset(self, dataset):
+        # make sure the index of the provided dataset is sorted
+        self._dataset = self._check_monotonic_dataset_index(dataset)
+
+    @staticmethod
+    def _check_monotonic_dataset_index(dataset):
+        if dataset is None:
+            return None
+
+        if not dataset.index.is_monotonic_increasing:
+            log.warning("dataset has been sorted to ensure a monotonic index!")
+            return dataset.sort_index()
+        else:
+            return dataset
 
     @property
     def _cached_props(self):
@@ -2898,9 +2922,11 @@ class MultiFits:
         )
 
     def set_dataset(self, dataset):
-        self._dataset = dataset
+        self._dataset = Fits._check_monotonic_dataset_index(dataset)
         for name in self.config_names:
-            getattr(self.configs, name).dataset = self._dataset
+            # set "_dataset" directly instead of "dataset" to avoid checking the
+            # index-sorting twice in the dataset-setter
+            getattr(self.configs, name)._dataset = self._dataset
 
     def set_aux_data(self, aux_data):
         self._aux_data = aux_data
