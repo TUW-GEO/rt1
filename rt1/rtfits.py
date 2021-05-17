@@ -78,22 +78,32 @@ class Fits(Scatter):
         Indicator whether dataset is given in linear units or in dB.
         The applied relation is:    x_dB = 10. * np.log10( x_linear )
     dataset: pandas.DataFrame (default = None)
-             a pandas.DataFrame with columns `inc` and `sig` defined
-             where `inc` referrs to the incidence-angle in radians, and
-             `sig` referrs to the measurement value (corresponding to
-             the assigned sig0 and dB values)
+             a pandas.DataFrame that has (at least) the following columns defined:
 
-             - If a column `data_weights` is provided, the residuals in the
+             - `"inc"`: the incidence-angle in radians
+             - `"sig"`: the backscatter measurement value, e.g.:
+              - backscattering coefficient if "sig0" is set to True or
+                intensity if "sig0" is set to False
+              - the parameter "dB" indicates if the values are provided in dB or not
+
+             - If a column `"data_weights"` is provided, the residuals in the
                fit-procedure will be weighted accordingly.
-               (e.g. residuals = weights * calculated_residuals )
-             - If columns `param_dyn` are provided where `param` is the name of
-               a parameter that is intended to be fitted, the entries will be
-               used to assign the dynamics of the corresponding parameter
-               (see defdict 'freq' entry for further details)
-             - If columns with names corresponding to parameters are provided
-               and the corresponding entry in the 'val' parameter of defdict
-               is set to 'auxiliary', then the provided data will be used
-               as auxiliary data for the parameter.
+               (e.g. residuals = data_weights * calculated_residuals )
+             - If columns `"<param>_dyn"` are provided where `<param>` is the name of
+               a parameter that is intended to be fitted, the positions of the unique
+               entries will be used to assign the dynamics of the corresponding
+               parameter (see defdict 'freq' entry for further details)
+
+               >>> defdict = {"X" : [True, .1, 'manual', ([0.], [1.]), False]}
+               >>> dataset['X_dyn'] = [1, 1, 1, 2, 2, 1, 1, 3, 3, 5, ...]
+
+             - If columns that match parameter-names are provided and the corresponding
+               entry in the `"val"` parameter of defdict is set to `"auxiliary"`, then
+               the provided data will be used as auxiliary data for the parameter.
+
+               >>> defdict = {"X" : [False, 'auxiliary']}
+               >>> dataset["X"] = ... the data to use for the "X" parameter...
+
 
     defdict: dict (default = None)
              a dictionary of the following structure:
