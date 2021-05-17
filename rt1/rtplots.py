@@ -3,6 +3,7 @@ Class for quick visualization of results and used phasefunctions
 """
 
 from functools import partial
+from itertools import cycle
 import datetime
 
 import numpy as np
@@ -61,7 +62,7 @@ def polarplot(
 
     Other Parameters
     -----------------
-    inp : list of floats (default = [15.,35.,55.,75.])
+    inc : list of floats (default = [15.,35.,55.,75.])
            Incidence-angles in degree at which the volume-scattering
            phase-function will be plotted
     multip : float (default = 2.)
@@ -89,10 +90,11 @@ def polarplot(
 
                  >>> polarax = fig.add_subplot(111, projection='polar')
 
-    param_dict : list of dict's
-                 a dictionary (or a list of dictionaries) that contains the
-                 names and values of the symbolic parameters required to define
-                 the V/SRF functions
+    param_dict : dict (or list of dicts)
+                 a dictionary containing the names and values of the symbolic
+                 parameters required to fully specify the V/SRF functions.
+                 if a list of dicts is provided, the specifications are
+                 plotted on top of each other.
 
     Returns
     ---------
@@ -110,6 +112,11 @@ def polarplot(
 
     if X is None:
         assert False, "Error: You must provide a volume- or surface object!"
+
+
+    if isinstance(param_dict, dict):
+        param_dict = [param_dict]
+
 
     if polarax is None:
         fig = plt.figure(figsize=(7, 7))
@@ -149,92 +156,91 @@ def polarplot(
     # plot of volume-scattering phase-function's
     pmax = 0
     for n_X, X in enumerate(np.atleast_1d(X)):
-        # define a plotfunction of the legendre-approximation of p
-        if aprox is True:
-            phasefunktapprox = sp.lambdify(
-                (*angs, *param_dict[n_X].keys()),
-                X.legexpansion(*angs, geometry="vvvv").doit(),
-                modules=["numpy", "sympy"],
-            )
-
-        # set incidence-angles for which p is calculated
-        plottis = np.deg2rad(inc)
-        colors = ["k", "r", "g", "b", "c", "m", "y"] * int(
-            round((len(plottis) / 7.0 + 1))
-        )
-
-        for i in plottis:
-            ts = np.arange(0.0, 2.0 * np.pi, 0.01)
-            pmax_i = multip * np.max(
-                getattr(X, funcname)(
-                    np.full_like(ts, i),
-                    ts,
-                    0.0,
-                    0.0,
-                    param_dict=param_dict[n_X],
-                )
-            )
-            if pmax_i > pmax:
-                pmax = pmax_i
-
-        if legend is True:
-            legend_lines = []
-
-        # set color-counter to 0
-        i = 0
-        for ti in plottis:
-            color = colors[i]
-            i = i + 1
-            rad = getattr(X, funcname)(
-                ti, thetass, 0.0, 0.0, param_dict=param_dict[n_X]
-            )
+        for n_p, params in enumerate(param_dict):
+            # define a plotfunction of the legendre-approximation of p
             if aprox is True:
-                # the use of np.pi-ti stems from the definition
-                # of legexpansion() in volume.py
-                radapprox = phasefunktapprox(
-                    angsub(ti), thetass, 0.0, 0.0, **param_dict[n_X]
+                phasefunktapprox = sp.lambdify(
+                    (*angs, *params.keys()),
+                    X.legexpansion(*angs, geometry="vvvv").doit(),
+                    modules=["numpy", "sympy"],
                 )
-            # set theta direction to clockwise
-            polarax.set_theta_direction(-1)
-            # set theta to start at z-axis
-            polarax.set_theta_offset(np.pi / 2.0)
 
-            polarax.plot(thetass, rad, color)
-            if aprox is True:
-                polarax.plot(thetass, radapprox, color + "--")
-            polarax.arrow(
-                -ti,
-                pmax * 1.2,
-                0.0,
-                -pmax * 0.8,
-                head_width=0.0,
-                head_length=0.0,
-                fc=color,
-                ec=color,
-                lw=1,
-                alpha=0.3,
-            )
+            # set incidence-angles for which p is calculated
+            plottis = np.deg2rad(inc)
+            colors = cycle(["k", "r", "g", "b", "c", "m", "y"])
+            used_colors = []
+            for i in plottis:
+                ts = np.arange(0.0, 2.0 * np.pi, 0.01)
+                pmax_i = multip * np.max(
+                    getattr(X, funcname)(
+                        np.full_like(ts, i),
+                        ts,
+                        0.0,
+                        0.0,
+                        param_dict=params,
+                    )
+                )
+                if pmax_i > pmax:
+                    pmax = pmax_i
 
-            polarax.fill_between(thetass, rad, alpha=0.2, color=color)
-            polarax.set_xticks(np.deg2rad([0, 45, 90, 125, 180]))
-            polarax.set_xticklabels(
-                [
-                    r"$0^\circ$",
-                    r"$45^\circ$",
-                    r"$90^\circ$",
-                    r"$135^\circ$",
-                    r"$180^\circ$",
-                ]
-            )
-            polarax.set_yticklabels([])
-            polarax.set_rmax(pmax * 1.2)
-            polarax.set_title(label + "\n")
-            polarax.set_rmin(0.0)
+            if legend is True:
+                legend_lines = []
+
+            # set color-counter to 0
+            for ti in plottis:
+                color = next(colors)
+                used_colors.append(color)
+                rad = getattr(X, funcname)(
+                    ti, thetass, 0.0, 0.0, param_dict=params
+                )
+                if aprox is True:
+                    # the use of np.pi-ti stems from the definition
+                    # of legexpansion() in volume.py
+                    radapprox = phasefunktapprox(
+                        angsub(ti), thetass, 0.0, 0.0, **params
+                    )
+                # set theta direction to clockwise
+                polarax.set_theta_direction(-1)
+                # set theta to start at z-axis
+                polarax.set_theta_offset(np.pi / 2.0)
+
+                polarax.plot(thetass, rad, color)
+                if aprox is True:
+                    polarax.plot(thetass, radapprox, color + "--")
+                polarax.arrow(
+                    -ti,
+                    pmax * 1.2,
+                    0.0,
+                    -pmax * 0.8,
+                    head_width=0.0,
+                    head_length=0.0,
+                    fc=color,
+                    ec=color,
+                    lw=1,
+                    alpha=0.3,
+                )
+
+                polarax.fill_between(thetass, rad, alpha=0.2, color=color)
+                polarax.set_xticks(np.deg2rad([0, 45, 90, 125, 180]))
+                polarax.set_xticklabels(
+                    [
+                        r"$0^\circ$",
+                        r"$45^\circ$",
+                        r"$90^\circ$",
+                        r"$135^\circ$",
+                        r"$180^\circ$",
+                    ]
+                )
+                polarax.set_yticklabels([])
+                polarax.set_rmax(pmax * 1.2)
+                polarax.set_title(label + "\n")
+                polarax.set_rmin(0.0)
+
     # add legend for covering layer phase-functions
+    used_colors = iter(used_colors)
     if legend is True:
-        i = 0
         for ti in plottis:
-            color = colors[i]
+            color = next(used_colors)
             legend_lines += [
                 mlines.Line2D(
                     [],
