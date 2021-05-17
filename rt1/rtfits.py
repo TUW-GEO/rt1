@@ -2956,7 +2956,7 @@ class MultiFits:
         ), f"the name {name} is not a valid python identifier!"
 
         # make sure that the config-name does not overwrite any definitions
-        assert name not in set(self.__dict__),(
+        assert name not in set(self.__dict__), (
             f"you can not use {name} as the name for a configuration!")
         self.config_names.append(name)
 

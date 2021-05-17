@@ -113,10 +113,8 @@ def polarplot(
     if X is None:
         assert False, "Error: You must provide a volume- or surface object!"
 
-
     if isinstance(param_dict, dict):
         param_dict = [param_dict]
-
 
     if polarax is None:
         fig = plt.figure(figsize=(7, 7))
