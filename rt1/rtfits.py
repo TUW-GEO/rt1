@@ -78,22 +78,31 @@ class Fits(Scatter):
         Indicator whether dataset is given in linear units or in dB.
         The applied relation is:    x_dB = 10. * np.log10( x_linear )
     dataset: pandas.DataFrame (default = None)
-             a pandas.DataFrame with columns `inc` and `sig` defined
-             where `inc` referrs to the incidence-angle in radians, and
-             `sig` referrs to the measurement value (corresponding to
-             the assigned sig0 and dB values)
+             a pandas.DataFrame that has (at least) the following columns defined:
 
-             - If a column `data_weights` is provided, the residuals in the
+             - `"inc"`: the incidence-angle in radians
+             - `"sig"`: the backscatter measurement value, e.g.:
+              - backscattering coefficient if "sig0" is set to True or
+                intensity if "sig0" is set to False
+              - the parameter "dB" indicates if the values are provided in dB or not
+
+             - If a column `"data_weights"` is provided, the residuals in the
                fit-procedure will be weighted accordingly.
-               (e.g. residuals = weights * calculated_residuals )
-             - If columns `param_dyn` are provided where `param` is the name of
-               a parameter that is intended to be fitted, the entries will be
-               used to assign the dynamics of the corresponding parameter
-               (see defdict 'freq' entry for further details)
-             - If columns with names corresponding to parameters are provided
-               and the corresponding entry in the 'val' parameter of defdict
-               is set to 'auxiliary', then the provided data will be used
-               as auxiliary data for the parameter.
+               (e.g. residuals = data_weights * calculated_residuals )
+             - If columns `"<param>_dyn"` are provided where `<param>` is the name of
+               a parameter that is intended to be fitted, the positions of the unique
+               entries will be used to assign the dynamics of the corresponding
+               parameter (see defdict 'freq' entry for further details)
+
+               >>> defdict = {"X" : [True, .1, 'manual', ([0.], [1.]), False]}
+               >>> dataset['X_dyn'] = [1, 1, 1, 2, 2, 1, 1, 3, 3, 5, ...]
+
+             - If columns that match parameter-names are provided and the corresponding
+               entry in the `"val"` parameter of defdict is set to `"auxiliary"`, then
+               the provided data will be used as auxiliary data for the parameter.
+
+               >>> defdict = {"X" : [False, 'auxiliary']}
+               >>> dataset["X"] = ... the data to use for the "X" parameter...
 
     defdict: dict (default = None)
              a dictionary of the following structure:
@@ -163,7 +172,17 @@ class Fits(Scatter):
                >>>     return V, SRF
 
                or a dict that will be passed to _init_V_SRF() to initialize
-               the V- and SRF-objects
+               the V- and SRF-objects of the form:
+
+               >>> dict(
+               >>>    V_props=dict(
+               >>>            V_name="Volume-function",
+               >>>            ... volume-keys ...),
+               >>>    SRF_props=dict(
+               >>>            SRF_name="Surface-function",
+               >>>            ... surface-keys ...)
+               >>>    )
+
     lsq_kwargs: dict (default = dict())
                 a dictionary with keyword-arguments passed to
                 scipy.optimize.least_squares
@@ -263,7 +282,7 @@ class Fits(Scatter):
 
         self.sig0 = sig0
         self.dB = dB
-        self.dataset = dataset
+        self.dataset = self._check_monotonic_dataset_index(dataset)
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
         self.defdict = copy.deepcopy(defdict)
         if lsq_kwargs is None:
@@ -317,6 +336,11 @@ class Fits(Scatter):
             self.res_dict = {key: val[0] for key, val in self.res_dict.items()}
 
     def __setstate__(self, d):
+        # downward-compatibility for the dataset property
+        if "_dataset" not in d:
+            if "dataset" in d:
+                d["_dataset"] = d.pop("dataset")
+
         # this is done to support downward-compatibility with pickled results
         self.__dict__ = d
         self.__update__()
@@ -357,6 +381,26 @@ class Fits(Scatter):
         super().__setattr__(attr, value)
 
     @property
+    def dataset(self):
+        return self._dataset
+
+    @dataset.setter
+    def dataset(self, dataset):
+        # make sure the index of the provided dataset is sorted
+        self._dataset = self._check_monotonic_dataset_index(dataset)
+
+    @staticmethod
+    def _check_monotonic_dataset_index(dataset):
+        if dataset is None:
+            return None
+
+        if not dataset.index.is_monotonic_increasing:
+            log.warning("dataset has been sorted to ensure a monotonic index!")
+            return dataset.sort_index()
+        else:
+            return dataset
+
+    @property
     def _cached_props(self):
         """a list of the names of the properties that are cached"""
         names = [
@@ -383,6 +427,8 @@ class Fits(Scatter):
             "_param_dyn_monotonic",
             "_get_excludesymbs",
             "metric",
+            "V", "SRF", "set_model",
+            "_assignvals_log_message"
         ]
 
         for i in ["tau", "omega", "N"]:
@@ -438,6 +484,25 @@ class Fits(Scatter):
                 pass
         return nums
 
+    @lru_cache()
+    def set_model(self):
+        # call this prior to performfit to ensure that cached properties
+        # are properly assigned before starting the fit
+        self.V
+        self.SRF
+
+        self._tau_symb
+        self._tau_func
+        self._tau_diff_func
+
+        self._omega_symb
+        self._omega_func
+        self._omega_diff_func
+
+        self._N_symb
+        self._N_func
+        self._N_diff_func
+
     @property
     @lru_cache()
     def interp_vals(self):
@@ -473,7 +538,8 @@ class Fits(Scatter):
         else:
 
             # the names of the parameters that will be fitted
-            dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
+            dyn_keys = [key for key, val in self.defdict.items()
+                        if val[0] is True]
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
@@ -605,7 +671,8 @@ class Fits(Scatter):
         """
 
         # find the max. length of the parameters
-        maxdict = {key: len(str(max(val))) for key, val in self.param_dyn_dict.items()}
+        maxdict = {key: len(str(max(val)))
+                   for key, val in self.param_dyn_dict.items()}
         # find the max. length of the parameters
 
         def doit(x, N):
@@ -615,7 +682,8 @@ class Fits(Scatter):
             if i == 0:
                 conclist = list(map(partial(doit, N=maxdict[key]), val))
             else:
-                conclist = map(add, conclist, map(partial(doit, N=maxdict[key]), val))
+                conclist = map(add, conclist, map(
+                    partial(doit, N=maxdict[key]), val))
         return np.array(list(map(int, conclist)))
 
     @property
@@ -632,7 +700,8 @@ class Fits(Scatter):
             return
         # don't use keys that are not provided in defdict
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
-        usekeys = ["sig", "inc"] + [key for key in self.defdict if key in self.dataset]
+        usekeys = ["sig", "inc"] + \
+            [key for key in self.defdict if key in self.dataset]
         if "data_weights" in self.dataset:
             usekeys += ["data_weights"]
 
@@ -909,7 +978,8 @@ class Fits(Scatter):
         """indices of each parameter-group (to re-assign to the data-index)"""
         assigndict = dict()
         for key, val in self.param_dyn_dict.items():
-            assigndict[key] = groupby_unsorted(range(len(val)), key=lambda x: val[x])
+            assigndict[key] = groupby_unsorted(
+                range(len(val)), key=lambda x: val[x])
 
         return assigndict
 
@@ -996,7 +1066,8 @@ class Fits(Scatter):
                     )
                     meanstartvals = list(
                         groupby_unsorted(
-                            zip(self._groupindex, self.dataset[key + "_start"]),
+                            zip(self._groupindex,
+                                self.dataset[key + "_start"]),
                             key=itemgetter(0),
                             get=itemgetter(1),
                         ).values()
@@ -1165,13 +1236,13 @@ class Fits(Scatter):
         # check of general input-requirements
         # check if all parameters have been provided
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         paramset = (
             set(map(str, self._startvaldict.keys()))
             ^ set(map(str, self.fixed_dict.keys()))
-        ) - {"tau", "omega", "NormBRDF"}
+        )
 
         assert paramset >= (vsymb | srfsymb), (
             "the parameters "
@@ -1179,6 +1250,7 @@ class Fits(Scatter):
             + " must be provided in param_dict"
         )
 
+        # TODO
         # remove also other symbols that are used in the definitions of
         # tau, omega and NormBRDF
         for i in set(toNlist - vsymb - srfsymb):
@@ -1188,6 +1260,7 @@ class Fits(Scatter):
         return param_R
 
     @property
+    @lru_cache()
     def V(self):
         """new initialization of the rt1.volume object used"""
 
@@ -1195,11 +1268,12 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(self.set_V_SRF["V_props"], setdict=self._setdict)
-
+            V = self._init_V_SRF(
+                self.set_V_SRF["V_props"], setdict=self._setdict)
         return V
 
     @property
+    @lru_cache()
     def SRF(self):
         """new initialization of the rt1.surface object used"""
 
@@ -1207,13 +1281,13 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(self.set_V_SRF["SRF_props"], setdict=self._setdict)
+            SRF = self._init_V_SRF(
+                self.set_V_SRF["SRF_props"], setdict=self._setdict)
         return SRF
 
     @property
     def R(self):
         """new initialization of the rt1.RT1 object used"""
-
         R = RT1(
             1.0,
             self.inc,
@@ -1246,7 +1320,8 @@ class Fits(Scatter):
     def _get_V_SRF_symbs(self, V_SRF, prop):
         """the symbols used to define tau, omega and NormBRDF of V and SRF"""
         try:
-            symbs = list(map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
+            symbs = list(
+                map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
         except Exception:
             symbs = list()
         return symbs
@@ -1338,12 +1413,13 @@ class Fits(Scatter):
             )
             return
 
-        vals = self._assignvals(self.res_dict)
+        vals = dict()
         for key, val in self._assignvals(self.res_dict).items():
-            vals[key] = vals[key][~self.mask]
+            vals[key] = val[~self.mask]
 
         resdf = (
-            pd.DataFrame(vals, list(chain(*self._orig_index))).groupby(level=0).first()
+            pd.DataFrame(vals, list(chain(*self._orig_index))
+                         ).groupby(level=0).first()
         )
 
         return resdf
@@ -1372,6 +1448,19 @@ class Fits(Scatter):
             series.append(pd.Series(x, self.meandatetimes_group, name=key))
         resdf = pd.concat(series, axis=1)
         return resdf
+
+    @lru_cache()
+    def _assignvals_log_message(self, msgid, key):
+        # cache this function to ensure that messages are logged only once
+        # start with "\r" to overwrite an existing progressbar
+        sys.stdout.write("\r")
+        if msgid == "interp_non_mono":
+            log.warning(f"interpolation of non-monotonic {key} !")
+        elif msgid == "interp_1_val":
+            log.warning(
+                "interpolation not possible for "
+                + f"({key}) because there are less than 2 values"
+            )
 
     def _assignvals(self, res_dict, interp_vals=None):
         """
@@ -1404,10 +1493,11 @@ class Fits(Scatter):
 
             if key in interp_vals:
                 if self._param_dyn_monotonic[key] is False:
-                    log.info(f"interpolation of non-monotonic {key} !")
+                    self._assignvals_log_message("interp_non_mono", key)
                     # use assignments for unsorted param_dyns
                     useindex = self._meandt_interp_assigns(key)[0]
-                    usevals = np.array(val)[self._meandt_interp_assigns(key)[1]]
+                    usevals = np.array(
+                        val)[self._meandt_interp_assigns(key)[1]]
                 else:
                     useindex = self.meandatetimes[key]
                     usevals = val
@@ -1440,10 +1530,7 @@ class Fits(Scatter):
                     # assign correct shape
                     use_res_dict[key] = np.take(x, self._idx_assigns)
                 else:
-                    log.info(
-                        "interpolation not possible for "
-                        + f"({key}) because there are less than 2 values"
-                    )
+                    self._assignvals_log_message("interp_1_val", key)
 
                     x = np.empty(len(self.dataset), dtype=float)
                     [
@@ -1467,12 +1554,35 @@ class Fits(Scatter):
 
         return use_res_dict
 
+    @property
+    def _Vsymb(self):
+        # do this check to allow both functions and strings for set_V_SRF
+        # ... check _init_V_SRF() for more details
+        if hasattr(self.V, "free_symbols"):
+            symb = set(map(str, self.V.free_symbols))
+        else:
+            symb = set(map(str, self.V._func.free_symbols))
+
+        return symb
+
+    @property
+    def _SRFsymb(self):
+        # do this check to allow both functions and strings for set_V_SRF
+        # ... check _init_V_SRF() for more details
+        if hasattr(self.SRF, "free_symbols"):
+            symb = set(map(str, self.SRF.free_symbols))
+        else:
+            symb = set(map(str, self.SRF._func.free_symbols))
+
+        return symb
+
+    @property
     @lru_cache()
     def _get_excludesymbs(self):
         # symbols used to define the functions
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         # a list of all symbols used to define tau, omega and NormBRDF
         toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
@@ -1491,6 +1601,58 @@ class Fits(Scatter):
         )
 
         return excludekeys
+
+    def _set_calc_values(self, R=None, res_dict=None, fixed_dict=None, interp_vals=None,
+                         assign=True):
+
+        # ensure correct array-processing
+        # res_dict = {key:val[:,np.newaxis] for
+        #             key, val in self._assignvals(res_dict).items()}
+        if assign is True:
+            res_dict = self._assignvals(res_dict, interp_vals)
+        res_dict.update(fixed_dict)
+
+        # update the numeric representations of omega, tau and NormBRDF
+        # based on the values for the used symbols provided in res_dict
+        if self._omega_func is None:
+            if "omega" in res_dict:
+                R.V.omega = res_dict["omega"]
+        else:
+            R.V.omega = self._omega_func(
+                **{key: res_dict[key] for key in self._omega_symb}
+            )
+
+        if self._tau_func is None:
+            if "tau" in res_dict:
+                R.V.tau = res_dict["tau"]
+        else:
+            R.V.tau = self._tau_func(
+                **{key: res_dict[key] for key in self._tau_symb})
+
+        if self._N_func is None:
+            if "NormBRDF" in res_dict:
+                R.SRF.NormBRDF = res_dict["NormBRDF"]
+        else:
+            R.SRF.NormBRDF = self._N_func(
+                **{key: res_dict[key] for key in self._N_symb}
+            )
+
+        if "bsf" in res_dict:
+            R.bsf = res_dict["bsf"]
+
+        # remove all unwanted symbols that are NOT needed for evaluation
+        # of the fn-coefficients from res_dict to generate a dict that
+        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
+        # and the symbols used to define them must be removed)
+
+        strparam_fn = {
+            str(key): val for key, val in res_dict.items() if key not in self._get_excludesymbs
+        }
+
+        # set the param-dict to the newly generated dict
+        R.param_dict = strparam_fn
+
+        return R
 
     def _calc_model(
         self,
@@ -1534,6 +1696,7 @@ class Fits(Scatter):
                     in linear-units or dB corresponding to the specifications
                     defined in the rtfits-class.
         """
+        self.set_model()
 
         if R is None:
             R = self.R
@@ -1544,52 +1707,10 @@ class Fits(Scatter):
         if interp_vals is None:
             interp_vals = self.interp_vals
 
-        # ensure correct array-processing
-        # res_dict = {key:val[:,np.newaxis] for
-        #             key, val in self._assignvals(res_dict).items()}
-        if assign is True:
-            res_dict = self._assignvals(res_dict, interp_vals)
-        res_dict.update(fixed_dict)
-
-        # update the numeric representations of omega, tau and NormBRDF
-        # based on the values for the used symbols provided in res_dict
-        if self._omega_func is None:
-            if "omega" in res_dict:
-                R.V.omega = res_dict["omega"]
-        else:
-            R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
-            )
-
-        if self._tau_func is None:
-            if "tau" in res_dict:
-                R.V.tau = res_dict["tau"]
-        else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
-
-        if self._N_func is None:
-            if "NormBRDF" in res_dict:
-                R.SRF.NormBRDF = res_dict["NormBRDF"]
-        else:
-            R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
-            )
-
-        if "bsf" in res_dict:
-            R.bsf = res_dict["bsf"]
-
-        # remove all unwanted symbols that are NOT needed for evaluation
-        # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input. (i.e. "omega", "tau", "NormBRDF"
-        # and the symbols used to define them must be removed)
-
-        excludekeys = self._get_excludesymbs()
-        strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in excludekeys
-        }
-
-        # set the param-dict to the newly generated dict
-        R.param_dict = strparam_fn
+        R = self._set_calc_values(R=R, res_dict=res_dict,
+                                  fixed_dict=fixed_dict,
+                                  interp_vals=interp_vals,
+                                  assign=assign)
 
         # calculate total backscatter-values
         if return_components is True:
@@ -1615,6 +1736,7 @@ class Fits(Scatter):
         fixed_dict=None,
         param_dyn_dict=None,
         order=None,
+        interp_vals=None,
     ):
         """
         function to evaluate the jacobian in the shape as required
@@ -1634,6 +1756,7 @@ class Fits(Scatter):
              the jacobian corresponding to the fit-parameters in the
              shape applicable to scipy's least_squres-function
         """
+        self.set_model()
 
         if R is None:
             R = self.R
@@ -1641,74 +1764,18 @@ class Fits(Scatter):
             res_dict = self.res_dict
         if fixed_dict is None:
             fixed_dict = self.fixed_dict
+        if interp_vals is None:
+            interp_vals = self.interp_vals
+
         if param_dyn_dict is None:
             param_dyn_dict = self.param_dyn_df
         if order is None:
             order = self._order
 
-        # ensure correct array-processing
-        # res_dict = {key:val[:,np.newaxis] for
-        #             key, val in self._assignvals(res_dict).items()}
-        res_dict = self._assignvals(res_dict)
-        res_dict.update(fixed_dict)
-
-        # update the numeric representations of omega, tau and NormBRDF
-        # based on the values for the used symbols provided in res_dict
-        if self._omega_func is None:
-            if "omega" in res_dict:
-                R.V.omega = res_dict["omega"]
-        else:
-            R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
-            )
-
-        if self._tau_func is None:
-            if "tau" in res_dict:
-                R.V.tau = res_dict["tau"]
-        else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
-
-        if self._N_func is None:
-            if "NormBRDF" in res_dict:
-                R.SRF.NormBRDF = res_dict["NormBRDF"]
-        else:
-            R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
-            )
-
-        if "bsf" in res_dict:
-            R.bsf = res_dict["bsf"]
-
-        # remove all unwanted symbols that are NOT needed for evaluation
-        # of the fn-coefficients from res_dict to generate a dict that
-        # can be used as R.param_dict input (i.e. "omega", "tau", "NormBRDF",
-        # "bsf" and the symbols used to define them must be removed)
-
-        # symbols used in the definitions of the functions
-        angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, self.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, self.SRF._func.free_symbols)) - angset
-
-        # a list of all symbols used to define tau, omega and NormBRDF
-        toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
-
-        # exclude all keys that are not needed to calculate the fn-coefficients
-        # vsymb and srfsymb must be subtracted in case the same symbol is used
-        # for omega, tau or NormBRDF definition and in the function definiton
-        excludekeys = [
-            "omega",
-            "tau",
-            "NormBRDF",
-            "bsf",
-            *[str(i) for i in set(toNlist - vsymb - srfsymb)],
-        ]
-
-        strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in excludekeys
-        }
-
-        # set the param-dict to the newly generated dict
-        R.param_dict = strparam_fn
+        R = self._set_calc_values(R=R, res_dict=res_dict,
+                                  fixed_dict=fixed_dict,
+                                  interp_vals=interp_vals,
+                                  assign=True)
 
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
@@ -1793,7 +1860,8 @@ class Fits(Scatter):
 
         # same for NormBRDF
         for i in set(self._N_symb) & set(param_dyn_dict.keys()):
-            df_dx = self._N_diff_func[i](**{key: res_dict[key] for key in self._N_symb})
+            df_dx = self._N_diff_func[i](
+                **{key: res_dict[key] for key in self._N_symb})
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
@@ -1918,7 +1986,8 @@ class Fits(Scatter):
             if "tau" in res_dict:
                 R.V.tau = res_dict["tau"]
         else:
-            R.V.tau = self._tau_func(**{key: res_dict[key] for key in self._tau_symb})
+            R.V.tau = self._tau_func(
+                **{key: res_dict[key] for key in self._tau_symb})
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
@@ -1938,8 +2007,8 @@ class Fits(Scatter):
 
         # symbols used to define the functions
         angset = {"phi_ex", "phi_0", "theta_0", "theta_ex"}
-        vsymb = set(map(str, R.V._func.free_symbols)) - angset
-        srfsymb = set(map(str, R.SRF._func.free_symbols)) - angset
+        vsymb = self._Vsymb - angset
+        srfsymb = self._SRFsymb - angset
 
         # a list of all symbols used to define tau, omega and NormBRDF
         toNlist = set(self._tau_symb + self._omega_symb + self._N_symb)
@@ -2026,14 +2095,22 @@ class Fits(Scatter):
             "V_name" in props and "SRF_name" in props
         ), 'provide either "V_name" or "SRF_name" not both!'
 
+        ignore_keys = ['omega', 'tau', 'NormBRDF', 'bsf']
+
         set_dict = dict()
+        free_symbols = set()
         for key, val in props.items():
             if key == "V_name" or key == "SRF_name":
                 continue
 
             # check if val is directly provided in setdict, if yes use it
+            # (e.g. this means the key is simply another name for a parameter
+            # and not an  equation)
             if val in setdict:
                 useval = setdict[val]
+                if key not in ignore_keys and isinstance(setdict[val], sp.Symbol):
+                    free_symbols.add(setdict[val])
+
             # check if val is a number, if yes use it directly
             elif isinstance(val, (int, float, np.ndarray)):
                 useval = val
@@ -2051,15 +2128,19 @@ class Fits(Scatter):
                         replacements[val_i] = setdict[str(val_i)]
                 useval = useval.xreplace(replacements)
 
+                if key not in ignore_keys:
+                    free_symbols.update(set(useval.free_symbols))
             set_dict[key] = useval
 
         if "V_name" in props:
             # initialize the volume-scattering function
             V = getattr(rt1_v, props["V_name"])(**set_dict)
+            V.free_symbols = free_symbols
             return V
         elif "SRF_name" in props:
             # initialize the surface-scattering function
             SRF = getattr(rt1_s, props["SRF_name"])(**set_dict)
+            SRF.free_symbols = free_symbols
             return SRF
 
     def performfit(
@@ -2092,6 +2173,9 @@ class Fits(Scatter):
         # clear the cache (to avoid issues in case re-processing is applied)
         if clear_cache is True:
             self._clear_cache()
+
+        self.set_model()
+
         # maintain R object during fit
         R = self.R
 
@@ -2391,7 +2475,8 @@ class Fits(Scatter):
                 else:
                     vari = "      -       "
 
-                boun = (f"{val[3][0][0]:.5}" + "-" + f"{val[3][1][0]:.5}").ljust(13)
+                boun = (f"{val[3][0][0]:.5}" + "-" +
+                        f"{val[3][1][0]:.5}").ljust(13)
                 try:
                     inte = f"{str(val[4]):<14}"
                 except IndexError:
@@ -2417,7 +2502,8 @@ class Fits(Scatter):
             vvals = list(vprop.values())
 
             srfnames = list(srfprop.keys())
-            srfnames = [i.ljust(max(map(len, srfnames))) + ":" for i in srfnames]
+            srfnames = [i.ljust(max(map(len, srfnames))) +
+                        ":" for i in srfnames]
             srfvals = list(srfprop.values())
 
             while len(vnames) < max(len(vnames), len(srfnames)):
@@ -2505,7 +2591,7 @@ class Fits(Scatter):
         if len(lsqkw) > 0:
             outstr += "\n\n# LSQ PARAMETERS " + "\n"
             for key1, key2 in zip(
-                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2 :]
+                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2:]
             ):
                 outstr += (
                     f" {key1:<15}= {lsqkw[key1]}".ljust(37)
@@ -2696,7 +2782,8 @@ class _MultiAccessors:
                     self,
                     prop,
                     update_wrapper(
-                        partial(self._applyit, prop=prop), getattr(Fits(), prop)
+                        partial(self._applyit, prop=prop), getattr(
+                            Fits(), prop)
                     ),
                 )
             elif isinstance(getattr(Fits, prop), property):
@@ -2797,6 +2884,13 @@ class MultiFits:
         else:
             self.set_reader_arg(reader_arg)
 
+    def __setstate__(self, d):
+        self.__dict__ = d
+        # this is done to support downward-compatibility with pickled results
+        for name, fit in self.accessor.config_fits.items():
+            if not hasattr(fit, "config_name"):
+                fit.config_name = name
+
     @property
     def dataset(self):
         return self._dataset
@@ -2828,9 +2922,11 @@ class MultiFits:
         )
 
     def set_dataset(self, dataset):
-        self._dataset = dataset
+        self._dataset = Fits._check_monotonic_dataset_index(dataset)
         for name in self.config_names:
-            getattr(self.configs, name).dataset = self._dataset
+            # set "_dataset" directly instead of "dataset" to avoid checking the
+            # index-sorting twice in the dataset-setter
+            getattr(self.configs, name)._dataset = self._dataset
 
     def set_aux_data(self, aux_data):
         self._aux_data = aux_data
@@ -2873,7 +2969,8 @@ class MultiFits:
             )
         elif isinstance(use_config, str):
             return [
-                (use_config, f(fit=self.accessor.config_fits[use_config], **kwargs))
+                (use_config, f(
+                    fit=self.accessor.config_fits[use_config], **kwargs))
             ]
         elif isinstance(use_config, list):
             return (
@@ -2898,20 +2995,21 @@ class MultiFits:
             the fit-object
         """
         if name in self.config_names:
-            log.warning(f"the config {name} will be overwritten by the new definition!")
+            log.warning(
+                f"the config {name} will be overwritten by the new definition!")
 
         assert str.isidentifier(
             name
         ), f"the name {name} is not a valid python identifier!"
 
-        # make sure that the config-name do not overwrite any definitions
-        assert name not in set(self.__dict__) ^ set(
-            self.config_names
-        ), f"you can not use {name} as the name for a configuration!"
+        # make sure that the config-name does not overwrite any definitions
+        assert name not in set(self.__dict__), (
+            f"you can not use {name} as the name for a configuration!")
         self.config_names.append(name)
 
         fit_object.dataset = self.dataset
         fit_object.aux_data = self.aux_data
+        fit_object.config_name = name
         setattr(self.configs, name, fit_object)
 
     def dump(self, path, mini=True):

@@ -138,7 +138,7 @@ def _increase_cnt(process_cnt, start, err=False):
                 ),
                 progress2=p_totcnt.value - p_meancnt.value,
             )
-            log.progress(msg.strip())
+
         else:
             # only increase the total counter
             p_totcnt.value += 1
@@ -162,7 +162,9 @@ def _increase_cnt(process_cnt, start, err=False):
                 ),
                 progress2=p_totcnt.value - p_meancnt.value,
             )
-            log.progress(msg.strip())
+
+            # log to file if an error occured during processing
+            log.debug(msg.strip())
 
         if lock is not None:
             # release the lock
@@ -306,10 +308,9 @@ class RTprocess(object):
         (use override=False to update `init_kwargs`)
 
         kwargs must be passed in the form:
-        ```
-        section = dict( key1 = val1,
-                        key2 = val2, ... )
-        ```
+
+        >>> section = dict( key1 = val1,
+        >>>                 key2 = val2, ... )
 
         Parameters
         ----------
@@ -364,7 +365,6 @@ class RTprocess(object):
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
         """
-
         self.cfg = RT1_configparser(self.config_path)
 
         # update specs with init_kwargs
@@ -471,11 +471,16 @@ class RTprocess(object):
         # from the copied file
         copypath = self.dumppath / "cfg" / self.cfg.configpath.name
         if mp.current_process().name == "MainProcess":
-            if (copypath).exists() and len(self.init_kwargs) == 0:
+            if copypath.exists() and len(self.init_kwargs) == 0:
+
                 log.warning(
-                    f'the file \n"{copypath}"\n'
+                    f'the file "{Path(*copypath.parts[-3:])} "'
                     + "already exists... NO copying is performed and the "
                     + "existing one is used!\n"
+                )
+
+                log.debug(
+                    f'{copypath.name} imported from \n"{copypath}"\n'
                 )
             else:
                 if len(self.init_kwargs) == 0:
@@ -513,10 +518,15 @@ class RTprocess(object):
 
                     if module_copypath.exists():
                         log.warning(
-                            f'the file \n"{module_copypath}" \nalready '
-                            + "exists ... NO copying is performed "
-                            + "and the existing one is used!\n"
+                            f'the file "{Path(*module_copypath.parts[-3:])} "'
+                            + "already exists... NO copying is performed and the "
+                            + "existing one is used!\n"
                         )
+
+                        log.debug(
+                            f'{module_copypath.name} imported from \n"{module_copypath}"\n'
+                        )
+
                     else:
                         shutil.copy(location, module_copypath)
                         log.info(f'"{location.name}" copied to \n"{module_copypath}"')
@@ -682,13 +692,14 @@ class RTprocess(object):
         (>> returns from provided initializer are returned)
         """
 
+        if queue is not None:
+            self._worker_configurer(queue)
+
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
             # all required modules from the desired locations
+            log.progress("setting up RTprocess-worker")
             self.setup()
-
-        if queue is not None:
-            self._worker_configurer(queue)
 
         if initializer is not None:
             res = initializer(*args)
@@ -832,10 +843,6 @@ class RTprocess(object):
             for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
                     parent_fit._fnevals_input = parent_fit.R._fnevals
-        # if len(self.cfg.config_names) > 0:
-        #     for i, [cfg_name, parent_fit] in enumerate(self.parent_fit):
-        #         if parent_fit.int_Q is True:
-        #             parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
@@ -1227,6 +1234,22 @@ class RTprocess(object):
         # load fitobjects based on fit-paths
         try:
             fit = load(fitpath)
+            if use_config is None:
+                use_config = fit.config_names
+
+            # assign pre-evaluated fn-coefficients
+            for config_name in use_config:
+                config_fit = self.parent_fit.accessor.config_fits[config_name]
+                if config_fit.int_Q is True:
+                    try:
+                        getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
+                    except AttributeError:
+                        log.error("could not assign pre-evaluated fn-coefficients to " +
+                                  f"the config {config_name}... " +
+                                  "available configs of the loaded Fits object:" +
+                                  f" {fit.config_names}")
+
+
         except Exception:
             log.error(f"there was an error while loading {fitpath}")
             _increase_cnt(process_cnt, start, err=True)
@@ -1305,6 +1328,21 @@ class RTprocess(object):
         # (to enable subprocess-logging)
         pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
 
+        # pre-evaluate the fn-coefficients if interaction terms are used
+        # since finalout might involve calling "calc_model()" or similar functions
+        # that require a re-evaluation of the fn_coefficients
+        if isinstance(self.parent_fit, MultiFits):
+            if use_config is None:
+                use_config = self.parent_fit.config_names
+
+            for fit_name in use_config:
+                parent_fit = self.parent_fit.accessor.config_fits[fit_name]
+                if parent_fit.int_Q is True:
+                    parent_fit._fnevals_input = parent_fit.R._fnevals
+        else:
+            if self.parent_fit.int_Q is True:
+                self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+
         if print_progress is True:
             # initialize shared values that will be used to track the number
             # of completed processes and the mean time to complete a process
@@ -1359,9 +1397,6 @@ class RTprocess(object):
         if isinstance(self.parent_fit, MultiFits):
             # store original finalout_name
             finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-            if use_config is None:
-                use_config = self.parent_fit.config_names
 
             for name in use_config:
                 self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
