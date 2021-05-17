@@ -565,7 +565,6 @@ class Rayleigh(Volume):
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
 
-
     @property
     def ncoefs(self):
         # make ncoefs a property since it is fixed and should not be changed
