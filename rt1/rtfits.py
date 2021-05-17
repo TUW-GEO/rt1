@@ -403,7 +403,8 @@ class Fits(Scatter):
             "_param_dyn_monotonic",
             "_get_excludesymbs",
             "metric",
-            "V", "SRF", "set_model"
+            "V", "SRF", "set_model",
+            "_assignvals_log_message"
         ]
 
         for i in ["tau", "omega", "N"]:
@@ -1424,6 +1425,19 @@ class Fits(Scatter):
         resdf = pd.concat(series, axis=1)
         return resdf
 
+    @lru_cache()
+    def _assignvals_log_message(self, msgid, key):
+        # cache this function to ensure that messages are logged only once
+        # start with "\r" to overwrite an existing progressbar
+        sys.stdout.write("\r")
+        if msgid == "interp_non_mono":
+            log.warning(f"interpolation of non-monotonic {key} !")
+        elif msgid == "interp_1_val":
+            log.warning(
+                "interpolation not possible for "
+                + f"({key}) because there are less than 2 values"
+            )
+
     def _assignvals(self, res_dict, interp_vals=None):
         """
         a function to distribute the fit-values to the actual shape of the
@@ -1455,7 +1469,7 @@ class Fits(Scatter):
 
             if key in interp_vals:
                 if self._param_dyn_monotonic[key] is False:
-                    log.info(f"interpolation of non-monotonic {key} !")
+                    self._assignvals_log_message("interp_non_mono", key)
                     # use assignments for unsorted param_dyns
                     useindex = self._meandt_interp_assigns(key)[0]
                     usevals = np.array(
@@ -1492,10 +1506,7 @@ class Fits(Scatter):
                     # assign correct shape
                     use_res_dict[key] = np.take(x, self._idx_assigns)
                 else:
-                    log.info(
-                        "interpolation not possible for "
-                        + f"({key}) because there are less than 2 values"
-                    )
+                    self._assignvals_log_message("interp_1_val", key)
 
                     x = np.empty(len(self.dataset), dtype=float)
                     [
