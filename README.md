@@ -14,6 +14,16 @@ for random volume over ground as documented in *Quast & Wagner (2016)* and
 The documentation of the package is found [here](http://rt1.readthedocs.io/).
 (Note that the documentation is still under construction.)
 
+
+## Overview of the RT1 python-module structure
+
+![RT1_overview](https://user-images.githubusercontent.com/22773387/118654673-16a35d00-b7e9-11eb-839d-434b7f93a4bd.png)
+
+
+- 🏞️ **rt1.volume** and **rt1.surface**
+
+  - a collection of useful surface- and volume scattering distribution functions
+
 - 🔨 **rt1.rt1**
 
   - generic implementation of radiative transfer calculations for a random
@@ -36,11 +46,6 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 - 📑 **rt1.rtparse**
 
   - a configparser to set up processing-routines via .ini files
-
-- 🏞️ **rt1.volume** and **rt1.surface**
-
-  - a collection of useful surface- and volume scattering functions
-
 
 
 ## Usage
