@@ -14,45 +14,49 @@ for random volume over ground as documented in *Quast & Wagner (2016)* and
 The documentation of the package is found [here](http://rt1.readthedocs.io/).
 (Note that the documentation is still under construction.)
 
-- **rt1.rt1**
+
+## Overview of the RT1 python-module structure
+
+![RT1_overview](https://user-images.githubusercontent.com/22773387/118656393-c4fbd200-b7ea-11eb-9ef9-913abb275e98.png)
+
+
+- 🏞️ **rt1.volume** and **rt1.surface**
+
+  - a collection of useful surface- and volume scattering distribution functions
+
+- 🔨 **rt1.rt1**
 
   - generic implementation of radiative transfer calculations for a random
     volume over ground
 
   - symbolic evaluation of first-order interaction contribution estimates
 
-- **rt1.rtfits**
+- ⚙️ **rt1.rtfits**
 
-  - a flexible interface to perform parameter estimation for incidence-angle
-    dependent data-timeseries via non-linear least-squares fitting routines.
+  - a flexible interface to perform parameter estimation from incidence-angle  
+    dependent backscatter-timeseries via non-linear least-squares fitting routines.
 
-  - integrates with a set of pre-defined plot-functions and interactive
+  - integrates with a set of pre-defined plot-functions and interactive   
     widgets that can be used to quickly analyze the obtained results
 
-- **rt1.rtprocess**
+- :rocket: **rt1.rtprocess**
 
   - a versatile interface to setup and run parallelized processing
 
-- **rt1.rtparse**
+- 📑 **rt1.rtparse**
 
   - a configparser to set up processing-routines via .ini files
-
-- **rt1.volume** and **rt1.surface**
-
-  - a collection of useful surface- and volume scattering functions
-
 
 
 ## Usage
 Any usage of this code is subject to the following conditions:
 
-- Full compliance with the license (see LICENSE file) is given
-- In publications or public presentations, credit should be given to the
+❗ Full compliance with the license (see LICENSE file) is given  
+❗ In publications or public presentations, credit should be given to the
   authors by:
 
-  - citing the references below
-
-  - pointing to this github repository
+  - citing the references below ✔️
+  - pointing to this github repository ✔️
 
 ## Installation
 For a basic install, the following line should be fine:

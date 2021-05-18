@@ -160,7 +160,7 @@ def _get_logger_formatter(simple=True):
 def setup_logger(
     log_name="rt1",
     console_out=True,
-    console_level=logging.WARNING,
+    console_level=21,
     simple=True,
 ):
 

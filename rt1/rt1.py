@@ -206,11 +206,11 @@ class RT1(object):
         log.info("dropping fn-coefficients to allow pickling...")
         for delkey in ["_RT1__fn"]:
             if delkey in self.__dict__:
-                log.info("removing", delkey, "from __dict__")
+                log.info(f"removing {delkey} from __dict__")
                 del self.__dict__[delkey]
         for Nonekey in ["_fn_input"]:
             if Nonekey in self.__dict__:
-                log.info("setting", Nonekey, "to None")
+                log.info(f"setting {Nonekey} to None")
                 self.__dict__[Nonekey] = None
 
         if self.lambda_backend == "symengine":

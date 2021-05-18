@@ -2,7 +2,7 @@
 
 import numpy as np
 import sympy as sp
-from functools import partial, update_wrapper
+from functools import partial, update_wrapper, lru_cache
 from .scatter import Scatter
 from .rtplots import polarplot
 
@@ -23,6 +23,21 @@ class Volume(Scatter):
         # add a quick way for visualizing the functions as polarplot
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
+
+    @lru_cache()
+    def _lambda_func(self, *args):
+        # define sympy objects
+        theta_0 = sp.Symbol("theta_0")
+        theta_ex = sp.Symbol("theta_ex")
+        phi_0 = sp.Symbol("phi_0")
+        phi_ex = sp.Symbol("phi_ex")
+
+        # replace arguments and evaluate expression
+        # sp.lambdify is used to allow array-inputs
+        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(args)
+        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
+        return pfunc
+
 
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
@@ -48,21 +63,13 @@ class Volume(Scatter):
         array_like(float)
             Numerical value of the volume-scattering phase-function
         """
-        # define sympy objects
-        theta_0 = sp.Symbol("theta_0")
-        theta_ex = sp.Symbol("theta_ex")
-        phi_0 = sp.Symbol("phi_0")
-        phi_ex = sp.Symbol("phi_ex")
 
-        # replace arguments and evaluate expression
-        # sp.lambdify is used to allow array-inputs
-        # for python > 3.5 unpacking could be used, i.e.:
-        # pfunc = sp.lambdify((theta_0, theta_ex, phi_0, phi_ex,
-        #                     *param_dict.keys()),
-        #                    self._func, modules=["numpy", "sympy"])
-        args = (theta_0, theta_ex, phi_0, phi_ex) + tuple(param_dict.keys())
-        pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
-
+        # if an explicit numeric function is provided, use it, otherwise
+        # lambdify the available sympy-function
+        if hasattr(self, "_func_numeric"):
+            pfunc = self._func_numeric
+        else:
+            pfunc = self._lambda_func(*param_dict.keys())
         # in case _func is a constant, lambdify will produce a function with
         # scalar output which is not suitable for further processing
         # (this happens e.g. for the Isotropic brdf).
@@ -430,13 +437,13 @@ class LinCombV(Volume):
         super(LinCombV, self).__init__(**kwargs)
 
         self.Vchoices = Vchoices
-        self._set_function()
-        self._set_legexpansion()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
 
-        self._func = self._Vcombiner()._func
+        return self._Vcombiner()._func
 
     def _set_legexpansion(self):
         """set legexpansion to the combined legexpansion"""
@@ -474,21 +481,7 @@ class LinCombV(Volume):
 
             def __init__(self, **kwargs):
                 super(Phasefunction, self).__init__(**kwargs)
-                self._set_function()
-                self._set_legcoefficients()
-
-            def _set_function(self):
-                """def phase function as sympy object for later evaluation"""
-
                 self._func = 0.0
-
-            def _set_legcoefficients(self):
-                """
-                set Legrende coefficients
-                needs to be a function that can be later evaluated by
-                subsituting 'n'
-                """
-
                 self.legcoefs = 0.0
 
         # find phase functions with equal a parameters
@@ -571,28 +564,36 @@ class Rayleigh(Volume):
 
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_function(self):
+    @property
+    def ncoefs(self):
+        # make ncoefs a property since it is fixed and should not be changed
+        # only 3 coefficients are needed to correctly represent
+        # the Rayleigh scattering function
+        return 3
+
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = 3.0 / (16.0 * sp.pi) * (1.0 + x ** 2.0)
+        return 3.0 / (16.0 * sp.pi) * (1.0 + x ** 2.0)
 
-    def _set_legcoefficients(self):
+    @property
+    @lru_cache()
+    def legcoefs(self):
         """
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
         # only 3 coefficients are needed to correctly represent
         # the Rayleigh scattering function
-        self.ncoefs = 3
         n = sp.Symbol("n")
-        self.legcoefs = (
+        return (
             (3.0 / (16.0 * sp.pi))
             * (
                 (4.0 / 3.0) * sp.KroneckerDelta(0, n)
@@ -639,27 +640,45 @@ class HenyeyGreenstein(Volume):
         )
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = (1.0 - self.t ** 2.0) / (
+        func = (1.0 - self.t ** 2.0) / (
             (4.0 * sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5
         )
 
-    def _set_legcoefficients(self):
+        return func
+
+    def _func_numeric(self, theta_0, theta_ex, phi_0, phi_ex, **kwargs):
+        """direct numeric version of _func"""
+        if isinstance(self.t, sp.Symbol):
+            t = kwargs[str(self.t)]
+        else:
+            t = self.t
+        x = self._scat_angle_numeric(theta_0, theta_ex, phi_0, phi_ex, self.a)
+        func = (1.0 - t ** 2.0) / (
+            (4.0 * np.pi) * (1.0 + t ** 2.0 - 2.0 * t * x) ** 1.5
+        )
+
+        return func
+
+    @property
+    @lru_cache()
+    def legcoefs(self):
         """
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
         n = sp.Symbol("n")
-        self.legcoefs = (1.0 / (4.0 * sp.pi)) * (2.0 * n + 1) * self.t ** n
+        legcoefs = (1.0 / (4.0 * sp.pi)) * (2.0 * n + 1) * self.t ** n
+        return legcoefs
 
 
 class HGRayleigh(Volume):
@@ -708,17 +727,17 @@ class HGRayleigh(Volume):
         )
         self.ncoefs = ncoefs
         assert self.ncoefs > 0
-        self._set_function()
-        self._set_legcoefficients()
 
-    def _set_function(self):
+    @property
+    @lru_cache()
+    def _func(self):
         """define phase function as sympy object for later evaluation"""
         theta_0 = sp.Symbol("theta_0")
         theta_ex = sp.Symbol("theta_ex")
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        self._func = (
+        return (
             3.0
             / (8.0 * sp.pi)
             * (
@@ -730,13 +749,15 @@ class HGRayleigh(Volume):
             )
         )
 
-    def _set_legcoefficients(self):
+    @property
+    @lru_cache()
+    def legcoefs(self):
         """
         set Legrende coefficients
         needs to be a function that can be later evaluated by subsituting 'n'
         """
         n = sp.Symbol("n")
-        self.legcoefs = sp.Piecewise(
+        return sp.Piecewise(
             (
                 3.0
                 / (8.0 * sp.pi)

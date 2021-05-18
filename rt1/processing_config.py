@@ -48,14 +48,14 @@ def defdict_parser(defdict):
                 parameter_specs["fitted_const"].append(key)
             else:
                 parameter_specs["fitted_dynamic"].append(key)
-                if val[1] == "manual":
+                if val[2] == "manual":
                     parameter_specs["fitted_dynamic_manual"].append(key)
-                elif val[1] == "index":
+                elif val[2] == "index":
                     parameter_specs["fitted_dynamic_index"].append(key)
-                elif isinstance(val[1], str):
-                    parameter_specs["fitted_dynamic_datetime"].append(key)
-                elif isinstance(val[1], int):
-                    parameter_specs["fitted_dynamic_integer"].append(key)
+                elif isinstance(val[2], str):
+                    parameter_specs["fitted_dynamic_datetime"].append((key, val[2]))
+                elif isinstance(val[2], int):
+                    parameter_specs["fitted_dynamic_integer"].append((key, val[2]))
         else:
             if val[1] == "auxiliary":
                 parameter_specs["auxiliary"].append(key)
@@ -286,9 +286,6 @@ class rt1_processing_config(object):
         filename : str
             the file-name that will be used to save the fit dump-files in case
             the processing was successful
-        error_filename : str
-            the file-name that will be used to save the error files in case an
-            error occured
         """
 
         # the ID used for indexing the processed sites
@@ -297,13 +294,9 @@ class rt1_processing_config(object):
         # the filename of the dump-file
         filename = f"{feature_id}.dump"
 
-        # the filename of the error-dumpfile
-        error_filename = f"{feature_id}_error.txt"
-
         return dict(
             feature_id=feature_id,
             filename=filename,
-            error_filename=error_filename,
         )
 
     def check_dump_exists(self, reader_arg):
@@ -506,7 +499,7 @@ class rt1_processing_config(object):
                 fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
                 return self.postprocess(fit, reader_arg)
             except Exception:
-                log.debug(
+                log.error(
                     "the has been a problem while loading the "
                     + f"already processed file '{names_ids['filename']}'"
                 )
@@ -516,26 +509,21 @@ class rt1_processing_config(object):
             # raised if there was a problem with the data, ignore and continue
             raise_exception = False
 
+            log.error(f"there was a DATA-problem for '{names_ids['filename']}'")
+        else:
+            log.error(traceback.format_exc())
+
         # in case `save_path` is specified, write ALL exceptions to a file
         # and continue processing WITHOUT raising the exception.
         # if `save_path`is NOT specified, raise ONLY exceptions that
         # have not been explicitly catched
         if self.rt1_procsesing_dumppath is None and raise_exception is True:
-            log.info(
+            log.debug(
                 "`save_path` must be specified otherwise exceptions "
                 + "that are not explicitly catched by `exceptfunc()` "
                 + " will be raised!"
             )
             raise ex
-        else:
-            if "error_filename" in names_ids:
-                error_filename = names_ids["error_filename"]
-            else:
-                error_filename = names_ids["filename"].split(".")[0] + "_error.txt"
-
-            # dump the encountered exception to a file
-            with open(self.rt1_procsesing_dumppath / error_filename, "w") as file:
-                file.write(traceback.format_exc())
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
