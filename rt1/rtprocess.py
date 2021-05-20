@@ -12,7 +12,7 @@ from pathlib import Path
 import shutil
 
 import pandas as pd
-from numpy.random import randint as np_randint
+from numpy.random import choice
 
 from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 from .rtparse import RT1_configparser
@@ -1602,7 +1602,10 @@ class RTresults(object):
                 If int:  load the nth file found in the dumpfolder
                 if Path: the full path to the .dump file
                 If None: load a random file from the folder
-                         (might take some time for very large amounts of files)
+                         NOTE: in order to load a random file, the folder
+                         must be indexed first! (this might take some time for
+                         very large amounts of files)
+                         > call `scan_folder()` to re-scan the folder contents
                 The default is 0.
             return_ID : bool, optional
                 If True, a tuple (fit, ID) is returned, otherwise only
@@ -1618,11 +1621,10 @@ class RTresults(object):
                 filepath = ID
             else:
                 if ID is None:
-                    if not hasattr(self, "_n_dump_files"):
-                        self._n_dump_files = len(list(self.dump_files))
-                    Nid = np_randint(0, self._n_dump_files)
+                    if not hasattr(self, "_dump_file_list"):
+                        self.scan_folder()
 
-                    filepath = next(islice(self.dump_files, Nid, None))
+                    filepath = Path(choice(self._dump_file_list))
 
                     log.info(
                         f"loading random ID ({filepath.stem}) from "
@@ -1639,6 +1641,15 @@ class RTresults(object):
                 return (fit, ID)
             else:
                 return fit
+
+        def scan_folder(self):
+            """
+            (re)-scan the contents of the dump-folder for ".dump" files
+            """
+            log.warning(f'... indexing folder:\n "{self._dump_path}"')
+            self._dump_file_list = list(self.dump_files)
+            self._n_dump_files = len(self._dump_file_list)
+
 
         def load_cfg(self, cfg_name=None):
             """
@@ -1680,11 +1691,12 @@ class RTresults(object):
             NOTICE: only files that do NOT contain "error" in the filename and
             whose file-ending is ".dump" are returned!
             """
-            return (
-                i.path
-                for i in os.scandir(self._dump_path)
-                if self._check_dump_filename(i.path)
-            )
+            for entry in os.scandir(self._dump_path):
+                if (entry.name.endswith('.dump')
+                    and entry.is_file()
+                    and 'error' not in entry.name):
+
+                    yield entry.path
 
         @property
         def NetCDF_variables(self):
