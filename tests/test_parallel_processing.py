@@ -267,5 +267,52 @@ class TestRTfits(unittest.TestCase):
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
 
+    def test_10_export_results(self):
+        for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
+            proc = RTprocess(f"tests/{folder}")
+
+            parameters = dict(t_s = dict(long_name="bare soil directionality"),
+                              tau = dict(long_name="optical depth"),
+                              sig2 = dict(long_name="sigma0 squared")
+                              )
+
+            metrics = dict(R=["pearson", "sig", "tot",
+                              dict(long_name="sig0 pearson correlation")],
+                           RMSD=["rmsd", "sig", "tot",
+                              dict(long_name="sig0 RMSD")]
+                           )
+
+            export_functions = dict(sig2=lambda fit: fit.dataset.sig**2)
+
+            attributes = dict(info="some info")
+
+
+            res = proc.export_data(parameters=parameters,
+                                   metrics=metrics,
+                                   export_functions=export_functions,
+                                   attributes=attributes,
+                                   index_col='gpi')
+
+            if folder != "proc_multi":
+                # make single-fit results a dict as well so that they can be treated
+                # in the same way as multi-fits
+                res = dict(single_fit=res)
+
+            for cfg_name, useres in res.items():
+                assert useres.R.dims == ('gpi',), "metric dim is wrong"
+                assert useres.RMSD.dims == ('gpi',), "metric dim is wrong"
+
+                assert useres.t_s.dims == ('gpi',), "static parameter dim is wrong"
+                assert useres.tau.dims == ('gpi','date'), "dynamic parameter dim is wrong"
+                assert useres.sig2.dims == ('gpi','date'), "dynamic parameter dim is wrong"
+
+                # check if attributes are correctly attached
+                assert useres.attrs['info'] == attributes['info'], "attributes not correctly attached"
+                for key, attrs in parameters.items():
+                    for name, a in attrs.items():
+                        assert useres[key].attrs[name] == a, "attributes not correctly attached"
+
+                assert "model_definition" in useres.attrs, "model_definition not correctly attached"
+
 if __name__ == "__main__":
     unittest.main()
