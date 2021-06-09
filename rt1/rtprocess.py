@@ -259,7 +259,7 @@ class RTprocess(object):
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
         if not hasattr(self, "dumppath"):
-            log.error("listener process called without dumppath specified!")
+            log.warning("no dumppath specified, log is not saved!")
             return
 
         datestring = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
@@ -1351,7 +1351,7 @@ class RTprocess(object):
             process_cnt = None
 
         if ncpu > 1:
-            log.info(f"start of finalout generation on {ncpu} cores")
+            log.progress(f"start of finalout generation on {ncpu} cores")
             with mp.Pool(ncpu, **pool_kwargs) as pool:
                 # loop over the reader_args
                 res_async = pool.starmap_async(
@@ -1368,7 +1368,7 @@ class RTprocess(object):
                 pool.join()  # Waits for workers to exit.
                 res = res_async.get()
         else:
-            log.info("start of single-core finalout generation")
+            log.progress("start of single-core finalout generation")
             # force autocontinue=True when calling the initializer since setup() has
             # already been called in the main process so all folders will already exist!
             init_autocontinue = self.autocontinue
@@ -1392,6 +1392,8 @@ class RTprocess(object):
                         postprocess=postprocess,
                     )
                 )
+        log.progress("... generating finaloutput")
+
 
         # in case of a multi-config, results will be dicts!
         if isinstance(self.parent_fit, MultiFits):
