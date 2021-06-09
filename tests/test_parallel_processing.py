@@ -266,14 +266,13 @@ class TestRTfits(unittest.TestCase):
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
-
     def test_10_export_results(self):
         for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
             proc = RTprocess(f"tests/{folder}")
 
-            parameters = dict(t_s = dict(long_name="bare soil directionality"),
-                              tau = dict(long_name="optical depth"),
-                              sig2 = dict(long_name="sigma0 squared")
+            parameters = dict(t_s=dict(long_name="bare soil directionality"),
+                              tau=dict(long_name="optical depth"),
+                              sig2=dict(long_name="sigma0 squared")
                               )
 
             metrics = dict(R=["pearson", "sig", "tot",
@@ -285,7 +284,6 @@ class TestRTfits(unittest.TestCase):
             export_functions = dict(sig2=lambda fit: fit.dataset.sig**2)
 
             attributes = dict(info="some info")
-
 
             res = proc.export_data(parameters=parameters,
                                    metrics=metrics,
@@ -303,8 +301,8 @@ class TestRTfits(unittest.TestCase):
                 assert useres.RMSD.dims == ('gpi',), "metric dim is wrong"
 
                 assert useres.t_s.dims == ('gpi',), "static parameter dim is wrong"
-                assert useres.tau.dims == ('gpi','date'), "dynamic parameter dim is wrong"
-                assert useres.sig2.dims == ('gpi','date'), "dynamic parameter dim is wrong"
+                assert useres.tau.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
+                assert useres.sig2.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
 
                 # check if attributes are correctly attached
                 assert useres.attrs['info'] == attributes['info'], "attributes not correctly attached"
