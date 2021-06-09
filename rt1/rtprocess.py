@@ -1249,8 +1249,9 @@ class RTprocess(object):
         # load fitobjects based on fit-paths
         try:
             fit = load(fitpath)
-            if use_config is None:
+            if use_config is None and isinstance(fit, MultiFits):
                 use_config = fit.config_names
+
 
             # assign pre-evaluated fn-coefficients
             if hasattr(self, "parent_fit"):
@@ -1514,7 +1515,6 @@ class RTprocess(object):
             a xarray-dataset with all layers defined according to the specs.
 
         """
-
         if saveparams is None:
             saveparams = []
 
@@ -1558,7 +1558,7 @@ class RTprocess(object):
                     + "during xarray postprocessing"
                 )
 
-        if auxdata is not None:
+        if auxdata is not None and len(auxdata) > 0:
             usedfs.append(auxdata)
 
         # combine all timeseries and set the proper index
@@ -1710,7 +1710,7 @@ class RTprocess(object):
             saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
             xindex=(index_col, reader_arg[index_col]),
             staticlayers=staticlayers,
-            auxdata=auxdata,
+            auxdata=pd.DataFrame(auxdata),
             sig_to_dB=sig_to_dB,
             inc_to_degree=inc_to_degree
         )
@@ -1719,10 +1719,10 @@ class RTprocess(object):
 
     @staticmethod
     def _export_finalout(res, savepath=None, attrs=None, descriptions=None,
-                         encoding=None):
+                         encoding=None, concat_dim="ID"):
 
-        resxar = xar.combine_nested([i for i in res if i is not None], concat_dim="ID")
-
+        resxar = xar.combine_nested([i for i in res if i is not None],
+                                    concat_dim=concat_dim)
         if attrs:
             for key, val in attrs.items():
                 resxar.attrs[key] = val
@@ -1891,7 +1891,8 @@ class RTprocess(object):
 
         finalout = partial(self._export_finalout,
                            descriptions=descriptions,
-                           attrs=attributes)
+                           attrs=attributes,
+                           concat_dim=index_col)
 
         # ----- run finalout generation
         out = self.run_finaloutput(
