@@ -1735,6 +1735,21 @@ class RTresults(object):
                     yield entry.path
 
         @property
+        def dump_fits(self):
+            """
+            a generator returning the fit-objects to the available dump-files
+
+            NOTICE: only files that do NOT contain "error" in the filename and
+            whose file-ending is ".dump" are returned!
+            """
+            for entry in os.scandir(self._dump_path):
+                if (entry.name.endswith('.dump')
+                    and entry.is_file()
+                    and 'error' not in entry.name):
+
+                    yield self.load_fit(entry.name)
+
+        @property
         def NetCDF_variables(self):
             """
             print all available NetCDF-files and their variables
