@@ -610,6 +610,7 @@ class RTprocess(object):
                         self.parent_fit, reader_arg, mini=True
                     )
 
+
                 if process_cnt is not None:
                     _increase_cnt(process_cnt, start, err=False)
 
@@ -1110,6 +1111,7 @@ class RTprocess(object):
         postprocess=None,
         print_progress=True,
         logfile_level=1,
+        fitlist=None
     ):
         """
         run postprocess and finaloutput for available .dump files
@@ -1155,7 +1157,11 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
-
+        fitlist : list, optional
+            optional way to provide a list of paths to dump-files directly
+            (useful if RTprocess is used without a config attached)
+            The default is None, in which case the dump-files will be 
+            identified according to the definitions in the config-file.
         """
         try:
             if logfile_level is not None and ncpu > 1:
@@ -1193,7 +1199,8 @@ class RTprocess(object):
                 # file to which the process is writing can not be generated!
                 listener.start()
 
-            fitlist = self._get_files(use_N_files=use_N_files)
+            if not fitlist:
+                fitlist = self._get_files(use_N_files=use_N_files)
 
             return self._run_finalout(
                 ncpu,
