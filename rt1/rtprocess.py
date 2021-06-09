@@ -365,7 +365,13 @@ class RTprocess(object):
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
         """
-        self.cfg = RT1_configparser(self.config_path)
+        try:
+            self.cfg = RT1_configparser(self.config_path)
+        except Exception:
+            if mp.current_process().name == "MainProcess":
+                log.warning("no valid config file was found")
+            return
+
 
         # update specs with init_kwargs
         for section, init_defs in self.init_kwargs.items():
