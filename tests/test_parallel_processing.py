@@ -266,7 +266,7 @@ class TestRTfits(unittest.TestCase):
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
-    def test_10_export_results(self):
+    def test_91_export_results(self):
         for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
             proc = RTprocess(f"tests/{folder}")
 
