@@ -1665,14 +1665,16 @@ class RTresults(object):
                         + f" {self._n_dump_files} available files"
                     )
                 elif isinstance(ID, int):
-                    filepath = next(islice(self.dump_files, ID, None))
+                    filepath = Path(next(islice(self.dump_files, ID, None)))
                 elif isinstance(ID, str):
-                    filepath = self._dump_path / (ID + ".dump")
+                    if not ID.endswith(".dump"):
+                        ID += ".dump"
+                    filepath = self._dump_path / (ID)
 
             fit = load(filepath)
 
             if return_ID is True:
-                return (fit, ID)
+                return (fit, filepath.stem)
             else:
                 return fit
 
