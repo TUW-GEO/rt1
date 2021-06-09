@@ -1251,16 +1251,17 @@ class RTprocess(object):
                 use_config = fit.config_names
 
             # assign pre-evaluated fn-coefficients
-            for config_name in use_config:
-                config_fit = self.parent_fit.accessor.config_fits[config_name]
-                if config_fit.int_Q is True:
-                    try:
-                        getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
-                    except AttributeError:
-                        log.error("could not assign pre-evaluated fn-coefficients to " +
-                                  f"the config {config_name}... " +
-                                  "available configs of the loaded Fits object:" +
-                                  f" {fit.config_names}")
+            if hasattr(self, "parent_fit"):
+                for config_name in use_config:
+                    config_fit = self.parent_fit.accessor.config_fits[config_name]
+                    if config_fit.int_Q is True:
+                        try:
+                            getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
+                        except AttributeError:
+                            log.error("could not assign pre-evaluated fn-coefficients to " +
+                                      f"the config {config_name}... " +
+                                      "available configs of the loaded Fits object:" +
+                                      f" {fit.config_names}")
 
 
         except Exception:
@@ -1344,17 +1345,18 @@ class RTprocess(object):
         # pre-evaluate the fn-coefficients if interaction terms are used
         # since finalout might involve calling "calc_model()" or similar functions
         # that require a re-evaluation of the fn_coefficients
-        if isinstance(self.parent_fit, MultiFits):
-            if use_config is None:
-                use_config = self.parent_fit.config_names
+        if hasattr(self, "parent_fit"):
+            if isinstance(self.parent_fit, MultiFits):
+                if use_config is None:
+                    use_config = self.parent_fit.config_names
 
-            for fit_name in use_config:
-                parent_fit = self.parent_fit.accessor.config_fits[fit_name]
-                if parent_fit.int_Q is True:
-                    parent_fit._fnevals_input = parent_fit.R._fnevals
-        else:
-            if self.parent_fit.int_Q is True:
-                self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+                for fit_name in use_config:
+                    parent_fit = self.parent_fit.accessor.config_fits[fit_name]
+                    if parent_fit.int_Q is True:
+                        parent_fit._fnevals_input = parent_fit.R._fnevals
+            else:
+                if self.parent_fit.int_Q is True:
+                    self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
         if print_progress is True:
             # initialize shared values that will be used to track the number
@@ -1407,9 +1409,26 @@ class RTprocess(object):
                 )
         log.progress("... generating finaloutput")
 
+        # in case no config is provided return the output to the console
+        if not hasattr(self, "proc_cls"):
+            if isinstance(res[0], dict):
+                out = dict()
+                if use_config is None:
+                    use_config = res[0].keys()
+                for name in use_config:
+                    if callable(finaloutput):
+                        out[name] = finaloutput((i.get(name) for i in res if i is not None))
+            else:
+                if callable(finaloutput):
+                    out = finaloutput(res)
+                else:
+                    out = res
+
+            return out
 
         # in case of a multi-config, results will be dicts!
-        if isinstance(self.parent_fit, MultiFits):
+        # if isinstance(self.parent_fit, MultiFits):
+        if isinstance(res[0], dict):
             # store original finalout_name
             finalout_name, ending = self.proc_cls.finalout_name.split(".")
 
