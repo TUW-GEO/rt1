@@ -1160,7 +1160,7 @@ class RTprocess(object):
         fitlist : list, optional
             optional way to provide a list of paths to dump-files directly
             (useful if RTprocess is used without a config attached)
-            The default is None, in which case the dump-files will be 
+            The default is None, in which case the dump-files will be
             identified according to the definitions in the config-file.
         """
         try:
@@ -1300,7 +1300,7 @@ class RTprocess(object):
             return ret
 
         except Exception as ex:
-            if callable(self.proc_cls.exceptfunc):
+            if hasattr(self, "proc_cls") and callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, fit.reader_arg)
                 if ex_ret is None or ex_ret is False:
                     _increase_cnt(process_cnt, start, err=True)
