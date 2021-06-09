@@ -1455,7 +1455,8 @@ class RTprocess(object):
             else:
                 return res
 
-    def _postprocess_xarray(self,
+    def _postprocess_xarray(
+        self,
         fit,
         saveparams=None,
         xindex=("x", -9999),
@@ -1690,7 +1691,6 @@ class RTprocess(object):
                 if fit.int_Q is True and fit.config_name in _fnevals_input:
                     fit._fnevals_input = _fnevals_input[fit.config_name]
 
-
         staticlayers = dict()
         if metrics:
             for name, p in metrics.items():
@@ -1705,12 +1705,11 @@ class RTprocess(object):
             for key, func in export_functions.items():
                 auxdata[key] = func(fit)
 
-
         ret = self._postprocess_xarray(
             fit=fit,
             saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
             xindex=(index_col, reader_arg[index_col]),
-            staticlayers = staticlayers,
+            staticlayers=staticlayers,
             auxdata=auxdata,
             sig_to_dB=sig_to_dB,
             inc_to_degree=inc_to_degree
@@ -1843,7 +1842,6 @@ class RTprocess(object):
             model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
             parameters = set(parameters) ^ model_keys
 
-
         for key, val in metrics.items():
             if len(val) == 4:
                 descriptions[key] = val[3]
@@ -1869,7 +1867,6 @@ class RTprocess(object):
         # load the first fit-object to pre-load fn-coefficients
         fit0 = useres.load_fit(0)
 
-
         if pre_evaluate_fn_coefs:
             log.progress("... pre-evaluation of fn-coefficients")
 
@@ -1879,13 +1876,13 @@ class RTprocess(object):
                     if fit_cfg.int_Q is True:
                         fn_evals[name] = fit_cfg.R._fnevals
             elif fit0.int_Q is True:
-                    fn_evals = fit0.R._fnevals
+                fn_evals = fit0.R._fnevals
             else:
                 fn_evals = None
 
         # ----- set postprocess and finalout functions
         func = partial(self._export_postprocess,
-                       parameters = parameters,
+                       parameters=parameters,
                        metrics=metrics,
                        export_functions=export_functions,
                        model_keys=model_keys,
@@ -1915,8 +1912,7 @@ class RTprocess(object):
             fit0.set_dataset(None)
             for key, val in out.items():
                 val.attrs['model_definition'] = (
-                    fit0.accessor.config_fits[key]._model_definition
-                    )
+                    fit0.accessor.config_fits[key]._model_definition)
         else:
             fit0.dataset = None
             out.attrs['model_definition'] = fit0._model_definition
