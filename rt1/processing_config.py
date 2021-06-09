@@ -498,7 +498,7 @@ class rt1_processing_config(object):
             try:
                 fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
                 return self.postprocess(fit, reader_arg)
-            except Exception as ex:
+            except Exception:
                 log.error(
                     "there has been a problem while loading the "
                     + f"already processed file '{names_ids['filename']}'"
