@@ -616,42 +616,6 @@ class RTprocess(object):
                 if process_cnt is not None:
                     _increase_cnt(process_cnt, start, err=False)
 
-            # # initialize a new fits-object and perform the fit
-            # if len(self.cfg.config_names) > 0:
-            #     # in case multiple configs are provided, evaluate them one by one
-            #     ret = []
-            #     for cfg_name, parent_fit in self.parent_fit:
-
-            #         if self.dumppath is not None:
-            #             self.proc_cls.rt1_procsesing_dumppath = (
-            #                 self.dumppath / "dumps" / cfg_name
-            #             )
-
-            #         fit = parent_fit.reinit_object(dataset=dataset)
-            #         fit.performfit()
-
-            #         # append auxiliary data
-            #         if aux_data is not None:
-            #             fit.aux_data = aux_data
-            #         # append reader_arg
-            #         fit.reader_arg = reader_arg
-
-            #         # if a post-processing function is provided, return its output,
-            #         # else return None
-            #         if self._postprocess and callable(self.proc_cls.postprocess):
-            #             ret.append(self.proc_cls.postprocess(fit, reader_arg))
-            #         else:
-            #             ret.append(None)
-
-            #         # dump a fit-file
-            #         # save dumps AFTER prostprocessing has been performed
-            #         # (it might happen that some parts change during postprocessing)
-            #         if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-            #             self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-
-            #     if process_cnt is not None:
-            #         _increase_cnt(process_cnt, start, err=False)
-
             else:
                 fit = self.parent_fit.reinit_object(dataset=dataset)
                 fit.performfit()
