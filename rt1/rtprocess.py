@@ -612,7 +612,6 @@ class RTprocess(object):
                         self.parent_fit, reader_arg, mini=True
                     )
 
-
                 if process_cnt is not None:
                     _increase_cnt(process_cnt, start, err=False)
 
@@ -1831,6 +1830,7 @@ class RTprocess(object):
         # load the first fit-object to pre-load fn-coefficients
         fit0 = useres.load_fit(0)
 
+        fn_evals = None
         if pre_evaluate_fn_coefs:
             log.progress("... pre-evaluation of fn-coefficients")
 
@@ -1841,8 +1841,6 @@ class RTprocess(object):
                         fn_evals[name] = fit_cfg.R._fnevals
             elif fit0.int_Q is True:
                 fn_evals = fit0.R._fnevals
-            else:
-                fn_evals = None
 
         # ----- set postprocess and finalout functions
         func = partial(self._export_postprocess,
