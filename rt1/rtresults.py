@@ -127,7 +127,6 @@ class RTresults(object):
         def __iter__(self):
             return self.dump_files
 
-
         @staticmethod
         def _check_dump_filename(p):
             return p.endswith(".dump") and "error" not in p.split(os.sep)[-1]
@@ -254,7 +253,6 @@ class RTresults(object):
             log.warning(f'... indexing folder:\n "{self._dump_path}"')
             self._dump_file_list = list(self.dump_files)
             self._n_dump_files = len(self._dump_file_list)
-
 
         def load_cfg(self, cfg_name=None):
             """
