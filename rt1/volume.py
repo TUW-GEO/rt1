@@ -432,11 +432,17 @@ class LinCombV(Volume):
                (Volume-objects) and the associated weighting-factors
                (floats) of the linear-combination.
     """
+    name = "LinCombV"
 
     def __init__(self, Vchoices=None, **kwargs):
         super(LinCombV, self).__init__(**kwargs)
 
         self.Vchoices = Vchoices
+
+        name = "LinCombV"
+        for c in Vchoices:
+            name += f"_({c[0]}, {c[1].name})"
+        self.name = name
 
     @property
     @lru_cache()
@@ -561,6 +567,7 @@ class Rayleigh(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+    name = "Rayleigh"
 
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
@@ -625,6 +632,7 @@ class HenyeyGreenstein(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+    name = "HenyeyGreenstein"
 
     def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -708,6 +716,7 @@ class HGRayleigh(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+    name = "HGRayleigh"
 
     def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
