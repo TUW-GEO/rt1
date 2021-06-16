@@ -2000,6 +2000,10 @@ class RTresults(object):
 
             self._nc_paths = self._get_results(".nc")
 
+        def __iter__(self):
+            return self.dump_files
+
+
         @staticmethod
         def _check_dump_filename(p):
             return p.endswith(".dump") and "error" not in p.split(os.sep)[-1]
