@@ -1,7 +1,8 @@
 from pathlib import Path
 import unittest
 import unittest.mock as mock
-from rt1.rtprocess import RTprocess, RTresults
+from rt1.rtprocess import RTprocess
+from rt1.rtresults import RTresults
 from rt1.rtfits import MultiFits
 import warnings
 

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from itertools import repeat, islice
 import ctypes
 import sys
-import os
 import traceback
 from textwrap import dedent
 
@@ -14,10 +13,10 @@ import shutil
 
 import pandas as pd
 import numpy as np
-from numpy.random import choice
 
 from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 from .rtparse import RT1_configparser
+from .rtresults import RTresults
 from .rtfits import load, MultiFits
 from . import log, _get_logger_formatter
 import logging
