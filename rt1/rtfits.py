@@ -198,12 +198,6 @@ class Fits(Scatter):
                     interaction-term
                     -> use with care! you must ensure that the provided
                     function evaluates correctly for the used definitions
-    _interp_vals: list, optional
-                  a list of keys corresponding to parameters whose values
-                  should be quadratically interpolated over the timespan
-                  instead of using a step-function that assigns the obtained
-                  value equally to all observations within the timespan.
-                  -> use with care! this might cause unexpected behaviour!
     verbose : int, optional
               the verbosity of the print-outputs (also passed to
               scipy.optimize.least_squares and rt1.RT1)
