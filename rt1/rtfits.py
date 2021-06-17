@@ -2664,6 +2664,17 @@ class Fits(Scatter):
 
         return fit
 
+    def _get_init_dict(self):
+        args = {
+            "sig0": self.sig0,
+            "dB": self.dB,
+            "defdict": self.defdict,
+            "set_V_SRF": self.set_V_SRF,
+            "lsq_kwargs": self.lsq_kwargs,
+            "int_Q": self.int_Q,
+        }
+        return args
+
     def reinit_object(self, share_fnevals=False, share_auxdata=True, **kwargs):
         """
         initialize a new fits-object that share all attributes except
