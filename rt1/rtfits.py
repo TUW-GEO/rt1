@@ -700,8 +700,10 @@ class Fits(Scatter):
             return
         # don't use keys that are not provided in defdict
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
-        usekeys = ["sig", "inc"] + \
-            [key for key in self.defdict if key in self.dataset]
+        # always attach "sig" and "inc" keys
+
+        usekeys = list({*self.defdict, "sig", "inc"} & set(self.dataset))
+
         if "data_weights" in self.dataset:
             usekeys += ["data_weights"]
 
@@ -1181,7 +1183,7 @@ class Fits(Scatter):
                     # set manual parameter dynamics
                     assert f"{key}_dyn" in self.dataset, (
                         f"{key}_dyn must be provided in the dataset"
-                        + 'if defdict[{key}][2] is set to "manual"'
+                        + ' if defdict[{key}][2] is set to "manual"'
                     )
 
                     manual_dyn_df[f"{key}"] = self.dataset[f"{key}_dyn"]
@@ -1910,7 +1912,7 @@ class Fits(Scatter):
                 return rectangularize(self._dataset_used[prop].values)
             elif prop == "mask":
                 _, mask = rectangularize(
-                    self._dataset_used.inc.values, return_mask=True
+                    self._dataset_used.orig_index.values, return_mask=True
                 )
                 if prop == "mask":
                     return mask
