@@ -4,7 +4,7 @@ from threading import Thread, current_thread, Timer
 import ctypes
 from timeit import default_timer
 from datetime import timedelta
-from rt1.general_functions import dt_to_hms, update_progress
+from rt1.general_functions import dt_to_hms, update_progress, groupby_unsorted
 import sys
 import pandas as pd
 import traceback
@@ -16,7 +16,10 @@ from pathlib import Path
 from collections import defaultdict
 import signal
 import h5py
+from ast import literal_eval
 
+
+from rt1.rtfits import Fits
 
 class RepeatTimer(Timer):
     def run(self):
@@ -182,10 +185,6 @@ class _RT1_writer_class(object):
                         else:
                             results[cfg].append(cfg_results)
 
-                    # # append the first result
-                    # results["static"].append(val[0])
-                    # results["dynamic"].append(val[1])
-
                     # append more results until cache-size is reached
                     while nres < self.write_chunk_size:
                         try:
@@ -277,8 +276,12 @@ class _RT1_writer_class(object):
                 self.args_to_process = [i for i, q in zip(self.arg_list, found_IDs) if not q]
         else:
             self.args_to_process = self.arg_list
-        print(f"found {len(self.args_to_process)} missing and",
-              f"{len(self.arg_list) - len(self.args_to_process)} existing IDs!")
+
+        if len(self.args_to_process) == 0:
+            print("All IDs are already present in the HDF file")
+        else:
+            print(f"found {len(self.args_to_process)} missing and",
+                  f"{len(self.arg_list) - len(self.args_to_process)} existing IDs!")
 
     def _save_file_process(self):
         with pd.HDFStore(self.dst_path, "a", complevel=4, complib="zlib") as store:
@@ -311,33 +314,154 @@ class _RT1_writer_class(object):
         combiner_thread.start()
         return combiner_thread
 
+    @classmethod
+    def connect(cls, self, path, arg_list, **kwargs):
+        self._RT1_writer = cls(path, arg_list, **kwargs)
+
+    def start(self):
+        writer = self._start_writer_process()
+        combiner = self._start_combiner_process()
+        return writer, combiner
+
+    def stop(self, writer, combiner):
+        self.queue.put(None)
+        print(f"waiting for {len(self.threads)} threads to join...")
+        combiner.join()
+        writer.join()
+
+    def get_data(self, key, config=None, **kwargs):
+        """
+        read data from the associated HDF file
+
+        Parameters
+        ----------
+        key : str
+            the key to use.
+        config : str, optional
+            the config to use.
+            The default is None, in which case "constant" keys are accessed
+        **kwargs :
+            kwargs passed to `pd.HDFStore.select()`.
+            (e.g. where, start, stop, columns, iterator, chunksize)
+        Returns
+        -------
+        res : pd.DataFrame
+            the extracted dataset.
+
+        """
+        with pd.HDFStore(self.dst_path, "r") as store:
+            keysplits = [key.lstrip("/").split("/") for key in store]
+            cfg_keys = (i for i in keysplits if len(i) > 1)
+            cfg_keys = groupby_unsorted(cfg_keys,
+                                    key=lambda x: x[0],
+                                    get = lambda x: x[1],
+                                    sort=True)
+            const_keys = [i[0] for i in keysplits if len(i) == 1]
+
+            if config is None:
+                assert key in const_keys, (f"'{key}' not found in HDF-file\n" +
+                                           "... available constant layers are" +
+                                           f"\n    {const_keys}\n" +
+                                           "... available config layers are \n    " +
+                                           "\n    ".join(f"{key}: {val}" for key, val in cfg_keys.items()))
+
+
+            usekey = f"{config}/{key}"
+
+            res = store.select(usekey, **kwargs)
+        return res
+
     @staticmethod
-    def fit_to_hdf(fit, path):
-        # with h5py.File(path, 'w') as f:
-        #     for key, val in fit._get_init_dict().items():
+    def fit_to_hdf(fit, path, overwrite=False, ID_key="ID",
+                   save_results=True, save_data=True, save_auxdata=True):
 
-        #         dset = f.create_dataset(key, data=val)
-
+        # defdicts are stored as categories to avoid saving the same a lot of times
 
 
-
-        #import numpy as np
-
-        #Writing data
-        #d1 = np.random.random(size = (1000,20))  #sample data
-        hf = h5py.File(path, 'w')
-        #dset1=hf.create_dataset('dataset_1', data=d1)
-        #set some metadata directly
-        #hf.attrs['metadata1']=5
-
-        #sample dictionary object
-        sample_dict={"metadata2":1, "metadata3":2, "metadata4":"blah_blah"}
-
-        #Store this dictionary object as hdf5 metadata
-        for k in fit._get_init_dict():
-            hf.attrs[k]=sample_dict[k]
-
-        hf.close()
+        ID = fit.reader_arg[ID_key]
 
 
+        with pd.HDFStore(path, "a", complevel=5, complib="zlib") as hf:
+
+            if not overwrite and "init_dict" in hf:
+                assert ID not in hf["init_dict"].index, "file already exists! (use overwrite=True)"
+
+            # -------------- save INIT_DICT (always saved)
+            hf.append("init_dict",
+                      pd.DataFrame(pd.Series(fit._get_init_dict()),
+                                   dtype=str,
+                                   columns=[ID]).T.astype("category"),
+                      format="t", data_columns=True)
+
+            # -------------- save READER_ARG   (always saved)
+            if hasattr(fit, "reader_arg"):
+                df = pd.DataFrame(fit.reader_arg, [ID])
+                hf.append("reader_arg", df)
+
+            # -------------- save DATASET
+            if save_data:
+                df = getattr(fit, "dataset", None)
+                if df is not None:
+                    df = pd.concat([df], keys=[ID])
+                    hf.append("dataset", df, format="t", data_columns=True)
+            elif save_results:
+                # store only data that is required to re-create the results
+                dynkeys = list(key + "_dyn" for key, val in fit.defdict.items()
+                               if val[0] and val[2] == "manual")
+                df = getattr(fit, "dataset", None)[dynkeys]
+                df = pd.concat([df], keys=[ID])
+                print("saving", dynkeys, df)
+
+                hf.append("dataset", df, format="t", data_columns=True)
+
+            # -------------- save AUX_DATA
+            if save_auxdata:
+                df = getattr(fit, "aux_data", None)
+                if df is not None:
+                    df = pd.concat([df], keys=[ID])
+                    hf.append("aux_data", df, format="t", data_columns=True)
+
+            # -------------- save RES_DICT
+            if save_results:
+                if fit.res_dict is not None:
+                    dfs = []
+                    for key, val in fit.res_dict.items():
+                        idx = pd.MultiIndex.from_product([[ID],range(len(val))])
+
+                        # TODO implement this after the following pandas-bug is fixed:
+                        # https://github.com/pandas-dev/pandas/issues/42070
+                        #dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
+
+                        dfs.append(pd.DataFrame({key:val}, idx))
+
+                    df = pd.concat(dfs, axis=1)
+
+                    hf.append("res_dict", df , format="t", data_columns=True)
+
+
+    @staticmethod
+    def load_fit(path, ID):
+        datakeys = ["dataset", "aux_data"]
+
+        with pd.HDFStore(path, 'r') as f:
+            attrs = {key: literal_eval(val) for key, val in
+                     f['init_dict'].loc[ID].items()}
+            fit = Fits(**attrs)
+
+            for key in datakeys:
+                if key in f:
+                    if ID in f[key].index:
+                        setattr(fit, key, f[key].loc[ID])
+
+            if "res_dict" in f:
+                if ID in f["res_dict"].index:
+
+                    fit.res_dict = {key:val.dropna().to_list()
+                                    for key, val in f["res_dict"].loc[ID].items()}
+
+            if "reader_arg" in f:
+                if ID in f["reader_arg"].index:
+                    fit.reader_arg = f["reader_arg"].loc[ID].to_dict()
+
+        return fit
 
