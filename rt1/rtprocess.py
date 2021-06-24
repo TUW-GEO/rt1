@@ -1652,6 +1652,8 @@ class RTprocess(object):
             if hasattr(fit, "config_name"):
                 if fit.int_Q is True and fit.config_name in _fnevals_input:
                     fit._fnevals_input = _fnevals_input[fit.config_name]
+            else:
+                fit._fnevals_input = _fnevals_input
 
         staticlayers = dict()
         if metrics:
