@@ -2718,6 +2718,160 @@ class Fits(Scatter):
         """
         return self._reinit_object(self, **kwargs)
 
+    def _get_res_dict_df(self, ID=None):
+        """
+        get a data-frame that contains all fitted parameters
+        (smaller than fit.res_df which is interpolated to the index)
+
+        Parameters
+        ----------
+        ID : TYPE, optional
+            DESCRIPTION. The default is None.
+
+        Returns
+        -------
+        df : TYPE
+            DESCRIPTION.
+
+        """
+        if ID is None:
+            try:
+                ID = self.reader_arg["ID"]
+            except Exception:
+                ID = "RT1_fit"
+
+        # convert res_dict to a dataframe
+        if self.res_dict is not None:
+            if hasattr(self, "config_name"):
+                idxcols = [[ID], [self.config_name]]
+                names = ["ID", "cfg", "n"]
+            else:
+                idxcols = [[ID]]
+                names = ["ID", "n"]
+
+            dfs = []
+            for key, val in self.res_dict.items():
+                idx = pd.MultiIndex.from_product([*idxcols, range(len(val))],
+                                                 names=names)
+
+                # TODO implement this after the following pandas-bug is fixed:
+                # https://github.com/pandas-dev/pandas/issues/42070
+                #dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
+
+                dfs.append(pd.DataFrame({key:val}, idx))
+
+            df = pd.concat(dfs, axis=1)
+            return df
+
+    def _get_fit_to_hdf_dict(self, ID_key="ID",
+                             save_results=True, save_data=True, save_auxdata=True):
+        """
+        return a dict of pandas-dataframes suitable to fully re-create
+        a Fits (or MultiFits) object.
+        -> used to store Fit-objects in HDF-containers
+
+        Parameters
+        ----------
+        ID_key : str, optional
+            The string to use as ID column. The default is "ID".
+        save_results : bool, optional
+            indicator if results should be saved. The default is True.
+        save_data : bool, optional
+            indicator if the dataset should be saved. The default is True.
+        save_auxdata : bool, optional
+            indicator if auxdata should be saved. The default is True.
+
+        Returns
+        -------
+        hf : dict
+            a dict containing all relevant information necessary to re-create
+            a Fits (or MultiFits) object.
+
+        """
+        # remove ID from reader_arg sine it is anyways used as index
+        reader_arg = {**self.reader_arg}
+        ID = reader_arg.pop(ID_key)
+
+        hf = dict()
+
+        # -------------- save INIT_DICT (always saved, different for MultiFits)
+        # defdicts are stored as categories to save memory
+        try:
+            if isinstance(self, MultiFits):
+                initdict = pd.concat(
+                    map(lambda arg: pd.DataFrame(
+                        [pd.Series(arg[1])],
+                        pd.MultiIndex.from_product([[ID], [arg[0]]],
+                                                   names=["ID", "cfg"]),
+                        dtype=str).astype("category"), self._get_init_dict()))
+            else:
+                initdict = pd.DataFrame([pd.Series(self._get_init_dict())],
+                                        [ID], dtype=str).astype("category")
+
+            hf["init_dict"] = initdict
+        except Exception:
+            print("could not save 'init_dict' for fit", ID)
+
+        # -------------- save READER_ARG   (always saved)
+        try:
+            df = pd.DataFrame(reader_arg, [ID])
+            df.index.name = "ID"
+            hf["reader_arg"] =  df
+        except Exception:
+            print("could not save 'reader_arg' for fit", ID)
+
+        # -------------- save DATASET
+        try:
+            if save_data:
+                df = getattr(self, "dataset", None)
+                if df is not None:
+                    df = pd.concat([df], keys=[ID], names=["ID", "date"])
+                    hf["dataset"] = df
+            elif save_results:
+                    # store only data that is required to re-create the results
+
+                    if isinstance(self, MultiFits):
+                        dynkeys = set(
+                            key + "_dyn"
+                            for cfg, defdict in self.apply(lambda fit: self.defdict)
+                            for key, val in defdict.items()
+                            if val[0] and val[2] == "manual")
+                    else:
+                        dynkeys = set(key + "_dyn" for key, val in self.defdict.items()
+                                       if val[0] and val[2] == "manual")
+                    df = getattr(self, "dataset", None)[dynkeys]
+                    df = pd.concat([df], keys=[ID])
+
+                    hf["dataset"] = df
+        except Exception:
+            print("could not save 'dataset' for fit", ID)
+
+        # -------------- save AUX_DATA
+        if save_auxdata:
+            try:
+                df = getattr(self, "aux_data", None)
+                if df is not None:
+                    df = pd.concat([df], keys=[ID], names=["ID", "date"])
+                    hf["aux_data"] = df
+            except Exception:
+                print("could not save 'aux_data' for fit", ID)
+
+        # -------------- save RES_DICT (different for MultiFits)
+        if save_results:
+            try:
+                if isinstance(self, MultiFits):
+                    df = pd.concat(i[1] for i in self.apply(lambda fit:
+                        fit._get_res_dict_df(ID=ID)))
+                else:
+                    df = self._get_res_dict_df(ID)
+
+                hf["res_dict"] = df
+            except Exception:
+                print("could not save 'res_dict' for fit", ID)
+
+        return hf
+
+
     @property
     @lru_cache()  # cache this since we need a static reference!
     def metric(self):
@@ -2905,6 +3059,17 @@ class MultiFits:
             if not hasattr(fit, "config_name"):
                 fit.config_name = name
 
+    def _get_init_dict(self):
+        args = self.apply(lambda fit: fit._get_init_dict())
+        return args
+
+    def _get_fit_to_hdf_dict(self, ID_key="ID",
+                             save_results=True, save_data=True,
+                             save_auxdata=True):
+        return Fits._get_fit_to_hdf_dict(self, ID_key="ID",
+                                         save_results=True, save_data=True,
+                                         save_auxdata=True)
+
     @property
     def dataset(self):
         return self._dataset
@@ -3045,6 +3210,3 @@ class MultiFits:
 
         with open(path, "wb") as file:
             cloudpickle.dump(self, file)
-
-
-# %%
