@@ -709,7 +709,14 @@ class Fits(Scatter):
                 key=itemgetter(0),
                 get=itemgetter(1),
             )
-        df = pd.DataFrame(df).rename(columns={"index": "orig_index"})
+
+        # make sure "orig_index" is correctly renamed in case
+        # the index-column has been explicitly re-named
+        indexname = (self.dataset.index.name
+                     if self.dataset.index.name is not None
+                     else "index")
+
+        df = pd.DataFrame(df).rename(columns={indexname: "orig_index"})
         return df
 
     @property
