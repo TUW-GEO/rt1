@@ -4,7 +4,6 @@ from threading import Thread, current_thread, Timer
 import ctypes
 from timeit import default_timer
 from datetime import timedelta
-from rt1.general_functions import dt_to_hms, update_progress, groupby_unsorted
 import sys
 import pandas as pd
 import traceback
@@ -13,79 +12,83 @@ from queue import Empty as QueueEmpty
 import os
 from pathlib import Path
 
+from contextlib import contextmanager
 from collections import defaultdict
+from itertools import count
 import signal
-import h5py
-from ast import literal_eval
 
+from . import log
+from .general_functions import dt_to_hms, update_progress, groupby_unsorted
 
-from rt1.rtfits import Fits
 
 class RepeatTimer(Timer):
+    """
+    A simple timer that executes a function after a given amount of time.
+    (as an asynchronous task)
+
+    to setup a scheduled execution of a given function use:
+
+        >>> r = RepeatTimer(1, lambda: print("hello"))
+        >>> r.start()
+
+    to stop the execution use:
+
+        >>> r.finished.set()
+    """
     def run(self):
         while not self.finished.wait(self.interval):
             self.function(*self.args, **self.kwargs)
 
-class _RT1_writer_class(object):
-    def __init__(self, dst_path, arg_list=None, write_chunk_size=1000, out_cache_size=10):
+
+class RT1_processor(object):
+    def __init__(self,
+                 n_worker=1, n_combiner=1, n_writer=1,
+                 dst_path=None, HDF_kwargs=None,
+                 write_chunk_size=1000, out_cache_size=10):
         """
+        A class that takes care of combining results and writing them
+        to disk as a HDF-container.
 
         Parameters
         ----------
-        dst_path : str
-            The path to store the output-file.
-        arg_list : iterable, optional
-            the list of arguments that are intended to be processed
-            ... use `_RT1_writer_class.args_to_process` to get a list of
-            unique args that are not yet present in the HDF-container
+        n_worker, n_combiner, n_writer: int
+            the number of workers, combiners and writers to use
         write_chunk_size : int, optional
-            the chunk-size for writing results to dict. The default is 1000.
+            the chunk-size for writing results to dict.
+            e.g.: a set of N results is combined and the combined output
+             is written to disc to reduce io
+            The default is 1000.
         out_cache_size : int, optional
             the max. number of results cached for writing.
-
-            (implemented to protect memory-overload... processing will wait
-             for the writer to empty the queue if the cache-size is exceeded)
+            e.g.: the number of combined results scheduled to be written to
+            disc. once this treshold is reached, processing is throttled
+            to protect memory-overload...
             The default is 10.
         """
         signal.signal(signal.SIGINT, self.manual_shutdown)
         signal.signal(signal.SIGTERM, self.manual_shutdown)
 
-        self.dst_path = dst_path
-        self.arg_list = arg_list
 
-        if self.arg_list is None:
-            self.p_max = None
-        else:
-            self._check_IDs()
-            self.p_max = len(self.args_to_process)
+        self.n_worker = n_worker
+        self.n_combiner = n_combiner
+        self.n_writer = n_writer
+
+        self.dst_path = dst_path
+
+        self.HDF_kwargs = dict(complevel=5, complib="blosc:zstd")
+        if HDF_kwargs is not None:
+            self.HDF_kwargs.update(HDF_kwargs)
 
         self.write_chunk_size = write_chunk_size
         self.out_cache_size = out_cache_size
 
-        self._stop = False
-
-        manager = mp.Manager()
-
-        self.queue = manager.Queue()
-        self.out_queue = manager.Queue()
-        self.event = manager.Event()
-
-        self.lock = manager.Lock()
-        self.p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-        self.p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-
-        self.threads = []
-        self.exit = False
-
     def manual_shutdown(self, *args, **kwargs):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         print("I'm shutting down")
-        self.queue.put(None)
-        self.out_queue.put(None)
+        self.should_stop.set()
+        self._stop.set()
         raise(SystemExit)
-
-    @staticmethod
-    def _start_cnt():
-        return default_timer()
 
     def _increase_cnt(self, err=False):
         self.lock.acquire()
@@ -100,14 +103,10 @@ class _RT1_writer_class(object):
         self.lock.release()
 
     def print_progress(self):
-        try:
-            self.p_start
-        except AttributeError:
-            self.p_start = self._start_cnt()
-
-        #self.lock.acquire()
+        self.lock.acquire()
         p_totcnt = self.p_totcnt.value
         p_meancnt = self.p_meancnt.value
+        self.lock.release()
 
         if self.p_meancnt.value == 0:
             title = f"{'estimating time ...':<28}"
@@ -127,8 +126,7 @@ class _RT1_writer_class(object):
                 timesuffix = "remaining"
 
             d, h, m, s = dt_to_hms(remain)
-            title = f"approx. {d} {h:02}:{m:02}:{s:02} {timesuffix}"
-        #self.lock.release()
+            title = f"~ {d} {h:02}:{m:02}:{s:02} {timesuffix}"
 
         msg = update_progress(
             p_totcnt,
@@ -142,8 +140,9 @@ class _RT1_writer_class(object):
         )
 
         sys.stdout.write(
-            msg + f" (~{meantime:.5f} s/fit)"
-            #+ f" Q={self.queue.qsize():03}, outQ={self.out_queue.qsize():02}, T={len(self.threads):02}, time={meantime:.5f}"
+            msg
+            + f" Q={self.queue.qsize():03}"
+            + f" O={self.out_queue.qsize():02}"
         )
         sys.stdout.flush()
 
@@ -160,22 +159,35 @@ class _RT1_writer_class(object):
         #outdict = {key: pd.concat(val) for key, val in results.items()}
         # return outdict
         self.out_queue.put(outdict)
-        self.threads.remove(current_thread())
+        #self.threads.remove(current_thread())
 
     def _combiner_process(self):
-        print_thread = RepeatTimer(.25, self.print_progress)
-        print_thread.start()
+        c = count() # a counter to name threads
+        threads = []
         while True:
+            if self.should_stop.is_set():
+                if not self.queue.empty():
+                    print("... combining remaining processed files")
+                else:
+                    print("shutting down", mp.current_process().name)
+                    break
+            if self._stop.is_set():
+                print("shutting down", mp.current_process().name)
+                break
+
             try:
                 # caches for results
                 results = defaultdict(list)
-
+                # results counter
                 nres = 0
-                # wait for the first result
-                val = self.queue.get()
-                if val is None:
-                    self._stop = True
-                else:
+
+                # append more results until cache-size is reached
+                while nres < self.write_chunk_size:
+                    try:
+                        val = self.queue.get(timeout=2)
+                    except QueueEmpty:
+                        break
+
                     for cfg, cfg_results in val.items():
                         if cfg.startswith("const__"):
                             results[cfg.lstrip("const__")].append(cfg_results)
@@ -185,47 +197,24 @@ class _RT1_writer_class(object):
                         else:
                             results[cfg].append(cfg_results)
 
-                    # append more results until cache-size is reached
-                    while nres < self.write_chunk_size:
-                        try:
-                            val = self.queue.get(timeout=2)
-                            if val is None:
-                                self._stop = True
-                                break
-                        except QueueEmpty:
-                            break
+                    nres += 1
+                    self._increase_cnt(err=False)
 
-                        for cfg, cfg_results in val.items():
-                            if cfg.startswith("const__"):
-                                results[cfg.lstrip("const__")].append(cfg_results)
-                            elif isinstance(cfg_results, dict):
-                                for cfg_key, cfg_val in cfg_results.items():
-                                    results[cfg + "/" + cfg_key].append(cfg_val)
-                            else:
-                                results[cfg].append(cfg_results)
-                        nres += 1
-                        self._increase_cnt(err=False)
-                        #self.print_progress()
-
-                    t = Thread(target=self._combine_results, args=(results,))
+                if len(results) > 0:
+                    t = Thread(target=self._combine_results, args=(results,),
+                               name=f"{current_thread().name} - {next(c)}")
                     t.start()
-                    self.threads.append(t)
-
-                if self._stop and self.queue.empty():
-                    # make sure all threads have finished before stopping the
-                    # writer process
-                    print()
-                    for n, t in enumerate(self.threads):
-                        print(f"joining remaining threads... {n + 1}", end="\r")
-                        t.join()
-                    # also tell the writer to stop
-                    self.out_queue.put(None)
-                    print_thread.cancel()
-                    break
+                    threads.append(t)
 
             except Exception:
-                print("Whoops! Problem:", file=sys.stderr)
+                print("There was a problem combining results:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
+
+        # wait for all threads to finish before exiting the combiner process
+        for n, t in enumerate(threads):
+            if t.is_alive():
+                print(f"joining remaining thread... {t.name}")
+                t.join()
 
     def _check_IDs(self, key="reader_arg", get_ID = None):
         """
@@ -259,7 +248,7 @@ class _RT1_writer_class(object):
             if get_ID is None:
                 get_ID = lambda i: i.split(os.sep)[-1].split(".")[0]
 
-            with pd.HDFStore(self.dst_path, "a", complevel=4, complib="zlib") as store:
+            with pd.HDFStore(self.dst_path, "r") as store:
                 keys = [i.lstrip("/") for i in store.keys()]
                 if key not in keys:
                     try:
@@ -284,52 +273,219 @@ class _RT1_writer_class(object):
                   f"{len(self.arg_list) - len(self.args_to_process)} existing IDs!")
 
     def _save_file_process(self):
-        with pd.HDFStore(self.dst_path, "a", complevel=4, complib="zlib") as store:
-            while True:
-                # pause processing in case out_cache_size is reached
-                if self.out_queue.qsize() < self.out_cache_size:
-                    self.event.set()
-                elif self.event.is_set():
-                    self.event.clear()
-                    print("queue full... waiting")
-
-                # wait for results to appear in the out_queue
-                out = self.out_queue.get()
-                if out is None:
+        while True:
+            # continue until the out_queue is emptied, then break
+            if self.should_stop.is_set():
+                if not self.out_queue.empty():
+                    print(f"writing remaining {self.out_queue.qsize()}",
+                          "cached results to disk")
+                else:
+                    print("shutting down", mp.current_process().name)
                     break
 
-                for key, val in out.items():
-                    store.append(key, val, format="t", data_columns=True, index=False)
+            if self._stop.is_set():
+                print("shutting down", mp.current_process().name)
+                break
+
+            # pause processing in case out_cache_size is reached
+            if self.out_queue.qsize() < self.out_cache_size:
+                self.should_wait.set()
+            elif self.should_wait.is_set():
+                self.should_wait.clear()
+                print("\nqueue full... waiting")
+
+
+            # wait for results to appear in the out_queue
+            # timeout after 2 sec to check for break-condition
+            try:
+                out = self.out_queue.get(timeout=2)
+            except QueueEmpty:
+                continue
+
+            # if out is None:
+            #     break
+            try:
+                self.write_lock.acquire()
+                with pd.HDFStore(self.dst_path, "a", **self.HDF_kwargs) as store:
+                    for key, val in out.items():
+                        store.append(key,
+                                     val,
+                                     format="t",
+                                     data_columns=[],   # don't index data-columns for disc-queries
+                                     index=False,)      # don't index already (will be done once all processes are finished)
+                self.write_lock.release()
+            except Exception:
+                print("problem while writing data... exiting")
+                self._stop.set()
+                self.should_wait.clear()
+                self.write_lock.release()
+
+    def _worker_process(self, arg):
+            self.should_wait.wait()
+
+            try:
+                fit = self.reader_func(arg)
+
+                if fit is not None:
+                    res = self.process_func(fit)
+                    self.queue.put(res)
+                else:
+                    print("loading", arg, "resulted in None... skipping")
+            except Exception:
+                print()
+                log.error(f"problem while processing \n{arg}")
+
+    def _start_worker_process(self):
+
+        pool = mp.Pool(self.n_worker)
+        # worker = pool.map_async(self._worker_process,
+        #                         self.args_to_process,
+        #                         chunksize=self.write_chunk_size)
+        # worker.get()
+        self.worker_pool = pool
+        return pool
 
     def _start_writer_process(self):
         # define a process that writes the results to disc
-        writer = mp.Process(target=self._save_file_process)
-        writer.start()
-        return writer
+        procs = []
+        for i in range(self.n_writer):
+            writer = mp.Process(target=self._save_file_process,
+                                    name=f"RTprocess writer {i}")
+            procs.append(writer)
+            print(f"starting {writer.name}")
+            writer.start()
+        return procs
 
     def _start_combiner_process(self):
-        # start thread to combine the results
-        combiner_thread = mp.Process(target=self._combiner_process)
-        # combiner_thread.setDaemon(True)
-        combiner_thread.start()
-        return combiner_thread
+        procs = []
+        for i in range(self.n_combiner):
+            # start thread to combine the results
+            t = mp.Process(target=self._combiner_process,
+                           name=f"RTprocess combiner {i}")
+            procs.append(t)
+            # combiner_thread.setDaemon(True)
+            print(f"starting {t.name}")
+            t.start()
+        return procs
+
+
+    def _setup_manager(self):
+        manager = mp.Manager()
+
+        self.queue = manager.Queue()
+        self.out_queue = manager.Queue()
+
+        self.should_wait = manager.Event()
+        self.should_stop = manager.Event()
+        self._stop = manager.Event()
+
+        self.lock = manager.Lock()
+        self.write_lock = manager.Lock()
+
+        self.p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
+        self.p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+
+        return manager
 
     @classmethod
-    def connect(cls, self, path, arg_list, **kwargs):
-        self._RT1_writer = cls(path, arg_list, **kwargs)
+    @contextmanager
+    def writer_pool(cls, *args, **kwargs):
+        try:
+            w = cls(*args, **kwargs)
 
-    def start(self):
-        writer = self._start_writer_process()
-        combiner = self._start_combiner_process()
-        return writer, combiner
+            manager = w._setup_manager()
+            writer = w._start_writer_process()
+            combiner = w._start_combiner_process()
 
-    def stop(self, writer, combiner):
-        self.queue.put(None)
-        print(f"waiting for {len(self.threads)} threads to join...")
-        combiner.join()
-        writer.join()
+            yield w
+        finally:
+            w.stop(writer, combiner, manager)
 
-    def get_data(self, key, config=None, **kwargs):
+    def run(self,
+            arg_list=None,
+            process_func=None,
+            reader_func=None,
+            pool_kwargs=None):
+
+        if pool_kwargs is None:
+            pool_kwargs = dict()
+
+        self.arg_list = arg_list
+        self.reader_func = reader_func
+        self.process_func = process_func
+
+        if self.arg_list is None:
+            self.p_max = None
+        else:
+            self._check_IDs()
+            self.p_max = len(self.args_to_process)
+
+
+        # start the timer for estimating the processing-time
+        self.p_start = default_timer()
+        # print the progress every 0.25 seconds
+        print_thread = RepeatTimer(.25, self.print_progress)
+        print_thread.start()
+
+        try:
+            with mp.Pool(self.n_worker) as pool:
+                worker = pool.map_async(self._worker_process,
+                                        self.args_to_process,
+                                        chunksize=self.write_chunk_size,
+                                        **pool_kwargs)
+                res = worker.get()
+
+        finally:
+            # stop the printer thread
+            print_thread.finished.set()
+            print() # print a newline after stopping the printer-thread
+
+            d, h, m, s = dt_to_hms(timedelta(
+                seconds=default_timer() - self.p_start))
+            print(f"finished processing! ... it took {d} {h:02}:{m:02}:{s:02}")
+
+        return res
+
+    def stop(self, writer, combiner, manager):
+        # initialize shutdown
+        self.should_stop.set()
+        print() # newline
+
+        # wait for cached results to be combined
+        for c in combiner:
+            c.join()
+        # wait for output-cache to be written to disc
+        for w in writer:
+            w.join()
+
+        # tell all processes to stop
+        self._stop.set()
+
+        manager.shutdown()
+
+        d, h, m, s = dt_to_hms(timedelta(
+            seconds=default_timer() - self.p_start))
+        print(f"finished! ... it took {d} {h:02}:{m:02}:{s:02}")
+
+    @staticmethod
+    def create_index(dst_path, id_col="ID", index_dates=False):
+        with pd.HDFStore(dst_path, "a") as store:
+
+            for key in ["init_dict", "reader_arg", "res_dict"]:
+                if key in store:
+                    print(f"creating index for {key}")
+                    s = store.get_storer(key)
+                    s.create_index([id_col])
+
+            for key in ["dataset", "aux_data"]:
+                if key in store:
+                    print(f"creating index for {key}")
+                    s = store.get_storer(key)
+                    s.create_index([id_col, "date"] if index_dates else
+                                   [id_col])
+
+    @staticmethod
+    def get_data(dst_path, key, config=None, **kwargs):
         """
         read data from the associated HDF file
 
@@ -349,7 +505,7 @@ class _RT1_writer_class(object):
             the extracted dataset.
 
         """
-        with pd.HDFStore(self.dst_path, "r") as store:
+        with pd.HDFStore(dst_path, "r") as store:
             keysplits = [key.lstrip("/").split("/") for key in store]
             cfg_keys = (i for i in keysplits if len(i) > 1)
             cfg_keys = groupby_unsorted(cfg_keys,
@@ -363,105 +519,32 @@ class _RT1_writer_class(object):
                                            "... available constant layers are" +
                                            f"\n    {const_keys}\n" +
                                            "... available config layers are \n    " +
-                                           "\n    ".join(f"{key}: {val}" for key, val in cfg_keys.items()))
-
+                                           "\n    ".join(
+                                               f"{key}: {val}"
+                                               for key, val in cfg_keys.items()))
 
             usekey = f"{config}/{key}"
-
             res = store.select(usekey, **kwargs)
         return res
 
-    @staticmethod
-    def fit_to_hdf(fit, path, overwrite=False, ID_key="ID",
-                   save_results=True, save_data=True, save_auxdata=True):
-
-        # defdicts are stored as categories to avoid saving the same a lot of times
 
 
-        ID = fit.reader_arg[ID_key]
 
 
-        with pd.HDFStore(path, "a", complevel=5, complib="zlib") as hf:
-
-            if not overwrite and "init_dict" in hf:
-                assert ID not in hf["init_dict"].index, "file already exists! (use overwrite=True)"
-
-            # -------------- save INIT_DICT (always saved)
-            hf.append("init_dict",
-                      pd.DataFrame(pd.Series(fit._get_init_dict()),
-                                   dtype=str,
-                                   columns=[ID]).T.astype("category"),
-                      format="t", data_columns=True)
-
-            # -------------- save READER_ARG   (always saved)
-            if hasattr(fit, "reader_arg"):
-                df = pd.DataFrame(fit.reader_arg, [ID])
-                hf.append("reader_arg", df)
-
-            # -------------- save DATASET
-            if save_data:
-                df = getattr(fit, "dataset", None)
-                if df is not None:
-                    df = pd.concat([df], keys=[ID])
-                    hf.append("dataset", df, format="t", data_columns=True)
-            elif save_results:
-                # store only data that is required to re-create the results
-                dynkeys = list(key + "_dyn" for key, val in fit.defdict.items()
-                               if val[0] and val[2] == "manual")
-                df = getattr(fit, "dataset", None)[dynkeys]
-                df = pd.concat([df], keys=[ID])
-                print("saving", dynkeys, df)
-
-                hf.append("dataset", df, format="t", data_columns=True)
-
-            # -------------- save AUX_DATA
-            if save_auxdata:
-                df = getattr(fit, "aux_data", None)
-                if df is not None:
-                    df = pd.concat([df], keys=[ID])
-                    hf.append("aux_data", df, format="t", data_columns=True)
-
-            # -------------- save RES_DICT
-            if save_results:
-                if fit.res_dict is not None:
-                    dfs = []
-                    for key, val in fit.res_dict.items():
-                        idx = pd.MultiIndex.from_product([[ID],range(len(val))])
-
-                        # TODO implement this after the following pandas-bug is fixed:
-                        # https://github.com/pandas-dev/pandas/issues/42070
-                        #dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
-
-                        dfs.append(pd.DataFrame({key:val}, idx))
-
-                    df = pd.concat(dfs, axis=1)
-
-                    hf.append("res_dict", df , format="t", data_columns=True)
 
 
-    @staticmethod
-    def load_fit(path, ID):
-        datakeys = ["dataset", "aux_data"]
 
-        with pd.HDFStore(path, 'r') as f:
-            attrs = {key: literal_eval(val) for key, val in
-                     f['init_dict'].loc[ID].items()}
-            fit = Fits(**attrs)
 
-            for key in datakeys:
-                if key in f:
-                    if ID in f[key].index:
-                        setattr(fit, key, f[key].loc[ID])
 
-            if "res_dict" in f:
-                if ID in f["res_dict"].index:
 
-                    fit.res_dict = {key:val.dropna().to_list()
-                                    for key, val in f["res_dict"].loc[ID].items()}
 
-            if "reader_arg" in f:
-                if ID in f["reader_arg"].index:
-                    fit.reader_arg = f["reader_arg"].loc[ID].to_dict()
 
-        return fit
+
+
+
+
+
+
+
+
 
