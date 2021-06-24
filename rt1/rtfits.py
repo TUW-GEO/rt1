@@ -2896,38 +2896,6 @@ class Fits(Scatter):
         return _metric_keys(self)
 
 
-def get_fitobject(self):
-    configs = self.config_names
-    if len(configs) > 0:
-        rt1_fits = []
-        for config in configs:
-            cfg = self.get_config(config)
-
-            rt1_fits.append(
-                [
-                    config,
-                    Fits(
-                        dataset=None,
-                        defdict=cfg["defdict"],
-                        set_V_SRF=cfg["set_V_SRF"],
-                        lsq_kwargs=cfg["lsq_kwargs"],
-                        **cfg["fits_kwargs"],
-                    ),
-                ]
-            )
-    else:
-        cfg = self.get_config()
-        rt1_fits = Fits(
-            dataset=None,
-            defdict=cfg["defdict"],
-            set_V_SRF=cfg["set_V_SRF"],
-            lsq_kwargs=cfg["lsq_kwargs"],
-            **cfg["fits_kwargs"],
-        )
-
-    return rt1_fits
-
-
 # %%
 
 
