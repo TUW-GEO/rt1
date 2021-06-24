@@ -224,7 +224,7 @@ def update_progress(
     adapted from: https://blender.stackexchange.com/a/30739
     """
 
-    length = 25  # the length of the progress bar
+    length = 20  # the length of the progress bar
     block = int(round(length * progress / max_prog))
     if progress2 is not None:
         msg = (
