@@ -3,10 +3,13 @@
 from itertools import islice
 import os
 from pathlib import Path
+from ast import literal_eval
+
+import pandas as pd
 from numpy.random import choice
 
 from .rtparse import RT1_configparser
-from .rtfits import load
+from .rtfits import load, Fits, MultiFits
 from . import log
 
 
@@ -218,7 +221,6 @@ class RTresults(object):
             fit : rt1.rtfits.Fits
                 the loaded rt1.rtfits.Fits result.
             """
-
             if isinstance(ID, Path):
                 filepath = ID
             else:
@@ -327,3 +329,100 @@ class RTresults(object):
                 print(f"\n################ result:  {r}.nc")
                 with self.load_nc(r) as ncfile:
                     print(ncfile)
+
+    @staticmethod
+    def load_fit_from_HDF(path, ID):
+
+        with pd.HDFStore(path, 'r') as store:
+
+            try:
+                init_dict = pd.read_hdf(store, key="init_dict",
+                                        where=f"ID='{ID}'")
+            except KeyError:
+                print("'init_dict' not present... fit can not be loaded")
+                return
+
+            try:
+                dataset = pd.read_hdf(store, key="dataset",
+                                      where=f"ID='{ID}'")
+            except KeyError:
+                dataset = None
+                pass
+
+            try:
+                aux_data = pd.read_hdf(store, key="aux_data",
+                                       where=f"ID='{ID}'")
+            except KeyError:
+                aux_data = None
+                pass
+
+            try:
+                reader_arg = pd.read_hdf(store, key="reader_arg",
+                                         where=f"ID='{ID}'")
+            except Exception:
+                try:
+                    # do this for downward-compatibility
+                    # (if ID is present both as comlumn and as index...)
+                    reader_arg = pd.read_hdf(store, key="reader_arg",
+                             where=f"index='{ID}'")
+                    reader_arg["ID"] = ID
+
+                except KeyError:
+                    reader_arg = None
+                    pass
+
+            try:
+                res_dict = pd.read_hdf(store, key="res_dict",
+                                       where=f"ID='{ID}'")
+            except KeyError:
+                res_dict = None
+                pass
+
+
+            if "cfg" in init_dict.index.names:
+                mf = MultiFits()
+                for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
+
+                    attrs = {key: literal_eval(val) for key, val in
+                             cfg_attrs.items()}
+
+                    fit = Fits(**attrs)
+                    if res_dict is not None:
+                        fit.res_dict = {key:val.dropna().to_list()
+                                        for key, val in
+                                        res_dict.loc[ID].loc[cfg].items()}
+
+                    mf.add_config(cfg, fit)
+
+                # attach shared properties
+                if dataset is not None:
+                    mf.set_dataset(dataset.loc[ID])
+                if aux_data is not None:
+                    mf.set_aux_data(aux_data.loc[ID])
+                if reader_arg is not None:
+                    mf.set_reader_arg(reader_arg.loc[ID].to_dict())
+
+                return mf
+
+            else:
+                attrs = {key: literal_eval(val) for key, val in
+                         init_dict.loc[ID].items()}
+                fit = Fits(**attrs)
+
+                if dataset is not None:
+                    fit.dataset = dataset.loc[ID]
+
+                if aux_data is not None:
+                    fit.aux_data = aux_data.loc[ID]
+
+                if reader_arg is not None:
+                    fit.reader_arg = reader_arg.loc[ID].to_dict()
+
+                if res_dict is not None:
+                    fit.res_dict = {key:val.dropna().to_list()
+                                    for key, val in res_dict.loc[ID].items()}
+                return fit
+
+
+
+
