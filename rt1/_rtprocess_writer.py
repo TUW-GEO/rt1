@@ -476,7 +476,8 @@ class RT1_processor(object):
                 worker = pool.starmap_async(self._worker_process,
                                             zip(self.args_to_process,
                                                 *starmap_args),
-                                            chunksize=self.write_chunk_size)
+                                            #chunksize=self.write_chunk_size
+                                            )
 
                 # do this after calling starmap_async to wait for the initializers
                 # to finish!
