@@ -2788,10 +2788,10 @@ class Fits(Scatter):
             a Fits (or MultiFits) object.
 
         """
+
         # remove ID from reader_arg sine it is anyways used as index
         reader_arg = {**self.reader_arg}
         ID = reader_arg.pop(ID_key)
-
         hf = dict()
 
         # -------------- save INIT_DICT (always saved, different for MultiFits)
@@ -2816,7 +2816,7 @@ class Fits(Scatter):
         try:
             df = pd.DataFrame(reader_arg, [ID])
             df.index.name = "ID"
-            hf["reader_arg"] =  df
+            hf["const__reader_arg"] =  df
         except Exception:
             print("could not save 'reader_arg' for fit", ID)
 
