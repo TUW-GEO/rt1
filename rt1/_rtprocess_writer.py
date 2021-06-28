@@ -42,7 +42,7 @@ class RepeatTimer(Timer):
 
 class RT1_processor(object):
     def __init__(self,
-                 n_worker=1, n_combiner=1, n_writer=1,
+                 n_worker=1, n_combiner=2, n_writer=1,
                  dst_path=None, HDF_kwargs=None,
                  write_chunk_size=1000, out_cache_size=10):
         """
@@ -68,14 +68,13 @@ class RT1_processor(object):
         signal.signal(signal.SIGINT, self.manual_shutdown)
         signal.signal(signal.SIGTERM, self.manual_shutdown)
 
-
         self.n_worker = n_worker
         self.n_combiner = n_combiner
         self.n_writer = n_writer
 
         self.dst_path = dst_path
 
-        self.HDF_kwargs = dict(complevel=5, complib="blosc:zstd")
+        self.HDF_kwargs = dict(complevel=1, complib="blosc")
         if HDF_kwargs is not None:
             self.HDF_kwargs.update(HDF_kwargs)
 
@@ -162,17 +161,24 @@ class RT1_processor(object):
         #self.threads.remove(current_thread())
 
     def _combiner_process(self):
+        """
+        combine results before writing them to the HDF-store
+
+        any key starting with "const__" will be treated as a constant
+        property that is maintained for all configs of a MultiConfig object
+
+        """
         c = count() # a counter to name threads
         threads = []
         while True:
             if self.should_stop.is_set():
                 if not self.queue.empty():
-                    print("... combining remaining processed files")
+                    log.progress("... combining remaining processed files")
                 else:
-                    print("shutting down", mp.current_process().name)
+                    log.progress("shutting down " + mp.current_process().name)
                     break
             if self._stop.is_set():
-                print("shutting down", mp.current_process().name)
+                log.progress("shutting down " + mp.current_process().name)
                 break
 
             try:
@@ -207,13 +213,13 @@ class RT1_processor(object):
                     threads.append(t)
 
             except Exception:
-                print("There was a problem combining results:", file=sys.stderr)
+                log.error("There was a problem combining results:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 
         # wait for all threads to finish before exiting the combiner process
         for n, t in enumerate(threads):
             if t.is_alive():
-                print(f"joining remaining thread... {t.name}")
+                log.progress(f"joining remaining thread... {t.name}")
                 t.join()
 
     def _check_IDs(self, key="reader_arg", get_ID = None):
@@ -244,7 +250,7 @@ class RT1_processor(object):
         """
 
         if Path(self.dst_path).exists():
-            print("evaluating list of IDs to process...")
+            log.progress("evaluating list of IDs to process...")
             if get_ID is None:
                 get_ID = lambda i: i.split(os.sep)[-1].split(".")[0]
 
@@ -253,38 +259,38 @@ class RT1_processor(object):
                 if key not in keys:
                     try:
                         msg = f"key {key} not found in HDF-file..."
-                        key = next(key for key in keys if key.endswith("static"))
-                        print(msg, f"using key {key}")
+                        key = keys[0]
+                        log.warning(msg + f"using key {key} to determin existing IDs")
                     except StopIteration:
                         self.args_to_process = self.arg_list
-                        print("unable to determine existing IDs...",
-                              f"processing all {len(self.args_to_process)} IDs!")
+                        log.warning("unable to determine IDs of existing file..." +
+                                    f"processing all {len(self.args_to_process)} IDs!")
                         return
 
                 found_IDs = pd.Index(map(get_ID, self.arg_list)).isin(store[key].index)
                 self.args_to_process = [i for i, q in zip(self.arg_list, found_IDs) if not q]
         else:
             self.args_to_process = self.arg_list
+            log.info("no existing output-HDF file found...")
+            log.progress(f"processing all {len(self.args_to_process)} IDs!")
 
-        if len(self.args_to_process) == 0:
-            print("All IDs are already present in the HDF file")
-        else:
-            print(f"found {len(self.args_to_process)} missing and",
-                  f"{len(self.arg_list) - len(self.args_to_process)} existing IDs!")
+        log.progress(f"found {len(self.args_to_process)} missing and " +
+                     f"{len(self.arg_list) - len(self.args_to_process)}" +
+                     " existing IDs!")
 
     def _save_file_process(self):
         while True:
             # continue until the out_queue is emptied, then break
             if self.should_stop.is_set():
                 if not self.out_queue.empty():
-                    print(f"writing remaining {self.out_queue.qsize()}",
-                          "cached results to disk")
+                    log.progress(f"writing remaining {self.out_queue.qsize()}" +
+                                 " cached results to disk")
                 else:
-                    print("shutting down", mp.current_process().name)
+                    log.progress("shutting down " + mp.current_process().name)
                     break
 
             if self._stop.is_set():
-                print("shutting down", mp.current_process().name)
+                log.progress("shutting down " + mp.current_process().name)
                 break
 
             # pause processing in case out_cache_size is reached
@@ -292,7 +298,7 @@ class RT1_processor(object):
                 self.should_wait.set()
             elif self.should_wait.is_set():
                 self.should_wait.clear()
-                print("\nqueue full... waiting")
+                log.warning("\nqueue full... waiting")
 
 
             # wait for results to appear in the out_queue
@@ -308,51 +314,49 @@ class RT1_processor(object):
                 self.write_lock.acquire()
                 with pd.HDFStore(self.dst_path, "a", **self.HDF_kwargs) as store:
                     for key, val in out.items():
+                        # don't index data-columns
+                        # don't index right away (will be done once all processes are 
+                        # finished to maintain write-speed during processing)
                         store.append(key,
                                      val,
                                      format="t",
-                                     data_columns=[],   # don't index data-columns for disc-queries
-                                     index=False,)      # don't index already (will be done once all processes are finished)
+                                     data_columns=[],
+                                     index=False,)
                 self.write_lock.release()
             except Exception:
-                print("problem while writing data... exiting")
+                log.error("problem while writing data... exiting")
                 self._stop.set()
                 self.should_wait.clear()
                 self.write_lock.release()
+                traceback.print_exc(file=sys.stderr)
 
-    def _worker_process(self, arg):
+    def _worker_process(self, *args):
             self.should_wait.wait()
 
             try:
-                fit = self.reader_func(arg)
+                if self.reader_func is not None:
+                    # use provided reader-func... 
+                    fit = self.reader_func(args[0])
+                else:
+                    fit = args[0]
 
                 if fit is not None:
-                    res = self.process_func(fit)
+                    res = self.process_func(fit, *args[1:])
                     self.queue.put(res)
                 else:
-                    print("loading", arg, "resulted in None... skipping")
+                    log.warning(f"loading {args} resulted in None... skipping")
             except Exception:
                 print()
-                log.error(f"problem while processing \n{arg}")
-
-    def _start_worker_process(self):
-
-        pool = mp.Pool(self.n_worker)
-        # worker = pool.map_async(self._worker_process,
-        #                         self.args_to_process,
-        #                         chunksize=self.write_chunk_size)
-        # worker.get()
-        self.worker_pool = pool
-        return pool
+                log.error(f"problem while processing \n{args}")
 
     def _start_writer_process(self):
         # define a process that writes the results to disc
         procs = []
         for i in range(self.n_writer):
             writer = mp.Process(target=self._save_file_process,
-                                    name=f"RTprocess writer {i}")
+                                name=f"RTprocess writer {i}")
             procs.append(writer)
-            print(f"starting {writer.name}")
+            log.progress(f"starting {writer.name}")
             writer.start()
         return procs
 
@@ -364,7 +368,7 @@ class RT1_processor(object):
                            name=f"RTprocess combiner {i}")
             procs.append(t)
             # combiner_thread.setDaemon(True)
-            print(f"starting {t.name}")
+            log.progress(f"starting {t.name}")
             t.start()
         return procs
 
@@ -392,7 +396,6 @@ class RT1_processor(object):
     def writer_pool(cls, *args, **kwargs):
         try:
             w = cls(*args, **kwargs)
-
             manager = w._setup_manager()
             writer = w._start_writer_process()
             combiner = w._start_combiner_process()
@@ -401,14 +404,57 @@ class RT1_processor(object):
         finally:
             w.stop(writer, combiner, manager)
 
-    def run(self,
+    def start_print_thread(self):
+        # start the timer for estimating the processing-time
+        self.p_start = default_timer()
+
+        print_thread = RepeatTimer(.25, self.print_progress)
+        print_thread.start()
+        return print_thread
+
+
+    def run_starmap(self,
             arg_list=None,
             process_func=None,
             reader_func=None,
-            pool_kwargs=None):
+            pool_kwargs=None,
+            starmap_args=None):
+        """
+        
+
+        Parameters
+        ----------
+        arg_list : iterable, optional
+            list of arguments to be processed. if the HDF store already exists, 
+            a check for existing IDs will be performed prior to processing and only
+            the non-existing IDs will be used!
+            The default is None.
+        process_func : callable, optional
+            the function to use for obtaining the results. 
+            -> must return a dict of pandas.DataFrames !
+            The default is None.
+        reader_func : callable, optional
+            optional explicit specification of a reader-function. 
+            If None, the arguments are directly forwarded to process_func
+            The default is None.
+        pool_kwargs : dict, optional
+            a dict of kwargs passed to the initialization of the multiprocessing.Pool.
+            The default is None.
+        starmap_args : iterable, optional
+            a list of additional arguments passed to the evaluation of
+            "process_func". The default is None.
+
+        Returns
+        -------
+        res : iterable
+            the final output of the process.
+
+        """
 
         if pool_kwargs is None:
             pool_kwargs = dict()
+        if starmap_args is None:
+            starmap_args = []
 
         self.arg_list = arg_list
         self.reader_func = reader_func
@@ -420,19 +466,22 @@ class RT1_processor(object):
             self._check_IDs()
             self.p_max = len(self.args_to_process)
 
-
-        # start the timer for estimating the processing-time
-        self.p_start = default_timer()
-        # print the progress every 0.25 seconds
-        print_thread = RepeatTimer(.25, self.print_progress)
-        print_thread.start()
+        if self.p_max == 0:
+            log.error("ALL IDs are already present in the HDF file!")
+            return
 
         try:
-            with mp.Pool(self.n_worker) as pool:
-                worker = pool.map_async(self._worker_process,
-                                        self.args_to_process,
-                                        chunksize=self.write_chunk_size,
-                                        **pool_kwargs)
+            with mp.Pool(self.n_worker, **pool_kwargs) as pool:
+
+                worker = pool.starmap_async(self._worker_process,
+                                            zip(self.args_to_process,
+                                                *starmap_args),
+                                            chunksize=self.write_chunk_size)
+
+                # do this after calling starmap_async to wait for the initializers
+                # to finish!
+                print_thread = self.start_print_thread()
+
                 res = worker.get()
 
         finally:
@@ -442,7 +491,7 @@ class RT1_processor(object):
 
             d, h, m, s = dt_to_hms(timedelta(
                 seconds=default_timer() - self.p_start))
-            print(f"finished processing! ... it took {d} {h:02}:{m:02}:{s:02}")
+            log.progress(f"finished processing! ... it took {d} {h:02}:{m:02}:{s:02}")
 
         return res
 
@@ -463,9 +512,12 @@ class RT1_processor(object):
 
         manager.shutdown()
 
-        d, h, m, s = dt_to_hms(timedelta(
-            seconds=default_timer() - self.p_start))
-        print(f"finished! ... it took {d} {h:02}:{m:02}:{s:02}")
+        if hasattr(self, "p_start"):
+            d, h, m, s = dt_to_hms(timedelta(
+                seconds=default_timer() - self.p_start))
+            log.progress(f"finished! ... it took {d} {h:02}:{m:02}:{s:02}")
+        else:
+            log.progress("exiting...")
 
     @staticmethod
     def create_index(dst_path, id_col="ID", index_dates=False):
@@ -473,13 +525,13 @@ class RT1_processor(object):
 
             for key in ["init_dict", "reader_arg", "res_dict"]:
                 if key in store:
-                    print(f"creating index for {key}")
+                    log.progress(f"creating index for {key}")
                     s = store.get_storer(key)
                     s.create_index([id_col])
 
             for key in ["dataset", "aux_data"]:
                 if key in store:
-                    print(f"creating index for {key}")
+                    log.progress(f"creating index for {key}")
                     s = store.get_storer(key)
                     s.create_index([id_col, "date"] if index_dates else
                                    [id_col])
