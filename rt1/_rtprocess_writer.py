@@ -281,7 +281,7 @@ class RT1_processor(object):
     def _save_file_process(self):
         while True:
             # continue until the out_queue is emptied, then break
-            if self.should_stop.is_set():
+            if self.combiner_ready.is_set():
                 if not self.out_queue.empty():
                     log.progress(f"writing remaining {self.out_queue.qsize()}" +
                                  " cached results to disk")
@@ -388,6 +388,8 @@ class RT1_processor(object):
 
         self.p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
         self.p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
+
+        self.combiner_ready = manager.Event()
 
         return manager
 
@@ -504,6 +506,7 @@ class RT1_processor(object):
         # wait for cached results to be combined
         for c in combiner:
             c.join()
+        self.combiner_ready.set()
         # wait for output-cache to be written to disc
         for w in writer:
             w.join()
