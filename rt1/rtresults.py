@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from itertools import islice
+from collections import defaultdict
+import weakref
+import contextlib
 import os
 from pathlib import Path
 from ast import literal_eval
+import gc
 
 import pandas as pd
 from numpy.random import choice
@@ -126,9 +130,17 @@ class RTresults(object):
             self._cfg_path = self.path / "cfg"
 
             self._nc_paths = self._get_results(".nc")
+            self._hdf_paths = self._get_results(".h5")
+
 
         def __iter__(self):
             return self.dump_files
+
+        @property
+        def fit_db(self):
+            assert "fit_db" in self._hdf_paths, '"fit_db.h5" not found in results-folder'
+
+            return self.load_hdf("fit_db")
 
         @staticmethod
         def _check_dump_filename(p):
@@ -149,6 +161,39 @@ class RTresults(object):
                 log.info(f'there is no "{ending}" file in "{self._result_path}"')
 
             return results
+
+        def load_hdf(self, result_name, **kwargs):
+            """
+            open a HDF5 file stored in the "results"-folder with
+            the HDFaccessor class (the file is opened in read-only mode!)
+
+            Parameters
+            ----------
+            result_name : str, optional
+                The name of the HDF-file (without a .h5 extension).
+                If None, and only 1 file is available, the available file
+                will be laoded. The default is None.
+            **kwargs :
+                kwargs passed to the initialization of the HDFaccessor class
+
+            Returns
+            -------
+            HDFaccessor : the HDFaccessor instance for the given file
+            """
+
+            results = self._get_results(".h5")
+            assert len(results) > 0, "no HDF file in the results folder!"
+
+            assert len(results) == 1 or result_name in results, (
+                "there is more than 1 HDF file... "
+                + 'provide "result_name":\n    - '
+                + "\n    - ".join(results.keys())
+            )
+
+            if result_name is None:
+                result_name = list(results.keys())[0]
+
+            return HDFaccessor(results[result_name], **kwargs)
 
         def load_nc(self, result_name=None, use_xarray=True):
             """
@@ -330,98 +375,383 @@ class RTresults(object):
                 with self.load_nc(r) as ncfile:
                     print(ncfile)
 
-    @staticmethod
-    def load_fit_from_HDF(path, ID):
 
-        with pd.HDFStore(path, 'r') as store:
+class HDFaccessor(object):
+    def __init__(self, path, **kwargs):
+        """
+        accessor class to read HDF5 files stored during RT1 processing
 
-            try:
-                init_dict = pd.read_hdf(store, key="init_dict",
-                                        where=f"ID='{ID}'")
-            except KeyError:
-                print("'init_dict' not present... fit can not be loaded")
-                return
+        Parameters
+        ----------
+        path : str
+            the path to the HDF file.
+        **kwargs :
+            kwargs passed to pd.HDFstore().
 
-            try:
-                dataset = pd.read_hdf(store, key="dataset",
-                                      where=f"ID='{ID}'")
-            except KeyError:
-                dataset = None
-                pass
+        Returns
+        -------
+        None.
 
-            try:
-                aux_data = pd.read_hdf(store, key="aux_data",
-                                       where=f"ID='{ID}'")
-            except KeyError:
-                aux_data = None
-                pass
+        """
+        self.store = pd.HDFStore(path=path, mode="r", **kwargs)
 
-            try:
-                reader_arg = pd.read_hdf(store, key="reader_arg",
-                                         where=f"ID='{ID}'")
-            except Exception:
-                try:
-                    # do this for downward-compatibility
-                    # (if ID is present both as comlumn and as index...)
-                    reader_arg = pd.read_hdf(store, key="reader_arg",
-                             where=f"index='{ID}'")
-                    reader_arg["ID"] = ID
+        self.datasets = _data_container()
 
-                except KeyError:
-                    reader_arg = None
-                    pass
+        if "reader_arg" in self.store:
+            self.IDs = self.store.select_column("reader_arg", "index")
+        else:
+            self.IDs = None
 
-            try:
-                res_dict = pd.read_hdf(store, key="res_dict",
-                                       where=f"ID='{ID}'")
-            except KeyError:
-                res_dict = None
-                pass
+        cfgkeys = defaultdict(list)
+        for key in self.store.keys():
+            if key.endswith("/meta"):
+                continue
 
-
-            if "cfg" in init_dict.index.names:
-                mf = MultiFits()
-                for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
-
-                    attrs = {key: literal_eval(val) for key, val in
-                             cfg_attrs.items()}
-
-                    fit = Fits(**attrs)
-                    if res_dict is not None:
-                        fit.res_dict = {key:val.dropna().to_list()
-                                        for key, val in
-                                        res_dict.loc[ID].loc[cfg].items()}
-
-                    mf.add_config(cfg, fit)
-
-                # attach shared properties
-                if dataset is not None:
-                    mf.set_dataset(dataset.loc[ID])
-                if aux_data is not None:
-                    mf.set_aux_data(aux_data.loc[ID])
-                if reader_arg is not None:
-                    mf.set_reader_arg(reader_arg.loc[ID].to_dict())
-
-                return mf
-
+            keysplit = key.lstrip("/").split("/")
+            if len(keysplit) == 2:
+                cfgkeys[keysplit[0]].append(keysplit[1])
+            elif len(keysplit) == 1:
+                setattr(self.datasets, keysplit[0], _subselector(self, key))
             else:
+                setattr(self.datasets, key, _subselector(self, key))
+
+        for cfg, keys in cfgkeys.items():
+            setattr(self.datasets, cfg, _cfgselector(self, cfg, keys))
+
+        # make load_fit function public if "init_dict" is found in the store
+        if "init_dict" in self.store:
+            self.load_fit = self._load_fit
+
+
+    def __del__(self):
+        self.store.close()
+        gc.collect()
+
+    def close(self):
+        self.store.close()
+        gc.collect()
+
+    def _load_fit(self, ID):
+        if isinstance(ID, int):
+            ID = self.IDs[ID]
+        try:
+            init_dict = self.datasets.init_dict.get_id(ID)
+        except KeyError:
+            print("'init_dict' not present... fit can not be loaded")
+            return
+
+        try:
+            dataset = self.datasets.dataset.get_id(ID)
+        except KeyError:
+            dataset = None
+            pass
+
+        try:
+            aux_data = self.datasets.aux_data.get_id(ID)
+        except KeyError:
+            aux_data = None
+            pass
+
+        try:
+            reader_arg = self.datasets.reader_arg.get_id(ID)
+            reader_arg = reader_arg.loc[ID].to_dict()
+            if "ID" not in reader_arg:
+                reader_arg["ID"] = ID
+        except Exception:
+            reader_arg = None
+            pass
+
+        try:
+            res_dict = self.datasets.res_dict.get_id(ID)
+        except Exception:
+            res_dict = None
+            pass
+
+
+        if "cfg" in init_dict.index.names:
+            mf = MultiFits()
+            for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
+
                 attrs = {key: literal_eval(val) for key, val in
-                         init_dict.loc[ID].items()}
+                         cfg_attrs.items()}
+
                 fit = Fits(**attrs)
-
-                if dataset is not None:
-                    fit.dataset = dataset.loc[ID]
-
-                if aux_data is not None:
-                    fit.aux_data = aux_data.loc[ID]
-
-                if reader_arg is not None:
-                    fit.reader_arg = reader_arg.loc[ID].to_dict()
-
                 if res_dict is not None:
+                    # use dropna(how="all", axis=1) to make sure that parameters that
+                    # are fitted in one config but not in another are not added as
+                    # empty lists!
                     fit.res_dict = {key:val.dropna().to_list()
-                                    for key, val in res_dict.loc[ID].items()}
-                return fit
+                                    for key, val in
+                                    res_dict.loc[ID].loc[cfg].dropna(how="all",
+                                                                     axis=1).items()}
+
+                mf.add_config(cfg, fit)
+
+            # attach shared properties
+            if dataset is not None:
+                mf.set_dataset(dataset.loc[ID])
+            if aux_data is not None:
+                mf.set_aux_data(aux_data.loc[ID])
+            if reader_arg is not None:
+                mf.set_reader_arg(reader_arg)
+
+            return mf
+
+        else:
+            attrs = {key: literal_eval(val) for key, val in
+                     init_dict.loc[ID].items()}
+            fit = Fits(**attrs)
+
+            if dataset is not None:
+                fit.dataset = dataset.loc[ID]
+
+            if aux_data is not None:
+                fit.aux_data = aux_data.loc[ID]
+
+            if reader_arg is not None:
+                fit.reader_arg = reader_arg
+
+            if res_dict is not None:
+                fit.res_dict = {key:val.dropna().to_list()
+                                for key, val in res_dict.loc[ID].items()}
+            return fit
+
+
+    @staticmethod
+    def _chunks(lst, n):
+        """Yield successive n-sized chunks from lst."""
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+
+    def _get_vals(self, key, chunksize, start=None, **kwargs):
+        n = self.store.get_node(key)
+
+        try:
+            # TODO make this a proper selector!
+            # check if indexed data-columns are available, if so use the first
+            idxname = n.table.indexedcolpathnames[0]
+        except IndexError:
+            idxname = "index"
+
+
+        assert self.IDs is not None, "no IDs found in HDF-store"
+        if start:
+            assert start < len(self.IDs), (f"start={start} is bigger than the number" +
+                                           f" of IDs ({len(self.IDs)})")
+        use_ids = self._chunks(self.IDs[slice(start, None)], chunksize)
+
+        for i, ids in enumerate(use_ids):
+            indexes = self.store.select_as_coordinates(key=key,
+                                                       where=f"{idxname} in ids")
+            data = self.store.get_storer(key).read(where=indexes,
+                                                   **kwargs)
+            yield data
+
+    def _get_vals_with_IDs(self, key, use_ids, chunksize=1 , **kwargs):
+        n = self.store.get_node(key)
+        try:
+            idxname = n.table.indexedcolpathnames[0]
+        except IndexError:
+            idxname = "index"
+
+        assert self.IDs is not None, "no IDs found in HDF-store"
+        use_ids = self._chunks(use_ids, chunksize)
+
+        for i, ids in enumerate(use_ids):
+            indexes = self.store.select_as_coordinates(key=key,
+                                                  where=f"{idxname} in ids")
+            data = self.store.get_storer(key).read(where=indexes,
+                                                   **kwargs)
+            yield data
+
+    def _get_nids(self, key, nids, start=None,
+                 read_chunksize=None, print_progress=False, **kwargs):
+        return next(self._get_nids_iter(key=key, nids=nids, start=start,
+                                       read_chunksize=read_chunksize,
+                                       print_progress=print_progress,
+                                       **kwargs))
+
+    def _get_id(self, key, n, **kwargs):
+        if isinstance(n, str):
+            ret = next(self._get_nids_iter(key=key, nids=[n], **kwargs))
+
+        elif isinstance(n, int):
+            ret = next(self._get_nids_iter(key=key, nids=1, start=n, **kwargs))
+
+        return ret
+
+    def _get_nids_iter(self, key, nids, start=None,
+                       read_chunksize=None, print_progress=False, **kwargs):
+        """
+        return an iterator that iteratively yields "nids" IDs from the given key
+        until all data has been returned
+
+        Parameters
+        ----------
+        key : str
+            the key to use.
+        nids : int or iterable
+            if int: the number of IDs to return.
+            if iterable: a list of IDs to use
+        start : int, optional
+            the index-number to start from.
+
+            e.g. equivalent to `IDs[start : start + nids]`
+
+            The default is None.
+        read_chunksize : int, optional
+            the chunksize used for retrieving the data. The default is None.
+        print_progress : bool, optional
+            indicator if a progress-message should be printed.
+            The default is False.
+        **kwargs :
+            kwargs passed to `storer.read()`
+
+        Yields
+        ------
+        data : pandas.DataFrame
+            the retrieved DataFrame.
+
+        """
+        assert key in self.store, f"invalid key provided, use one of {self.store.keys()}"
+
+        if read_chunksize is None:
+            s = self.store.get_storer(key)
+
+            if isinstance(nids, int):
+                if s.is_multi_index:
+                    read_chunksize = min(10, nids)
+                else:
+                    read_chunksize = nids
+            elif isinstance(nids, str):
+                read_chunksize = 1
+            else:
+                read_chunksize = len(nids)
+
+        if isinstance(nids, int):
+            data_gen = self._get_vals(key=key, chunksize=read_chunksize,
+                                      start=start, **kwargs)
+        elif isinstance(nids, str):
+            nids = 1
+            data_gen = self._get_vals_with_IDs(key=key, chunksize=read_chunksize,
+                                               use_ids=[nids], **kwargs)
+        else:
+            use_ids = nids
+            nids = len(use_ids)
+            data_gen = self._get_vals_with_IDs(key=key, chunksize=read_chunksize,
+                                               use_ids=use_ids, **kwargs)
+
+        ret = []
+        for i, d in enumerate(data_gen):
+            ret.append(d)
+
+            if (i+1)%(nids//read_chunksize)==0:
+                if nids%read_chunksize != 0:
+                    data = next(data_gen)
+                    ret.append(iloc_level(data, slice(nids%10)))
+
+                data = pd.concat(ret)
+                yield data
+
+                if nids%read_chunksize != 0:
+                    ret = [iloc_level(data, slice(nids%10, None))]
+                else:
+                    ret = []
+
+            if print_progress:
+                print("reading", (i + 1)*read_chunksize)
+        else:
+            print("asdf")
+            data = pd.concat(ret)
+            yield data
+
+class _data_container(object):
+    def __init__(self):
+        pass
+
+class _cfgselector(object):
+    def __init__(self, parent, cfg, keys):
+        # use weak references to ensure proper closing of the file-handlers
+        # if parent-class is deleted
+        self._parent = weakref.ref(parent)
+        self._cfg = cfg
+        self._keys = keys
+
+        for key in self._keys:
+            setattr(self, key, _subselector(parent, f"{cfg}/{key}"))
+
+class _subselector(object):
+    def __init__(self, parent, key):
+        # use weak references to ensure proper closing of the file-handlers
+        # if parent-class is deleted
+        self._parent = weakref.ref(parent)
+        self._key = key
+
+    def select(self, **kwargs):
+        ret = self._parent().store.select(self._key, **kwargs)
+        return ret
+
+    def get_nids_iter(self, nids, start=None,
+                      read_chunksize=None, print_progress=False, **kwargs):
+        return self._parent()._get_nids_iter(key=self._key,
+                                          nids=nids,
+                                          start=start,
+                                          read_chunksize=read_chunksize,
+                                          print_progress=print_progress,
+                                          **kwargs)
+
+    def get_nids(self, nids, start=None,
+                      read_chunksize=None, print_progress=False, **kwargs):
+        return self._parent()._get_nids(key=self._key,
+                                     nids=nids,
+                                     start=start,
+                                     read_chunksize=read_chunksize,
+                                     print_progress=print_progress,
+                                     **kwargs)
+
+    def get_id(self, n, **kwargs):
+        return self._parent()._get_id(key=self._key, n=n, **kwargs)
+
+def _sanitize_index(df, idx):
+    # convert inputs to desired indexers
+    # (so that we can use integers and None directly)
+    try:
+        idx = list(idx)
+    except TypeError:
+        idx = [idx]
+
+    for level, i in enumerate(idx):
+        if i is None:
+            yield df.index.levels[level][slice(None)]
+        elif isinstance(i, int):
+            yield df.index.levels[level][slice(i, i + 1)]
+        else:
+            yield df.index.levels[level][i]
+
+def iloc_level(df, idx):
+    """
+    iloc a MultiIndexed pandas.DataFrame
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        the MultiIndexed dataframe to use.
+    idx : iterable
+        the indexers to use for the MultiIndex levels.
+        can be (None, int, list or slice)
+
+        >>> idx = [level_1 indexer, level_2 indexer, ...]
+
+        if None: all index-values will be used
+        if int: the n^th index-value is selected
+
+    Returns
+    -------
+    pandas.DataFrame
+    """
+    return df.iloc[df.index.get_locs(list(_sanitize_index(df, idx)))]
+
+
+
 
 
 
