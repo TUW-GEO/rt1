@@ -2896,7 +2896,6 @@ class Fits(Scatter):
         return _metric_keys(self)
 
 
-# %%
 
 
 class _MultiAccessors:
