@@ -2,7 +2,6 @@ import multiprocessing as mp
 from timeit import default_timer
 from datetime import datetime, timedelta
 from itertools import repeat, islice
-import ctypes
 import sys
 import traceback
 from textwrap import dedent
@@ -14,7 +13,10 @@ import shutil
 import pandas as pd
 import numpy as np
 
-from .general_functions import dt_to_hms, update_progress, groupby_unsorted
+
+from ._rtprocess_writer import RT1_processor
+
+from .general_functions import groupby_unsorted
 from .rtparse import RT1_configparser
 from .rtresults import RTresults
 from .rtfits import load, MultiFits
@@ -81,104 +83,6 @@ def _make_folderstructure(save_path, subfolders):
             if not mkpath.exists():
                 log.info(f'"{mkpath}"\ndoes not exist... creating directory')
                 mkpath.mkdir(parents=True, exist_ok=True)
-
-
-def _setup_cnt(N_items, ncpu):
-    if ncpu > 1:
-        manager = mp.Manager()
-        lock = manager.Lock()
-        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_time = manager.Value(ctypes.c_float, 0)
-    else:
-        # don't use a manager if single-core processing is used
-        p_totcnt = mp.Value(ctypes.c_ulonglong, 0)
-        p_meancnt = mp.Value(ctypes.c_ulonglong, 0)
-        p_time = mp.Value(ctypes.c_float, 0)
-        lock = None
-
-    process_cnt = [p_totcnt, p_meancnt, N_items, p_time, ncpu, lock]
-    return process_cnt
-
-
-def _start_cnt():
-    return default_timer()
-
-
-def _increase_cnt(process_cnt, start, err=False):
-    if process_cnt is None:
-        return
-
-    p_totcnt, p_meancnt, p_max, p_time, p_ncpu, lock = process_cnt
-    if lock is not None:
-        # ensure that only one process is allowed to write simultaneously
-        lock.acquire()
-    try:
-        if err is False:
-            end = default_timer()
-            # increase the total counter
-            p_totcnt.value += 1
-
-            # update the estimate of the mean time needed to process a site
-            p_time.value = (p_meancnt.value * p_time.value + (end - start)) / (
-                p_meancnt.value + 1
-            )
-            # increase the mean counter
-            p_meancnt.value += 1
-            # get the remaining time and update the progressbar
-            remain = timedelta(seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value)
-            d, h, m, s = dt_to_hms(remain)
-
-            msg = update_progress(
-                p_totcnt.value,
-                p_max,
-                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                finalmsg=(
-                    "finished! "
-                    + f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"
-                ),
-                progress2=p_totcnt.value - p_meancnt.value,
-            )
-
-        else:
-            # only increase the total counter
-            p_totcnt.value += 1
-            if p_meancnt.value == 0:
-                title = f"{'estimating time ...':<28}"
-            else:
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value
-                )
-                d, h, m, s = dt_to_hms(remain)
-                title = f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-            msg = update_progress(
-                p_totcnt.value,
-                p_max,
-                title=title,
-                finalmsg=(
-                    "finished! "
-                    + f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"
-                ),
-                progress2=p_totcnt.value - p_meancnt.value,
-            )
-
-            # log to file if an error occured during processing
-            log.debug(msg.strip())
-
-        if lock is not None:
-            # release the lock
-            lock.release()
-    except Exception:
-        msg = "???"
-        if lock is not None:
-            # release the lock in case an error occured
-            lock.release()
-        pass
-
-    sys.stdout.write(msg)
-    sys.stdout.flush()
 
 
 class RTprocess(object):
@@ -255,16 +159,17 @@ class RTprocess(object):
             ), 'the values of "init_kwargs" MUST be strings !'
             self.init_kwargs = init_kwargs
 
-    def _listener_process(self, queue):
+    @staticmethod
+    def _listener_process(queue, dumppath):
 
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
-        if not hasattr(self, "dumppath"):
+        if dumppath is None:
             log.warning("no dumppath specified, log is not saved!")
             return
 
         datestring = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-        path = self.dumppath / "cfg" / f"RT1_process({datestring}).log"
+        path = dumppath / "cfg" / f"RT1_process({datestring}).log"
 
         log.debug("listener process started for path: " + str(path))
 
@@ -366,13 +271,13 @@ class RTprocess(object):
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
         """
+
         try:
             self.cfg = RT1_configparser(self.config_path)
         except Exception:
             if mp.current_process().name == "MainProcess":
                 log.warning("no valid config file was found")
             return
-
 
         # update specs with init_kwargs
         for section, init_defs in self.init_kwargs.items():
@@ -425,6 +330,8 @@ class RTprocess(object):
                 ["results", "cfg", "dumps"],
             )
 
+        # TODO fix this properly!!
+        sys.path.append(str(self.dumppath / "cfg"))
         # copy modules and config-files and ensure that they are loaded from the
         # right direction (NO files will be overwritten!!)
         # copying is only performed in the main-process!
@@ -486,9 +393,7 @@ class RTprocess(object):
                     + "existing one is used!\n"
                 )
 
-                log.debug(
-                    f'{copypath.name} imported from \n"{copypath}"\n'
-                )
+                log.debug(f'{copypath.name} imported from \n"{copypath}"\n')
             else:
                 if len(self.init_kwargs) == 0:
                     # if no init_kwargs have been provided, copy the
@@ -541,7 +446,7 @@ class RTprocess(object):
         del self.cfg
         self.cfg = RT1_configparser(copypath)
 
-    def _evalfunc(self, reader_arg=None, process_cnt=None):
+    def _evalfunc(self, reader_arg=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -550,16 +455,11 @@ class RTprocess(object):
         ----------
         reader_arg : dict
             A dict of arguments passed to the reader.
-        process_cnt : list
-            A list of shared-memory variables that are used to update the
-            progressbar
         Returns
         -------
         The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
         """
 
-        if process_cnt is not None:
-            start = _start_cnt()
         try:
             # if a reader (and no dataset) is provided, use the reader
             read_data = self.proc_cls.reader(reader_arg)
@@ -611,22 +511,17 @@ class RTprocess(object):
                         self.parent_fit, reader_arg, mini=True
                     )
 
-                if process_cnt is not None:
-                    _increase_cnt(process_cnt, start, err=False)
-
             else:
-                fit = self.parent_fit.reinit_object(dataset=dataset)
+                fit = self.parent_fit.reinit_object(dataset=dataset, 
+                                                    share_fnevals=True)
+                # append reader_arg
+                fit.reader_arg = reader_arg
+
                 fit.performfit()
 
                 # append auxiliary data
                 if aux_data is not None:
                     fit.aux_data = aux_data
-
-                # append reader_arg
-                fit.reader_arg = reader_arg
-
-                if process_cnt is not None:
-                    _increase_cnt(process_cnt, start, err=False)
 
                 # if a post-processing function is provided, return its output,
                 # else return None
@@ -640,21 +535,21 @@ class RTprocess(object):
                 # (it might happen that some parts change during postprocessing)
                 if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
                     self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-            return ret
+
+            # TODO
+            id_col = next(i for i in fit.reader_arg if i in ["ID", "gpi"])
+            return fit._get_fit_to_hdf_dict(id_col)
 
         except Exception as ex:
 
             if callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, reader_arg)
-                if ex_ret is None or ex_ret is False:
-                    _increase_cnt(process_cnt, start, err=True)
-                else:
-                    _increase_cnt(process_cnt, start, err=False)
 
                 return ex_ret
             else:
                 raise ex
 
+    #@staticmethod
     def _initializer(self, initializer, queue, *args):
         """
         decorate a provided initializer with the "_worker_configurer()" to
@@ -664,7 +559,7 @@ class RTprocess(object):
         """
 
         if queue is not None:
-            self._worker_configurer(queue)
+            RTprocess._worker_configurer(queue)
 
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
@@ -686,6 +581,7 @@ class RTprocess(object):
         queue=None,
         dump_fit=True,
         postprocess=True,
+        **kwargs
     ):
         """
         Evaluate a RT-1 model on a single core or in parallel using
@@ -818,75 +714,22 @@ class RTprocess(object):
             if self.parent_fit.int_Q is True:
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            process_cnt = _setup_cnt(N_items=len(reader_args), ncpu=ncpu)
-        else:
-            process_cnt = None
+        # start processing
+        with RT1_processor.writer_pool(
+            n_worker=ncpu,
+            dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
+            **kwargs
+        ) as w:
 
-        if ncpu > 1:
-            log.info(f"start of parallel evaluation on {ncpu} cores")
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(
-                    self._evalfunc, zip(reader_args, repeat(process_cnt))
-                )
+            res = w.run_starmap(
+                arg_list=reader_args,
+                process_func=self._evalfunc,
+                pool_kwargs=pool_kwargs,
+            )
 
-                pool.close()  # Marks the pool as closed.
-                pool.join()  # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            log.info("start of single-core evaluation")
-            # force autocontinue=True when calling the initializer since setup() has
-            # already been called in the main process so all folders will already exist!
-            init_autocontinue = self.autocontinue
-            self.autocontinue = True
+        return res
 
-            # call the initializer if it has been provided
-            if "initializer" in pool_kwargs:
-                if "initargs" in pool_kwargs:
-                    pool_kwargs["initializer"](*pool_kwargs["initargs"])
-                else:
-                    pool_kwargs["initializer"]()
 
-            self.autocontinue = init_autocontinue
-
-            res = []
-            for reader_arg in reader_args:
-                res.append(
-                    self._evalfunc(reader_arg=reader_arg, process_cnt=process_cnt)
-                )
-
-        # TODO incorporate this in run_finalout
-        # call finaloutput if post-processing has been performed and a finaloutput
-        # function is provided
-        if self._postprocess and callable(self.proc_cls.finaloutput):
-            # in case of a multi-config, results will be dicts!
-            if isinstance(self.parent_fit, MultiFits):
-                # store original finalout_name
-                finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-                for name in self.parent_fit.config_names:
-                    self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
-                    self.proc_cls.finaloutput(
-                        (i.get(name) for i in res if i is not None)
-                    )
-                # reset initial finalout_name
-                self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
-
-            # if len(self.cfg.config_names) > 0:
-            #     for i, res_i in enumerate(
-            #         zip_longest(*(i for i in res if i is not None))
-            #     ):
-            #         self.proc_cls.rt1_procsesing_respath = (
-            #             self.dumppath / "results" / self.parent_fit[i][0]
-            #         )
-            #         self.proc_cls.finaloutput(res_i)
-            else:
-                return self.proc_cls.finaloutput(res)
-        else:
-            return res
 
     def run_processing(
         self,
@@ -956,11 +799,18 @@ class RTprocess(object):
         """
 
         try:
+            # initialize all necessary properties if setup was not yet called
+            self.setup()
+
             if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 queue = mp.Manager().Queue(-1)
-                listener = mp.Process(target=self._listener_process, args=[queue])
+                listener = mp.Process(
+                    target=self._listener_process,
+                    args=[queue, self.dumppath],
+                    name="RTprocess logger",
+                )
 
                 # make the queue listen also to the MainProcess start the
                 # listener-process that writes the file to disc AFTER
@@ -969,9 +819,6 @@ class RTprocess(object):
                 self._worker_configurer(queue)
             else:
                 queue = None
-
-            # initialize all necessary properties if setup was not yet called
-            self.setup()
 
             if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
@@ -1071,14 +918,17 @@ class RTprocess(object):
         use_N_files=None,
         use_config=None,
         finalout_name=None,
-        finaloutput=None,
         postprocess=None,
         print_progress=True,
         logfile_level=1,
-        fitlist=None
+        fitlist=None,
+        save_path=None,
+        create_index=True,
+        metadata=None,
+        **kwargs,
     ):
         """
-        run postprocess and finaloutput for available .dump files
+        run postprocess for available .dump files
 
         Parameters
         ----------
@@ -1092,18 +942,9 @@ class RTprocess(object):
             The default is None, in which case all configs are used!
         finalout_name : str, optional
             override the finalout_name provided in the ".ini" file
-        finaloutput : callable, optional
-            override the finaloutput function provided via the
-            "processing_config.py" script
-            NOTICE: the call-signature is
-            `finaloutput(proc_cls, ...)` where proc_cls is the
-            used instance of the "processing_cfg" class!
-            -> this way you have access to all arguments specified in
-            proc_cls such as ".save_path", ".dumpfolder" etc.
         postprocess : callable, optional
             override the postprocess function provided via the
             "processing_config.py" script
-            NOTICE: the call signature is similar to finaloutput above!
         print_progress : bool, optional
             Indicator if a progress-bar should be printed or not.
             If True, it might be wise to suppress warnings during runtime
@@ -1126,27 +967,37 @@ class RTprocess(object):
             (useful if RTprocess is used without a config attached)
             The default is None, in which case the dump-files will be
             identified according to the definitions in the config-file.
+        save_path : str, optional
+            the path where the finaloutput file will be stored
+            if None, the path provided in the ".ini" file will be used
+            (e.g. "dumpfolder / results / finalout_name.h5" )
+        create_index : bool or dict, optional
+            indicator if the created HDF-store should be indexed or not.
+
+            - if True a index is created for the first index-column
+              (this can take quite some time but speeds up querying a lot!)
+            - if a dict is provided, it is used as kwargs for
+              `_rtprocess_writer.RT1_processor.create_index()`
+              (e.g. the defaults are:  idx_levels=None and keys=None)
+        metadata : dict
+            TODO
+            a dict with keys "descriptions" and "attributes"
+        **kwargs :
+            additional kwargs passed to
+            `_rtprocess_writer.RT1_processor()`
+            (n_combiner, n_writer, HDF_kwargs, write_chunk_size,
+             out_cache_size)
         """
+
+        # check if provided postprocess function is a callable
+        if postprocess is not None:
+            assert callable(postprocess), "postprocess must be callable!"
+
         try:
-            if logfile_level is not None and ncpu > 1:
-                # start a listener-process that takes care of the logs from
-                # multiprocessing workers
-                queue = mp.Manager().Queue(-1)
-                listener = mp.Process(target=self._listener_process, args=[queue])
-
-                # make the queue listen also to the MainProcess start the
-                # listener-process that writes the file to disc AFTER
-                # initialization of the  folder-structure!
-                # (otherwise the log-file can not be generated!)
-                self._worker_configurer(queue)
-            else:
-                queue = None
-
             # override finalout_name
             # do this BEFORE self.setup() is called !!
             if finalout_name is not None:
                 assert isinstance(finalout_name, str), "finalout_name must be a string"
-                # self.proc_cls.finalout_name = finalout_name
                 self.override_config(
                     PROCESS_SPECS=dict(finalout_name=finalout_name), override=False
                 )
@@ -1157,31 +1008,62 @@ class RTprocess(object):
             self.setup()
             self.autocontinue = initial_autocontinue
 
+            # if "save-path" is not provided explicitly, use the path from the config
+            if save_path is None:
+                save_path = (
+                    self.proc_cls.rt1_procsesing_respath / self.proc_cls.finalout_name
+                )
+
+            if logfile_level is not None and ncpu > 1:
+                # start a listener-process that takes care of the logs from
+                # multiprocessing workers
+                queue = mp.Manager().Queue(-1)
+                listener = mp.Process(
+                    target=self._listener_process,
+                    args=[queue, self.dumppath],
+                    name="RTprocess logger",
+                )
+
+                # make the queue listen also to the MainProcess start the
+                # listener-process that writes the file to disc AFTER
+                # initialization of the  folder-structure!
+                # (otherwise the log-file can not be generated!)
+                self._worker_configurer(queue)
+            else:
+                queue = None
+
             if logfile_level is not None and ncpu > 1:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
+                # TODO
                 listener.start()
 
-            if not fitlist:
+            if fitlist is None:
+                # use fits from .dump file if no fitlist is provided
                 fitlist = self._get_files(use_N_files=use_N_files)
 
-            return self._run_finalout(
+            res =  self._run_finalout(
                 ncpu,
                 fitlist=fitlist,
+                save_path=save_path,
                 use_config=use_config,
-                finaloutput=finaloutput,
                 postprocess=postprocess,
                 queue=queue,
                 print_progress=print_progress,
+                create_index=create_index,
+                metadata=metadata,
+                **kwargs
             )
+
+            return res
+
 
         except Exception as err:
             log.exception("there was an error during finalout generation!")
             raise err
 
         finally:
-
             # turn off capturing warnings
             logging.captureWarnings(False)
 
@@ -1193,8 +1075,7 @@ class RTprocess(object):
                     # stop the listener process
                     listener.join()
 
-                # remove any remaining file-handler and queue-handlers after
-                # the processing is done
+                # remove any remaining file-and queue-handlers after processing is done
                 handlers = groupby_unsorted(log.handlers, key=lambda x: x.name)
                 for h in handlers.get("rtprocessing_queuehandler", []):
                     # close the handler (removing it does not close it!)
@@ -1202,18 +1083,87 @@ class RTprocess(object):
                     # remove the file-handler from the log
                     log.handlers.remove(h)
 
-    def _run_postprocess(
-        self, fitpath, use_config=None, process_cnt=None, postprocess=None
+
+    def _run_finalout(
+        self,
+        ncpu,
+        fitlist=None,
+        save_path=None,
+        use_config=None,
+        postprocess=None,
+        queue=None,
+        print_progress=True,
+        create_index=True,
+        metadata=None,
+        **kwargs
     ):
-        if process_cnt is not None:
-            start = _start_cnt()
+
+        # don't call additional initializers, only use the default initializer
+        # (to enable subprocess-logging)
+        pool_kwargs = dict(
+            initializer=self._initializer,
+            initargs=[None, queue],
+        )
+
+        # pre-evaluate the fn-coefficients if interaction terms are used
+        # since finalout might involve calling "calc_model()" or similar
+        # functions that require a re-evaluation of the fn_coefficients
+        if hasattr(self, "parent_fit"):
+            if isinstance(self.parent_fit, MultiFits):
+                if use_config is None or use_config == "from_postprocess":
+                    cfgs = self.parent_fit.config_names
+                else:
+                    cfgs = use_config
+
+                for fit_name in cfgs:
+                    log.progress(
+                        f"pre-evaluation of coefficients for {fit_name}"
+                        )
+                    parent_fit = self.parent_fit.accessor.config_fits[fit_name]
+                    if parent_fit.int_Q is True:
+                        parent_fit._fnevals_input = parent_fit.R._fnevals
+            else:
+                if self.parent_fit.int_Q is True:
+                    self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+
+
+        log.progress(f"start of finalout generation on {ncpu} cores")
+
+        with RT1_processor.writer_pool(
+            n_worker=ncpu,
+            dst_path=save_path,
+            **kwargs
+        ) as w:
+
+            res = w.run_starmap(
+                arg_list=fitlist,
+                reader_func=self._finalout_reader,
+                process_func=self._run_postprocess,
+                pool_kwargs=pool_kwargs,
+                starmap_args=[repeat(use_config),
+                              repeat(postprocess),
+                              ],
+            )
+
+        if create_index:
+            if isinstance(create_index, dict):
+                RT1_processor.create_index(save_path, **create_index)
+            elif create_index is True:
+                RT1_processor.create_index(save_path)
+
+        if metadata:
+            RT1_processor.attach_metadata(save_path, **metadata)
+
+        return res
+
+    def _finalout_reader(self, fitpath, use_config=None, *args):
 
         # load fitobjects based on fit-paths
         try:
             fit = load(fitpath)
-            if use_config is None and isinstance(fit, MultiFits):
+            if ((use_config is None or use_config == "from_postprocess"
+                 ) and isinstance(fit, MultiFits)):
                 use_config = fit.config_names
-
 
             # assign pre-evaluated fn-coefficients
             if hasattr(self, "parent_fit"):
@@ -1221,19 +1171,38 @@ class RTprocess(object):
                     config_fit = self.parent_fit.accessor.config_fits[config_name]
                     if config_fit.int_Q is True:
                         try:
-                            getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
+                            getattr(
+                                fit.configs, config_name
+                            )._fnevals_input = config_fit._fnevals_input
                         except AttributeError:
-                            log.error("could not assign pre-evaluated fn-coefficients to " +
-                                      f"the config {config_name}... " +
-                                      "available configs of the loaded Fits object:" +
-                                      f" {fit.config_names}")
-
-
+                            log.error(
+                                "could not assign pre-evaluated fn-coefficients to "
+                                + f"the config {config_name}... "
+                                + "available configs of the loaded Fits object:"
+                                + f" {fit.config_names}"
+                            )
+            return fit
         except Exception:
-            log.error(f"there was an error while loading {fitpath}")
-            _increase_cnt(process_cnt, start, err=True)
+            log.error(f"there was an error while loading {fitpath}",
+                      exc_info=True)
             return
-        # TODO fix reader_arg argument of postprocess
+
+
+    def _run_postprocess(self, fit, use_config=None, postprocess=None, *args):
+        # "from_postprocess" is used as indicator to use the function-output
+        #  directly (e.g. without using .apply to treat MultiFits objects etc.)
+        # -> only use if you know what you're doing!
+        if use_config == "from_postprocess":
+            use_func_directly = True
+            use_config = None
+        else:
+            use_func_directly = False
+
+
+        # if not isinstance(fit, (Fits, MultiFits)):
+        #     fit = self._finalout_reader(fit)
+
+        # apply postprocess function (with proper treatment of MultiFits)
         try:
             if isinstance(fit, MultiFits):
                 if postprocess is None:
@@ -1241,36 +1210,40 @@ class RTprocess(object):
                         fit.apply(
                             self.proc_cls.postprocess,
                             use_config=use_config,
-                            reader_arg=fit.reader_arg,
                         )
                     )
+                elif use_func_directly:
+                    ret = postprocess(fit)
                 else:
                     ret = dict(
                         fit.apply(
                             postprocess,
                             use_config=use_config,
-                            reader_arg=fit.reader_arg,
                         )
                     )
             else:
+                if hasattr(fit, "config_name"):
+                    cfgname = fit.config_name
+                else:
+                    cfgname = "default"
+
                 # run postprocessing
                 if postprocess is None:
-                    ret = self.proc_cls.postprocess(fit, reader_arg=fit.reader_arg)
+                    ret = {cfgname: self.proc_cls.postprocess(fit)}
                 else:
-                    ret = postprocess(fit, reader_arg=fit.reader_arg)
+                    ret = {cfgname: postprocess(fit)}
 
-            if process_cnt is not None:
-                _increase_cnt(process_cnt, start, err=False)
+            if "const__reader_arg" not in ret and hasattr(fit, "reader_arg"):
+                # append reader_args
+                attrs = pd.DataFrame(fit.reader_arg, index=[0])
+                attrs.set_index("ID", inplace=True)
+                ret["const__reader_arg"] = attrs
 
             return ret
 
         except Exception as ex:
             if hasattr(self, "proc_cls") and callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, fit.reader_arg)
-                if ex_ret is None or ex_ret is False:
-                    _increase_cnt(process_cnt, start, err=True)
-                else:
-                    _increase_cnt(process_cnt, start, err=False)
                 return ex_ret
             else:
                 raise ex
@@ -1288,135 +1261,6 @@ class RTprocess(object):
             fitlist = list(dumpiter)
         return fitlist
 
-    def _run_finalout(
-        self,
-        ncpu,
-        fitlist=None,
-        use_config=None,
-        finaloutput=None,
-        postprocess=None,
-        queue=None,
-        print_progress=True,
-    ):
-
-        # override postprocess function
-        if postprocess is not None:
-            assert callable(postprocess), "postprocess must be callable!"
-
-        # don't call additional initializers, only use the default initializer
-        # (to enable subprocess-logging)
-        pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
-
-        # pre-evaluate the fn-coefficients if interaction terms are used
-        # since finalout might involve calling "calc_model()" or similar functions
-        # that require a re-evaluation of the fn_coefficients
-        if hasattr(self, "parent_fit"):
-            if isinstance(self.parent_fit, MultiFits):
-                if use_config is None:
-                    use_config = self.parent_fit.config_names
-
-                for fit_name in use_config:
-                    parent_fit = self.parent_fit.accessor.config_fits[fit_name]
-                    if parent_fit.int_Q is True:
-                        parent_fit._fnevals_input = parent_fit.R._fnevals
-            else:
-                if self.parent_fit.int_Q is True:
-                    self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
-
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            process_cnt = _setup_cnt(N_items=len(fitlist), ncpu=ncpu)
-        else:
-            process_cnt = None
-
-        if ncpu > 1:
-            log.progress(f"start of finalout generation on {ncpu} cores")
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(
-                    self._run_postprocess,
-                    zip(
-                        fitlist,
-                        repeat(use_config),
-                        repeat(process_cnt),
-                        repeat(postprocess),
-                    ),
-                )
-
-                pool.close()  # Marks the pool as closed.
-                pool.join()  # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            log.progress("start of single-core finalout generation")
-            # force autocontinue=True when calling the initializer since setup() has
-            # already been called in the main process so all folders will already exist!
-            init_autocontinue = self.autocontinue
-            self.autocontinue = True
-
-            # call the initializer if it has been provided
-            if "initializer" in pool_kwargs:
-                if "initargs" in pool_kwargs:
-                    pool_kwargs["initializer"](*pool_kwargs["initargs"])
-                else:
-                    pool_kwargs["initializer"]()
-
-            self.autocontinue = init_autocontinue
-            res = []
-            for fitpath in fitlist:
-                res.append(
-                    self._run_postprocess(
-                        fitpath=fitpath,
-                        use_config=use_config,
-                        process_cnt=process_cnt,
-                        postprocess=postprocess,
-                    )
-                )
-        log.progress("... generating finaloutput")
-
-        # in case no config is provided return the output to the console
-        if not hasattr(self, "proc_cls"):
-            if isinstance(res[0], dict):
-                out = dict()
-                if use_config is None:
-                    use_config = res[0].keys()
-                for name in use_config:
-                    if callable(finaloutput):
-                        out[name] = finaloutput((i.get(name) for i in res if i is not None))
-            else:
-                if callable(finaloutput):
-                    out = finaloutput(res)
-                else:
-                    out = res
-
-            return out
-
-        # in case of a multi-config, results will be dicts!
-        # if isinstance(self.parent_fit, MultiFits):
-        if isinstance(res[0], dict):
-            # store original finalout_name
-            finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-            for name in use_config:
-                self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
-                self.proc_cls.config_name = name
-                if callable(finaloutput):
-                    finaloutput((i.get(name) for i in res if i is not None))
-                elif hasattr(self.proc_cls, "finaloutput"):
-                    self.proc_cls.finaloutput(
-                        (i.get(name) for i in res if i is not None)
-                    )
-
-            # reset initial finalout_name
-            self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
-        else:
-            if callable(finaloutput):
-                return finaloutput(res)
-                log.info("finished generation of finaloutput!")
-            elif hasattr(self.proc_cls, "finaloutput"):
-                return self.proc_cls.finaloutput(res)
-            else:
-                return res
 
     @staticmethod
     def _postprocess_xarray(
