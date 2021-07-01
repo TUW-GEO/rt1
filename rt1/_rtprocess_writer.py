@@ -7,6 +7,9 @@ from datetime import timedelta
 import sys
 import pandas as pd
 import traceback
+import gc
+import weakref
+from ast import literal_eval
 
 from queue import Empty as QueueEmpty
 import os
@@ -190,7 +193,8 @@ class RT1_processor(object):
                 # append more results until cache-size is reached
                 while nres < self.write_chunk_size:
                     try:
-                        val = self.queue.get(timeout=2)
+                        # get values from the queue, timeout after 5 seconds
+                        val = self.queue.get(timeout=5)
                     except QueueEmpty:
                         break
 
@@ -207,8 +211,9 @@ class RT1_processor(object):
                     self._increase_cnt(err=False)
 
                 if len(results) > 0:
-                    t = Thread(target=self._combine_results, args=(results,),
-                               name=f"{current_thread().name} - {next(c)}")
+                    t = Thread(
+                        target=self._combine_results, args=(results,),
+                        name=f"{mp.current_process().name} - {next(c)}")
                     t.start()
                     threads.append(t)
 
@@ -315,7 +320,7 @@ class RT1_processor(object):
                 with pd.HDFStore(self.dst_path, "a", **self.HDF_kwargs) as store:
                     for key, val in out.items():
                         # don't index data-columns
-                        # don't index right away (will be done once all processes are 
+                        # don't index right away (will be done once all processes are
                         # finished to maintain write-speed during processing)
                         store.append(key,
                                      val,
@@ -335,8 +340,8 @@ class RT1_processor(object):
 
             try:
                 if self.reader_func is not None:
-                    # use provided reader-func... 
-                    fit = self.reader_func(args[0])
+                    # use provided reader-func...
+                    fit = self.reader_func(*args)
                 else:
                     fit = args[0]
 
@@ -422,21 +427,21 @@ class RT1_processor(object):
             pool_kwargs=None,
             starmap_args=None):
         """
-        
+
 
         Parameters
         ----------
         arg_list : iterable, optional
-            list of arguments to be processed. if the HDF store already exists, 
+            list of arguments to be processed. if the HDF store already exists,
             a check for existing IDs will be performed prior to processing and only
             the non-existing IDs will be used!
             The default is None.
         process_func : callable, optional
-            the function to use for obtaining the results. 
+            the function to use for obtaining the results.
             -> must return a dict of pandas.DataFrames !
             The default is None.
         reader_func : callable, optional
-            optional explicit specification of a reader-function. 
+            optional explicit specification of a reader-function.
             If None, the arguments are directly forwarded to process_func
             The default is None.
         pool_kwargs : dict, optional
@@ -523,22 +528,76 @@ class RT1_processor(object):
         else:
             log.progress("exiting...")
 
+
     @staticmethod
-    def create_index(dst_path, id_col="ID", index_dates=False):
+    def create_index(dst_path, idx_levels=None,
+                     keys=None):
+        """
+        create an index for the given HDF-store to speed up querying.
+        (the index is stored to disk, so this only needs to be executed once!)
+
+        NOTICE: this can take quite some time for large datasets and
+                complex indexes (e.g. MultiIndex etc.) !
+
+        Parameters
+        ----------
+        dst_path : str or Path
+            the path to the HDF-store.
+        idx_levels : iterable, "all" or None, optional
+            if iterable: a list of index-levels to use when creating the index.
+                         only levels actually present in a dataset are
+                         considered! multiindexes are also possible,
+                         e.g.: (["ID", "date"])
+            if True: all available index-levels found in the dataset are used
+            if "None": only the first index-level found in the dataset is used
+            The default is None.
+        keys : iterable, optional
+            the keys to create an index for.
+            The default is None, in which case all keys are used!.
+
+        """
         with pd.HDFStore(dst_path, "a") as store:
+            use_keys = keys if keys else store.keys()
+            use_keys = [key for key in use_keys if not key.endswith("/meta")]
+            log.progress("attempting to create indexes for the columns:\n" +
+                         "    \n".join(use_keys))
+            for key in use_keys:
+                s = store.get_storer(key)
+                s_levels = s.levels
 
-            for key in ["init_dict", "reader_arg", "res_dict"]:
-                if key in store:
-                    log.progress(f"creating index for {key}")
-                    s = store.get_storer(key)
-                    s.create_index([id_col])
+                if idx_levels is None:
+                    try:
+                        # if s_levels is iterable and idx_cols is None,
+                        # use the first level
+                        iter(s_levels)
+                        use_levels = [s.levels[0]]
+                    except TypeError:
+                        # else use whatever the level-identification available
+                        use_levels = [s.levels]
 
-            for key in ["dataset", "aux_data"]:
-                if key in store:
-                    log.progress(f"creating index for {key}")
-                    s = store.get_storer(key)
-                    s.create_index([id_col, "date"] if index_dates else
-                                   [id_col])
+                elif idx_levels == "all":
+                    try:
+                        # if s_levels is iterable and idx_cols is None,
+                        # use all available levels
+                        iter(s_levels)
+                        use_levels = s.levels
+                    except TypeError:
+                        # else use whatever the level-identification available
+                        use_levels = s.levels
+
+                else:
+                    use_levels = list(set(idx_levels) & set(s_levels))
+
+                if len(use_levels) > 0:
+                    log.progress(
+                        f'creating index-levels "{use_levels}" for "{key}"'
+                        )
+                    s.create_index(list(map(str, use_levels)), kind="full")
+                else:
+                    log.warning(
+                        f'no index-level found for "{key}"... skipping'
+                        )
+
 
     @staticmethod
     def get_data(dst_path, key, config=None, **kwargs):
@@ -582,25 +641,3 @@ class RT1_processor(object):
             usekey = f"{config}/{key}"
             res = store.select(usekey, **kwargs)
         return res
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
