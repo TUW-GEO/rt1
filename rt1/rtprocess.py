@@ -1418,8 +1418,8 @@ class RTprocess(object):
             else:
                 return res
 
+    @staticmethod
     def _postprocess_xarray(
-        self,
         fit,
         saveparams=None,
         xindex=("x", -9999),
@@ -1427,7 +1427,7 @@ class RTprocess(object):
         staticlayers=None,
         auxdata=None,
         sig_to_dB=False,
-        inc_to_degree=False
+        inc_to_degree=False,
     ):
         """
         the identification of parameters is as follows:
@@ -1483,7 +1483,7 @@ class RTprocess(object):
         if staticlayers is None:
             staticlayers = dict()
 
-        defs = self._defdict_parser(fit.defdict)
+        defs = RTprocess._defdict_parser(fit.defdict)
 
         usedfs = []
         for key in saveparams:
@@ -1506,9 +1506,11 @@ class RTprocess(object):
                 elif key in defs["auxiliary"]:
                     usedfs.append(fit.dataset[key])
             elif key in fit.dataset:
-                if (key in ["tot", "surf", "vol", "inter"] and
-                    fit.dB is False and
-                    sig_to_dB):
+                if (
+                    key in ["tot", "surf", "vol", "inter"]
+                    and fit.dB is False
+                    and sig_to_dB
+                ):
                     usedfs.append(10.0 * np.log10(fit.dataset[key]))
                 else:
                     usedfs.append(fit.dataset[key])
