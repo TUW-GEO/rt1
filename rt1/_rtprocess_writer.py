@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from threading import Thread, current_thread, Timer
+import threading
 
 import ctypes
 from timeit import default_timer
@@ -22,9 +22,10 @@ import signal
 
 from . import log
 from .general_functions import dt_to_hms, update_progress, groupby_unsorted
+import json
 
 
-class RepeatTimer(Timer):
+class RepeatTimer(threading.Thread):
     """
     A simple timer that executes a function after a given amount of time.
     (as an asynchronous task)
@@ -38,6 +39,24 @@ class RepeatTimer(Timer):
 
         >>> r.finished.set()
     """
+    def __init__(self, interval, function, args=None, kwargs=None):
+        threading.Thread.__init__(self, name="RTprocess_print_thread")
+        self.interval = interval
+        self.function = function
+        self.args = args if args is not None else []
+        self.kwargs = kwargs if kwargs is not None else {}
+        self.finished = threading.Event()
+
+    def cancel(self):
+        """Stop the timer if it hasn't finished yet."""
+        self.finished.set()
+
+    def run(self):
+        self.finished.wait(self.interval)
+        if not self.finished.is_set():
+            self.function(*self.args, **self.kwargs)
+        self.finished.set()
+
     def run(self):
         while not self.finished.wait(self.interval):
             self.function(*self.args, **self.kwargs)
@@ -105,9 +124,15 @@ class RT1_processor(object):
         self.lock.release()
 
     def print_progress(self):
+        # shut down the print-thread in case should_stop is set and the queue is empty
+        if ((self.should_stop.is_set() and self.queue.empty()) or self._stop.is_set()):
+            threading.current_thread().cancel()
+            print() # print a newline
+
         self.lock.acquire()
-        p_totcnt = self.p_totcnt.value
-        p_meancnt = self.p_meancnt.value
+        qsize = self.queue.qsize()
+        p_totcnt = self.p_totcnt.value + qsize
+        p_meancnt = self.p_meancnt.value + qsize
         self.lock.release()
 
         if self.p_meancnt.value == 0:
@@ -161,7 +186,6 @@ class RT1_processor(object):
         #outdict = {key: pd.concat(val) for key, val in results.items()}
         # return outdict
         self.out_queue.put(outdict)
-        #self.threads.remove(current_thread())
 
     def _combiner_process(self):
         """
@@ -211,7 +235,7 @@ class RT1_processor(object):
                     self._increase_cnt(err=False)
 
                 if len(results) > 0:
-                    t = Thread(
+                    t = threading.Thread(
                         target=self._combine_results, args=(results,),
                         name=f"{mp.current_process().name} - {next(c)}")
                     t.start()
@@ -266,7 +290,7 @@ class RT1_processor(object):
                         msg = f"key {key} not found in HDF-file..."
                         key = keys[0]
                         log.warning(msg + f"using key {key} to determin existing IDs")
-                    except StopIteration:
+                    except IndexError:
                         self.args_to_process = self.arg_list
                         log.warning("unable to determine IDs of existing file..." +
                                     f"processing all {len(self.args_to_process)} IDs!")
@@ -483,7 +507,6 @@ class RT1_processor(object):
                 worker = pool.starmap_async(self._worker_process,
                                             zip(self.args_to_process,
                                                 *starmap_args),
-                                            #chunksize=self.write_chunk_size
                                             )
 
                 # do this after calling starmap_async to wait for the initializers
@@ -493,17 +516,22 @@ class RT1_processor(object):
                 res = worker.get()
 
         finally:
-            # stop the printer thread
-            print_thread.finished.set()
-            print() # print a newline after stopping the printer-thread
+            print() # print a newline
 
             d, h, m, s = dt_to_hms(timedelta(
                 seconds=default_timer() - self.p_start))
             log.progress(f"finished processing! ... it took {d} {h:02}:{m:02}:{s:02}")
 
+
+            # stop the printer thread
+            #print_thread.finished.set()
+
         return res
 
+
+
     def stop(self, writer, combiner, manager):
+
         # initialize shutdown
         self.should_stop.set()
         print() # newline
@@ -512,6 +540,7 @@ class RT1_processor(object):
         for c in combiner:
             c.join()
         self.combiner_ready.set()
+
         # wait for output-cache to be written to disc
         for w in writer:
             w.join()
