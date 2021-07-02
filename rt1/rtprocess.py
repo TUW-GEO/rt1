@@ -512,7 +512,7 @@ class RTprocess(object):
                     )
 
             else:
-                fit = self.parent_fit.reinit_object(dataset=dataset, 
+                fit = self.parent_fit.reinit_object(dataset=dataset,
                                                     share_fnevals=True)
                 # append reader_arg
                 fit.reader_arg = reader_arg
@@ -1161,26 +1161,31 @@ class RTprocess(object):
         # load fitobjects based on fit-paths
         try:
             fit = load(fitpath)
+
             if ((use_config is None or use_config == "from_postprocess"
                  ) and isinstance(fit, MultiFits)):
                 use_config = fit.config_names
 
             # assign pre-evaluated fn-coefficients
             if hasattr(self, "parent_fit"):
-                for config_name in use_config:
-                    config_fit = self.parent_fit.accessor.config_fits[config_name]
-                    if config_fit.int_Q is True:
-                        try:
-                            getattr(
-                                fit.configs, config_name
-                            )._fnevals_input = config_fit._fnevals_input
-                        except AttributeError:
-                            log.error(
-                                "could not assign pre-evaluated fn-coefficients to "
-                                + f"the config {config_name}... "
-                                + "available configs of the loaded Fits object:"
-                                + f" {fit.config_names}"
-                            )
+                if isinstance(fit, MultiFits):
+                    for config_name in use_config:
+                        config_fit = self.parent_fit.accessor.config_fits[config_name]
+                        if config_fit.int_Q is True:
+                            try:
+                                getattr(
+                                    fit.configs, config_name
+                                )._fnevals_input = config_fit._fnevals_input
+                            except AttributeError:
+                                log.error(
+                                    "could not assign pre-evaluated fn-coefficients to "
+                                    + f"the config {config_name}... "
+                                    + "available configs of the loaded Fits object:"
+                                    + f" {fit.config_names}"
+                                )
+                else:
+                    fit._fnevals_input = self.parent_fit._fnevals_input
+
             return fit
         except Exception:
             log.error(f"there was an error while loading {fitpath}",
@@ -1229,9 +1234,15 @@ class RTprocess(object):
 
                 # run postprocessing
                 if postprocess is None:
-                    ret = {cfgname: self.proc_cls.postprocess(fit)}
+                    if use_func_directly:
+                        ret = self.proc_cls.postprocess(fit)
+                    else:
+                        ret = {cfgname: self.proc_cls.postprocess(fit)}
                 else:
-                    ret = {cfgname: postprocess(fit)}
+                    if use_func_directly:
+                        ret = postprocess(fit)
+                    else:
+                        ret = {cfgname: postprocess(fit)}
 
             if "const__reader_arg" not in ret and hasattr(fit, "reader_arg"):
                 # append reader_args
