@@ -19,6 +19,7 @@ from .general_functions import (
     split_into,
     update_progress,
     groupby_unsorted,
+    isidentifier,
 )
 
 from .rtplots import plot as rt1_plots
@@ -34,6 +35,7 @@ from itertools import repeat, count, chain, groupby
 from functools import lru_cache, partial, wraps, update_wrapper
 from operator import itemgetter, add, methodcaller
 from datetime import datetime
+from pathlib import Path
 
 try:
     import cloudpickle
@@ -57,6 +59,9 @@ def load(path):
 
     with open(path, "rb") as file:
         fit = cloudpickle.load(file)
+
+    if not hasattr(fit, "ID") or fit.ID is None:
+        fit.ID = Path(path).stem
 
     return fit
 
@@ -271,7 +276,8 @@ class Fits(Scatter):
         lambda_backend=None,
         _fnevals_input=None,
         verbose=2,
-        **kwargs,
+        ID="RT1_fit",
+        **kwargs
     ):
 
         self.sig0 = sig0
@@ -294,8 +300,11 @@ class Fits(Scatter):
 
         self.verbose = verbose
 
+        self.ID = ID
+
         # add plotfunctions
         self.plot = rt1_plots(self)
+
 
     def __update__(self):
         """needed for downward compatibility"""
@@ -351,8 +360,8 @@ class Fits(Scatter):
                 returndict[key] = None
 
             # save only a minimal subset of the fit-output
-            if hasattr(self, "fit_output"):
-                fit_props = dict()
+            fit_props = dict()
+            if hasattr(self, "fit_output") and self.fit_output is not None:
                 fit_props["fit_success"] = self.fit_output.success
                 fit_props["fit_status"] = self.fit_output.status
                 fit_props["fit_optimality"] = self.fit_output.optimality
@@ -373,6 +382,18 @@ class Fits(Scatter):
                 self._clear_cache()
 
         super().__setattr__(attr, value)
+
+    @property
+    def ID(self):
+        return self._ID
+
+    @ID.setter
+    def ID(self, ID):
+        if not isidentifier(str(ID)):
+            self._ID = f"RT1_{ID}"
+            log.debug(f"'{ID}' is not a valid identifier - using '{self._ID}'")
+        else:
+            self._ID = str(ID)
 
     @property
     def dataset(self):
@@ -2718,35 +2739,25 @@ class Fits(Scatter):
         """
         return self._reinit_object(self, **kwargs)
 
-    def _get_res_dict_df(self, ID=None):
+    def _get_res_dict_df(self):
         """
         get a data-frame that contains all fitted parameters
-        (smaller than fit.res_df which is interpolated to the index)
-
-        Parameters
-        ----------
-        ID : TYPE, optional
-            DESCRIPTION. The default is None.
+        (smaller than fit.res_df which is always interpolated to the index)
 
         Returns
         -------
-        df : TYPE
-            DESCRIPTION.
+        df : pandas.DataFrame
+            a pandas-dataframe representing the obtained parameters.
 
         """
-        if ID is None:
-            try:
-                ID = self.reader_arg["ID"]
-            except Exception:
-                ID = "RT1_fit"
 
         # convert res_dict to a dataframe
         if self.res_dict is not None:
             if hasattr(self, "config_name"):
-                idxcols = [[ID], [self.config_name]]
+                idxcols = [[self.ID], [self.config_name]]
                 names = ["ID", "cfg", "n"]
             else:
-                idxcols = [[ID]]
+                idxcols = [[self.ID]]
                 names = ["ID", "n"]
 
             dfs = []
@@ -2763,8 +2774,11 @@ class Fits(Scatter):
             df = pd.concat(dfs, axis=1)
             return df
 
-    def _get_fit_to_hdf_dict(self, ID_key="ID",
-                             save_results=True, save_data=True, save_auxdata=True):
+    def _get_fit_to_hdf_dict(self,
+                             save_results=True,
+                             save_data=True,
+                             save_auxdata=True,
+                             ):
         """
         return a dict of pandas-dataframes suitable to fully re-create
         a Fits (or MultiFits) object.
@@ -2772,8 +2786,6 @@ class Fits(Scatter):
 
         Parameters
         ----------
-        ID_key : str, optional
-            The string to use as ID column. The default is "ID".
         save_results : bool, optional
             indicator if results should be saved. The default is True.
         save_data : bool, optional
@@ -2789,9 +2801,7 @@ class Fits(Scatter):
 
         """
 
-        # remove ID from reader_arg sine it is anyways used as index
-        reader_arg = {**self.reader_arg}
-        ID = reader_arg.pop(ID_key)
+        ID = self.ID
         hf = dict()
 
         # -------------- save INIT_DICT (always saved, different for MultiFits)
@@ -2807,6 +2817,7 @@ class Fits(Scatter):
             else:
                 initdict = pd.DataFrame([pd.Series(self._get_init_dict())],
                                         [ID], dtype=str).astype("category")
+                initdict.index.name = "ID"
 
             hf["init_dict"] = initdict
         except Exception:
@@ -2814,7 +2825,7 @@ class Fits(Scatter):
 
         # -------------- save READER_ARG   (always saved)
         try:
-            df = pd.DataFrame(reader_arg, [ID])
+            df = pd.DataFrame(self.reader_arg, [ID])
             df.index.name = "ID"
             hf["const__reader_arg"] =  df
         except Exception:
@@ -2822,32 +2833,32 @@ class Fits(Scatter):
 
         # -------------- save DATASET
         try:
-            if save_data:
+            if save_data is True:
                 df = getattr(self, "dataset", None)
                 if df is not None:
                     df = pd.concat([df], keys=[ID], names=["ID", "date"])
                     hf["dataset"] = df
-            elif save_results:
-                    # store only data that is required to re-create the results
+            elif save_results is True:
+                # store only data that is required to re-create the results
 
-                    if isinstance(self, MultiFits):
-                        dynkeys = set(
-                            key + "_dyn"
-                            for cfg, defdict in self.apply(lambda fit: self.defdict)
-                            for key, val in defdict.items()
-                            if val[0] and val[2] == "manual")
-                    else:
-                        dynkeys = set(key + "_dyn" for key, val in self.defdict.items()
-                                       if val[0] and val[2] == "manual")
-                    df = getattr(self, "dataset", None)[dynkeys]
-                    df = pd.concat([df], keys=[ID])
+                if isinstance(self, MultiFits):
+                    dynkeys = set(
+                        key + "_dyn"
+                        for cfg, defdict in self.apply(lambda fit: self.defdict)
+                        for key, val in defdict.items()
+                        if val[0] and val[2] == "manual")
+                else:
+                    dynkeys = set(key + "_dyn" for key, val in self.defdict.items()
+                                   if val[0] and val[2] == "manual")
+                df = getattr(self, "dataset", None)[dynkeys]
+                df = pd.concat([df], keys=[ID])
 
-                    hf["dataset"] = df
+                hf["dataset"] = df
         except Exception:
             print("could not save 'dataset' for fit", ID)
 
         # -------------- save AUX_DATA
-        if save_auxdata:
+        if save_auxdata is True:
             try:
                 df = getattr(self, "aux_data", None)
                 if df is not None:
@@ -2857,13 +2868,13 @@ class Fits(Scatter):
                 print("could not save 'aux_data' for fit", ID)
 
         # -------------- save RES_DICT (different for MultiFits)
-        if save_results:
+        if save_results is True:
             try:
                 if isinstance(self, MultiFits):
                     df = pd.concat(i[1] for i in self.apply(lambda fit:
-                        fit._get_res_dict_df(ID=ID)))
+                        fit._get_res_dict_df()))
                 else:
-                    df = self._get_res_dict_df(ID)
+                    df = self._get_res_dict_df()
 
                 hf["res_dict"] = df
             except Exception:
@@ -2937,7 +2948,8 @@ class _MultiAccessors:
 
     @property
     def config_fits(self):
-        return self._FitContainer.__dict__
+        #return self._FitContainer.__dict__
+        return {i.config_name: i for i in self._FitContainer}
 
     def _getit(self, prop):
         def _get_all(self):
@@ -2973,7 +2985,19 @@ class _MultiAccessors:
 
 
 class _FitContainer:
-    pass
+    def __init__(self, parent):
+        self._parent = parent
+
+    def __iter__(self):
+        return (getattr(self, i) for i in self._parent.config_names)
+
+    def __getitem__(self, key):
+        assert key in self._parent.config_names, (
+            f"config {key} not found, use one of:" +
+            f"\n{self._parent.config_names}"
+            )
+        return getattr(self, key)
+
 
 
 class MultiFits:
@@ -3005,11 +3029,15 @@ class MultiFits:
 
     """
 
-    def __init__(self, dataset=None, aux_data=None, reader_arg=None):
+    def __init__(self,
+                 dataset=None,
+                 aux_data=None,
+                 reader_arg=None,
+                 ):
 
         self.config_names = []
 
-        self.configs = _FitContainer()
+        self.configs = _FitContainer(self)
         self._accessor = _MultiAccessors(self.configs)
 
         self.set_dataset(dataset)
@@ -3030,12 +3058,30 @@ class MultiFits:
         args = self.apply(lambda fit: fit._get_init_dict())
         return args
 
-    def _get_fit_to_hdf_dict(self, ID_key="ID",
-                             save_results=True, save_data=True,
-                             save_auxdata=True):
-        return Fits._get_fit_to_hdf_dict(self, ID_key="ID",
-                                         save_results=True, save_data=True,
-                                         save_auxdata=True)
+    def _get_fit_to_hdf_dict(self,
+                             save_results=True,
+                             save_data=True,
+                             save_auxdata=True,
+                             ):
+        return Fits._get_fit_to_hdf_dict(self,
+                                         save_results=save_results,
+                                         save_data=save_data,
+                                         save_auxdata=save_auxdata,
+                                         )
+
+    @property
+    def ID(self):
+        assert len(self.config_names) > 0, (
+            "NO config... the MultiFits ID is inherited from the first config!"
+            )
+
+        return getattr(self.configs, self.config_names[0]).ID
+
+    @ID.setter
+    def ID(self, ID):
+        raise AttributeError(
+            "use `set_ID` to set 'ID' on ALL configs of the MultiFits object!"
+        )
 
     @property
     def dataset(self):
@@ -3083,6 +3129,10 @@ class MultiFits:
         self._reader_arg = reader_arg
         for name in self.config_names:
             getattr(self.configs, name).reader_arg = self._reader_arg
+
+    def set_ID(self, ID):
+        for i, name in enumerate(self.config_names):
+            getattr(self.configs, name).ID = ID
 
     @property
     def accessor(self):
