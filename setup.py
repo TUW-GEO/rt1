@@ -36,9 +36,13 @@ setup(name='rt1',
                         'covered by a homogeneous layer of scattering' +
                         'media.'),
 
-      install_requires=["numpy>=1.16", "sympy>=1.4", "scipy>=1.2",
-                        "pandas>=0.24", "matplotlib>=3.0"],
-      extras_require={'full' : ["symengine>=0.4", "xarray>=0.16"]},
+      install_requires=["numpy>=1.16",
+                        "sympy>=1.4",
+                        "scipy>=1.2",
+                        "pandas>=0.24",
+                        "matplotlib>=3.0",
+                        ],
+      extras_require={'full' : ["symengine>=0.4", "xarray>=0.16", "pytables>=3.6.1"]},
 
       keywords=["physics", "radiative transfer"],
 
@@ -54,5 +58,3 @@ setup(name='rt1',
       ],
 
       )
-
-
