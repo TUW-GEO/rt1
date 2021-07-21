@@ -219,6 +219,9 @@ class RT1_processor(object):
                     try:
                         # get values from the queue, timeout after 5 seconds
                         val = self.queue.get(timeout=5)
+                        if val is None:
+                            log.debug("ignored a None in the queue")
+                            continue
                     except QueueEmpty:
                         break
 
@@ -242,7 +245,7 @@ class RT1_processor(object):
                     threads.append(t)
 
             except Exception:
-                log.error("There was a problem combining results:", file=sys.stderr)
+                log.error("There was a problem combining results:")
                 traceback.print_exc(file=sys.stderr)
 
         # wait for all threads to finish before exiting the combiner process
@@ -261,7 +264,7 @@ class RT1_processor(object):
         inp : iterable
             the list of IDs that are intended to be processed.
         key : str, optional
-            the key to use in the HDF-container. The default is "static".
+            the key to use in the HDF-container. The default is "reader_arg".
         get_ID : callable, optional
             a custom callable that extracts the ID from the provided
             IDs list.
@@ -289,7 +292,7 @@ class RT1_processor(object):
                     try:
                         msg = f"key {key} not found in HDF-file..."
                         key = keys[0]
-                        log.warning(msg + f"using key {key} to determin existing IDs")
+                        log.warning(msg + f"using key {key} to determine existing IDs")
                     except IndexError:
                         self.args_to_process = self.arg_list
                         log.warning("unable to determine IDs of existing file..." +
@@ -449,7 +452,8 @@ class RT1_processor(object):
             process_func=None,
             reader_func=None,
             pool_kwargs=None,
-            starmap_args=None):
+            starmap_args=None,
+            ID_getter=None):
         """
 
 
@@ -494,7 +498,7 @@ class RT1_processor(object):
         if self.arg_list is None:
             self.p_max = None
         else:
-            self._check_IDs()
+            self._check_IDs(get_ID=ID_getter)
             self.p_max = len(self.args_to_process)
 
         if self.p_max == 0:
