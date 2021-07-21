@@ -208,7 +208,6 @@ class TestRTfits(unittest.TestCase):
         testfit = Fits(sig0=sig0, dB=dB,
                        dataset=dataset, defdict=defdict,
                        set_V_SRF=set_V_SRF, lsq_kwargs=lsq_kwargs,
-                       setindex='mean',
                        int_Q=True, verbose=2)
 
         # print model definition
