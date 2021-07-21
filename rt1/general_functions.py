@@ -2,11 +2,30 @@
 """helper functions that are used both in rtfits and rtplots"""
 from itertools import tee, islice
 from collections import OrderedDict
+import keyword
 
 try:
     import numpy as np
 except ModuleNotFoundError:
     pass
+
+
+def isidentifier(ident: str) -> bool:
+    """
+    Determines if string is valid Python identifier.
+    taken from: https://stackoverflow.com/a/29586366/9703451
+    """
+
+    if not isinstance(ident, str):
+        raise TypeError("expected str, but got {!r}".format(type(ident)))
+
+    if not ident.isidentifier():
+        return False
+
+    if keyword.iskeyword(ident):
+        return False
+
+    return True
 
 
 def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
