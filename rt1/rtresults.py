@@ -100,6 +100,15 @@ class RTresults(object):
                 if p.is_dir():
                     self._addresult(Path(p.path))
 
+    def __iter__(self):
+        return (getattr(self, i) for i in self._paths)
+
+    def __getitem__(self, key):
+        assert key in self._paths, (
+            f"'{key}' not found... use one of {list(self._paths)}")
+
+        return getattr(self, key)
+
     @staticmethod
     def _check_folderstructure(path):
         return all(
@@ -436,19 +445,19 @@ class HDFaccessor(object):
             ID = self.IDs[ID]
         try:
             init_dict = self.datasets.init_dict.get_id(ID)
-        except KeyError:
+        except Exception:
             print("'init_dict' not present... fit can not be loaded")
             return
 
         try:
             dataset = self.datasets.dataset.get_id(ID)
-        except KeyError:
+        except Exception:
             dataset = None
             pass
 
         try:
             aux_data = self.datasets.aux_data.get_id(ID)
-        except KeyError:
+        except Exception:
             aux_data = None
             pass
 
@@ -526,20 +535,17 @@ class HDFaccessor(object):
     def _get_vals(self, key, chunksize, start=None, **kwargs):
         n = self.store.get_node(key)
 
-        try:
-            # TODO make this a proper selector!
-            # check if indexed data-columns are available, if so use the first
-            idxname = n.table.indexedcolpathnames[0]
-        except IndexError:
+        # TODO
+        if "ID" in n.table.colpathnames:
+            idxname = "ID"
+        else:
             idxname = "index"
-
 
         assert self.IDs is not None, "no IDs found in HDF-store"
         if start:
             assert start < len(self.IDs), (f"start={start} is bigger than the number" +
                                            f" of IDs ({len(self.IDs)})")
         use_ids = self._chunks(self.IDs[slice(start, None)], chunksize)
-
         for i, ids in enumerate(use_ids):
             indexes = self.store.select_as_coordinates(key=key,
                                                        where=f"{idxname} in ids")
@@ -549,9 +555,10 @@ class HDFaccessor(object):
 
     def _get_vals_with_IDs(self, key, use_ids, chunksize=1 , **kwargs):
         n = self.store.get_node(key)
-        try:
-            idxname = n.table.indexedcolpathnames[0]
-        except IndexError:
+        # TODO
+        if "ID" in n.table.colpathnames:
+            idxname = "ID"
+        else:
             idxname = "index"
 
         assert self.IDs is not None, "no IDs found in HDF-store"
@@ -749,10 +756,3 @@ def iloc_level(df, idx):
     pandas.DataFrame
     """
     return df.iloc[df.index.get_locs(list(_sanitize_index(df, idx)))]
-
-
-
-
-
-
-
