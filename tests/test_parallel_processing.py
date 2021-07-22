@@ -285,7 +285,7 @@ class TestRTfits(unittest.TestCase):
         # check if dumped-properties are equal for pickles and HDF-containers
         for fit in results.dump01.dump_fits:
             fit_hdf = fit_db.load_fit(fit.ID)
-
+            hdf_dataset = fit_hdf.dataset[list(fit.dataset)]
             assert fit_hdf.dataset.equals(fit.dataset), (
                 "datasets of HDF-container and pickle-dumps are not equal!")
 
