@@ -491,6 +491,8 @@ class HDFaccessor(object):
                          cfg_attrs.items()}
 
                 fit = Fits(**attrs)
+                fit.ID = ID
+
                 if res_dict is not None:
                     # use dropna(how="all", axis=1) to make sure that parameters that
                     # are fitted in one config but not in another are not added as
@@ -510,12 +512,14 @@ class HDFaccessor(object):
             if reader_arg is not None:
                 mf.set_reader_arg(reader_arg)
 
+            mf.set_ID(ID)
             return mf
 
         else:
             attrs = {key: literal_eval(val) for key, val in
                      init_dict.loc[ID].items()}
             fit = Fits(**attrs)
+            fit.ID = ID
 
             if dataset is not None:
                 fit.dataset = dataset.loc[ID]
