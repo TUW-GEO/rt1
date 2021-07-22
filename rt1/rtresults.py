@@ -431,6 +431,12 @@ class HDFaccessor(object):
         if "init_dict" in self.store:
             self.load_fit = self._load_fit
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.store.close()
+        gc.collect()
 
     def __del__(self):
         self.store.close()
