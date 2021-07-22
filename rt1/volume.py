@@ -24,6 +24,36 @@ class Volume(Scatter):
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
 
+    @property
+    def init_dict(self):
+        if self.name.startswith("LinCombV"):
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["V_name"] = "LinCombV"
+            srfchoices = []
+            for frac, srf in d["Vchoices"]:
+                if isinstance(frac, sp.Basic):
+                    srfchoices.append([str(frac), srf.init_dict])
+                else:
+                    srfchoices.append([frac, srf.init_dict])
+
+            d["Vchoices"] = srfchoices
+        else:
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["V_name"] = self.name
+        return d
+
     @lru_cache()
     def _lambda_func(self, *args):
         # define sympy objects
@@ -433,6 +463,7 @@ class LinCombV(Volume):
                (floats) of the linear-combination.
     """
     name = "LinCombV"
+    _param_names = ["Vchoices", "tau", "omega"]
 
     def __init__(self, Vchoices=None, **kwargs):
         super(LinCombV, self).__init__(**kwargs)
@@ -568,6 +599,7 @@ class Rayleigh(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
     name = "Rayleigh"
+    _param_names = ["tau", "omega", "ncoefs"]
 
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)
@@ -633,6 +665,7 @@ class HenyeyGreenstein(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
     name = "HenyeyGreenstein"
+    _param_names = ["tau", "omega", "ncoefs", "t", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -717,6 +750,7 @@ class HGRayleigh(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
     name = "HGRayleigh"
+    _param_names = ["tau", "omega", "ncoefs", "t", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[-1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"

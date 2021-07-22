@@ -26,6 +26,36 @@ class Surface(Scatter):
         self.hemreflect = partial(hemreflect, SRF=self)
         update_wrapper(self.hemreflect, hemreflect)
 
+    @property
+    def init_dict(self):
+        if self.name.startswith("LinCombSRF"):
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["SRF_name"] = "LinCombSRF"
+            srfchoices = []
+            for frac, srf in d["SRFchoices"]:
+                if isinstance(frac, sp.Basic):
+                    srfchoices.append([str(frac), srf.init_dict])
+                else:
+                    srfchoices.append([frac, srf.init_dict])
+
+            d["SRFchoices"] = srfchoices
+        else:
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["SRF_name"] = self.name
+        return d
+
     @lru_cache()
     def _lambda_func(self, *args):
         # define sympy objects
@@ -419,6 +449,7 @@ class LinCombSRF(Surface):
     """
 
     name = "LinCombSRF"
+    _param_names = ["SRFchoices", "NormBRDF"]
 
     def __init__(self, SRFchoices=None, **kwargs):
 
@@ -543,6 +574,7 @@ class Isotropic(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
     name = "Isotropic"
+    _param_names = ["NormBRDF"]
 
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
@@ -589,6 +621,7 @@ class CosineLobe(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
     name = "CosineLobe"
+    _param_names = ["i", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, ncoefs=None, i=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert ncoefs is not None, (
@@ -685,6 +718,7 @@ class HenyeyGreenstein(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
     name = "HenyeyGreenstein"
+    _param_names = ["t", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -749,6 +783,7 @@ class HG_nadirnorm(Surface):
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
     name = "HG_nadirnorm"
+    _param_names = ["t", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -765,6 +800,8 @@ class HG_nadirnorm(Surface):
         assert len(a) == 3, (
             "Error: Generalization-parameter list must " + "contain 3 values"
         )
+
+        self._param_names = ["t", "ncoefs", "NormBRDF", "a"]
 
     @property
     @lru_cache()

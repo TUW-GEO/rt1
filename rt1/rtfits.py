@@ -2109,9 +2109,7 @@ class Fits(Scatter):
         SRF : a function of rt1.surface
             the used surface-scattering function.
         """
-
-        if setdict is None:
-            setdict = dict()
+        ignore_keys = ['omega', 'tau', 'NormBRDF', 'bsf']
 
         assert (
             "V_name" in props or "SRF_name" in props
@@ -2120,14 +2118,13 @@ class Fits(Scatter):
             "V_name" in props and "SRF_name" in props
         ), 'provide either "V_name" or "SRF_name" not both!'
 
-        ignore_keys = ['omega', 'tau', 'NormBRDF', 'bsf']
+        if setdict is None:
+            setdict = dict()
 
         set_dict = dict()
         free_symbols = set()
-        for key, val in props.items():
-            if key == "V_name" or key == "SRF_name":
-                continue
 
+        def checkval(key, val):
             # check if val is directly provided in setdict, if yes use it
             # (e.g. this means the key is simply another name for a parameter
             # and not an  equation)
@@ -2144,7 +2141,7 @@ class Fits(Scatter):
             # then replace them by the corresponding values in setdict
             else:
                 # convert to sympy expression (check doc for use of _clash)
-                useval = sp.sympify(val, _clash)
+                useval = sp.sympify(val, _clash, evaluate=False)
                 # in case parts of the expression are provided in setdict,
                 # replace them with the provided values
                 replacements = dict()
@@ -2155,6 +2152,28 @@ class Fits(Scatter):
 
                 if key not in ignore_keys:
                     free_symbols.update(set(useval.free_symbols))
+            return useval
+
+        # deal with linear-combinations
+        for prefix in ["V", "SRF"]:
+            if (f"{prefix}_name" in props
+                and props[f"{prefix}_name"].startswith(f"LinComb{prefix}")):
+                choices = []
+                for val, initdict in props[f"{prefix}choices"]:
+                    useval = checkval(val, val)
+
+                    choices.append([useval, self._init_V_SRF(initdict)])
+
+                set_dict[f"{prefix}choices"] = choices
+
+        for key, val in props.items():
+            if key in ["V_name", "SRF_name", "SRFchoices", "Vchoices"]:
+                continue
+            if key in ["a"]:
+                # use the values directly without checking anything
+                set_dict[key] = val
+                continue
+            useval = checkval(key, val)
             set_dict[key] = useval
 
         if "V_name" in props:
