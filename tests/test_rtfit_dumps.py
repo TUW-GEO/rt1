@@ -11,28 +11,27 @@ import matplotlib.pyplot as plt
 import copy
 import os
 
+from rt1.rtresults import HDFaccessor
+
 class TestDUMPS(unittest.TestCase):
     def setUp(self):
-        self.sig0_dB_path = os.path.dirname(__file__) + os.sep + "sig0_dB.dump"
-        self.sig0_linear_path = os.path.dirname(__file__) + os.sep + "sig0_linear.dump"
+        self.fit_dB_path = os.path.dirname(__file__) + os.sep + "test_fit_db.h5"
 
-    def load_data(self, path):
-        with open(path, 'rb') as file:
-            fit = cloudpickle.load(file)
+        self.sig0_dB_ID = "sig0_dB"
+        self.sig0_linear_ID = "sig0_linear"
+
+    def load_data(self, ID):
+        with HDFaccessor(self.fit_dB_path) as fit_db:
+            fit = fit_db.load_fit(ID)
         return fit
-
-
-#        self.assertTrue(
-#            err < errdict[key],
-#            msg='derived error' + str(err) + 'too high for ' + str(key))
 
     def test_rtplots(self):
 
-        for path, msg in zip([self.sig0_dB_path, self.sig0_linear_path],
+        for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID],
                              ['dB', 'linear']):
 
             print(f'testing plotfunctions for {msg} fit')
-            fit = self.load_data(path)
+            fit = self.load_data(ID)
 
             # call performfit to re-initialize _fnevals functions
             # and evaluate intermediate results
@@ -116,11 +115,11 @@ class TestDUMPS(unittest.TestCase):
                     plt.close(f)
 
     def test_performfit(self):
-        for path, msg in zip([self.sig0_dB_path, self.sig0_linear_path],
+        for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID],
                              ['dB', 'linear']):
 
             print(f'testing plotfunctions for {msg} fit')
-            fit = self.load_data(path)
+            fit = self.load_data(ID)
 
             old_results = fit.res_dict
             # print model definition

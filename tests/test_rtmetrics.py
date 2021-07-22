@@ -1,4 +1,5 @@
 import unittest
+import os
 from itertools import combinations
 
 import pandas as pd
@@ -6,8 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from rt1.rtmetrics import RTmetrics
-from rt1 import rtfits
-
+from rt1.rtresults import HDFaccessor
 
 class TestRTMetrics(unittest.TestCase):
 
@@ -36,7 +36,12 @@ class TestRTMetrics(unittest.TestCase):
 
     @staticmethod
     def mock_fit():
-        return rtfits.load('./tests/sig0_dB.dump')
+        fit_dB_path = os.path.dirname(__file__) + os.sep + "test_fit_db.h5"
+
+        with HDFaccessor(fit_dB_path) as fit_db:
+            fit = fit_db.load_fit("sig0_dB")
+
+        return fit
 
     def test_metrics(self):
         d1, d2, expected_values = self.mock_series()
