@@ -2822,7 +2822,7 @@ class Fits(Scatter):
 
             hf["init_dict"] = initdict
         except Exception:
-            print("could not save 'init_dict' for fit", ID)
+            log.debug(f"could not save 'init_dict' for fit {ID}")
 
         # -------------- save READER_ARG   (always saved)
         try:
@@ -2830,7 +2830,8 @@ class Fits(Scatter):
             df.index.name = "ID"
             hf["const__reader_arg"] =  df
         except Exception:
-            print("could not save 'reader_arg' for fit", ID)
+            log.debug(f"could not save 'reader_arg' for fit {ID}")
+            df = pd.DataFrame({"ID": ID}, [ID])
 
         # -------------- save DATASET
         try:
@@ -2856,7 +2857,7 @@ class Fits(Scatter):
 
                 hf["dataset"] = df
         except Exception:
-            print("could not save 'dataset' for fit", ID)
+            log.debug(f"could not save 'dataset' for fit {ID}")
 
         # -------------- save AUX_DATA
         if save_auxdata is True:
@@ -2866,7 +2867,7 @@ class Fits(Scatter):
                     df = pd.concat([df], keys=[ID], names=["ID", "date"])
                     hf["aux_data"] = df
             except Exception:
-                print("could not save 'aux_data' for fit", ID)
+                log.debug(f"could not save 'aux_data' for fit {ID}")
 
         # -------------- save RES_DICT (different for MultiFits)
         if save_results is True:
@@ -2879,7 +2880,7 @@ class Fits(Scatter):
 
                 hf["res_dict"] = df
             except Exception:
-                print("could not save 'res_dict' for fit", ID)
+                log.debug(f"could not save 'res_dict' for fit {ID}")
 
         return hf
 
