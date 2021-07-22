@@ -362,10 +362,11 @@ class Fits(Scatter):
             # save only a minimal subset of the fit-output
             fit_props = dict()
             if hasattr(self, "fit_output") and self.fit_output is not None:
-                fit_props["fit_success"] = self.fit_output.success
-                fit_props["fit_status"] = self.fit_output.status
-                fit_props["fit_optimality"] = self.fit_output.optimality
-
+                for key in ["success", "status", "optimality"]:
+                    try:
+                        fit_props[f"fit_{key}"] = getattr(self.fit_output, key)
+                    except AttributeError:
+                        continue
             returndict["fit_output"] = fit_props
 
             return returndict
