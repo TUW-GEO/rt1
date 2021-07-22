@@ -2859,6 +2859,10 @@ class Fits(Scatter):
         except Exception:
             log.debug(f"could not save 'reader_arg' for fit {ID}")
             df = pd.DataFrame({"ID": ID}, [ID])
+            df.index.name = "ID"
+
+            hf["const__reader_arg"] =  df
+
 
         # -------------- save DATASET
         try:
