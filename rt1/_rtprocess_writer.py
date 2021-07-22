@@ -66,7 +66,8 @@ class RT1_processor(object):
     def __init__(self,
                  n_worker=1, n_combiner=2, n_writer=1,
                  dst_path=None, HDF_kwargs=None,
-                 write_chunk_size=1000, out_cache_size=10):
+                 write_chunk_size=1000, out_cache_size=10,
+                 min_itemsize=None):
         """
         A class that takes care of combining results and writing them
         to disk as a HDF-container.
@@ -75,6 +76,11 @@ class RT1_processor(object):
         ----------
         n_worker, n_combiner, n_writer: int
             the number of workers, combiners and writers to use
+        dst_path : str
+            the path where the HDF-store will be saved
+        HDF_kwargs : dict, optional
+            a dict with keyword-arguments passed to the HDF-store initialization
+            - see `pandas.HDFstore` for details
         write_chunk_size : int, optional
             the chunk-size for writing results to dict.
             e.g.: a set of N results is combined and the combined output
@@ -86,7 +92,28 @@ class RT1_processor(object):
             disc. once this treshold is reached, processing is throttled
             to protect memory-overload...
             The default is 10.
+        min_itemsize : dict
+            a dict with the minimum-number of characters used to save string-columns
+            within pytables.
+            for details, check:
+
+               - https://pandas.pydata.org/pandas-docs/stable/user_guide/io.html#storing-types
+               - https://github.com/PyTables/PyTables/issues/48
+
+            NOTE: variable-length strigns are not supported by pytables!
+                  -> in case variable lenght strings are encountered, you MUST specify
+                  min_itemsize to avoid truncating the strings!
+
+            the default is set to {"index": 99, "values": 99} which results in a
+            minimum length of 99 characters for any strings encountered in indexes
+            or values of the saved DataFrames
         """
+
+        if min_itemsize is None:
+            self.min_itemsize = {"index": 99, "values": 99}
+        else:
+            self.min_itemsize = min_itemsize
+
         signal.signal(signal.SIGINT, self.manual_shutdown)
         signal.signal(signal.SIGTERM, self.manual_shutdown)
 
@@ -340,8 +367,6 @@ class RT1_processor(object):
             except QueueEmpty:
                 continue
 
-            # if out is None:
-            #     break
             try:
                 self.write_lock.acquire()
                 with pd.HDFStore(self.dst_path, "a", **self.HDF_kwargs) as store:
@@ -353,7 +378,8 @@ class RT1_processor(object):
                                      val,
                                      format="t",
                                      data_columns=[],
-                                     index=False,)
+                                     index=False,
+                                     min_itemsize=self.min_itemsize)
                 self.write_lock.release()
             except Exception:
                 log.error("problem while writing data... exiting")
