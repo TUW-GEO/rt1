@@ -2794,6 +2794,14 @@ class Fits(Scatter):
             df = pd.concat(dfs, axis=1)
             return df
 
+    @staticmethod
+    def _prepend_ID_to_index(df, ID, idx_name="date"):
+        df = df.copy()
+        newindex = pd.MultiIndex.from_product([[ID], df.index],
+                                              names=["ID", idx_name])
+        df.index = newindex
+        return df
+
     def _get_fit_to_hdf_dict(self,
                              save_results=True,
                              save_data=True,
@@ -2857,8 +2865,8 @@ class Fits(Scatter):
             if save_data is True:
                 df = getattr(self, "dataset", None)
                 if df is not None:
-                    df = pd.concat([df], keys=[ID], names=["ID", "date"])
-                    hf["dataset"] = df
+                    #df = pd.concat([df], keys=[ID], names=["ID", "date"])
+                    hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
             elif save_results is True:
                 # store only data that is required to re-create the results
 
@@ -2872,9 +2880,9 @@ class Fits(Scatter):
                     dynkeys = set(key + "_dyn" for key, val in self.defdict.items()
                                    if val[0] and val[2] == "manual")
                 df = getattr(self, "dataset", None)[dynkeys]
-                df = pd.concat([df], keys=[ID])
+                #df = pd.concat([df], keys=[ID])
 
-                hf["dataset"] = df
+                hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
         except Exception:
             log.debug(f"could not save 'dataset' for fit {ID}")
 
@@ -2883,8 +2891,8 @@ class Fits(Scatter):
             try:
                 df = getattr(self, "aux_data", None)
                 if df is not None:
-                    df = pd.concat([df], keys=[ID], names=["ID", "date"])
-                    hf["aux_data"] = df
+                    #df = pd.concat([df], keys=[ID], names=["ID", "date"])
+                    hf["aux_data"] = Fits._prepend_ID_to_index(df, self.ID)
             except Exception:
                 log.debug(f"could not save 'aux_data' for fit {ID}")
 
