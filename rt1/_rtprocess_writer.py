@@ -380,6 +380,7 @@ class RT1_processor(object):
             except Exception:
                 print()
                 log.error(f"problem while processing \n{args}")
+                traceback.print_exc()
 
     def _start_writer_process(self):
         # define a process that writes the results to disc
