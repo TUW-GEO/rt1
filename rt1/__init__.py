@@ -1,5 +1,12 @@
 """Import module for RT1 module"""
 
+try:
+    from colorama import Fore, Back, Style, init
+    init()
+    _colored = True
+except Exception:
+    _colored = False
+
 import logging
 import logging.handlers
 import sys
@@ -130,12 +137,37 @@ class WrappedFixedIndentingLog(logging.Formatter):
         return indent(super().format(record), " " * self._indent).strip()
 
 
-def _get_logger_formatter(simple=True):
+class ColoredWrappedFixedIndentingLog(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, style="%", indent=4):
+        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
 
+        self._indent = indent
+
+        self.FORMATS = {
+            logging.DEBUG: Fore.CYAN + fmt + Style.RESET_ALL,
+            logging.INFO: Fore.GREEN + fmt + Style.RESET_ALL,
+            logging.WARNING: Fore.MAGENTA + fmt + Style.RESET_ALL,
+            logging.ERROR: Back.RED + fmt + Style.RESET_ALL,
+            logging.CRITICAL: Back.RED + fmt + Style.RESET_ALL,
+            _PROGRESS_LEVEL_NUM: Back.GREEN + fmt + Style.RESET_ALL
+        }
+
+
+    def format(self, record):
+        log_fmt = (Fore.LIGHTWHITE_EX + "%(asctime)s" + Style.RESET_ALL + " - " +
+                   self.FORMATS.get(record.levelno))
+        formatter = logging.Formatter(log_fmt)
+
+        return indent(formatter.format(record), " " * self._indent).strip()
+
+
+
+def _get_logger_formatter(simple=True, colored=False):
     if simple is False:
         logfmt = (
-            "%(asctime)s - "
-            + mp.current_process().name
+            #"%(asctime)s - "
+            #+
+            mp.current_process().name
             + ": "
             + "%(levelname)-8s ("
             + "%(filename)s:%(lineno)d - "
@@ -145,15 +177,17 @@ def _get_logger_formatter(simple=True):
         )
     else:
         logfmt = (
-            "%(asctime)s - "
-            +
+            #"%(asctime)s - "
+            #+
             # (mp.current_process().name + ':').ljust(21) +
             "%(processName)-21s"
             + "%(levelname)-8s"
             + "%(message)s"
         )
-
-    formatter = WrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
+    if colored:
+        formatter = ColoredWrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
+    else:
+        formatter = WrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
     return formatter
 
 
@@ -162,6 +196,7 @@ def setup_logger(
     console_out=True,
     console_level=21,
     simple=True,
+    colored=_colored
 ):
 
     logger = logging.getLogger(log_name)
@@ -172,7 +207,7 @@ def setup_logger(
         return logger
 
     logger.setLevel(logging.DEBUG)
-    formatter = _get_logger_formatter(simple)
+    formatter = _get_logger_formatter(simple, colored=colored)
 
     if console_out is True:
         # setup a console-handler that prints to sys.stdout
@@ -188,4 +223,4 @@ def setup_logger(
 
 
 # initialize a logger for rt1
-log = setup_logger(console_out=True, simple=True, log_name="rt1")
+log = setup_logger(console_out=True, simple=True, log_name="rt1", colored=_colored)
