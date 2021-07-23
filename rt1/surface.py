@@ -418,12 +418,19 @@ class LinCombSRF(Surface):
                will not be considered!
     """
 
+    name = "LinCombSRF"
+
     def __init__(self, SRFchoices=None, **kwargs):
 
         super(LinCombSRF, self).__init__(**kwargs)
 
         self.SRFchoices = SRFchoices
         self._set_legexpansion()
+
+        name = "LinCombSRF"
+        for c in SRFchoices:
+            name += f"_({c[0]}, {c[1].name})"
+        self.name = name
 
     @property
     @lru_cache()
@@ -535,6 +542,7 @@ class Isotropic(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+    name = "Isotropic"
 
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
@@ -580,6 +588,7 @@ class CosineLobe(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+    name = "CosineLobe"
 
     def __init__(self, ncoefs=None, i=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert ncoefs is not None, (
@@ -675,6 +684,7 @@ class HenyeyGreenstein(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+    name = "HenyeyGreenstein"
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -738,6 +748,7 @@ class HG_nadirnorm(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+    name = "HG_nadirnorm"
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"

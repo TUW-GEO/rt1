@@ -500,10 +500,10 @@ class rt1_processing_config(object):
                 return self.postprocess(fit, reader_arg)
             except Exception:
                 log.error(
-                    "the has been a problem while loading the "
+                    "there has been a problem while loading the "
                     + f"already processed file '{names_ids['filename']}'"
                 )
-                pass
+                log.error(traceback.format_exc())
 
         elif "rt1_data_error" in ex.args:
             # raised if there was a problem with the data, ignore and continue
