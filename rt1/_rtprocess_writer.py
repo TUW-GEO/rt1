@@ -21,7 +21,7 @@ from itertools import count
 import signal
 
 from . import log
-from .general_functions import dt_to_hms, update_progress, groupby_unsorted
+from .general_functions import dt_to_hms, update_progress, groupby_unsorted, isidentifier
 import json
 
 
@@ -311,7 +311,16 @@ class RT1_processor(object):
         if Path(self.dst_path).exists():
             log.progress("evaluating list of IDs to process...")
             if get_ID is None:
-                get_ID = lambda i: i.split(os.sep)[-1].split(".")[0]
+
+                def get_ID(i):
+                    ID = i.split(os.sep)[-1].split(".")[0]
+                    if not isidentifier(str(ID)):
+                        return f"RT1_{ID}"
+                    else:
+                        return str(ID)
+
+
+                #get_ID = lambda i: i.split(os.sep)[-1].split(".")[0]
 
             with pd.HDFStore(self.dst_path, "r") as store:
                 keys = [i.lstrip("/") for i in store.keys()]
