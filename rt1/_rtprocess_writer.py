@@ -421,7 +421,8 @@ class RT1_processor(object):
         # define a process that writes the results to disc
         procs = []
         for i in range(self.n_writer):
-            writer = mp.Process(target=self._save_file_process,
+            ctx = mp.get_context('spawn')
+            writer = ctx.Process(target=self._save_file_process,
                                 name=f"RTprocess writer {i}")
             procs.append(writer)
             log.progress(f"starting {writer.name}")
@@ -432,7 +433,8 @@ class RT1_processor(object):
         procs = []
         for i in range(self.n_combiner):
             # start thread to combine the results
-            t = mp.Process(target=self._combiner_process,
+            ctx = mp.get_context('spawn')
+            t = ctx.Process(target=self._combiner_process,
                            name=f"RTprocess combiner {i}")
             procs.append(t)
             # combiner_thread.setDaemon(True)
@@ -442,7 +444,8 @@ class RT1_processor(object):
 
 
     def _setup_manager(self):
-        manager = mp.Manager()
+        ctx = mp.get_context('spawn')
+        manager = ctx.Manager()
 
         self.queue = manager.Queue()
         self.out_queue = manager.Queue()
@@ -542,7 +545,8 @@ class RT1_processor(object):
             return
 
         try:
-            with mp.Pool(self.n_worker, **pool_kwargs) as pool:
+            ctx = mp.get_context('spawn')
+            with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
 
                 worker = pool.starmap_async(self._worker_process,
                                             zip(self.args_to_process,
@@ -560,7 +564,9 @@ class RT1_processor(object):
 
             d, h, m, s = dt_to_hms(timedelta(
                 seconds=default_timer() - self.p_start))
-            log.progress(f"finished processing! ... it took {d} {h:02}:{m:02}:{s:02}")
+            log.progress(f"finished processing " +
+                         f"{len(self.args_to_process)} [{self.p_totcnt.value}] IDs!" +
+                         f" ... it took {d} {h:02}:{m:02}:{s:02}")
 
 
             # stop the printer thread
