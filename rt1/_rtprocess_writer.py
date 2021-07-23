@@ -108,7 +108,6 @@ class RT1_processor(object):
             minimum length of 99 characters for any strings encountered in indexes
             or values of the saved DataFrames
         """
-
         if min_itemsize is None:
             self.min_itemsize = {"index": 99, "values": 99}
         else:
@@ -131,9 +130,10 @@ class RT1_processor(object):
         self.out_cache_size = out_cache_size
 
     def manual_shutdown(self, *args, **kwargs):
+        log.error("shutting down due to SIGTERM event")
+
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        print("I'm shutting down")
         self.should_stop.set()
         self._stop.set()
         raise(SystemExit)
@@ -546,8 +546,9 @@ class RT1_processor(object):
 
         try:
             ctx = mp.get_context('spawn')
-            with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
-
+            pool = ctx.Pool(self.n_worker, **pool_kwargs)
+            #with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
+            try:
                 worker = pool.starmap_async(self._worker_process,
                                             zip(self.args_to_process,
                                                 *starmap_args),
@@ -558,7 +559,9 @@ class RT1_processor(object):
                 print_thread = self.start_print_thread()
 
                 res = worker.get()
-
+            finally:
+                pool.close()
+                pool.join()
         finally:
             print() # print a newline
 
