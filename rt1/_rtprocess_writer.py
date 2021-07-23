@@ -7,9 +7,6 @@ from datetime import timedelta
 import sys
 import pandas as pd
 import traceback
-import gc
-import weakref
-from ast import literal_eval
 
 from queue import Empty as QueueEmpty
 import os
@@ -39,6 +36,7 @@ class RepeatTimer(threading.Thread):
 
         >>> r.finished.set()
     """
+
     def __init__(self, interval, function, args=None, kwargs=None):
         threading.Thread.__init__(self, name="RTprocess_print_thread")
         self.interval = interval
@@ -49,12 +47,6 @@ class RepeatTimer(threading.Thread):
 
     def cancel(self):
         """Stop the timer if it hasn't finished yet."""
-        self.finished.set()
-
-    def run(self):
-        self.finished.wait(self.interval)
-        if not self.finished.is_set():
-            self.function(*self.args, **self.kwargs)
         self.finished.set()
 
     def run(self):
@@ -154,7 +146,7 @@ class RT1_processor(object):
         # shut down the print-thread in case should_stop is set and the queue is empty
         if ((self.should_stop.is_set() and self.queue.empty()) or self._stop.is_set()):
             threading.current_thread().cancel()
-            print() # print a newline
+            print()  # print a newline
 
         self.lock.acquire()
         qsize = self.queue.qsize()
@@ -210,8 +202,6 @@ class RT1_processor(object):
             else:
                 outdict[key] = pd.Series(val)
 
-        #outdict = {key: pd.concat(val) for key, val in results.items()}
-        # return outdict
         self.out_queue.put(outdict)
 
     def _combiner_process(self):
@@ -222,7 +212,7 @@ class RT1_processor(object):
         property that is maintained for all configs of a MultiConfig object
 
         """
-        c = count() # a counter to name threads
+        c = count()  # a counter to name threads
         threads = []
         while True:
             if self.should_stop.is_set():
@@ -281,7 +271,7 @@ class RT1_processor(object):
                 log.progress(f"joining remaining thread... {t.name}")
                 t.join()
 
-    def _check_IDs(self, key="reader_arg", get_ID = None):
+    def _check_IDs(self, key="reader_arg", get_ID=None):
         """
         return a list of IDs that are not yet present in the hdf-container
         located at "dst_path"
@@ -319,9 +309,6 @@ class RT1_processor(object):
                     else:
                         return str(ID)
 
-
-                #get_ID = lambda i: i.split(os.sep)[-1].split(".")[0]
-
             with pd.HDFStore(self.dst_path, "r") as store:
                 keys = [i.lstrip("/") for i in store.keys()]
                 if key not in keys:
@@ -336,7 +323,8 @@ class RT1_processor(object):
                         return
 
                 found_IDs = pd.Index(map(get_ID, self.arg_list)).isin(store[key].index)
-                self.args_to_process = [i for i, q in zip(self.arg_list, found_IDs) if not q]
+                self.args_to_process = [i for i, q in zip(self.arg_list,
+                                                          found_IDs) if not q]
         else:
             self.args_to_process = self.arg_list
             log.info("no existing output-HDF file found...")
@@ -368,7 +356,6 @@ class RT1_processor(object):
                 self.should_wait.clear()
                 log.warning("\nqueue full... waiting")
 
-
             # wait for results to appear in the out_queue
             # timeout after 2 sec to check for break-condition
             try:
@@ -398,24 +385,24 @@ class RT1_processor(object):
                 traceback.print_exc(file=sys.stderr)
 
     def _worker_process(self, *args):
-            self.should_wait.wait()
+        self.should_wait.wait()
 
-            try:
-                if self.reader_func is not None:
-                    # use provided reader-func...
-                    fit = self.reader_func(*args)
-                else:
-                    fit = args[0]
+        try:
+            if self.reader_func is not None:
+                # use provided reader-func...
+                fit = self.reader_func(*args)
+            else:
+                fit = args[0]
 
-                if fit is not None:
-                    res = self.process_func(fit, *args[1:])
-                    self.queue.put(res)
-                else:
-                    log.warning(f"loading {args} resulted in None... skipping")
-            except Exception:
-                print()
-                log.error(f"problem while processing \n{args}")
-                traceback.print_exc()
+            if fit is not None:
+                res = self.process_func(fit, *args[1:])
+                self.queue.put(res)
+            else:
+                log.warning(f"loading {args} resulted in None... skipping")
+        except Exception:
+            print()
+            log.error(f"problem while processing \n{args}")
+            traceback.print_exc()
 
     def _start_writer_process(self):
         # define a process that writes the results to disc
@@ -423,7 +410,7 @@ class RT1_processor(object):
         for i in range(self.n_writer):
             ctx = mp.get_context('spawn')
             writer = ctx.Process(target=self._save_file_process,
-                                name=f"RTprocess writer {i}")
+                                 name=f"RTprocess writer {i}")
             procs.append(writer)
             log.progress(f"starting {writer.name}")
             writer.start()
@@ -435,13 +422,12 @@ class RT1_processor(object):
             # start thread to combine the results
             ctx = mp.get_context('spawn')
             t = ctx.Process(target=self._combiner_process,
-                           name=f"RTprocess combiner {i}")
+                            name=f"RTprocess combiner {i}")
             procs.append(t)
             # combiner_thread.setDaemon(True)
             log.progress(f"starting {t.name}")
             t.start()
         return procs
-
 
     def _setup_manager(self):
         ctx = mp.get_context('spawn')
@@ -485,14 +471,14 @@ class RT1_processor(object):
         print_thread.start()
         return print_thread
 
-
     def run_starmap(self,
-            arg_list=None,
-            process_func=None,
-            reader_func=None,
-            pool_kwargs=None,
-            starmap_args=None,
-            ID_getter=None):
+                    arg_list=None,
+                    process_func=None,
+                    reader_func=None,
+                    pool_kwargs=None,
+                    starmap_args=None,
+                    ID_getter=None
+                    ):
         """
 
 
@@ -547,7 +533,7 @@ class RT1_processor(object):
         try:
             ctx = mp.get_context('spawn')
             pool = ctx.Pool(self.n_worker, **pool_kwargs)
-            #with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
+            # with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
             try:
                 worker = pool.starmap_async(self._worker_process,
                                             zip(self.args_to_process,
@@ -563,27 +549,21 @@ class RT1_processor(object):
                 pool.close()
                 pool.join()
         finally:
-            print() # print a newline
+            print()  # print a newline
 
             d, h, m, s = dt_to_hms(timedelta(
                 seconds=default_timer() - self.p_start))
-            log.progress(f"finished processing " +
+            log.progress("finished processing " +
                          f"{len(self.args_to_process)} [{self.p_totcnt.value}] IDs!" +
                          f" ... it took {d} {h:02}:{m:02}:{s:02}")
 
-
-            # stop the printer thread
-            #print_thread.finished.set()
-
         return res
-
-
 
     def stop(self, writer, combiner, manager):
 
         # initialize shutdown
         self.should_stop.set()
-        print() # newline
+        print()  # newline
 
         # wait for cached results to be combined
         for c in combiner:
@@ -676,7 +656,6 @@ class RT1_processor(object):
                         f'no index-level found for "{key}"... skipping'
                         )
 
-
     @staticmethod
     def get_data(dst_path, key, config=None, **kwargs):
         """
@@ -702,9 +681,9 @@ class RT1_processor(object):
             keysplits = [key.lstrip("/").split("/") for key in store]
             cfg_keys = (i for i in keysplits if len(i) > 1)
             cfg_keys = groupby_unsorted(cfg_keys,
-                                    key=lambda x: x[0],
-                                    get = lambda x: x[1],
-                                    sort=True)
+                                        key=lambda x: x[0],
+                                        get=lambda x: x[1],
+                                        sort=True)
             const_keys = [i[0] for i in keysplits if len(i) == 1]
 
             if config is None:
