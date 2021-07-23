@@ -1174,6 +1174,10 @@ class RTprocess(object):
         try:
             if isinstance(fit, MultiFits):
                 if postprocess is None:
+                    assert hasattr(self.proc_cls, "postprocess"), (
+                        "no explicit 'postprocess' function provided" +
+                        "and no 'postprocess' function found in processing_config class"
+                        )
                     ret = dict(
                         fit.apply(
                             self.proc_cls.postprocess,
@@ -1237,141 +1241,6 @@ class RTprocess(object):
         else:
             fitlist = list(dumpiter)
         return fitlist
-
-    @staticmethod
-    def _postprocess_xarray(
-        fit,
-        saveparams=None,
-        xindex=("x", -9999),
-        yindex=None,
-        staticlayers=None,
-        auxdata=None,
-        sig_to_dB=False,
-        inc_to_degree=False,
-    ):
-        """
-        the identification of parameters is as follows:
-
-            1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
-            2) any parameter present in defdict is handled accordingly
-            3) auxdata (a pandas-dataframe) is appended
-            4) static layers are added according to the provided dict
-
-        Parameters
-        ----------
-        fit : rt1.rtfits.Fits object
-            the fit-object to use
-        saveparams : list, optional
-            a list of strings that correspond to parameter-names that should
-            be included.
-            can be any parameter present in "fit.dataset", "fit.res_df",
-            The default is None.
-        xindex : tuple, optional
-            a tuple (name, value) that will be used as the x-index.
-            The default is ('x', -9999).
-        yindex : tuple, optional
-            a tuple (name, value) that will be used as the y-index.
-            if provided, a multiindex (x, y) will be used!
-            Be warned... when combining xarrays the x- and y- coordinates will
-            be assumed as a rectangular grid!
-            The default is None.
-        staticlayers : dict, optional
-            a dict with parameter-names and values that will be added das
-            static layers. The default is None.
-        auxdata : pandas.DataFrame, optional
-            a pandas DataFrame that will be concatenated to the DataFrame obtained
-            from combining all 'saveparams'.
-            NOTICE: if the index does not align well with the fit-index, the
-            generated output can increase a lot in size due to missing values!
-            The default is None.
-        sig_to_dB : bool
-            indicator if sigma0 values (e.g. "sig", "tot", "surf", "vol", "inter")
-            should be converted to dB
-        inc_to_degree : bool
-            indicator if incidence-angle values (e.g. "inc")
-            should be converted to degrees
-
-        Returns
-        -------
-        dfxar : xarray.Dataset
-            a xarray-dataset with all layers defined according to the specs.
-
-        """
-        if saveparams is None:
-            saveparams = []
-
-        if staticlayers is None:
-            staticlayers = dict()
-
-        defs = RTprocess._defdict_parser(fit.defdict)
-
-        usedfs = []
-        for key in saveparams:
-
-            if key == "sig":
-                if fit.dB is False and sig_to_dB:
-                    usedfs.append(10.0 * np.log10(fit.dataset.sig))
-                else:
-                    usedfs.append(fit.dataset.sig)
-            elif key == "inc" and inc_to_degree:
-                usedfs.append(np.rad2deg(fit.dataset.inc))
-
-            elif key in fit.defdict:
-                if key in defs["fitted_dynamic"]:
-                    usedfs.append(fit.res_df[key])
-                elif key in defs["fitted_const"]:
-                    staticlayers[key] = fit.res_dict[key][0]
-                elif key in defs["constant"]:
-                    staticlayers[key] = fit.defdict[key][1]
-                elif key in defs["auxiliary"]:
-                    usedfs.append(fit.dataset[key])
-            elif key in fit.dataset:
-                if (
-                    key in ["tot", "surf", "vol", "inter"]
-                    and fit.dB is False
-                    and sig_to_dB
-                ):
-                    usedfs.append(10.0 * np.log10(fit.dataset[key]))
-                else:
-                    usedfs.append(fit.dataset[key])
-            elif key in fit.reader_arg:
-                staticlayers[key] = fit.reader_arg[key]
-            else:
-                log.warning(
-                    f"the parameter {key} could not be processed"
-                    + "during xarray postprocessing"
-                )
-
-        if auxdata is not None and len(auxdata) > 0:
-            usedfs.append(auxdata)
-
-        # combine all timeseries and set the proper index
-        df = pd.concat(usedfs, axis=1)
-        df.columns.names = ["param"]
-        df.index.names = ["date"]
-
-        if yindex is not None:
-            df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-            # set static layers
-            statics = pd.DataFrame(
-                staticlayers,
-                index=pd.MultiIndex.from_product(
-                    iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
-                ),
-            )
-
-        else:
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-            # set static layers
-            statics = pd.DataFrame(staticlayers, index=[xindex[1]])
-            statics.index.name = xindex[0]
-
-        dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
-
-        return dfxar
 
     @staticmethod
     def _defdict_parser(defdict):
