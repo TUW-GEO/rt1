@@ -9,6 +9,8 @@ from .rtplots import polarplot
 
 class Volume(Scatter):
     """basic volume class"""
+    name = "RT1_Volume_base_class"
+    _param_names = ["omega", "tau", "a"]
 
     def __init__(self, **kwargs):
         self.omega = kwargs.pop("omega", None)
@@ -599,7 +601,7 @@ class Rayleigh(Volume):
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
     name = "Rayleigh"
-    _param_names = ["tau", "omega", "ncoefs"]
+    _param_names = ["tau", "omega"]
 
     def __init__(self, **kwargs):
         super(Rayleigh, self).__init__(**kwargs)

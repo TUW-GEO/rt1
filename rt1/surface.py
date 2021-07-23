@@ -10,6 +10,8 @@ from .rtplots import polarplot, hemreflect
 
 class Surface(Scatter):
     """basic surface class"""
+    name = "RT1_Surface_base_class"
+    _param_names = ["NormBRDF", "a"]
 
     def __init__(self, **kwargs):
         # set scattering angle generalization-matrix to [1,1,1] if it is not
