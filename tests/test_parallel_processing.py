@@ -13,7 +13,7 @@ warnings.simplefilter("ignore")
 # use "test_0_---"   "test_1_---"   to ensure test-order
 
 # # set this to False to avoid deleting results & processing-folders!
-cleanup_before = True
+cleanup_before = False
 cleanup_after = False
 
 
@@ -31,7 +31,7 @@ class TestRTfits(unittest.TestCase):
         if not cleanup_before:
             return
 
-        folders = ["proc_test", "proc_test2", "proc_test3", "proc_multi" ]
+        folders = ["proc_test", "proc_test2", "proc_multi" ]
 
         for folder in folders:
             p = Path(f"tests/{folder}")
@@ -45,7 +45,7 @@ class TestRTfits(unittest.TestCase):
         if not cleanup_after:
             return
 
-        folders = ["proc_test", "proc_test2", "proc_test3", "proc_multi" ]
+        folders = ["proc_test", "proc_test2", "proc_multi" ]
 
         for folder in folders:
             p = Path(f"tests/{folder}")
@@ -411,7 +411,7 @@ class TestRTfits(unittest.TestCase):
 
 
     def test_92_export_results(self):
-        for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
+        for folder in ["proc_test", "proc_test2", "proc_multi"]:
             # select the first subfolder and find the .ini file used
             res = list(RTresults(f"tests/{folder}"))
             assert len(res) == 1, "there's more than one result-folder???"

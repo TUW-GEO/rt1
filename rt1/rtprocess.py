@@ -548,7 +548,6 @@ class RTprocess(object):
                 # (it might happen that some parts change during postprocessing)
                 if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
                     self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-
                 return fit._get_fit_to_hdf_dict()
 
         except Exception as ex:
