@@ -305,7 +305,6 @@ class Fits(Scatter):
         # add plotfunctions
         self.plot = rt1_plots(self)
 
-
     def __update__(self):
         """needed for downward compatibility"""
 
@@ -1671,7 +1670,8 @@ class Fits(Scatter):
         # and the symbols used to define them must be removed)
 
         strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in self._get_excludesymbs
+            str(key): val for key, val in res_dict.items()
+            if key not in self._get_excludesymbs
         }
 
         # set the param-dict to the newly generated dict
@@ -2787,9 +2787,9 @@ class Fits(Scatter):
 
                 # TODO implement this after the following pandas-bug is fixed:
                 # https://github.com/pandas-dev/pandas/issues/42070
-                #dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
+                # dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
 
-                dfs.append(pd.DataFrame({key:val}, idx))
+                dfs.append(pd.DataFrame({key: val}, idx))
 
             df = pd.concat(dfs, axis=1)
             return df
@@ -2855,25 +2855,22 @@ class Fits(Scatter):
         try:
             df = pd.DataFrame(self.reader_arg, [ID])
             df.index.name = "ID"
-            hf["const__reader_arg"] =  df
+            hf["const__reader_arg"] = df
         except Exception:
             log.debug(f"could not save 'reader_arg' for fit {ID}")
             df = pd.DataFrame({"ID": ID}, [ID])
             df.index.name = "ID"
 
-            hf["const__reader_arg"] =  df
-
+            hf["const__reader_arg"] = df
 
         # -------------- save DATASET
         try:
             if save_data is True:
                 df = getattr(self, "dataset", None)
                 if df is not None:
-                    #df = pd.concat([df], keys=[ID], names=["ID", "date"])
                     hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
             elif save_results is True:
                 # store only data that is required to re-create the results
-
                 if isinstance(self, MultiFits):
                     dynkeys = set(
                         key + "_dyn"
@@ -2882,9 +2879,8 @@ class Fits(Scatter):
                         if val[0] and val[2] == "manual")
                 else:
                     dynkeys = set(key + "_dyn" for key, val in self.defdict.items()
-                                   if val[0] and val[2] == "manual")
+                                  if val[0] and val[2] == "manual")
                 df = getattr(self, "dataset", None)[dynkeys]
-                #df = pd.concat([df], keys=[ID])
 
                 hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
         except Exception:
@@ -2895,7 +2891,6 @@ class Fits(Scatter):
             try:
                 df = getattr(self, "aux_data", None)
                 if df is not None:
-                    #df = pd.concat([df], keys=[ID], names=["ID", "date"])
                     hf["aux_data"] = Fits._prepend_ID_to_index(df, self.ID)
             except Exception:
                 log.debug(f"could not save 'aux_data' for fit {ID}")
@@ -2905,7 +2900,7 @@ class Fits(Scatter):
             try:
                 if isinstance(self, MultiFits):
                     df = pd.concat(i[1] for i in self.apply(lambda fit:
-                        fit._get_res_dict_df()))
+                                                            fit._get_res_dict_df()))
                 else:
                     df = self._get_res_dict_df()
 
@@ -2914,7 +2909,6 @@ class Fits(Scatter):
                 log.debug(f"could not save 'res_dict' for fit {ID}")
 
         return hf
-
 
     @property
     @lru_cache()  # cache this since we need a static reference!
@@ -2938,8 +2932,6 @@ class Fits(Scatter):
         """
 
         return _metric_keys(self)
-
-
 
 
 class _MultiAccessors:
@@ -2981,7 +2973,6 @@ class _MultiAccessors:
 
     @property
     def config_fits(self):
-        #return self._FitContainer.__dict__
         return {i.config_name: i for i in self._FitContainer}
 
     def _getit(self, prop):
@@ -3030,7 +3021,6 @@ class _FitContainer:
             f"\n{self._parent.config_names}"
             )
         return getattr(self, key)
-
 
 
 class MultiFits:
@@ -3133,7 +3123,8 @@ class MultiFits:
     @aux_data.setter
     def aux_data(self, value):
         raise AttributeError(
-            "use `set_aux_data` to set 'aux_data' on ALL configs of the MultiFits object!"
+            "use `set_aux_data` to set 'aux_data' on ALL configs" +
+            " of the MultiFits object!"
         )
 
     @property
@@ -3143,7 +3134,8 @@ class MultiFits:
     @reader_arg.setter
     def reader_arg(self, value):
         raise AttributeError(
-            "use `set_reader_arg` to set 'reader_arg' on ALL configs of the MultiFits object!"
+            "use `set_reader_arg` to set 'reader_arg' on ALL configs" +
+            " of the MultiFits object!"
         )
 
     def set_dataset(self, dataset):
