@@ -676,7 +676,7 @@ class HDFaccessor(object):
                     ret = []
 
             if print_progress:
-                print("reading", (i + 1)*read_chunksize)
+                print("reading", (i + 1) * read_chunksize)
         else:
             print("asdf")
             data = pd.concat(ret)

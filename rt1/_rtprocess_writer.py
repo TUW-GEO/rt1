@@ -647,14 +647,10 @@ class RT1_processor(object):
                     use_levels = list(set(idx_levels) & set(s_levels))
 
                 if len(use_levels) > 0:
-                    log.progress(
-                        f'creating index-levels "{use_levels}" for "{key}"'
-                        )
+                    log.progress(f'creating index-levels "{use_levels}" for "{key}"')
                     s.create_index(list(map(str, use_levels)), kind="full")
                 else:
-                    log.warning(
-                        f'no index-level found for "{key}"... skipping'
-                        )
+                    log.warning(f'no index-level found for "{key}"... skipping')
 
     @staticmethod
     def get_data(dst_path, key, config=None, **kwargs):
