@@ -18,8 +18,11 @@ from itertools import count
 import signal
 
 from . import log
-from .general_functions import dt_to_hms, update_progress, groupby_unsorted, isidentifier
-import json
+from .general_functions import (dt_to_hms,
+                                update_progress,
+                                groupby_unsorted,
+                                isidentifier,
+                                )
 
 
 class RepeatTimer(threading.Thread):
@@ -542,7 +545,7 @@ class RT1_processor(object):
 
                 # do this after calling starmap_async to wait for the initializers
                 # to finish!
-                print_thread = self.start_print_thread()
+                _ = self.start_print_thread()
 
                 res = worker.get()
             finally:
@@ -585,7 +588,6 @@ class RT1_processor(object):
             log.progress(f"finished! ... it took {d} {h:02}:{m:02}:{s:02}")
         else:
             log.progress("exiting...")
-
 
     @staticmethod
     def create_index(dst_path, idx_levels=None,

@@ -202,43 +202,13 @@ class TestRTfits(unittest.TestCase):
             "tests/proc_test2/dump02/cfg/parallel_processing_config.py"
         ).exists(), "copying did not work"
 
-    # def test_4_postprocess_and_finalout(self):
-    #     config_path = Path(__file__).parent.absolute() / "test_config.ini"
-    #     reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
-
-    #     proc = RTprocess(config_path)
-    #     proc.override_config(
-    #         PROCESS_SPECS=dict(path__save_path="tests/proc_test3", dumpfolder="dump03")
-    #     )
-
-    #     proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=False)
-
-    #     results = RTresults("tests/proc_test3")
-    #     assert hasattr(results, "dump03"), "dumpfolder dump02 not found by RTresults"
-
-    #     finalout_name = results.dump03.load_cfg().get_process_specs()["finalout_name"]
-
-    #     assert not Path(
-    #         f"tests/proc_test3/dump03/results/{finalout_name}.nc"
-    #     ).exists(), "disabling postprocess did not work"
-
-    #     proc.run_finaloutput(ncpu=1, finalout_name="ncpu_1.nc")
-    #     assert Path(
-    #         "tests/proc_test3/dump03/results/ncpu_1.nc"
-    #     ).exists(), "run_finalout with ncpu=1 not work"
-
-    #     proc.run_finaloutput(ncpu=4, finalout_name="ncpu_2.nc")
-    #     assert Path(
-    #         "tests/proc_test3/dump03/results/ncpu_2.nc"
-    #     ).exists(), "run_finalout with ncpu=2 not work"
-
     def test_5_multiconfig(self):
 
         config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
 
         proc = RTprocess(config_path)
-        proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=True)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         for cfg in ["cfg_0", "cfg_1"]:
             # check if model-definition files are written correctly
@@ -259,19 +229,6 @@ class TestRTfits(unittest.TestCase):
 
         fit = results.dump01.load_fit()
         cfg = results.dump01.load_cfg()
-
-        # with results.dump01.load_nc() as ncfile:
-        #     processed_ids = list(ncfile.ID.values)
-
-        # processed_ids.sort()
-        # assert processed_ids == [1, 2, 3], "NetCDF export does not include all IDs"
-
-        # # check if NetCDF_variables works as expected
-        # results.dump01.NetCDF_variables
-
-        # remove the save_path directory
-        # print('deleting save_path directory...')
-        # shutil.rmtree(results._parent_path)
 
         fit_db = results.dump01.fit_db
 
@@ -298,29 +255,6 @@ class TestRTfits(unittest.TestCase):
 
         # make sure to close the HDF-file so that the folders can be savely deleted
         fit_db.close()
-
-    # def test_7_multiconfig_finalout(self):
-    #     config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
-
-    #     proc = RTprocess(config_path)
-    #     proc.run_finaloutput(
-    #         ncpu=1,
-    #         finalout_name="ncpu1.nc",
-    #     )
-
-    #     proc.run_finaloutput(
-    #         ncpu=3,
-    #         finalout_name="ncpu3.nc",
-    #     )
-
-    #     for cfg in ["cfg_0", "cfg_1"]:
-    #         # check if all folders are properly initialized
-    #         assert Path(
-    #             f"tests/proc_multi/dump01/results/ncpu1__{cfg}.nc"
-    #         ).exists(), "multiconfig finaloutput with ncpu=1 did not work"
-    #         assert Path(
-    #             f"tests/proc_multi/dump01/results/ncpu3__{cfg}.nc"
-    #         ).exists(), "multiconfig finaloutput with ncpu=3 did not work"
 
     def test_8_multiconfig_rtresults(self):
         res = RTresults("tests/proc_multi")

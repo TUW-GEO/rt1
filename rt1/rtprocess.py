@@ -143,8 +143,6 @@ class RTprocess(object):
 
         self.autocontinue = autocontinue
 
-        self._postprocess = True
-
         self.copy = copy
 
         self._proc_cls = proc_cls
@@ -367,8 +365,6 @@ class RTprocess(object):
         for key in [
             "preprocess",
             "reader",
-            "postprocess",
-            "finaloutput",
             "exceptfunc",
         ]:
             assert hasattr(
@@ -457,7 +453,7 @@ class RTprocess(object):
             A dict of arguments passed to the reader.
         Returns
         -------
-        The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
+        a dict containing all data and definitions needed to re-create the Fits object
         """
 
         try:
@@ -502,18 +498,6 @@ class RTprocess(object):
                 do_performfit = self.parent_fit.accessor.performfit()
                 _ = [doit() for doit in do_performfit.values()]
 
-                # TODO remove this
-                # if a post-processing function is provided, return its output,
-                # else return None
-                if self._postprocess and callable(self.proc_cls.postprocess):
-                    ret = dict(
-                        self.parent_fit.apply(
-                            self.proc_cls.postprocess, reader_arg=reader_arg
-                        )
-                    )
-                else:
-                    ret = dict()
-
                 if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
                     self.proc_cls.dump_fit_to_file(
                         self.parent_fit, reader_arg, mini=True
@@ -534,14 +518,6 @@ class RTprocess(object):
                 # append auxiliary data
                 if aux_data is not None:
                     fit.aux_data = aux_data
-
-                # TODO remove this
-                # if a post-processing function is provided, return its output,
-                # else return None
-                if self._postprocess and callable(self.proc_cls.postprocess):
-                    ret = self.proc_cls.postprocess(fit, reader_arg)
-                else:
-                    ret = None
 
                 # dump a fit-file
                 # save dumps AFTER prostprocessing has been performed
@@ -589,7 +565,6 @@ class RTprocess(object):
         preprocess_kwargs=None,
         queue=None,
         dump_fit=True,
-        postprocess=True,
         **kwargs
     ):
         """
@@ -658,18 +633,13 @@ class RTprocess(object):
             indicator if a fit-object should be dumped or not.
             (e.g. by invoking processing_config.dump_fit_to_file() )
             The default is True
-        postprocess bool, optional
-            indicator if postprocess() and finalout() workflows should be
-            executed or not
 
         Returns
         -------
         res : list
-            A list of rt1.rtfits.Fits objects or a list of outputs of the
-            postprocess-function.
+            A list of rt1.rtfits.Fits objects
 
         """
-        self._postprocess = postprocess
         self._dump_fit = dump_fit
 
         if callable(self.proc_cls.preprocess):
@@ -756,7 +726,6 @@ class RTprocess(object):
         preprocess_kwargs=None,
         logfile_level=1,
         dump_fit=True,
-        postprocess=True,
     ):
         """
         Start the processing
@@ -808,10 +777,6 @@ class RTprocess(object):
             indicator if `processing_config.dump_fit_to_file()` should be
             called after finishing the fit.
             The default is True
-        postprocess : bool, optional
-            indicator if postprocess() and finaloutput() workflows should be
-            executed or not.
-            The default is True.
         """
 
         try:
@@ -895,7 +860,6 @@ class RTprocess(object):
                 preprocess_kwargs=preprocess_kwargs,
                 queue=queue,
                 dump_fit=dump_fit,
-                postprocess=postprocess,
             )
 
         except Exception as err:
@@ -940,7 +904,6 @@ class RTprocess(object):
         fitlist=None,
         save_path=None,
         create_index=True,
-        metadata=None,
         **kwargs,
     ):
         """
@@ -995,9 +958,6 @@ class RTprocess(object):
             - if a dict is provided, it is used as kwargs for
               `_rtprocess_writer.RT1_processor.create_index()`
               (e.g. the defaults are:  idx_levels=None and keys=None)
-        metadata : dict
-            TODO
-            a dict with keys "descriptions" and "attributes"
         **kwargs :
             additional kwargs passed to
             `_rtprocess_writer.RT1_processor()`
@@ -1068,7 +1028,6 @@ class RTprocess(object):
                 queue=queue,
                 print_progress=print_progress,
                 create_index=create_index,
-                metadata=metadata,
                 **kwargs
             )
 
@@ -1108,7 +1067,6 @@ class RTprocess(object):
         queue=None,
         print_progress=True,
         create_index=True,
-        metadata=None,
         **kwargs
     ):
 
@@ -1163,9 +1121,6 @@ class RTprocess(object):
                 RT1_processor.create_index(save_path, **create_index)
             elif create_index is True:
                 RT1_processor.create_index(save_path)
-
-        if metadata:
-            RT1_processor.attach_metadata(save_path, **metadata)
 
         return res
 
@@ -1473,7 +1428,6 @@ class RTprocess(object):
         self,
         parameters=None,
         metrics=None,
-        attributes=None,
         export_functions=None,
         index_col=None,
         use_config=None,
@@ -1496,24 +1450,23 @@ class RTprocess(object):
         parameters : list or dict
             a list (or dict) of parameter-names to attach.
             can be any parameter available in "fit.dataset", "fit.res_df", any of
-            the model-contributions, e.g.: ["tot", "surf", "vol", "inter"] or any
-            parameter whose export-function has been provided via "export_functions"
+            the model-contributions, e.g.:
 
-            To attach descriptions, use a dict of dicts of the form:
-            >>> dict(sig = dict(long_name = "sigma0 data",
-            >>>                 units = "dB"),
-            >>>      inc = dict(long_name = "incidence angle",
-            >>>                 units = "degrees"))
+            >>> ["tot", "surf", "vol", "inter"]
+
+            or any parameter whose export-function has been provided via
+            cumstom defined "export_functions"
 
         metrics : dict
             a dict of metrics to calculate between model-parameters and dataset-keys
 
             - key: the name to use for the metric in the returned dataset
-            - value: a tuple of the form (description is optional):
-                     (metric, parameter 1, parameter 2, [description-dict])
+            - value: a tuple of the form:
+                     (metric, parameter 1, parameter 2)
 
-            >>> dict(R = ("pearson", "sig", "tot",
-            >>>           dict(long_name="sig0 pearson correlation")))
+            >>> dict(R = ("pearson", "sig", "tot"),
+            >>>      RMSD = ("rmsd", "sig", "tot"))
+
 
         export_functions = dict, optional
             a dict with functions that will be used to export the parameter-values
@@ -1523,8 +1476,6 @@ class RTprocess(object):
 
             >>> dict(sig=lambda fit: fit.dataset.sig)
 
-        attributes : dict, optional
-            additional attributes to attach
         index_col : str
             the name of the reader-arg value to use as index
         use_config : list, optional
@@ -1581,22 +1532,9 @@ class RTprocess(object):
         if not metrics:
             metrics = dict()
 
-        # ----- set descriptions (and separate model-keys)
-        descriptions = dict()
-        if isinstance(parameters, dict):
-            model_keys = dict()
-            descriptions.update(parameters)
-
-            for key in ["tot", "surf", "vol", "inter"]:
-                if key in parameters:
-                    model_keys[key] = parameters.pop(key)
-        else:
-            model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
-            parameters = set(parameters) ^ model_keys
-
-        for key, val in metrics.items():
-            if len(val) == 4:
-                descriptions[key] = val[3]
+        # ----- separate model-keys from the provided parameters
+        model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
+        parameters = set(parameters) ^ model_keys
 
         # ----- initialize a RTresults object for easy access to the list of dump-files
         res = RTresults(self.dumppath)
@@ -1644,13 +1582,6 @@ class RTprocess(object):
             _fnevals_input=fn_evals,
         )
 
-        # TODO metadata not used
-        metadata = dict()
-        if descriptions:
-            metadata["descriptions"] = descriptions
-        if attributes:
-            metadata["attributes"] = attributes
-
         # ----- run finalout generation
         out = self.run_finaloutput(
             ncpu=ncpu,
@@ -1662,21 +1593,8 @@ class RTprocess(object):
             logfile_level=1,
             fitlist=fitlist,
             save_path=savepath,
-            # metadata=metadata,
             **kwargs
         )
-
-        # # ----- attach model definition strings as attributes
-        # if isinstance(fit0, MultiFits):
-        #     # remove dataset since we are not interested in site-specific infos
-        #     fit0.set_dataset(None)
-        #     for key, val in out.items():
-        #         val.attrs["model_definition"] = fit0.accessor.config_fits[
-        #             key
-        #         ]._model_definition
-        # else:
-        #     fit0.dataset = None
-        #     out.attrs["model_definition"] = fit0._model_definition
 
         return out
 

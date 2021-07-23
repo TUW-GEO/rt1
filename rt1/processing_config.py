@@ -2,183 +2,10 @@
 
 import sys
 import pandas as pd
-import numpy as np
 import traceback
 from pathlib import Path
 from .rtfits import load
 from . import log
-
-try:
-    import xarray as xar
-except ModuleNotFoundError:
-    log.debug("xarray could not be imported, " + "postprocess_xarray will not work!")
-
-
-def defdict_parser(defdict):
-    """
-    get parameter-dynamics specifications from a given defdict
-
-    Parameters
-    ----------
-    defdict : dict
-        a defdict (e.g. fit.defdict)
-
-    Returns
-    -------
-    parameter_specs : dict
-        a dict that contains lists of parameter-names according to their
-        specifications. (keys should be self-explanatory)
-    """
-    parameter_specs = dict(
-        fitted=[],
-        fitted_const=[],
-        fitted_dynamic=[],
-        fitted_dynamic_manual=[],
-        fitted_dynamic_index=[],
-        fitted_dynamic_datetime=[],
-        fitted_dynamic_integer=[],
-        constant=[],
-        auxiliary=[],
-    )
-
-    for key, val in defdict.items():
-        if val[0] is True:
-            parameter_specs["fitted"].append(key)
-            if val[2] is None:
-                parameter_specs["fitted_const"].append(key)
-            else:
-                parameter_specs["fitted_dynamic"].append(key)
-                if val[2] == "manual":
-                    parameter_specs["fitted_dynamic_manual"].append(key)
-                elif val[2] == "index":
-                    parameter_specs["fitted_dynamic_index"].append(key)
-                elif isinstance(val[2], str):
-                    parameter_specs["fitted_dynamic_datetime"].append((key, val[2]))
-                elif isinstance(val[2], int):
-                    parameter_specs["fitted_dynamic_integer"].append((key, val[2]))
-        else:
-            if val[1] == "auxiliary":
-                parameter_specs["auxiliary"].append(key)
-            else:
-                parameter_specs["constant"].append(key)
-
-    return parameter_specs
-
-
-def postprocess_xarray(
-    fit,
-    saveparams=None,
-    xindex=("x", -9999),
-    yindex=None,
-    staticlayers=None,
-    auxdata=None,
-):
-    """
-    the identification of parameters is as follows:
-
-        1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
-        2) any parameter present in defdict is handled accordingly
-        3) auxdata (a pandas-dataframe) is appended
-
-        4) static layers are generated and added according to the provided dict
-
-
-    Parameters
-    ----------
-    fit : rt1.rtfits.Fits object
-        the fit-object to use
-    saveparams : list, optional
-        a list of strings that correspond to parameter-names that should
-        be included. The default is None.
-    xindex : tuple, optional
-        a tuple (name, value) that will be used as the x-index.
-        The default is ('x', -9999).
-    yindex : tuple, optional
-        a tuple (name, value) that will be used as the y-index.
-        if provided, a multiindex (x, y) will be used!
-        Be warned... when combining xarrays the x- and y- coordinates will
-        be assumed as a rectangular grid!
-        The default is None.
-    staticlayers : dict, optional
-        a dict with parameter-names and values that will be adde das
-        static layers. The default is None.
-    auxdata : pandas.DataFrame, optional
-        a pandas DataFrame that will be concatenated to the DataFrame obtained
-        from combining all 'saveparams'. The default is None.
-
-    Returns
-    -------
-    dfxar : xarray.Dataset
-        a xarray-dataset with all layers defined according to the specs.
-
-    """
-
-    if saveparams is None:
-        saveparams = []
-
-    if staticlayers is None:
-        staticlayers = dict()
-
-    defs = defdict_parser(fit.defdict)
-
-    usedfs = []
-    for key in saveparams:
-
-        if key == "sig":
-            if fit.dB is False:
-                usedfs.append(10.0 * np.log10(fit.dataset.sig))
-            else:
-                usedfs.append(fit.dataset.sig)
-        elif key == "inc":
-            usedfs.append(np.rad2deg(fit.dataset.inc))
-
-        elif key in fit.defdict:
-            if key in defs["fitted_dynamic"]:
-                usedfs.append(fit.res_df[key])
-            elif key in defs["fitted_const"]:
-                staticlayers[key] = fit.res_dict[key][0]
-            elif key in defs["constant"]:
-                staticlayers[key] = fit.defdict[key][1]
-            elif key in defs["auxiliary"]:
-                usedfs.append(fit.dataset[key])
-        elif key in fit.dataset:
-            usedfs.append(fit.dataset[key])
-        else:
-            log.warning(
-                f"the parameter {key} could not be processed"
-                + "during xarray postprocessing"
-            )
-
-    if auxdata is not None:
-        usedfs.append(auxdata)
-
-    # combine all timeseries and set the proper index
-    df = pd.concat(usedfs, axis=1)
-    df.columns.names = ["param"]
-    df.index.names = ["date"]
-
-    if yindex is not None:
-        df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-        # set static layers
-        statics = pd.DataFrame(
-            staticlayers,
-            index=pd.MultiIndex.from_product(
-                iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
-            ),
-        )
-
-    else:
-        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-        # set static layers
-        statics = pd.DataFrame(staticlayers, index=[xindex[1]])
-        statics.index.name = xindex[0]
-
-    dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
-
-    return dfxar
 
 
 class rt1_processing_config(object):
@@ -230,17 +57,6 @@ class rt1_processing_config(object):
     ...         # read the data for each fit
     ...         ...
     ...         return df, aux_data
-    ...
-    ...     # customize the postprocess function
-    ...     def postprocess(self, fit, reader_arg):
-    ...         # do something with each fit and return the desired output
-    ...         return ...
-    ...
-    ...     # customize the finaloutput function
-    ...     def finaloutput(self, res):
-    ...         # do something with res
-    ...         # (res is a list of outputs from the postprocess() function)
-    ...         ...
     ...
     ...     # customize the function that is used to catch exceptions
     ...     def exceptfunc(self, ex, reader_arg):
@@ -331,7 +147,7 @@ class rt1_processing_config(object):
 
     def dump_fit_to_file(self, fit, reader_arg, mini=True):
         """
-        pickle to Fits-object to  "save_path / dumpfolder / filename.dump"
+        pickle Fits-object to  "save_path / dumpfolder / filename.dump"
 
         Parameters
         ----------
@@ -372,85 +188,6 @@ class rt1_processing_config(object):
 
         return data, aux_data
 
-    def postprocess(self, fit, reader_arg=None):
-        """
-        A function that is called AFTER processing of each site:
-
-        - a pandas.DataFrame with the obtained parameters is returned.
-          The columns are multiindexes corresponding to::
-
-              columns = [feature_id,
-                         [param_1, param_2, ...]]
-
-        - in case "save_path" is provided:
-            - a dump of the fit object will be stored in the folder
-            - if the file already exists, a 'rt1_file_already_exists' error
-              will be raised
-
-
-        Parameters
-        ----------
-        fit: rt1.rtfits.Fits object
-            The fits object.
-        reader_arg: dict
-            the arguments passed to the reader function.
-
-        Returns
-        -------
-        df: pandas.DataFrame
-            a pandas dataframe containing the fitted parameterss.
-
-        """
-        if reader_arg is None:
-            reader_arg = fit.reader_arg
-
-        # get filenames
-        names_ids = self.get_names_ids(reader_arg)
-        # parse defdict to find static and dynamic parameter names
-        params = defdict_parser(fit.defdict)
-
-        # add all constant (fitted) parameters as static layers
-        staticlayers = dict()
-        for key in params["fitted_const"]:
-            staticlayers[key] = fit.res_dict[key][0]
-
-        ret = postprocess_xarray(
-            fit=fit,
-            saveparams=["inc", "sig", *params["fitted_dynamic"]],
-            xindex=("ID", names_ids["feature_id"]),
-            staticlayers=staticlayers,
-        )
-
-        return ret
-
-    def finaloutput(self, res):
-        """
-        A function that is called after ALL sites are processed:
-
-        Parameters
-        ----------
-        res: list
-            A list of return-values from the "postprocess()" function.
-
-        Returns
-        -------
-        res: xarray.Dataset
-             the concatenated results
-        """
-
-        # concatenate the results
-        resxar = xar.combine_nested([i for i in res if i is not None], concat_dim="ID")
-
-        if self.rt1_procsesing_respath is None or self.finalout_name is None:
-            log.info(
-                "both save_path and finalout_name must be specified... "
-                + "otherwise the final results can NOT be saved!"
-            )
-            return resxar
-        else:
-            # export netcdf file
-            resxar.to_netcdf(self.rt1_procsesing_respath / self.finalout_name)
-
     def exceptfunc(self, ex, reader_arg):
         """
         a error-catch function that handles the following errors:
@@ -461,8 +198,8 @@ class rt1_processing_config(object):
         - 'rt1_data_error'
             exceptions are ignored and the next site is processed
         - 'rt1_file_already_exists'
-            the already existing dump-file is loaded, the postprocess()
-            function is applied and the result is returned
+            the already existing dump-file is loaded, and the dict defining
+            the Fits-object is returned
         - for any other exceptions:
             if `save_path` and `dumpfolder`or `error_dumpfolder` are specified
             a dump of the exception-message is saved and the exception
@@ -503,7 +240,7 @@ class rt1_processing_config(object):
 
             try:
                 fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
-                return self.postprocess(fit, reader_arg)
+                return fit._get_fit_to_hdf_dict()
             except Exception:
                 log.error(
                     "there has been a problem while loading the "
