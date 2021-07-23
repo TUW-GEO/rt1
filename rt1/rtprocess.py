@@ -1884,8 +1884,8 @@ class RTprocess(object):
             if None, the path provided in the ".ini" file will be used
             (e.g. "dumpfolder / results / < finalout_name >.h5" )
         **kwargs :
-            additional kwargs passed to
-            `_rtprocess_writer.RT1_processor()`
+            additional kwargs passed to `RTprocess.run_finaloutput()`
+            and further to `_rtprocess_writer.RT1_processor()`
             (n_combiner, n_writer, HDF_kwargs, write_chunk_size,
              out_cache_size)
         """
