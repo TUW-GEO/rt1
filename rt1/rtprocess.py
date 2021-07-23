@@ -1,6 +1,5 @@
 import multiprocessing as mp
-from timeit import default_timer
-from datetime import datetime, timedelta
+from datetime import datetime
 from itertools import repeat, islice
 import sys
 import traceback
@@ -436,7 +435,8 @@ class RTprocess(object):
                         )
 
                         log.debug(
-                            f'{module_copypath.name} imported from \n"{module_copypath}"\n'
+                            f'{module_copypath.name} imported from \n' +
+                            f'"{module_copypath}"\n'
                         )
 
                     else:
@@ -559,7 +559,6 @@ class RTprocess(object):
             else:
                 raise ex
 
-    #@staticmethod
     def _initializer(self, initializer, queue, *args):
         """
         decorate a provided initializer with the "_worker_configurer()" to
@@ -1060,7 +1059,7 @@ class RTprocess(object):
                 # use fits from .dump file if no fitlist is provided
                 fitlist = self._get_files(use_N_files=use_N_files)
 
-            res =  self._run_finalout(
+            res = self._run_finalout(
                 ncpu,
                 fitlist=fitlist,
                 save_path=save_path,
@@ -1074,7 +1073,6 @@ class RTprocess(object):
             )
 
             return res
-
 
         except Exception as err:
             log.exception("there was an error during finalout generation!")
@@ -1099,7 +1097,6 @@ class RTprocess(object):
                     h.close()
                     # remove the file-handler from the log
                     log.handlers.remove(h)
-
 
     def _run_finalout(
         self,
@@ -1142,7 +1139,6 @@ class RTprocess(object):
             else:
                 if self.parent_fit.int_Q is True:
                     self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
-
 
         log.progress(f"start of finalout generation on {ncpu} cores")
 
@@ -1209,7 +1205,6 @@ class RTprocess(object):
                       exc_info=True)
             return
 
-
     def _run_postprocess(self, fit, use_config=None, postprocess=None, *args):
         # "from_postprocess" is used as indicator to use the function-output
         #  directly (e.g. without using .apply to treat MultiFits objects etc.)
@@ -1219,10 +1214,6 @@ class RTprocess(object):
             use_config = None
         else:
             use_func_directly = False
-
-
-        # if not isinstance(fit, (Fits, MultiFits)):
-        #     fit = self._finalout_reader(fit)
 
         # apply postprocess function (with proper treatment of MultiFits)
         try:
@@ -1291,7 +1282,6 @@ class RTprocess(object):
         else:
             fitlist = list(dumpiter)
         return fitlist
-
 
     @staticmethod
     def _postprocess_xarray(
@@ -1479,322 +1469,6 @@ class RTprocess(object):
 
         return parameter_specs
 
-    # @staticmethod
-    # def _export_postprocess(
-    #     fit,
-    #     reader_arg=None,
-    #     parameters=[],
-    #     metrics=None,
-    #     export_functions=None,
-    #     model_keys=[],
-    #     index_col="ID",
-    #     sig_to_dB=False,
-    #     inc_to_degree=False,
-    #     _fnevals_input=None,
-    # ):
-    #     """
-    #     Parameters
-    #     ----------
-
-    #     fit: rt1.rtfits.Fits object
-    #         The fits object.
-    #     reader_arg: dict
-    #         the arguments passed to the reader function.
-    #     parameters : list
-    #         a list of parameter-names to attach.
-    #     metrics : dict
-    #         key: the name to use for the metric in the returned dataset
-    #         value: a tuple of the form:
-    #               (metric, parameter 1, parameter 2)
-    #     export_fuinctions : dict
-    #         a dict of functions to use for exporting the parameter
-    #     model_keys : list
-    #         a list of keys that correspond to model-calculation results
-    #         (e.g. any of ["tot", "surf", "vol", "inter"])
-    #     index_col : str
-    #         the name of the reader-arg value to use as index
-    #     _fnevals_input : dict or callable
-    #         pre-evaluated fnevals functions. in case fit is a MultiFits object:
-    #         a dict with the config-names and pre-evaluated fnevals functions
-    #     Returns
-    #     -------
-    #     df: pandas.DataFrame
-    #         a xarray.Dataset containing the fitted parameterss.
-
-    #     """
-    #     if reader_arg is None:
-    #         reader_arg = fit.reader_arg
-
-    #     # assign pre-evaluated fn-coefficients
-    #     if _fnevals_input:
-    #         if hasattr(fit, "config_name"):
-    #             if fit.int_Q is True and fit.config_name in _fnevals_input:
-    #                 fit._fnevals_input = _fnevals_input[fit.config_name]
-    #         else:
-    #             fit._fnevals_input = _fnevals_input
-
-    #     staticlayers = dict()
-    #     if metrics:
-    #         for name, p in metrics.items():
-    #             staticlayers[name] = getattr(
-    #                 getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower()
-    #             )
-
-    #     auxdata = dict()
-    #     if model_keys:
-    #         auxdata = fit.calc_model(return_components=True)[model_keys]
-
-    #     if export_functions:
-    #         for key, func in export_functions.items():
-    #             auxdata[key] = func(fit)
-
-    #     ret = RTprocess._postprocess_xarray(
-    #         fit=fit,
-    #         saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
-    #         xindex=(index_col, reader_arg[index_col]),
-    #         staticlayers=staticlayers,
-    #         auxdata=pd.DataFrame(auxdata),
-    #         sig_to_dB=sig_to_dB,
-    #         inc_to_degree=inc_to_degree,
-    #     )
-
-    #     return ret
-
-    # @staticmethod
-    # def _export_finalout(
-    #     res,
-    #     savepath=None,
-    #     attrs=None,
-    #     descriptions=None,
-    #     encoding=None,
-    #     concat_dim="ID",
-    # ):
-
-    #     resxar = xar.combine_nested(
-    #         [i for i in res if i is not None], concat_dim=concat_dim
-    #     )
-    #     if attrs:
-    #         for key, val in attrs.items():
-    #             resxar.attrs[key] = val
-
-    #     if descriptions:
-    #         for p, a in descriptions.items():
-    #             for key, val in a.items():
-    #                 getattr(resxar, p).attrs[key] = val
-
-    #     if savepath:
-    #         if not encoding:
-    #             encoding = {
-    #                 key: {"zlib": True, "complevel": 1} for key in resxar.data_vars
-    #             }
-
-    #         log.info("export of NetCDF file at location:\n" + '"' + savepath + '"')
-
-    #         resxar.to_netcdf(savepath, encoding=encoding)
-    #     else:
-    #         return resxar
-
-    # def export_data(
-    #     self,
-    #     parameters=None,
-    #     metrics=None,
-    #     attributes=None,
-    #     export_functions=None,
-    #     index_col="ID",
-    #     use_config=None,
-    #     dumpfolder=None,
-    #     use_nfiles=None,
-    #     ncpu=1,
-    #     sig_to_dB=False,
-    #     inc_to_degree=False,
-    #     pre_evaluate_fn_coefs=True,
-    #     savepath=None,
-    # ):
-    #     """
-    #     a convenience-method to export parameters and performance-metrics
-    #     from a collection of rtfits.Fits objects
-
-    #     Parameters
-    #     ----------
-    #     parameters : list or dict
-    #         a list (or dict) of parameter-names to attach.
-    #         can be any parameter available in "fit.dataset", "fit.res_df", any of
-    #         the model-contributions, e.g.: ["tot", "surf", "vol", "inter"] or any
-    #         parameter whose export-function has been provided via "export_functions"
-
-    #         To attach descriptions, use a dict of dicts of the form:
-    #         >>> dict(sig = dict(long_name = "sigma0 data",
-    #         >>>                 units = "dB"),
-    #         >>>      inc = dict(long_name = "incidence angle",
-    #         >>>                 units = "degrees"))
-
-    #     metrics : dict
-    #         a dict of metrics to calculate between model-parameters and dataset-keys
-
-    #         - key: the name to use for the metric in the returned dataset
-    #         - value: a tuple of the form (description is optional):
-    #                  (metric, parameter 1, parameter 2, [description-dict])
-
-    #         >>> dict(R = ("pearson", "sig", "tot",
-    #         >>>           dict(long_name="sig0 pearson correlation")))
-
-    #     export_functions = dict, optional
-    #         a dict with functions that will be used to export the parameter-values
-    #         (Note that this will override the default extraction-procedures!)
-
-    #         >>> dict(sig=lambda fit: fit.dataset.sig)
-
-    #     attributes : dict, optional
-    #         additional attributes to attach to the returned xarray.Dataset
-    #     index_col : str
-    #         the name of the reader-arg value to use as index
-    #     use_config : list, optional
-    #         a list of configs to use in case a multi-config fit has been performed.
-    #         The default is None.
-    #     dumpfolder : str, optional
-    #         the dumpfolder to use. (must be specified if more than 1 result is found)
-    #         The default is None.
-    #     use_nfiles : int, optional
-    #         the number of files to process.
-    #         The default is None in which case ALL files are processed!
-    #     ncpu : int, optional
-    #         the number of cpu's to use. The default is 1.
-    #     sig_to_dB : bool, optional
-    #         indicator if sigma0 datasets ("sig", "tot", "surf", "vol", "inter")
-    #         should be converted to dB
-    #     inc_to_degrees : str, optional
-    #         indicator if incidence-angle datasets ("inc") should be converted to
-    #         degrees
-    #     pre_evaluate_fn_coefs : bool
-    #         indicator if the first Fits (or MultiFits) object should be used to
-    #         pre-evaluate fn-coefficients required to evaluate interaction-terms.
-    #         Note: if this is set to False, the coefficients have to be evaluated
-    #         for every single file which can cause a major reduction in speed!
-    #         The default is True.
-    #     savepath : str
-    #         the path to store the exported NetCDF files
-    #     Returns
-    #     -------
-    #     out : xarray.Dataset
-    #         a xarray Dataset of the exported data.
-
-    #     """
-
-    #     if not parameters:
-    #         parameters = []
-
-    #     if not metrics:
-    #         metrics = dict()
-
-    #     # ----- set descriptions (and separate model-keys)
-    #     descriptions = dict()
-    #     if isinstance(parameters, dict):
-    #         model_keys = dict()
-    #         descriptions.update(parameters)
-
-    #         for key in ["tot", "surf", "vol", "inter"]:
-    #             if key in parameters:
-    #                 model_keys[key] = parameters.pop(key)
-    #     else:
-    #         model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
-    #         parameters = set(parameters) ^ model_keys
-
-    #     for key, val in metrics.items():
-    #         if len(val) == 4:
-    #             descriptions[key] = val[3]
-
-    #     # ----- initialize a RTresults object for easy access to the list of dump-files
-    #     res = RTresults(self.config_path)
-
-    #     # ----- get dumpfolder to use
-    #     if not dumpfolder:
-    #         if len(res._paths) > 1:
-    #             log.error(
-    #                 "there is more than 1 possible dumpfolder!\n"
-    #                 + f"please explicitly specify one of:\n{list(res._paths)}"
-    #             )
-    #             return
-    #         else:
-    #             dumpfolder = list(res._paths)[0]
-    #             log.progress(f"exporting parameters from '{dumpfolder}' dumpfolder")
-
-    #     # ----- get list of paths to fit-objects
-    #     useres = getattr(res, dumpfolder)
-    #     useres.scan_folder()
-    #     fitlist = list(islice(useres.dump_files, use_nfiles))
-
-    #     # load the first fit-object to pre-load fn-coefficients
-    #     fit0 = useres.load_fit(0)
-
-    #     fn_evals = None
-    #     if pre_evaluate_fn_coefs:
-    #         log.progress("... pre-evaluation of fn-coefficients")
-
-    #         if isinstance(fit0, MultiFits):
-    #             fn_evals = dict()
-    #             for name, fit_cfg in fit0.accessor.config_fits.items():
-    #                 if fit_cfg.int_Q is True:
-    #                     fn_evals[name] = fit_cfg.R._fnevals
-    #         elif fit0.int_Q is True:
-    #             fn_evals = fit0.R._fnevals
-
-    #     # ----- set postprocess and finalout functions
-    #     func = partial(
-    #         self._export_postprocess,
-    #         parameters=parameters,
-    #         metrics=metrics,
-    #         export_functions=export_functions,
-    #         model_keys=model_keys,
-    #         index_col=index_col,
-    #         _fnevals_input=fn_evals,
-    #     )
-
-    #     finalout = partial(
-    #         self._export_finalout,
-    #         descriptions=descriptions,
-    #         attrs=attributes,
-    #         concat_dim=index_col,
-    #     )
-
-    #     # ----- run finalout generation
-    #     out = self.run_finaloutput(
-    #         ncpu=ncpu,
-    #         use_N_files=use_nfiles,
-    #         use_config=use_config,
-    #         finalout_name=None,
-    #         finaloutput=finalout,
-    #         postprocess=func,
-    #         print_progress=True,
-    #         logfile_level=1,
-    #         fitlist=fitlist,
-    #     )
-
-    #     # ----- attach model definition strings as attributes
-    #     if isinstance(fit0, MultiFits):
-    #         # remove dataset since we are not interested in site-specific infos
-    #         fit0.set_dataset(None)
-    #         for key, val in out.items():
-    #             val.attrs["model_definition"] = fit0.accessor.config_fits[
-    #                 key
-    #             ]._model_definition
-    #     else:
-    #         fit0.dataset = None
-    #         out.attrs["model_definition"] = fit0._model_definition
-
-    #     # if savepath is provided, save NetCDF files to disc
-    #     if savepath:
-    #         savepath = Path(savepath)
-    #         if isinstance(out, dict):
-    #             parent = savepath.parent
-    #             name = savepath.stem
-    #             suffix = savepath.suffix
-    #             for key, val in out.items():
-    #                 val.to_netcdf(parent / (name + "__" + key + suffix))
-    #         else:
-    #             out.to_netcdf(savepath)
-
-    #     return out
-
     def export_data_to_HDF(
         self,
         parameters=None,
@@ -1895,7 +1569,6 @@ class RTprocess(object):
         self.setup()
         self.autocontinue = initial_autocontinue
 
-
         if index_col is None:
             try:
                 index_col = self.proc_cls.ID_key
@@ -1989,7 +1662,7 @@ class RTprocess(object):
             logfile_level=1,
             fitlist=fitlist,
             save_path=savepath,
-            #metadata=metadata,
+            # metadata=metadata,
             **kwargs
         )
 
@@ -2006,7 +1679,6 @@ class RTprocess(object):
         #     out.attrs["model_definition"] = fit0._model_definition
 
         return out
-
 
     @staticmethod
     def _HDF_export_postprocess(
@@ -2060,7 +1732,6 @@ class RTprocess(object):
             else:
                 fit._fnevals_input = _fnevals_input
 
-
         auxdata = dict()
         if model_keys:
             auxdata = fit.calc_model(return_components=True)[model_keys]
@@ -2091,7 +1762,6 @@ class RTprocess(object):
             ret["metrics"] = metric_layer
 
         return ret
-
 
     @staticmethod
     def _postprocess_getparams(
@@ -2218,5 +1888,5 @@ class RTprocess(object):
             statics = pd.DataFrame(staticlayers, index=[xindex[1]])
             statics.index.name = xindex[0]
 
-        return dict(dynamic = df,
-                    static = statics)
+        return dict(dynamic=df,
+                    static=statics)
