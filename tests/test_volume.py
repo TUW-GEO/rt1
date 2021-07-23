@@ -75,7 +75,7 @@ class TestVolume(unittest.TestCase):
     def test_HenyeyGreenstein_coefficients(self):
         V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         init_dict = V.init_dict
-        self.assertEqual(V._get_legcoef(0), 1./(4. * np.pi))
+        self.assertEqual(V._get_legcoef(0), 1. / (4. * np.pi))
         self.assertEqual(V._get_legcoef(1), 3. * 0.7 / (4. * np.pi))
 
     def test_polarplot_V(self):
