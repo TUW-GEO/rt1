@@ -75,6 +75,7 @@ class TestSurface(unittest.TestCase):
         ncoefs = 10
         # means coefficients 0...9; i=5 is for the example in the paper
         S = CosineLobe(ncoefs=ncoefs, i=5)
+        init_dict = S.init_dict
 
         # input parameters are set in a way that COS_THETA = 1
         # and therefore only the legendre coefficients should be returned
@@ -106,21 +107,29 @@ class TestSurface(unittest.TestCase):
 
         for i in range(N):
             I = Isotropic()
+            init_dict = I.init_dict
+
             self.assertTrue(np.allclose(I.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
 
             ncoefs = 10
             C = CosineLobe(ncoefs=ncoefs, i=0)
+            init_dict = C.init_dict
+
             self.assertTrue(np.allclose(C.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
 
             H = HenyeyGreenstein(t=0, ncoefs=5)
+            init_dict = H.init_dict
+
             self.assertTrue(np.allclose(H.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
 
 
             LCH = LinCombSRF([[.5, HenyeyGreenstein(t=0, ncoefs=5)],
                               [.5, HenyeyGreenstein(t=0, ncoefs=5)]])
+            init_dict = LCH.init_dict
+
             self.assertTrue(np.allclose(LCH.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
 
@@ -140,6 +149,7 @@ class TestSurface(unittest.TestCase):
 
         for t in [.1,.2,.3,.4,.5,.6,.7]:
             H_nad = HG_nadirnorm(t=t, ncoefs=10)
+            init_dict = H_nad.init_dict
 
             nadirnorm = hemreflect(0, 0, H_nad.brdf)
 
@@ -151,6 +161,8 @@ class TestSurface(unittest.TestCase):
 
     def test_hemreflect_polarplot_SRF(self):
         SRF = HenyeyGreenstein(t=0.5, ncoefs=15, NormBRDF=.3)
+        init_dict = SRF.init_dict
+
         pl = SRF.polarplot()
         plt.close(pl)
 
