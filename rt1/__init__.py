@@ -14,7 +14,7 @@ from textwrap import indent
 import multiprocessing as mp
 from .general_functions import groupby_unsorted
 
-__version__ = "1.5.2"
+__version__ = "2.0"
 __author__ = "Raphael Quast"
 
 
