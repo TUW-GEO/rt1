@@ -3,7 +3,6 @@
 from itertools import islice
 from collections import defaultdict
 import weakref
-import contextlib
 import os
 from pathlib import Path
 from ast import literal_eval
@@ -141,13 +140,14 @@ class RTresults(object):
             self._nc_paths = self._get_results(".nc")
             self._hdf_paths = self._get_results(".h5")
 
-
         def __iter__(self):
             return self.dump_files
 
         @property
         def fit_db(self):
-            assert "fit_db" in self._hdf_paths, '"fit_db.h5" not found in results-folder'
+            assert "fit_db" in self._hdf_paths, (
+                '"fit_db.h5" not found in results-folder'
+                )
 
             return self.load_hdf("fit_db")
 
@@ -482,7 +482,6 @@ class HDFaccessor(object):
             res_dict = None
             pass
 
-
         if "cfg" in init_dict.index.names:
             mf = MultiFits()
             for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
@@ -497,7 +496,7 @@ class HDFaccessor(object):
                     # use dropna(how="all", axis=1) to make sure that parameters that
                     # are fitted in one config but not in another are not added as
                     # empty lists!
-                    fit.res_dict = {key:val.dropna().to_list()
+                    fit.res_dict = {key: val.dropna().to_list()
                                     for key, val in
                                     res_dict.loc[ID].loc[cfg].dropna(how="all",
                                                                      axis=1).items()}
@@ -531,10 +530,9 @@ class HDFaccessor(object):
                 fit.reader_arg = reader_arg
 
             if res_dict is not None:
-                fit.res_dict = {key:val.dropna().to_list()
+                fit.res_dict = {key: val.dropna().to_list()
                                 for key, val in res_dict.loc[ID].items()}
             return fit
-
 
     @staticmethod
     def _chunks(lst, n):
@@ -563,7 +561,7 @@ class HDFaccessor(object):
                                                    **kwargs)
             yield data
 
-    def _get_vals_with_IDs(self, key, use_ids, chunksize=1 , **kwargs):
+    def _get_vals_with_IDs(self, key, use_ids, chunksize=1, **kwargs):
         n = self.store.get_node(key)
         # TODO
         if "ID" in n.table.colpathnames:
@@ -576,17 +574,17 @@ class HDFaccessor(object):
 
         for i, ids in enumerate(use_ids):
             indexes = self.store.select_as_coordinates(key=key,
-                                                  where=f"{idxname} in ids")
+                                                       where=f"{idxname} in ids")
             data = self.store.get_storer(key).read(where=indexes,
                                                    **kwargs)
             yield data
 
     def _get_nids(self, key, nids, start=None,
-                 read_chunksize=None, print_progress=False, **kwargs):
+                  read_chunksize=None, print_progress=False, **kwargs):
         return next(self._get_nids_iter(key=key, nids=nids, start=start,
-                                       read_chunksize=read_chunksize,
-                                       print_progress=print_progress,
-                                       **kwargs))
+                                        read_chunksize=read_chunksize,
+                                        print_progress=print_progress,
+                                        **kwargs))
 
     def _get_id(self, key, n, **kwargs):
         if isinstance(n, str):
@@ -630,7 +628,9 @@ class HDFaccessor(object):
             the retrieved DataFrame.
 
         """
-        assert key in self.store, f"invalid key provided, use one of {self.store.keys()}"
+        assert key in self.store, (
+            f"invalid key provided, use one of {self.store.keys()}"
+            )
 
         if read_chunksize is None:
             s = self.store.get_storer(key)
@@ -662,16 +662,16 @@ class HDFaccessor(object):
         for i, d in enumerate(data_gen):
             ret.append(d)
 
-            if (i+1)%(nids//read_chunksize)==0:
-                if nids%read_chunksize != 0:
+            if (i + 1) % (nids // read_chunksize) == 0:
+                if nids % read_chunksize != 0:
                     data = next(data_gen)
-                    ret.append(iloc_level(data, slice(nids%10)))
+                    ret.append(iloc_level(data, slice(nids % 10)))
 
                 data = pd.concat(ret)
                 yield data
 
-                if nids%read_chunksize != 0:
-                    ret = [iloc_level(data, slice(nids%10, None))]
+                if nids % read_chunksize != 0:
+                    ret = [iloc_level(data, slice(nids % 10, None))]
                 else:
                     ret = []
 
@@ -682,9 +682,11 @@ class HDFaccessor(object):
             data = pd.concat(ret)
             yield data
 
+
 class _data_container(object):
     def __init__(self):
         pass
+
 
 class _cfgselector(object):
     def __init__(self, parent, cfg, keys):
@@ -696,6 +698,7 @@ class _cfgselector(object):
 
         for key in self._keys:
             setattr(self, key, _subselector(parent, f"{cfg}/{key}"))
+
 
 class _subselector(object):
     def __init__(self, parent, key):
@@ -711,23 +714,24 @@ class _subselector(object):
     def get_nids_iter(self, nids, start=None,
                       read_chunksize=None, print_progress=False, **kwargs):
         return self._parent()._get_nids_iter(key=self._key,
-                                          nids=nids,
-                                          start=start,
-                                          read_chunksize=read_chunksize,
-                                          print_progress=print_progress,
-                                          **kwargs)
+                                             nids=nids,
+                                             start=start,
+                                             read_chunksize=read_chunksize,
+                                             print_progress=print_progress,
+                                             **kwargs)
 
     def get_nids(self, nids, start=None,
-                      read_chunksize=None, print_progress=False, **kwargs):
+                 read_chunksize=None, print_progress=False, **kwargs):
         return self._parent()._get_nids(key=self._key,
-                                     nids=nids,
-                                     start=start,
-                                     read_chunksize=read_chunksize,
-                                     print_progress=print_progress,
-                                     **kwargs)
+                                        nids=nids,
+                                        start=start,
+                                        read_chunksize=read_chunksize,
+                                        print_progress=print_progress,
+                                        **kwargs)
 
     def get_id(self, n, **kwargs):
         return self._parent()._get_id(key=self._key, n=n, **kwargs)
+
 
 def _sanitize_index(df, idx):
     # convert inputs to desired indexers
@@ -744,6 +748,7 @@ def _sanitize_index(df, idx):
             yield df.index.levels[level][slice(i, i + 1)]
         else:
             yield df.index.levels[level][i]
+
 
 def iloc_level(df, idx):
     """
