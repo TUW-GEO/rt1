@@ -1,6 +1,7 @@
 """a module to parse .ini files"""
 
 from configparser import ConfigParser, ExtendedInterpolation
+from collections import defaultdict
 from datetime import datetime
 from functools import partial
 import sys
@@ -277,8 +278,7 @@ class RT1_configparser(object):
         for prefix in ["V", "SRF"]:
             if (f"{prefix}_name" in parsed_dict and
                 parsed_dict[f"{prefix}_name"] == f"LinComb{prefix}"):
-                from collections import defaultdict
-                choices = defaultdict(lambda:[1, dict()])
+                choices = defaultdict(lambda: [1, dict()])
                 for key in list(parsed_dict):
                     if key[0].isupper() and key[1:].startswith("__"):
                         if key.endswith("__frac"):
