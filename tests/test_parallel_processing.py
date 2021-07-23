@@ -31,7 +31,7 @@ class TestRTfits(unittest.TestCase):
         if not cleanup_before:
             return
 
-        folders = ["proc_test", "proc_test2", "proc_multi" ]
+        folders = ["proc_test", "proc_test2", "proc_multi"]
 
         for folder in folders:
             p = Path(f"tests/{folder}")
@@ -45,14 +45,13 @@ class TestRTfits(unittest.TestCase):
         if not cleanup_after:
             return
 
-        folders = ["proc_test", "proc_test2", "proc_multi" ]
+        folders = ["proc_test", "proc_test2", "proc_multi"]
 
         for folder in folders:
             p = Path(f"tests/{folder}")
             if p.exists():
                 print(f"removing folder '{folder}' to cleanup after testing")
                 shutil.rmtree(p)
-
 
     def test_0_parallel_processing(self):
         reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
@@ -61,7 +60,7 @@ class TestRTfits(unittest.TestCase):
         proc = RTprocess(config_path, autocontinue=True)
         proc.run_processing(ncpu=4, reader_args=reader_args)
 
-        #run again to check what happens if files already exist
+        # run again to check what happens if files already exist
         proc.run_processing(ncpu=4, reader_args=reader_args)
 
         # ----------------------------------------- check if files have been copied
@@ -252,7 +251,6 @@ class TestRTfits(unittest.TestCase):
             #     f"tests/proc_multi/dump01/results/results__{cfg}.nc"
             # ).exists(), "multiconfig NetCDF export did not work"
 
-
     def test_6_multiconfig_rtresults(self):
         results = RTresults("tests/proc_multi")
         assert hasattr(results, "dump01"), "dumpfolder not found by RTresults"
@@ -323,7 +321,6 @@ class TestRTfits(unittest.TestCase):
     #         assert Path(
     #             f"tests/proc_multi/dump01/results/ncpu3__{cfg}.nc"
     #         ).exists(), "multiconfig finaloutput with ncpu=3 did not work"
-
 
     def test_8_multiconfig_rtresults(self):
         res = RTresults("tests/proc_multi")
@@ -409,7 +406,6 @@ class TestRTfits(unittest.TestCase):
 
     #             assert "model_definition" in useres.attrs, "model_definition not correctly attached"
 
-
     def test_92_export_results(self):
         for folder in ["proc_test", "proc_test2", "proc_multi"]:
             # select the first subfolder and find the .ini file used
@@ -448,8 +444,7 @@ class TestRTfits(unittest.TestCase):
                     i in data.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
                     ), ("HDF-container does not contain all IDs")
 
-
-                    #TODO add some basic tests to check that the HDF file is OK
+                # TODO add some basic tests to check that the HDF file is OK
 
 
 if __name__ == "__main__":

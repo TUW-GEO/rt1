@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import simps
 from itertools import product
 
+
 class TestVolume(unittest.TestCase):
 
     def test_init(self):
@@ -33,18 +34,20 @@ class TestVolume(unittest.TestCase):
         self.assertEqual(p, (3./(16.*np.pi)))
 
     def test_HenyeyGreenstein(self):
-        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         init_dict = V.init_dict
 
-        self.assertEqual(V.t,0.7)
+        self.assertEqual(V.t, 0.7)
         t_0 = np.pi/2.
         t_ex = 0.234234
         p_0 = np.pi/2.
         p_ex = 0.
 
-        #--> cos(THETA) = 0
+        # --> cos(THETA) = 0
         p = V.p(t_0, t_ex, p_0, p_ex)
-        self.assertAlmostEqual(p, (1.-0.7*0.7)/(4.*np.pi*(1.+0.7*0.7)**1.5),10)
+        self.assertAlmostEqual(
+            p, (1. - 0.7 * 0.7) / (4. * np.pi * (1. + 0.7 * 0.7) ** 1.5), 10
+            )
 
     def test_HGRayleigh(self):
         V = HGRayleigh(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
@@ -55,30 +58,31 @@ class TestVolume(unittest.TestCase):
         p_0 = np.pi/2.
         p_ex = 0.
 
-        Vr= Rayleigh(omega=0.2, tau=1.7)
+        Vr = Rayleigh(omega=0.2, tau=1.7)
         init_dict = Vr.init_dict
-        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         init_dict = Vhg.init_dict
 
         p = V.p(t_0, t_ex, p_0, p_ex)
         phg = Vhg.p(t_0, t_ex, p_0, p_ex)
         pr = Vr.p(t_0, t_ex, p_0, p_ex)
 
-        self.assertAlmostEqual(p, 4.*np.pi*(4/(2+.7**2))*1/2*phg*pr,10)
+        self.assertAlmostEqual(p,
+                               4. * np.pi * (4 / (2 + .7 ** 2)) * 1 / 2 * phg * pr,
+                               10
+                               )
 
     def test_HenyeyGreenstein_coefficients(self):
-        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         init_dict = V.init_dict
-        self.assertEqual(V._get_legcoef(0),1./(4.*np.pi))
-        self.assertEqual(V._get_legcoef(1),3.*0.7/(4.*np.pi))
-
+        self.assertEqual(V._get_legcoef(0), 1./(4.*np.pi))
+        self.assertEqual(V._get_legcoef(1), 3. * 0.7 / (4. * np.pi))
 
     def test_polarplot_V(self):
-        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        V = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         init_dict = V.init_dict
         pl = V.polarplot()
         plt.close(pl)
-
 
     def test_V_normalization(self):
 
@@ -87,10 +91,10 @@ class TestVolume(unittest.TestCase):
         V3 = Rayleigh(omega=0.2, tau=1.7)
 
         V4 = LinCombV([[.5, Rayleigh()],
-                      [.5, HenyeyGreenstein(t=0.7,ncoefs=20)]],
-                     omega=0.2, tau=1.7)
+                      [.5, HenyeyGreenstein(t=0.7, ncoefs=20)]],
+                      omega=0.2, tau=1.7)
 
-        for V in [V1,V2,V3,V4]:
+        for V in [V1, V2, V3, V4]:
             init_dict = V.init_dict
             # set incident (zenith-angle) directions for which the integral
             # should be evaluated!
@@ -120,10 +124,8 @@ class TestVolume(unittest.TestCase):
 
                 self.assertTrue(np.allclose(sol, 1.))
 
-
-
     def test_LinCombV(self):
-        Vr= Rayleigh(omega=0.2, tau=1.7)
+        Vr = Rayleigh(omega=0.2, tau=1.7)
         Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
 
         V = LinCombV([[.5, Vr],
@@ -131,8 +133,8 @@ class TestVolume(unittest.TestCase):
 
         init_dict = V.init_dict
 
-        Vr= Rayleigh(omega=0.2, tau=1.7)
-        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7,ncoefs=20)
+        Vr = Rayleigh(omega=0.2, tau=1.7)
+        Vhg = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
 
         incnum = np.linspace(0, np.pi, 3)
         pincnum = np.linspace(0, 2*np.pi, 3)
@@ -144,11 +146,8 @@ class TestVolume(unittest.TestCase):
             phg = Vhg.p(t_0, t_ex, p_0, p_ex)
             pr = Vr.p(t_0, t_ex, p_0, p_ex)
 
-            self.assertAlmostEqual(p, .5*(phg + pr),10)
-
+            self.assertAlmostEqual(p, .5 * (phg + pr), 10)
 
 
 if __name__ == "__main__":
     unittest.main()
-
-

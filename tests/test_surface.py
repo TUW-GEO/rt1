@@ -106,10 +106,10 @@ class TestSurface(unittest.TestCase):
         p_ex = np.pi / 4.
 
         for i in range(N):
-            I = Isotropic()
-            init_dict = I.init_dict
+            Iso = Isotropic()
+            init_dict = Iso.init_dict
 
-            self.assertTrue(np.allclose(I.brdf(t_0[i], t_ex[i], p_0, p_ex),
+            self.assertTrue(np.allclose(Iso.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
 
             ncoefs = 10
@@ -124,7 +124,6 @@ class TestSurface(unittest.TestCase):
 
             self.assertTrue(np.allclose(H.brdf(t_0[i], t_ex[i], p_0, p_ex),
                                         1. / np.pi))
-
 
             LCH = LinCombSRF([[.5, HenyeyGreenstein(t=0, ncoefs=5)],
                               [.5, HenyeyGreenstein(t=0, ncoefs=5)]])
@@ -146,18 +145,13 @@ class TestSurface(unittest.TestCase):
             z = integfunkt(x[:, None], y)
             return simps(simps(z, y), x)
 
-
-        for t in [.1,.2,.3,.4,.5,.6,.7]:
+        for t in [.1, .2, .3, .4, .5, .6, .7]:
             H_nad = HG_nadirnorm(t=t, ncoefs=10)
             init_dict = H_nad.init_dict
 
             nadirnorm = hemreflect(0, 0, H_nad.brdf)
 
             self.assertTrue(np.allclose(nadirnorm, 1.))
-
-
-
-
 
     def test_hemreflect_polarplot_SRF(self):
         SRF = HenyeyGreenstein(t=0.5, ncoefs=15, NormBRDF=.3)
