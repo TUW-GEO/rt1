@@ -152,7 +152,6 @@ class ColoredWrappedFixedIndentingLog(logging.Formatter):
             _PROGRESS_LEVEL_NUM: Back.GREEN + fmt + Style.RESET_ALL
         }
 
-
     def format(self, record):
         log_fmt = (Fore.LIGHTWHITE_EX + "%(asctime)s" + Style.RESET_ALL + " - " +
                    self.FORMATS.get(record.levelno))
@@ -161,12 +160,11 @@ class ColoredWrappedFixedIndentingLog(logging.Formatter):
         return indent(formatter.format(record), " " * self._indent).strip()
 
 
-
 def _get_logger_formatter(simple=True, colored=False):
     if simple is False:
         logfmt = (
-            #"%(asctime)s - "
-            #+
+            # "%(asctime)s - "
+            # +
             mp.current_process().name
             + ": "
             + "%(levelname)-8s ("
@@ -177,8 +175,8 @@ def _get_logger_formatter(simple=True, colored=False):
         )
     else:
         logfmt = (
-            #"%(asctime)s - "
-            #+
+            # "%(asctime)s - "
+            # +
             # (mp.current_process().name + ':').ljust(21) +
             "%(processName)-21s"
             + "%(levelname)-8s"
