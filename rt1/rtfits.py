@@ -56,7 +56,7 @@ def load(path):
     """
 
     with open(path, "rb") as file:
-        fit = cloudpickle.load(file)
+        fit = pd.read_pickle(file)
 
     return fit
 
