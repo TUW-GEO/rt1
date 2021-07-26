@@ -60,7 +60,7 @@ def set_log_handler_level(level, name="rt1_consolehandler"):
     h.setLevel(level)
 
 
-def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
+def start_log_to_file(path, name="rt1_filehandler", level=logging.DEBUG):
     """
     forward all log-messages to a file
     to close the file use the `stop_log_to_file()` method!
@@ -84,12 +84,10 @@ def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
         stop_log_to_file(name=name)
 
         log = setup_logger()
-        # get formatting from consolehandler (always present)
-        hc = [val for val in log.handlers if val.name == "rt1_consolehandler"][0]
-
         # setup a new filehandler
         fh = logging.FileHandler(path, "a")
-        fh.setFormatter(hc.formatter)
+        formatter = _get_logger_formatter(True, colored=False)
+        fh.setFormatter(formatter)
         fh.set_name(name)
         # initialize the file-handler with level 1 to get all infos
         fh.setLevel(level)
@@ -129,7 +127,10 @@ def stop_log_to_file(name="rt1_filehandler"):
 
 class WrappedFixedIndentingLog(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, style="%", indent=4):
-        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
+
+        usefmt = "%(asctime)s - " + fmt
+
+        super().__init__(fmt=usefmt, datefmt=datefmt, style=style)
 
         self._indent = indent
 
@@ -183,9 +184,15 @@ def _get_logger_formatter(simple=True, colored=False):
             + "%(message)s"
         )
     if colored:
-        formatter = ColoredWrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
+        formatter = ColoredWrappedFixedIndentingLog(logfmt,
+                                                    indent=51,
+                                                    datefmt="%Y-%m-%d %H:%M:%S",
+                                                    )
     else:
-        formatter = WrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
+        formatter = WrappedFixedIndentingLog(logfmt,
+                                             indent=51,
+                                             datefmt="%Y-%m-%d %H:%M:%S",
+                                             )
     return formatter
 
 
