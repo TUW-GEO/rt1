@@ -564,7 +564,7 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         queue=None,
-        dump_fit=True,
+        dump_fit=False,
         **kwargs
     ):
         """
@@ -632,7 +632,7 @@ class RTprocess(object):
         dump_fit : bool, optional
             indicator if a fit-object should be dumped or not.
             (e.g. by invoking processing_config.dump_fit_to_file() )
-            The default is True
+            The default is False
 
         Returns
         -------
@@ -725,7 +725,7 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         logfile_level=1,
-        dump_fit=True,
+        dump_fit=False,
     ):
         """
         Start the processing
@@ -776,7 +776,10 @@ class RTprocess(object):
         dump_fit: bool, optional
             indicator if `processing_config.dump_fit_to_file()` should be
             called after finishing the fit.
-            The default is True
+            -> this will generate a pickle (".dump") file for each fit so that
+            the reults can be analyzed quickle. (e.g. useful for debug and initial
+            configuration of a fit)
+            The default is False
         """
 
         try:
@@ -1128,7 +1131,7 @@ class RTprocess(object):
 
         # load fitobjects based on fit-paths
         try:
-            fit = load(fitpath)
+            fit = self._useres.load_fit(fitpath)
 
             if ((use_config is None or use_config == "from_postprocess"
                  ) and isinstance(fit, MultiFits)):
@@ -1230,9 +1233,11 @@ class RTprocess(object):
                 raise ex
 
     def _get_files(self, use_N_files=None):
-        # get the relevant files that have to be processed for `run_finaloutput`
-
-        useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
+        try:
+            useres = self._useres
+            # get the relevant files that have to be processed for `run_finaloutput`
+        except AttributeError:
+            useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
         # get dump-files
         dumpiter = useres.dump_files
 
@@ -1421,12 +1426,10 @@ class RTprocess(object):
                 log.progress(f"exporting parameters from '{dumpfolder}' dumpfolder")
 
         # ----- get list of paths to fit-objects
-        useres = getattr(res, dumpfolder)
-        useres.scan_folder()
-        fitlist = list(islice(useres.dump_files, use_nfiles))
+        self._useres = getattr(res, dumpfolder)
 
         # load the first fit-object to pre-load fn-coefficients
-        fit0 = useres.load_fit(0)
+        fit0 = self._useres.load_fit(0)
 
         fn_evals = None
         if pre_evaluate_fn_coefs:
@@ -1460,7 +1463,6 @@ class RTprocess(object):
             postprocess=func,
             print_progress=True,
             logfile_level=1,
-            fitlist=fitlist,
             save_path=savepath,
             **kwargs
         )
