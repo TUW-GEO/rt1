@@ -402,15 +402,13 @@ class TestRTfits(unittest.TestCase):
 
             log.progress("a multiline\nmessage nice!")
 
-
         stop_log_to_file()
 
         assert logpath.exists(), "the logfile does not exist!"
 
-
         with open(logpath, "r") as file:
-            msgs = [l.split(mp.current_process().name)[-1].strip()
-                    for l in file.readlines()]
+            msgs = [line.split(mp.current_process().name)[-1].strip()
+                    for line in file.readlines()]
 
         expected_msgs = ["ERROR   error message",
                          "WARNING warning message",
@@ -423,9 +421,7 @@ class TestRTfits(unittest.TestCase):
         # skip the first message since it comes from starting the file-handler
         for i, msg in enumerate(msgs[1:]):
             assert msg == expected_msgs[i], (
-                f"the message {msg} does not equal {expected_msgs[i]}"
-                )
-
+                f"the message {msg} does not equal {expected_msgs[i]}")
 
 
 if __name__ == "__main__":
