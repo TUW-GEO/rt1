@@ -174,19 +174,26 @@ class rt1_processing_config(object):
         return
 
     def reader(self, reader_arg):
-        """a function that is called for each site to obtain the dataset"""
-        # get the incidence-angles of the data
-        inc = [0.1, 0.2, 0.3, 0.4, 0.5]
-        # get the sig0-values of the data
-        sig = [-10, -11.0, -11.45, -13, -15]
-        # get the index-values of the data
-        index = pd.date_range("1.1.2020", "1.5.2020", freq="D")
+        """
+        a function that is called for each site to obtain the dataset
 
-        data = pd.DataFrame(dict(inc=inc, sig=sig), index=index)
+        it must return a pandas.DataFrame with the following keys defined:
+            - "inc" : the incidence-angle in radians
+            - "sig" : the backscattering coefficient values
 
-        aux_data = pd.DataFrame(dict(something=[1, 2, 3, 4, 5]))
+        any additional return-values will be appended to the fit as `fit.aux_data`
 
-        return data, aux_data
+        >>> def reader(self, reader_arg):
+        >>>    data = pd.DataFrame(inc=[...]
+        >>>                        sig=[...],
+        >>>                        index = [a datetime-index])
+        >>>
+        >>>    aux_data = "any aux-data that should be appended"
+        >>>
+        >>>    return data, aux_data
+
+        """
+        assert False, "you must define a proper reader-function first!"
 
     def exceptfunc(self, ex, reader_arg):
         """
