@@ -2,10 +2,13 @@ from pathlib import Path
 import shutil
 import unittest
 import unittest.mock as mock
+from rt1 import log, start_log_to_file, stop_log_to_file
 from rt1.rtprocess import RTprocess
 from rt1.rtresults import RTresults
 from rt1.rtfits import MultiFits
 import warnings
+import pytest
+import multiprocessing as mp
 
 warnings.simplefilter("ignore")
 
@@ -379,6 +382,50 @@ class TestRTfits(unittest.TestCase):
                     ), ("HDF-container does not contain all IDs")
 
                 # TODO add some basic tests to check that the HDF file is OK
+
+    # this is needed to disable log-capturing during testing
+    @pytest.fixture(autouse=True)
+    def caplog(self, caplog):
+        self.caplog = caplog
+
+    def test_log_to_file(self):
+
+        logpath = Path("tests/proc_test/testlog.log")
+        # temporarily set the log-capture level to 0 (e.g. allow all logs)
+        with self.caplog.at_level(0):
+            start_log_to_file(logpath, 0)
+            log.error("error message")
+            log.warning("warning message")
+            log.debug("debug message")
+            log.info("info message")
+            log.progress("progress message")
+
+            log.progress("a multiline\nmessage nice!")
+
+
+        stop_log_to_file()
+
+        assert logpath.exists(), "the logfile does not exist!"
+
+
+        with open(logpath, "r") as file:
+            msgs = [l.split(mp.current_process().name)[-1].strip()
+                    for l in file.readlines()]
+
+        expected_msgs = ["ERROR   error message",
+                         "WARNING warning message",
+                         "DEBUG   debug message",
+                         "INFO    info message",
+                         "PROG.   progress message",
+                         "PROG.   a multiline",
+                         "message nice!"]
+
+        # skip the first message since it comes from starting the file-handler
+        for i, msg in enumerate(msgs[1:]):
+            assert msg == expected_msgs[i], (
+                f"the message {msg} does not equal {expected_msgs[i]}"
+                )
+
 
 
 if __name__ == "__main__":
