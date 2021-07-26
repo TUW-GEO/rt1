@@ -58,7 +58,7 @@ def load(path):
     """
 
     with open(path, "rb") as file:
-        fit = cloudpickle.load(file)
+        fit = pd.read_pickle(file)
 
     if not hasattr(fit, "ID") or fit.ID is None:
         fit.ID = Path(path).stem
