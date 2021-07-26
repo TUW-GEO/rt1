@@ -18,18 +18,9 @@ from ._rtprocess_writer import RT1_processor
 from .general_functions import groupby_unsorted, isidentifier
 from .rtparse import RT1_configparser
 from .rtresults import RTresults
-from .rtfits import load, MultiFits
+from .rtfits import MultiFits
 from . import log, _get_logger_formatter
 import logging
-
-
-try:
-    import xarray as xar
-except ModuleNotFoundError:
-    log.info(
-        "xarray could not be imported, "
-        + "NetCDF-features of RT1_results will not work!"
-    )
 
 
 def _confirm_input(msg="are you sure?", stopmsg="STOP", callbackdict=None):
