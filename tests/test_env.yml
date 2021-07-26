@@ -6,7 +6,7 @@ dependencies:
   - numpy
   - sympy
   - scipy
-  - pandas<1.3
+  - pandas
   - xarray
   - matplotlib
   - cloudpickle
