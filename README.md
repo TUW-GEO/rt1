@@ -17,8 +17,7 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
 
 ## Overview of the RT1 python-module structure
 
-![RT1_overview](https://user-images.githubusercontent.com/22773387/118656393-c4fbd200-b7ea-11eb-9ef9-913abb275e98.png)
-
+![RT1_overview](https://user-images.githubusercontent.com/22773387/126987504-eddbb998-02c3-4eb1-bf9c-20ade2c5fe07.png)
 
 - 🏞️ **rt1.volume** and **rt1.surface**
 
