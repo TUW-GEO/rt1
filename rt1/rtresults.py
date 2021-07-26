@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from itertools import islice
+from functools import wraps
 from collections import defaultdict
 import weakref
 import os
@@ -83,10 +84,15 @@ class RTresults(object):
     ----------
     parent_path : str
         the parent-path where the results are stored.
+    use_dumps : bool
+        indicator if the dumps-folder and the .dump-files or
+        the "fit_db.h5" container should be used to load Fits objects etc.
+        The default is False in which case the "fit_db.h5" file is used
     """
 
-    def __init__(self, parent_path):
+    def __init__(self, parent_path, use_dumps=False):
         self._parent_path = Path(parent_path)
+        self._use_dumps = use_dumps
 
         self._paths = dict()
         if self._check_folderstructure(self._parent_path):
@@ -126,13 +132,14 @@ class RTresults(object):
             setattr(
                 self,
                 path.stem,
-                self._RT1_fitresult(path.stem, path),
+                self._RT1_fitresult(path.stem, path, self._use_dumps),
             )
 
     class _RT1_fitresult(object):
-        def __init__(self, name, path):
+        def __init__(self, name, path, use_dumps):
             self.name = name
             self.path = Path(path)
+            self._use_dumps = use_dumps
             self._result_path = self.path / "results"
             self._dump_path = self.path / "dumps"
             self._cfg_path = self.path / "cfg"
@@ -245,24 +252,32 @@ class RTresults(object):
             file = xar.open_dataset(results[result_name])
             return file
 
+        def _load_fit_from_HDF(self, ID):
+            with self.fit_db as fit_db:
+                fit = fit_db.load_fit(ID)
+
+            return fit
+
         def load_fit(self, ID=0, return_ID=False):
             """
-            load one of the available .dump-files located in the "dumps"
-            folder.  (using rt1.rtfits.load() )
+            load one of the available Fits (or MultiFits) object from the data
+            stored in the "results/fit_db.h5" file
 
-            Notice: the dump-files are generated using cloudpickle.dump()
-            and might be platform and environment-specific!
+            > alternatively load the .dump-file if "load_dumps" is set to "True"
+            > during initialization of the RTresults class
+            > Notice: the dump-files are generated using cloudpickle.dump()
+            > and might be platform and environment-specific!
 
             Parameters
             ----------
             ID : str or int, or pathli.Path
-                If str:  The name of the dump-file to be loaded
-                         (without the .dump extension).
-                If int:  load the nth file found in the dumpfolder
+                If str:  The name of the Fits object to be loaded
+                If int:  load the nth file found
                 if Path: the full path to the .dump file
-                If None: load a random file from the folder
-                         NOTE: in order to load a random file, the folder
-                         must be indexed first! (this might take some time for
+                         > Notice: if a full path is provided, the .dump file is loaded!
+                If None: load a random Fits object
+                         NOTE: if "load_dump" is True the folder must be indexed before
+                         you  can load a random file! (this might take some time for
                          very large amounts of files)
                          > call `scan_folder()` to re-scan the folder contents
                 The default is 0.
@@ -275,27 +290,37 @@ class RTresults(object):
             fit : rt1.rtfits.Fits
                 the loaded rt1.rtfits.Fits result.
             """
-            if isinstance(ID, Path):
-                filepath = ID
+            if self._use_dumps is True or isinstance(ID, Path):
+                if isinstance(ID, Path):
+                    filepath = ID
+                else:
+                    if ID is None:
+                        if not hasattr(self, "_dump_file_list"):
+                            self.scan_folder()
+
+                        filepath = Path(choice(self._dump_file_list))
+
+                        log.info(
+                            f"loading random ID ({filepath.stem}) from "
+                            + f" {self._n_dump_files} available files"
+                        )
+                    elif isinstance(ID, int):
+                        try:
+                            filepath = Path(next(islice(self.dump_files, ID, None)))
+                        except StopIteration:
+                            log.error("there is no '.dump' file available!")
+                            return
+                    elif isinstance(ID, str):
+                        if not ID.endswith(".dump"):
+                            ID += ".dump"
+                        filepath = self._dump_path / (ID)
+
+                fit = load(filepath)
             else:
-                if ID is None:
-                    if not hasattr(self, "_dump_file_list"):
-                        self.scan_folder()
-
-                    filepath = Path(choice(self._dump_file_list))
-
-                    log.info(
-                        f"loading random ID ({filepath.stem}) from "
-                        + f" {self._n_dump_files} available files"
+                assert isinstance(ID, (str, int)) or ID is None, (
+                    "please provide either a string, int or 'None' as ID"
                     )
-                elif isinstance(ID, int):
-                    filepath = Path(next(islice(self.dump_files, ID, None)))
-                elif isinstance(ID, str):
-                    if not ID.endswith(".dump"):
-                        ID += ".dump"
-                    filepath = self._dump_path / (ID)
-
-            fit = load(filepath)
+                fit = self._load_fit_from_HDF(ID)
 
             if return_ID is True:
                 return (fit, filepath.stem)
@@ -345,17 +370,25 @@ class RTresults(object):
         @property
         def dump_files(self):
             """
-            a generator returning the paths to the available dump-files
+            if use_dumps is True:
+                a generator returning the paths to the available dump-files
+            if use_dumps is False:
+                a generator returning the IDs of the fits available in "fit_db.h5"
 
             NOTICE: only files that do NOT contain "error" in the filename and
             whose file-ending is ".dump" are returned!
             """
-            for entry in os.scandir(self._dump_path):
-                if (entry.name.endswith('.dump')
-                    and entry.is_file()
-                    and 'error' not in entry.name):
 
-                    yield entry.path
+            if self._use_dumps:
+                for entry in os.scandir(self._dump_path):
+                    if (entry.name.endswith('.dump')
+                        and entry.is_file()
+                        and 'error' not in entry.name):
+
+                        yield entry.path
+            else:
+                for ID in self.fit_db.IDs:
+                    yield ID
 
         @property
         def dump_fits(self):
@@ -365,12 +398,16 @@ class RTresults(object):
             NOTICE: only files that do NOT contain "error" in the filename and
             whose file-ending is ".dump" are returned!
             """
-            for entry in os.scandir(self._dump_path):
-                if (entry.name.endswith('.dump')
-                    and entry.is_file()
-                    and 'error' not in entry.name):
+            if self._use_dumps:
+                for entry in os.scandir(self._dump_path):
+                    if (entry.name.endswith('.dump')
+                        and entry.is_file()
+                        and 'error' not in entry.name):
 
-                    yield self.load_fit(entry.name)
+                        yield self.load_fit(entry.name)
+            else:
+                for ID in self.fit_db.IDs:
+                    yield self.load_fit(ID)
 
         @property
         def NetCDF_variables(self):
@@ -447,6 +484,8 @@ class HDFaccessor(object):
         gc.collect()
 
     def _load_fit(self, ID):
+        if ID is None:
+            ID = self.IDs.sample(n=1).values[0]
         if isinstance(ID, int):
             ID = self.IDs[ID]
         try:
@@ -581,15 +620,54 @@ class HDFaccessor(object):
 
     def _get_nids(self, key, nids, start=None,
                   read_chunksize=None, print_progress=False, **kwargs):
+        """
+        get the data for "nids" ID's as a pandas.DataFrame
+
+        Parameters
+        ----------
+        nids : int
+            the number of IDs to return.
+        start : int, optional
+            the number to start from.
+            The default is None in which case the selection starts from the first result
+        read_chunksize : int, optional
+            the chunksize used for retrieving the data. The default is None.
+        print_progress : bool, optional
+            indicator if a progress-message should be printed.
+            The default is False.
+        **kwargs :
+            kwargs passed to `storer.read()`
+
+        Returns
+        -------
+        pandas.DataFrame
+        """
+
         return next(self._get_nids_iter(key=key, nids=nids, start=start,
                                         read_chunksize=read_chunksize,
                                         print_progress=print_progress,
                                         **kwargs))
 
     def _get_id(self, key, n, **kwargs):
+        """
+        return the data for a single ID
+
+        Parameters
+        ----------
+        n : int or str
+            if int: return the n^th fit from the database
+            if str: return the fit that corresponds to the provided ID.
+        **kwargs :
+            kwargs passed to get_nids_iter().
+
+        Returns
+        -------
+        ret : pandas.DataFrame
+        """
+        assert isinstance(n, (int, str)), "ID can only be an integer or string!"
+
         if isinstance(n, str):
             ret = next(self._get_nids_iter(key=key, nids=[n], **kwargs))
-
         elif isinstance(n, int):
             ret = next(self._get_nids_iter(key=key, nids=1, start=n, **kwargs))
 
@@ -603,8 +681,6 @@ class HDFaccessor(object):
 
         Parameters
         ----------
-        key : str
-            the key to use.
         nids : int or iterable
             if int: the number of IDs to return.
             if iterable: a list of IDs to use
@@ -711,6 +787,7 @@ class _subselector(object):
         ret = self._parent().store.select(self._key, **kwargs)
         return ret
 
+    @wraps(HDFaccessor._get_nids_iter)
     def get_nids_iter(self, nids, start=None,
                       read_chunksize=None, print_progress=False, **kwargs):
         return self._parent()._get_nids_iter(key=self._key,
@@ -720,6 +797,7 @@ class _subselector(object):
                                              print_progress=print_progress,
                                              **kwargs)
 
+    @wraps(HDFaccessor._get_nids)
     def get_nids(self, nids, start=None,
                  read_chunksize=None, print_progress=False, **kwargs):
         return self._parent()._get_nids(key=self._key,
@@ -729,6 +807,7 @@ class _subselector(object):
                                         print_progress=print_progress,
                                         **kwargs)
 
+    @wraps(HDFaccessor._get_id)
     def get_id(self, n, **kwargs):
         return self._parent()._get_id(key=self._key, n=n, **kwargs)
 
