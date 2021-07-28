@@ -12,6 +12,7 @@ import copy
 import os
 
 from rt1.rtresults import HDFaccessor
+from rt1.rtfits import load
 
 class TestDUMPS(unittest.TestCase):
     def setUp(self):
@@ -141,11 +142,24 @@ class TestDUMPS(unittest.TestCase):
                      mini=False)
 
             for key, val in old_results.items():
-                self.assertTrue(np.allclose(fit.res_dict[key],
-                                            old_results[key], atol=1e-3, rtol=1e-3),
-                                msg=f'fitted values for {msg} fit of {key} ' +
-                                     f'differ by {np.subtract(fit.res_dict[key], old_results[key]).mean()}')
+                self.assertTrue(
+                    np.allclose(fit.res_dict[key],
+                                old_results[key], atol=1e-3, rtol=1e-3),
+                    msg=f'fitted values for {msg} fit of {key} differ by ' +
+                    f'{np.subtract(fit.res_dict[key], old_results[key]).mean()}'
+                    )
 
+    def test_load_and_dump_fits(self):
+        # load fit from HDF-container
+        fit = self.load_data(self.sig0_dB_ID)
+        # pickle-dump the fit
+        fit.dump(os.path.dirname(__file__) + os.sep + "dump_test.dump")
+
+        # load the fit from the pickled result
+        load_fit = load(os.path.dirname(__file__) + os.sep + "dump_test.dump")
+
+        # perform the fit to see if it works
+        load_fit.performfit()
 
 
 if __name__ == "__main__":
