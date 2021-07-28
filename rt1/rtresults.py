@@ -178,7 +178,7 @@ class RTresults(object):
 
             return results
 
-        def load_hdf(self, result_name, **kwargs):
+        def load_hdf(self, result_name=None, **kwargs):
             """
             open a HDF5 file stored in the "results"-folder with
             the HDFaccessor class (the file is opened in read-only mode!)

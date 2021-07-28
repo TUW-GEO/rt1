@@ -92,7 +92,7 @@ class TestRTfits(unittest.TestCase):
         print(dumpfiles)
 
         fit = results.dump01.load_fit()
-        cfg = results.dump01.load_cfg()
+        _ = results.dump01.load_cfg()
 
         # with results.dump01.load_nc() as ncfile:
         #     processed_ids = list(ncfile.ID.values)
@@ -228,10 +228,10 @@ class TestRTfits(unittest.TestCase):
         results = RTresults("tests/proc_multi")
         assert hasattr(results, "dump01"), "dumpfolder not found by RTresults"
 
-        dumpfiles = [i for i in results.dump01.dump_files]
+        _ = [i for i in results.dump01.dump_files]
 
         fit = results.dump01.load_fit()
-        cfg = results.dump01.load_cfg()
+        _ = results.dump01.load_cfg()
 
         fit_db = results.dump01.fit_db
 
@@ -243,7 +243,7 @@ class TestRTfits(unittest.TestCase):
         # check if dumped-properties are equal for pickles and HDF-containers
         for fit in results.dump01.dump_fits:
             fit_hdf = fit_db.load_fit(fit.ID)
-            hdf_dataset = fit_hdf.dataset[list(fit.dataset)]
+            _ = fit_hdf.dataset[list(fit.dataset)]
             assert fit_hdf.dataset.equals(fit.dataset), (
                 "datasets of HDF-container and pickle-dumps are not equal!")
 
@@ -297,7 +297,6 @@ class TestRTfits(unittest.TestCase):
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
-
     def test_92_export_results(self):
         for folder in ["proc_test", "proc_test2", "proc_multi"]:
             # select the first subfolder and find the .ini file used
@@ -336,11 +335,10 @@ class TestRTfits(unittest.TestCase):
                     i in data.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
                     ), ("HDF-container does not contain all IDs")
 
-
                 # some basic checks if Fits and MultiFits are correctly exported
 
                 if folder in ["proc_test", "proc_test2"]:
-                    configs = ["default"] # single-config is called "default"
+                    configs = ["default"]  # single-config is called "default"
                 else:
                     configs = ["cfg_0", "cfg_1"]
 
@@ -356,12 +354,6 @@ class TestRTfits(unittest.TestCase):
                     cols = list(getattr(
                         data.datasets, cfg).metrics.get_id(0).columns)
                     assert cols == ["R", "RMSD"], "metrics columns are not OK"
-
-
-
-
-
-                # TODO add some basic tests to check that the HDF file is OK
 
     # this is needed to disable log-capturing during testing
     @pytest.fixture(autouse=True)
