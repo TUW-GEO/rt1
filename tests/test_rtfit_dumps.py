@@ -6,13 +6,12 @@ all actions again
 
 import unittest
 import numpy as np
-import cloudpickle
 import matplotlib.pyplot as plt
-import copy
 import os
 
 from rt1.rtresults import HDFaccessor
 from rt1.rtfits import load
+
 
 class TestDUMPS(unittest.TestCase):
     def setUp(self):
@@ -29,7 +28,7 @@ class TestDUMPS(unittest.TestCase):
     def test_rtplots(self):
 
         for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID],
-                             ['dB', 'linear']):
+                           ['dB', 'linear']):
 
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(ID)
@@ -43,7 +42,8 @@ class TestDUMPS(unittest.TestCase):
 
             # get list of available plot-methods
             method_list = [func for func in dir(fit.plot) if
-                           callable(getattr(fit.plot, func)) and not func.startswith("__")]
+                           callable(getattr(fit.plot, func))
+                           and not func.startswith("__")]
 
             for function_name in method_list:
                 print(f'... {function_name}')
@@ -63,7 +63,6 @@ class TestDUMPS(unittest.TestCase):
                     s1.set_val(1)
                     s2.set_val(1)
                     plt.close(f)
-
 
                 elif function_name == 'analyzemodel':
                     f, sliders, txt_but = fit.plot.__getattribute__(
@@ -101,7 +100,7 @@ class TestDUMPS(unittest.TestCase):
                     # convert the labels to degrees
                     f = fit.plot.__getattribute__(function_name)(
                         grp=('inc', 10),
-                        label_formatter=lambda x,y:round(np.rad2deg(x),2))
+                        label_formatter=lambda x, y: round(np.rad2deg(x), 2))
                     plt.close(f)
                     # check grouping with respect to datetimes
                     f = fit.plot.__getattribute__(function_name)(grp='groups')
@@ -117,7 +116,7 @@ class TestDUMPS(unittest.TestCase):
 
     def test_performfit(self):
         for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID],
-                             ['dB', 'linear']):
+                           ['dB', 'linear']):
 
             print(f'testing plotfunctions for {msg} fit')
             fit = self.load_data(ID)
