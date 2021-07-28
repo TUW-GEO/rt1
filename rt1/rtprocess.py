@@ -64,14 +64,14 @@ def _make_folderstructure(save_path, subfolders):
     if save_path is not None:
         # generate "save_path" directory if it does not exist
         if not save_path.exists():
-            log.info(f'"{save_path}"\ndoes not exist... creating directory')
+            log.progress(f'"{save_path}"\ndoes not exist... creating directory')
             save_path.mkdir(parents=True, exist_ok=True)
 
         for folder in subfolders:
             # generate subfolder if it does not exist
             mkpath = save_path / folder
             if not mkpath.exists():
-                log.info(f'"{mkpath}"\ndoes not exist... creating directory')
+                log.progress(f'"{mkpath}"\ndoes not exist... creating directory')
                 mkpath.mkdir(parents=True, exist_ok=True)
 
 
@@ -148,7 +148,7 @@ class RTprocess(object):
             self.init_kwargs = init_kwargs
 
     @staticmethod
-    def _listener_process(queue, dumppath):
+    def _listener_process(queue, dumppath, log_level=1):
 
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
@@ -162,10 +162,10 @@ class RTprocess(object):
         log.debug("listener process started for path: " + str(path))
 
         log2 = logging.getLogger()
-        log2.setLevel(1)
+        log2.setLevel(log_level)
         h = logging.FileHandler(path)
         h.setFormatter(_get_logger_formatter())
-        h.setLevel(1)
+        h.setLevel(log_level)
         log2.addHandler(h)
 
         while True:
@@ -250,7 +250,7 @@ class RTprocess(object):
         # remove folderstructure
         shutil.rmtree(self.dumppath)
 
-        log.info(f'"{self.dumppath}"' + "\nhas successfully been removed.\n")
+        log.progress(f'"{self.dumppath}"' + "\nhas successfully been removed.\n")
 
     def setup(self):
         """
@@ -658,7 +658,7 @@ class RTprocess(object):
                 + "AND via the return-dict of the preprocess() function!"
             )
 
-        log.info(f"processing {len(reader_args)} features")
+        log.info(f"attempting to process {len(reader_args)} features")
 
         if "pool_kwargs" in setupdict:
             pool_kwargs = setupdict["pool_kwargs"]
@@ -680,9 +680,15 @@ class RTprocess(object):
         if isinstance(self.parent_fit, MultiFits):
             for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
+                    log.progress(
+                        f"pre-evaluating coefficients for config {name} ..."
+                        )
                     parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
+                log.progress(
+                        "pre-evaluating coefficients ..."
+                        )
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
         # start processing
@@ -716,7 +722,7 @@ class RTprocess(object):
         reader_args=None,
         pool_kwargs=None,
         preprocess_kwargs=None,
-        logfile_level=1,
+        logfile_level=21,
         dump_fit=False,
     ):
         """
@@ -765,6 +771,9 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
+
+            The default is 21 (=logging.PROGRESS), in which case only
+            e.g. only RT1 progress-messages, warnings and errors will be logged
         dump_fit: bool, optional
             indicator if `processing_config.dump_fit_to_file()` should be
             called after finishing the fit.
@@ -784,7 +793,7 @@ class RTprocess(object):
                 queue = mp.Manager().Queue(-1)
                 listener = mp.Process(
                     target=self._listener_process,
-                    args=[queue, self.dumppath],
+                    args=[queue, self.dumppath, logfile_level],
                     name="RTprocess logger",
                 )
 
@@ -936,6 +945,9 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
+
+            The default is 21 (=logging.PROGRESS), in which case only
+            e.g. only RT1 progress-messages, warnings and errors will be logged
         fitlist : list, optional
             optional way to provide a list of paths to dump-files directly
             (useful if RTprocess is used without a config attached)
@@ -991,7 +1003,7 @@ class RTprocess(object):
                 queue = mp.Manager().Queue(-1)
                 listener = mp.Process(
                     target=self._listener_process,
-                    args=[queue, self.dumppath],
+                    args=[queue, self.dumppath, logfile_level],
                     name="RTprocess logger",
                 )
 
