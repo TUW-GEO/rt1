@@ -687,9 +687,7 @@ class RTprocess(object):
                     parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
-                log.progress(
-                        "pre-evaluating coefficients ..."
-                        )
+                log.progress("pre-evaluating coefficients ...")
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
         # start processing
