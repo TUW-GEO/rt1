@@ -21,13 +21,13 @@ class processing_cfg(rt1_processing_config):
         self.check_dump_exists(reader_arg)
 
         # initialize a reader
-        if reader_arg['gpi'] in [1, 2, 3]:
+        if reader_arg['ID'] in [1, 2, 3]:
             index = pd.date_range('1.1.2017', '1.1.2018', freq='D')
             ndata = len(index)
             df = pd.DataFrame(dict(sig=np.random.rand(ndata),
                                    inc=np.random.rand(ndata)),
                               index)
-        if reader_arg['gpi'] == 4:
+        if reader_arg['ID'] == 4:
             df = pd.DataFrame()
 
         return df

@@ -1307,7 +1307,6 @@ class RTprocess(object):
         parameters=None,
         metrics=None,
         export_functions=None,
-        index_col=None,
         use_config=None,
         dumpfolder=None,
         use_nfiles=None,
@@ -1354,8 +1353,6 @@ class RTprocess(object):
 
             >>> dict(sig=lambda fit: fit.dataset.sig)
 
-        index_col : str
-            the name of the reader-arg value to use as index
         use_config : list, optional
             a list of configs to use in case a multi-config fit has been performed.
             The default is None.
@@ -1392,18 +1389,6 @@ class RTprocess(object):
             (n_combiner, n_writer, HDF_kwargs, write_chunk_size,
              out_cache_size)
         """
-        # initialize all necessary properties with autocontinue=True
-        initial_autocontinue = self.autocontinue
-        self.autocontinue = True
-        self.setup()
-        self.autocontinue = initial_autocontinue
-
-        if index_col is None:
-            try:
-                index_col = self.proc_cls.ID_key
-            except Exception:
-                index_col = "ID"
-
         if not parameters:
             parameters = []
 
@@ -1415,7 +1400,9 @@ class RTprocess(object):
         parameters = set(parameters) ^ model_keys
 
         # ----- initialize a RTresults object for easy access to the list of dump-files
-        res = RTresults(self.dumppath)
+        # don't use "self.dumppath" since it requires a call to setup() !
+        specs = RT1_configparser(self.config_path).get_process_specs()
+        res = RTresults(specs["save_path"] / specs["dumpfolder"])
 
         # ----- get dumpfolder to use
         if not dumpfolder:
@@ -1454,7 +1441,6 @@ class RTprocess(object):
             metrics=metrics,
             export_functions=export_functions,
             model_keys=model_keys,
-            index_col=index_col,
             _fnevals_input=fn_evals,
         )
 
@@ -1480,7 +1466,6 @@ class RTprocess(object):
         metrics=None,
         export_functions=None,
         model_keys=[],
-        index_col=None,
         sig_to_dB=False,
         inc_to_degree=False,
         _fnevals_input=None,
@@ -1505,8 +1490,6 @@ class RTprocess(object):
         model_keys : list
             a list of keys that correspond to model-calculation results
             (e.g. any of ["tot", "surf", "vol", "inter"])
-        index_col : str
-            the name of the reader-arg value to use as index
         _fnevals_input : dict or callable
             pre-evaluated fnevals functions. in case fit is a MultiFits object:
             a dict with the config-names and pre-evaluated fnevals functions

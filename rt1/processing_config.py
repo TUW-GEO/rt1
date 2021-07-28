@@ -86,11 +86,6 @@ class rt1_processing_config(object):
         for key, val in kwargs.items():
             setattr(self, key, val)
 
-        # add the default key that is used to define the ID's from the
-        # reader_arg dict.
-        if not hasattr(self, "ID_key"):
-            self.ID_key = "ID"
-
     def get_names_ids(self, reader_arg):
         """
         A function that returns the file-name based on the passed reader_args
@@ -111,7 +106,7 @@ class rt1_processing_config(object):
         """
 
         # the ID used for indexing the processed sites
-        feature_id = str(reader_arg[self.ID_key])
+        feature_id = str(reader_arg["ID"])
 
         # the filename of the dump-file
         filename = f"{feature_id}.dump"

@@ -57,7 +57,7 @@ class TestRTfits(unittest.TestCase):
                 shutil.rmtree(p)
 
     def test_0_parallel_processing(self):
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         proc = RTprocess(config_path, autocontinue=True)
@@ -126,7 +126,7 @@ class TestRTfits(unittest.TestCase):
         fit_db.close()
 
     def test_2_single_core_processing(self):
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         # mock inputs as shown here: https://stackoverflow.com/a/37467870/9703451
@@ -174,7 +174,7 @@ class TestRTfits(unittest.TestCase):
 
     def test_3_parallel_processing_init_kwargs(self):
         # test overwriting keyword-args from .ini file
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         proc = RTprocess(config_path, autocontinue=True)
@@ -208,7 +208,7 @@ class TestRTfits(unittest.TestCase):
     def test_5_multiconfig(self):
 
         config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
 
         proc = RTprocess(config_path)
         proc.run_processing(ncpu=4, reader_args=reader_args)
@@ -297,51 +297,6 @@ class TestRTfits(unittest.TestCase):
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
-    # def test_91_export_results(self):
-    #     for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
-    #         proc = RTprocess(f"tests/{folder}")
-
-    #         parameters = dict(t_s=dict(long_name="bare soil directionality"),
-    #                           tau=dict(long_name="optical depth"),
-    #                           sig2=dict(long_name="sigma0 squared")
-    #                           )
-
-    #         metrics = dict(R=["pearson", "sig", "tot",
-    #                           dict(long_name="sig0 pearson correlation")],
-    #                        RMSD=["rmsd", "sig", "tot",
-    #                           dict(long_name="sig0 RMSD")]
-    #                        )
-
-    #         export_functions = dict(sig2=lambda fit: fit.dataset.sig**2)
-
-    #         attributes = dict(info="some info")
-
-    #         res = proc.export_data(parameters=parameters,
-    #                                metrics=metrics,
-    #                                export_functions=export_functions,
-    #                                attributes=attributes,
-    #                                index_col='gpi')
-
-    #         if folder != "proc_multi":
-    #             # make single-fit results a dict as well so that they can be treated
-    #             # in the same way as multi-fits
-    #             res = dict(single_fit=res)
-
-    #         for cfg_name, useres in res.items():
-    #             assert useres.R.dims == ('gpi',), "metric dim is wrong"
-    #             assert useres.RMSD.dims == ('gpi',), "metric dim is wrong"
-
-    #             assert useres.t_s.dims == ('gpi',), "static parameter dim is wrong"
-    #             assert useres.tau.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
-    #             assert useres.sig2.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
-
-    #             # check if attributes are correctly attached
-    #             assert useres.attrs['info'] == attributes['info'], "attributes not correctly attached"
-    #             for key, attrs in parameters.items():
-    #                 for name, a in attrs.items():
-    #                     assert useres[key].attrs[name] == a, "attributes not correctly attached"
-
-    #             assert "model_definition" in useres.attrs, "model_definition not correctly attached"
 
     def test_92_export_results(self):
         for folder in ["proc_test", "proc_test2", "proc_multi"]:
@@ -380,6 +335,31 @@ class TestRTfits(unittest.TestCase):
                 assert all(
                     i in data.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
                     ), ("HDF-container does not contain all IDs")
+
+
+                # some basic checks if Fits and MultiFits are correctly exported
+
+                if folder in ["proc_test", "proc_test2"]:
+                    configs = ["default"] # single-config is called "default"
+                else:
+                    configs = ["cfg_0", "cfg_1"]
+
+                for cfg in configs:
+                    cols = list(getattr(
+                        data.datasets, cfg).dynamic.get_id(0).columns)
+                    assert cols == ["tau", "sig2"], "dynamic columns are not OK"
+
+                    cols = list(getattr(
+                        data.datasets, cfg).static.get_id(0).columns)
+                    assert cols == ["t_s"], "static columns are not OK"
+
+                    cols = list(getattr(
+                        data.datasets, cfg).metrics.get_id(0).columns)
+                    assert cols == ["R", "RMSD"], "metrics columns are not OK"
+
+
+
+
 
                 # TODO add some basic tests to check that the HDF file is OK
 
