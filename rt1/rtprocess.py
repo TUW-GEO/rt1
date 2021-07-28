@@ -274,15 +274,16 @@ class RTprocess(object):
             ), f"the init_kwargs section {section} is not present in the .ini file!"
 
             for key, val in init_defs.items():
-                if key in self.cfg.config[section]:
-                    if mp.current_process().name == "MainProcess":
-                        log.warning(
-                            f'"{key} = {self.cfg.config[section][key]}" '
-                            + "will be overwritten by the definition provided via "
-                            + f'"init_kwargs[{section}]": "{key} = {val}" '
-                        )
-                    # update the parsed config (for import of modules etc.)
-                    self.cfg.config[section][key] = val
+                if (key in self.cfg.config[section] and
+                    mp.current_process().name == "MainProcess"):
+
+                    log.warning(
+                        f'"{key} = {self.cfg.config[section][key]}" '
+                        + "will be overwritten by the definition provided via "
+                        + f'"init_kwargs[{section}]": "{key} = {val}" '
+                    )
+                # update the parsed config (for import of modules etc.)
+                self.cfg.config[section][key] = val
 
         specs = self.cfg.get_process_specs()
         self.dumppath = specs["save_path"] / specs["dumpfolder"]
