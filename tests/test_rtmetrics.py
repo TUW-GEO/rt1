@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from rt1.rtmetrics import RTmetrics
 from rt1.rtresults import HDFaccessor
 
+
 class TestRTMetrics(unittest.TestCase):
 
     @staticmethod
@@ -121,7 +122,6 @@ class TestRTMetrics(unittest.TestCase):
                     else:
                         assert fit_metric == fit_func, assertmsg
 
-
             # check additional methods
             f = metric_fit_params.scatterplot()
             plt.close(f)
@@ -135,9 +135,6 @@ class TestRTMetrics(unittest.TestCase):
         fit = self.mock_fit()
         _ = RTmetrics.scatterplot(fit.res_df.SM, fit.res_df.omega,
                                   "SM", "omega")
-
-
-
 
 
 if __name__ == "__main__":
