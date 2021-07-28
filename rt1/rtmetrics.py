@@ -550,7 +550,7 @@ class RTmetrics(object):
         # scale for higher cells
         metrics_table.scale(1, 1.5)
 
-        plt.show()
+        plt.show(block=False)
         return fig
 
     @classmethod
