@@ -247,7 +247,7 @@ class _RTmetrics1(object):
         return RTmetrics.metrics_table(*self._unify_idx_data)
 
     def scatterplot(self):
-        RTmetrics.scatterplot(*self._unify_idx_data, self._d1, self._d2)
+        return RTmetrics.scatterplot(*self._unify_idx_data, self._d1, self._d2)
 
 
 class RTmetrics(object):
