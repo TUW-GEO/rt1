@@ -423,7 +423,8 @@ class RTmetrics(object):
     @staticmethod
     def mape(d1, d2):
         """
-        evaluates mean absolute percentage error of given Series d1 and d2 with respect to d1
+        evaluates mean absolute percentage error of given Series
+        d1 and d2 with respect to d1
 
         Parameters
         ----------
@@ -444,7 +445,8 @@ class RTmetrics(object):
     @staticmethod
     def std_ratio(d1, d2):
         """
-        evaluates standard deviation ratio of given Series d1 and d2: sigma_1 / sigma_2
+        evaluates standard deviation ratio of given Series
+        d1 and d2: sigma_1 / sigma_2
 
         Parameters
         ----------
@@ -464,8 +466,9 @@ class RTmetrics(object):
     @classmethod
     def allmetrics(cls, d1, d2):
         """
-        run all metrics specified in RTmetrics.metrics_registry of given Series d1 and d2
-        metrics have to be specified by function name in metrics_registry
+        run all metrics specified in RTmetrics.metrics_registry of given
+        Series d1 and d2. Metrics have to be specified by function name
+        in metrics_registry
 
         Parameters
         ----------
@@ -480,7 +483,8 @@ class RTmetrics(object):
             function/metric name and corresponding value
 
         """
-        return {func: getattr(cls, func)(d1, d2) for func in cls.metrics_registry}
+        return {func: getattr(cls, func)(d1, d2)
+                for func in cls.metrics_registry}
 
     @classmethod
     def scatterplot(cls, d1, d2, d1_name, d2_name):
@@ -529,7 +533,8 @@ class RTmetrics(object):
                 metric_values.append(val)
 
         # add another dimension for usage in table
-        two_dim_metric_values = [[metric_value] for metric_value in metric_values]
+        two_dim_metric_values = [[metric_value]
+                                 for metric_value in metric_values]
 
         # remove border to only show table itself
         ax2.axis("off")
@@ -551,13 +556,14 @@ class RTmetrics(object):
     @classmethod
     def _flatten_dictionary(cls, dictionary, depth=0):
         """
-        recursively flattens a dictionary, only returns float values from that dictionary
-        keys of sub-dictionaries are prefixed with a '-' according to the depth
+        recursively flattens a dictionary, only returns float values from
+        that dictionary keys of sub-dictionaries are prefixed with a '-'
+        according to the depth
 
         Parameters
         ----------
         dictionary : dict
-            dictionary that should be flattened, should contain float or dict values
+            dict that should be flattened, should contain float or dict values
         depth : integer
             recursion depth used for prefixing
 
@@ -581,8 +587,9 @@ class RTmetrics(object):
     @classmethod
     def metrics_table(cls, d1, d2):
         """
-        prints a table with all metrics and values returned from the allmetrics method for given series d1 and d2
-        dictionaries returned by allmetrics are handled recursively by _metrics_table_dict_entry
+        prints a table with all metrics and values returned from the allmetrics
+        method for given series d1 and d2 dictionaries returned by allmetrics
+        are handled recursively by _metrics_table_dict_entry
 
         Parameters
         ----------
@@ -622,7 +629,8 @@ class RTmetrics(object):
         Returns
         -------
         string
-            multiline string containing all floating point entries of a dictionary and its sub-dictionaries
+            multiline string containing all floating point entries of a
+            dictionary and its sub-dictionaries
 
         """
         entries = ""
@@ -640,7 +648,8 @@ class RTmetrics(object):
 
             elif isinstance(val, dict):
                 entries += (
-                    " " + "--" * depth + f"{metric}|".ljust(29 - depth_offset) + "|\n"
+                    " " + "--" * depth
+                    + f"{metric}|".ljust(29 - depth_offset) + "|\n"
                 )
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
 
