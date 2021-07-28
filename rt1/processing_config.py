@@ -1,7 +1,6 @@
 """convenient default functions for use with rt1.rtfits.processfunc()"""
 
 import sys
-import pandas as pd
 import traceback
 from pathlib import Path
 from .rtfits import load
@@ -90,8 +89,7 @@ class rt1_processing_config(object):
         """
         A function that returns the file-name based on the passed reader_args
 
-        - the filenames are generated from the reader-argument `self.ID_key`
-          (which is set to "ID" by default)
+        - by default, the filenames are generated from the reader-argument "ID"
 
         Parameters
         ----------
@@ -100,9 +98,10 @@ class rt1_processing_config(object):
 
         Returns
         -------
+        feature_id : str
+            the ID that will be assigned to the fits-object (e.g. `fit.ID`)
         filename : str
-            the file-name that will be used to save the fit dump-files in case
-            the processing was successful
+            the file-name that will be used to save the pickle dump-files
         """
 
         # the ID used for indexing the processed sites
@@ -116,56 +115,30 @@ class rt1_processing_config(object):
             filename=filename,
         )
 
-    def check_dump_exists(self, reader_arg):
-        """
-        check if a dump of the fit already exists
-        (used to determine if the fit has already been evaluated to avoid
-         performing the same fit twice)
-
-        Parameters
-        ----------
-        reader_arg : dict
-            the reader-arg dict.
-
-        Raises
-        ------
-        rt1_file_already_exists
-            If a dump-file with the specified filename already exists
-            at "save_path / dumpfolder / dumps /"
-        """
-
-        # check if the file already exists, and if yes, raise a skip-error
-        if self.rt1_procsesing_dumppath is not None:
-            names_ids = self.get_names_ids(reader_arg)
-            if (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
-                raise Exception("rt1_file_already_exists")
-
-    def dump_fit_to_file(self, fit, reader_arg, mini=True):
-        """
-        pickle Fits-object to  "save_path / dumpfolder / filename.dump"
-
-        Parameters
-        ----------
-        fit : rt1.rtfits.Fits
-            the rtfits.Fits object.
-        reader_arg : dict
-            the reader-arg dict.
-        mini : bool, optional
-            indicator if a mini-dump should be performed or not.
-            (see rt1.rtfits.Fits.dump() for details)
-            The default is True.
-        """
-        if self.rt1_procsesing_dumppath is not None:
-            names_ids = self.get_names_ids(reader_arg)
-
-            if not (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
-                fit.dump(
-                    self.rt1_procsesing_dumppath / names_ids["filename"],
-                    mini=mini,
-                )
-
     def preprocess(self, **kwargs):
-        """a function that is called PRIOR to processing"""
+        """
+        a (optional) function that is called PRIOR to processing
+
+        Parameters
+        ----------
+        kwargs :
+            kwargs obtained from
+
+            >>> RTprocess(...).run_processing(preprocess_kwargs=dict(...))
+
+        Returns:
+        --------
+        dict
+            a dict with the following keys defined:
+
+                - "reader_args" : a list of dicts that will be used as input
+                  for the call to the reader function (e.g. `reader_arg`)
+                - "pool_kwargs" : a dict of kwargs passed to the initialization
+                  of the multiprocessing.Pool used for processing
+                  (useful for providing initializers etc.)
+        --------
+        """
+
         return
 
     def reader(self, reader_arg):
@@ -187,6 +160,19 @@ class rt1_processing_config(object):
         >>>
         >>>    return data, aux_data
 
+        Parameters
+        ----------
+        reader_arg : dict
+            the arguments passed to the reader function.
+
+        Returns
+        -------
+        return_data : pandas.DataFrame
+            a pandas.DataFrame that will be used as "dataset" for the fit
+            (e.g. `fit.dataset`)
+        *aux_data :
+            any additional return-arguments will be attached to the fits-object
+            as `fit.aux_data`
         """
         assert False, "you must define a proper reader-function first!"
 
@@ -231,7 +217,7 @@ class rt1_processing_config(object):
             raise_exception = False
 
         elif "rt1_file_already_exists" in ex.args:
-            # if the fit-dump file already exists, try loading the existing
+            # if a fit-dump file already exists, try loading the existing
             # file and apply post-processing (e.g. avoid re-processing results)
             raise_exception = False
 

@@ -491,10 +491,15 @@ class RTprocess(object):
                 do_performfit = self.parent_fit.accessor.performfit()
                 _ = [doit() for doit in do_performfit.values()]
 
-                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                    self.proc_cls.dump_fit_to_file(
-                        self.parent_fit, reader_arg, mini=True
-                    )
+                if self._dump_fit:
+                    self.parent_fit.dump(
+                        (self.dumppath /
+                         "dumps" /
+                         self.proc_cls.get_names_ids(reader_arg)["filename"]
+                         ),
+                        mini=True,
+                        )
+
                 return self.parent_fit._get_fit_to_hdf_dict()
 
             else:
@@ -515,8 +520,15 @@ class RTprocess(object):
                 # dump a fit-file
                 # save dumps AFTER prostprocessing has been performed
                 # (it might happen that some parts change during postprocessing)
-                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                    self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
+                if self._dump_fit:
+                    fit.dump(
+                        (self.dumppath /
+                         "dumps" /
+                         self.proc_cls.get_names_ids(reader_arg)["filename"]
+                         ),
+                        mini=True,
+                        )
+
                 return fit._get_fit_to_hdf_dict()
 
         except Exception as ex:
@@ -623,8 +635,8 @@ class RTprocess(object):
         queue : multiprocessing.Manager().queue
             the queue used for logging
         dump_fit : bool, optional
-            indicator if a fit-object should be dumped or not.
-            (e.g. by invoking processing_config.dump_fit_to_file() )
+            indicator if a pickle of the fit-object should be put in the
+            "dumps" folder for each finished fit.
             The default is False
 
         Returns
@@ -774,11 +786,13 @@ class RTprocess(object):
             The default is 21 (=logging.PROGRESS), in which case only
             e.g. only RT1 progress-messages, warnings and errors will be logged
         dump_fit: bool, optional
-            indicator if `processing_config.dump_fit_to_file()` should be
-            called after finishing the fit.
+            indicator if a pickle-dump file should be generated and put in the
+            "dumps" folder after finishing the fit.
             -> this will generate a pickle (".dump") file for each fit so that
-            the reults can be analyzed quickle. (e.g. useful for debug and initial
-            configuration of a fit)
+            can be loaded and analyzed quickly.
+
+            useful for debug and initial configuration of a fit)
+            NOT suitable for long-term storage!!
             The default is False
         """
 

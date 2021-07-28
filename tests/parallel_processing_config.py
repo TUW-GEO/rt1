@@ -17,9 +17,6 @@ class processing_cfg(rt1_processing_config):
         super().__init__(**kwargs)
 
     def reader(self, reader_arg):
-
-        self.check_dump_exists(reader_arg)
-
         # initialize a reader
         if reader_arg['ID'] in [1, 2, 3]:
             index = pd.date_range('1.1.2017', '1.1.2018', freq='D')
