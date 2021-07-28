@@ -1325,10 +1325,10 @@ class RTprocess(object):
 
         Parameters
         ----------
-        parameters : list or dict
-            a list (or dict) of parameter-names to attach.
-            can be any parameter available in "fit.dataset", "fit.res_df", any of
-            the model-contributions, e.g.:
+        parameters : list
+            a list of parameter-names to attach.
+            can be any parameter available in "fit.dataset", "fit.res_df", or
+            any of the calculated model-contributions, e.g.:
 
             >>> ["tot", "surf", "vol", "inter"]
 
