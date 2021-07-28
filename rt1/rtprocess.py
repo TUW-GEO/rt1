@@ -275,11 +275,12 @@ class RTprocess(object):
 
             for key, val in init_defs.items():
                 if key in self.cfg.config[section]:
-                    log.warning(
-                        f'"{key} = {self.cfg.config[section][key]}" '
-                        + "will be overwritten by the definition provided via "
-                        + f'"init_kwargs[{section}]": "{key} = {val}" '
-                    )
+                    if mp.current_process().name == "MainProcess":
+                        log.warning(
+                            f'"{key} = {self.cfg.config[section][key]}" '
+                            + "will be overwritten by the definition provided via "
+                            + f'"init_kwargs[{section}]": "{key} = {val}" '
+                        )
                     # update the parsed config (for import of modules etc.)
                     self.cfg.config[section][key] = val
 
