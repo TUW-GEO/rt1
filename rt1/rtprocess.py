@@ -814,7 +814,7 @@ class RTprocess(object):
                 # listener-process that writes the file to disc AFTER
                 # initialization of the  folder-structure!
                 # (otherwise the log-file can not be generated!)
-                self._worker_configurer(queue)
+                self._worker_configurer(queue, loglevel=logfile_level)
             else:
                 queue = None
 
@@ -1029,7 +1029,7 @@ class RTprocess(object):
                 # listener-process that writes the file to disc AFTER
                 # initialization of the  folder-structure!
                 # (otherwise the log-file can not be generated!)
-                self._worker_configurer(queue)
+                self._worker_configurer(queue, loglevel=logfile_level)
             else:
                 queue = None
 
