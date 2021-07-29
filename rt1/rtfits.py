@@ -3020,6 +3020,17 @@ class _FitContainer:
     def __init__(self, parent):
         self._parent = parent
 
+    def __setstate__(self, d):
+        # downward-compatibility for the _parent property
+        if "_parent" not in d:
+            parent = MultiFits()
+            for key, val in d.items():
+                if isinstance(val, Fits):
+                    parent.add_config(key, val)
+            d["_parent"] = parent
+        # -----------------------------------------------
+        self.__dict__ = d
+
     def __iter__(self):
         return (getattr(self, i) for i in self._parent.config_names)
 
