@@ -156,7 +156,7 @@ class ColoredWrappedFixedIndentingLog(logging.Formatter):
     def format(self, record):
         log_fmt = (Fore.LIGHTWHITE_EX + "%(asctime)s" + Style.RESET_ALL + " - " +
                    self.FORMATS.get(record.levelno))
-        formatter = logging.Formatter(log_fmt)
+        formatter = logging.Formatter(log_fmt, datefmt=self.datefmt)
 
         return indent(formatter.format(record), " " * self._indent).strip()
 
