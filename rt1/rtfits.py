@@ -61,7 +61,10 @@ def load(path):
         fit = pd.read_pickle(file)
 
     if not hasattr(fit, "ID") or fit.ID is None:
-        fit.ID = Path(path).stem
+        if isinstance(fit, MultiFits):
+            fit.set_ID(Path(path).stem)
+        else:
+            fit.ID = Path(path).stem
 
     return fit
 
