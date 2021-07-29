@@ -287,7 +287,12 @@ class Fits(Scatter):
         self.dB = dB
         self.dataset = self._check_monotonic_dataset_index(dataset)
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
-        self.defdict = copy.deepcopy(defdict)
+
+        if defdict is None:
+            self.defdict = dict()
+        else:
+            self.defdict = copy.deepcopy(defdict)
+
         if lsq_kwargs is None:
             self.lsq_kwargs = dict()
         else:
