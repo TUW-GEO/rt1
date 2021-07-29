@@ -921,6 +921,7 @@ class RTprocess(object):
         fitlist=None,
         save_path=None,
         create_index=True,
+        use_dumps=False,
         **kwargs,
     ):
         """
@@ -978,6 +979,10 @@ class RTprocess(object):
             - if a dict is provided, it is used as kwargs for
               `_rtprocess_writer.RT1_processor.create_index()`
               (e.g. the defaults are:  idx_levels=None and keys=None)
+        use_dumps : bool, optional
+            indicatior if the "fit_db.h5" file or the ".dump" files in the
+            "dumps" folder should be used to load the Fits-objects
+            The default is False in which case "fit_db.h5" is used
         **kwargs :
             additional kwargs passed to
             `_rtprocess_writer.RT1_processor()`
@@ -1036,8 +1041,10 @@ class RTprocess(object):
                 listener.start()
 
             if fitlist is None:
+
                 # use fits from .dump file if no fitlist is provided
-                fitlist = self._get_files(use_N_files=use_N_files)
+                fitlist = self._get_files(use_N_files=use_N_files,
+                                          use_dumps=use_dumps)
 
             res = self._run_finalout(
                 ncpu,
@@ -1249,14 +1256,14 @@ class RTprocess(object):
             else:
                 raise ex
 
-    def _get_files(self, use_N_files=None):
-        try:
-            useres = self._useres
-            # get the relevant files that have to be processed for `run_finaloutput`
-        except AttributeError:
-            useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
+    def _get_files(self, use_N_files=None, use_dumps=False):
+
+        if not hasattr(self, "_useres"):
+            self._useres = getattr(RTresults(self.dumppath, use_dumps=use_dumps),
+                                   self.proc_cls.dumpfolder)
+
         # get dump-files
-        dumpiter = useres.dump_files
+        dumpiter = self._useres.dump_files
 
         if use_N_files is not None:
             fitlist = list(islice(dumpiter, use_N_files))
