@@ -21,7 +21,7 @@ from .rtresults import RTresults
 from .rtfits import MultiFits
 from . import log, _get_logger_formatter
 import logging
-
+import ctypes
 
 def _confirm_input(msg="are you sure?", stopmsg="STOP", callbackdict=None):
     """
@@ -73,24 +73,6 @@ def _make_folderstructure(save_path, subfolders):
             if not mkpath.exists():
                 log.progress(f'"{mkpath}"\ndoes not exist... creating directory')
                 mkpath.mkdir(parents=True, exist_ok=True)
-
-
-class Counter(object):
-    """
-    a shared counter for multiprocessing
-    taken from https://stackoverflow.com/a/21681534/9703451
-    """
-
-    def __init__(self):
-        self.val = mp.Value('i', 0)
-
-    def increment(self, n=1):
-        with self.val.get_lock():
-            self.val.value += n
-
-    @property
-    def value(self):
-        return self.val.value
 
 
 class RTprocess(object):
@@ -579,11 +561,9 @@ class RTprocess(object):
             mp.current_process().name = "RTprocess-" + "".join(
                 origname.split("-")[1:]
                 )
-
             if proc_counter is not None:
-                with proc_counter.val.get_lock():
-                    proc_counter.increment()
-                    mp.current_process().name = f"RTprocess-{proc_counter.value}"
+                proc_counter.value += 1
+                mp.current_process().name = f"RTprocess-{proc_counter.value}"
 
             log.progress("setting up RTprocess-worker")
             self.setup()
@@ -714,7 +694,8 @@ class RTprocess(object):
         # to the initargs and use "self._initializer" as initializer-function
         # Note: this is a pickleable way for decorating the initializer!
 
-        proc_counter = Counter()
+        # TODO use the same Manager as for the queue
+        proc_counter = mp.Manager().Value(ctypes.c_ulonglong, 0)
         pool_kwargs["initargs"] = [
             pool_kwargs.pop("initializer", None),
             queue,
@@ -1136,7 +1117,9 @@ class RTprocess(object):
 
         # don't call additional initializers, only use the default initializer
         # (to enable subprocess-logging)
-        proc_counter = Counter()
+        # TODO use the same manager as for the queue
+        proc_counter = mp.Manager().Value(ctypes.c_ulonglong, 0)
+
         pool_kwargs = dict(
             initializer=self._initializer,
             initargs=[None, queue, proc_counter],
