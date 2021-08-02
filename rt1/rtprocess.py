@@ -75,6 +75,24 @@ def _make_folderstructure(save_path, subfolders):
                 mkpath.mkdir(parents=True, exist_ok=True)
 
 
+class Counter(object):
+    """
+    a shared counter for multiprocessing
+    taken from https://stackoverflow.com/a/21681534/9703451
+    """
+
+    def __init__(self):
+        self.val = mp.Value('i', 0)
+
+    def increment(self, n=1):
+        with self.val.get_lock():
+            self.val.value += n
+
+    @property
+    def value(self):
+        return self.val.value
+
+
 class RTprocess(object):
     def __init__(
         self,
@@ -500,7 +518,8 @@ class RTprocess(object):
                         mini=True,
                         )
 
-                return self.parent_fit._get_fit_to_hdf_dict()
+                return self.parent_fit._get_fit_to_hdf_dict(
+                    ID=reader_arg.get("_RT1_ID_num", None))
 
             else:
                 fit = self.parent_fit.reinit_object(
@@ -529,7 +548,8 @@ class RTprocess(object):
                         mini=True,
                         )
 
-                return fit._get_fit_to_hdf_dict()
+                return fit._get_fit_to_hdf_dict(
+                    ID=reader_arg.get("_RT1_ID_num", None))
 
         except Exception as ex:
 
@@ -540,7 +560,7 @@ class RTprocess(object):
             else:
                 raise ex
 
-    def _initializer(self, initializer, queue, *args):
+    def _initializer(self, initializer, queue, proc_counter=None, *args):
         """
         decorate a provided initializer with the "_worker_configurer()" to
         enable logging from subprocesses while keeping the initializer a
@@ -554,6 +574,17 @@ class RTprocess(object):
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
             # all required modules from the desired locations
+
+            origname = mp.current_process().name
+            mp.current_process().name = "RTprocess-" + "".join(
+                origname.split("-")[1:]
+                )
+
+            if proc_counter is not None:
+                with proc_counter.val.get_lock():
+                    proc_counter.increment()
+                    mp.current_process().name = f"RTprocess-{proc_counter.value}"
+
             log.progress("setting up RTprocess-worker")
             self.setup()
 
@@ -682,9 +713,12 @@ class RTprocess(object):
         # add provided initializer and queue (used for subprocess-logging)
         # to the initargs and use "self._initializer" as initializer-function
         # Note: this is a pickleable way for decorating the initializer!
+
+        proc_counter = Counter()
         pool_kwargs["initargs"] = [
             pool_kwargs.pop("initializer", None),
             queue,
+            proc_counter,
             *pool_kwargs.pop("initargs", []),
         ]
         pool_kwargs["initializer"] = self._initializer
@@ -877,6 +911,8 @@ class RTprocess(object):
                 preprocess_kwargs=preprocess_kwargs,
                 queue=queue,
                 dump_fit=dump_fit,
+                init_func=self._worker_configurer,
+                init_args=(queue, logfile_level)
             )
 
         except Exception as err:
@@ -1045,7 +1081,6 @@ class RTprocess(object):
                 # use fits from .dump file if no fitlist is provided
                 fitlist = self._get_files(use_N_files=use_N_files,
                                           use_dumps=use_dumps)
-
             res = self._run_finalout(
                 ncpu,
                 fitlist=fitlist,
@@ -1055,6 +1090,8 @@ class RTprocess(object):
                 queue=queue,
                 print_progress=print_progress,
                 create_index=create_index,
+                init_func=self._worker_configurer,
+                init_args=(queue, logfile_level),
                 **kwargs
             )
 
@@ -1099,9 +1136,10 @@ class RTprocess(object):
 
         # don't call additional initializers, only use the default initializer
         # (to enable subprocess-logging)
+        proc_counter = Counter()
         pool_kwargs = dict(
             initializer=self._initializer,
-            initargs=[None, queue],
+            initargs=[None, queue, proc_counter],
         )
 
         # pre-evaluate the fn-coefficients if interaction terms are used
@@ -1126,7 +1164,6 @@ class RTprocess(object):
                     self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
         log.progress(f"start of finalout generation on {ncpu} cores")
-
         with RT1_processor.writer_pool(
             n_worker=ncpu,
             dst_path=save_path,
@@ -1151,8 +1188,8 @@ class RTprocess(object):
 
         return res
 
-    def _finalout_reader(self, fitpath, use_config=None, *args):
-
+    def _finalout_reader(self, reader_arg, use_config=None):
+        fitpath = reader_arg["ID"]
         # load fitobjects based on fit-paths
         try:
             fit = self._useres.load_fit(fitpath)
@@ -1165,12 +1202,13 @@ class RTprocess(object):
             if hasattr(self, "parent_fit"):
                 if isinstance(fit, MultiFits):
                     for config_name in use_config:
-                        config_fit = self.parent_fit.accessor.config_fits[config_name]
+                        config_fit = self.parent_fit.configs[config_name]
+
                         if config_fit.int_Q is True:
                             try:
-                                getattr(
-                                    fit.configs, config_name
-                                )._fnevals_input = config_fit._fnevals_input
+                                fit.configs[
+                                    config_name
+                                    ]._fnevals_input = config_fit._fnevals_input
                             except AttributeError:
                                 log.error(
                                     "could not assign pre-evaluated fn-coefficients to "
@@ -1178,8 +1216,15 @@ class RTprocess(object):
                                     + "available configs of the loaded Fits object:"
                                     + f" {fit.config_names}"
                                 )
+
                 else:
                     fit._fnevals_input = self.parent_fit._fnevals_input
+
+            # attach ID integer identifier to the Fits-object
+            fit._RT1_ID_num = reader_arg.get("_RT1_ID_num", None)
+            if isinstance(fit, MultiFits):
+                for cfg_fit in fit.configs:
+                    cfg_fit._RT1_ID_num = reader_arg.get("_RT1_ID_num", None)
 
             return fit
         except Exception:
@@ -1240,7 +1285,7 @@ class RTprocess(object):
 
             if "const__reader_arg" not in ret and hasattr(fit, "reader_arg"):
                 # append reader_args
-                attrs = pd.DataFrame(fit.reader_arg, [fit.ID])
+                attrs = pd.DataFrame(fit.reader_arg, [fit._RT1_ID_num])
                 attrs.index.name = "ID"
 
                 # attrs = pd.DataFrame(fit.reader_arg, index=[0])
@@ -1266,9 +1311,10 @@ class RTprocess(object):
         dumpiter = self._useres.dump_files
 
         if use_N_files is not None:
-            fitlist = list(islice(dumpiter, use_N_files))
+            fitlist = list(map(lambda x: dict(ID=x),
+                               islice(dumpiter, use_N_files)))
         else:
-            fitlist = list(dumpiter)
+            fitlist = list(map(lambda x: dict(ID=x), dumpiter))
         return fitlist
 
     @staticmethod
@@ -1539,7 +1585,7 @@ class RTprocess(object):
         ret = RTprocess._postprocess_getparams(
             fit=fit,
             saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
-            xindex=("ID", fit.ID),
+            xindex=("ID", fit._RT1_ID_num),
             auxdata=pd.DataFrame(auxdata),
             sig_to_dB=sig_to_dB,
             inc_to_degree=inc_to_degree,
@@ -1552,7 +1598,7 @@ class RTprocess(object):
                 metric_layer[name] = getattr(
                     getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower()
                 )
-            metric_layer = pd.DataFrame(metric_layer, index=[fit.ID])
+            metric_layer = pd.DataFrame(metric_layer, index=[fit._RT1_ID_num])
             metric_layer.index.name = "ID"
 
             ret["metrics"] = metric_layer

@@ -2767,7 +2767,7 @@ class Fits(Scatter):
         """
         return self._reinit_object(self, **kwargs)
 
-    def _get_res_dict_df(self):
+    def _get_res_dict_df(self, ID=None):
         """
         get a data-frame that contains all fitted parameters
         (smaller than fit.res_df which is always interpolated to the index)
@@ -2779,13 +2779,16 @@ class Fits(Scatter):
 
         """
 
+        if ID is None:
+            ID = self.ID
+
         # convert res_dict to a dataframe
         if self.res_dict is not None:
             if hasattr(self, "config_name"):
-                idxcols = [[self.ID], [self.config_name]]
+                idxcols = [[ID], [self.config_name]]
                 names = ["ID", "cfg", "n"]
             else:
-                idxcols = [[self.ID]]
+                idxcols = [[ID]]
                 names = ["ID", "n"]
 
             dfs = []
@@ -2814,7 +2817,7 @@ class Fits(Scatter):
                              save_results=True,
                              save_data=True,
                              save_auxdata=True,
-                             ):
+                             ID=None):
         """
         return a dict of pandas-dataframes suitable to fully re-create
         a Fits (or MultiFits) object.
@@ -2828,7 +2831,9 @@ class Fits(Scatter):
             indicator if the dataset should be saved. The default is True.
         save_auxdata : bool, optional
             indicator if auxdata should be saved. The default is True.
-
+        ID : int, optional
+            the index-number to use for indexing within the HDF-store
+            if None, "fit._RT1_ID_num" will be used if available, else "fit.ID"
         Returns
         -------
         hf : dict
@@ -2836,8 +2841,11 @@ class Fits(Scatter):
             a Fits (or MultiFits) object.
 
         """
-
-        ID = self.ID
+        if ID is None:
+            if hasattr(self, "_RT1_ID_num"):
+                ID = self._RT1_ID_num
+            else:
+                ID = self.ID
         hf = dict()
 
         # -------------- save INIT_DICT (always saved, different for MultiFits)
@@ -2876,7 +2884,7 @@ class Fits(Scatter):
             if save_data is True:
                 df = getattr(self, "dataset", None)
                 if df is not None:
-                    hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
+                    hf["dataset"] = Fits._prepend_ID_to_index(df, ID)
             elif save_results is True:
                 # store only data that is required to re-create the results
                 if isinstance(self, MultiFits):
@@ -2890,7 +2898,7 @@ class Fits(Scatter):
                                   if val[0] and val[2] == "manual")
                 df = getattr(self, "dataset", None)[dynkeys]
 
-                hf["dataset"] = Fits._prepend_ID_to_index(df, self.ID)
+                hf["dataset"] = Fits._prepend_ID_to_index(df, ID)
         except Exception:
             log.debug(f"could not save 'dataset' for fit {ID}")
 
@@ -2899,7 +2907,7 @@ class Fits(Scatter):
             try:
                 df = getattr(self, "aux_data", None)
                 if df is not None:
-                    hf["aux_data"] = Fits._prepend_ID_to_index(df, self.ID)
+                    hf["aux_data"] = Fits._prepend_ID_to_index(df, ID)
             except Exception:
                 log.debug(f"could not save 'aux_data' for fit {ID}")
 
@@ -2907,10 +2915,10 @@ class Fits(Scatter):
         if save_results is True:
             try:
                 if isinstance(self, MultiFits):
-                    df = pd.concat(i[1] for i in self.apply(lambda fit:
-                                                            fit._get_res_dict_df()))
+                    df = pd.concat(i[1] for i in self.apply(
+                        lambda fit: fit._get_res_dict_df(ID=ID)))
                 else:
-                    df = self._get_res_dict_df()
+                    df = self._get_res_dict_df(ID=ID)
 
                 hf["res_dict"] = df
             except Exception:
@@ -2951,6 +2959,7 @@ class _MultiAccessors:
     def __init__(self, FitContainer):
 
         self._FitContainer = FitContainer
+        ignore_keys = ["dataset", "aux_data", "plot"]
 
         # add all functions and attributes
         allattrs = list(i for i in dir(Fits()) if not i.startswith("__"))
@@ -2972,7 +2981,7 @@ class _MultiAccessors:
                     property(self._getit(prop)),
                 )
 
-        for prop in (set(allattrs) ^ set(classattrs)) - set(["dataset", "aux_data"]):
+        for prop in (set(allattrs) ^ set(classattrs)) - set(ignore_keys):
             setattr(
                 _MultiAccessors,
                 prop,
@@ -3035,11 +3044,24 @@ class _FitContainer:
         return (getattr(self, i) for i in self._parent.config_names)
 
     def __getitem__(self, key):
-        assert key in self._parent.config_names, (
-            f"config {key} not found, use one of:" +
-            f"\n{self._parent.config_names}"
-            )
-        return getattr(self, key)
+        if isinstance(key, str):
+            assert key in self._parent.config_names, (
+                f"config {key} not found, use one of:" +
+                f"\n{self._parent.config_names}"
+                )
+
+            return getattr(self, key)
+        elif isinstance(key, int):
+            n_names = len(self._parent.config_names)
+            assert key < n_names, (
+                f"cannot access config nr. {key}.... there are only " +
+                f"{n_names} configs available: \n{self._parent.config_names}"
+                )
+            return getattr(self, self._parent.config_names[key])
+
+        else:
+            raise AttributeError(
+                "configs can only be accessed using integers or strings")
 
 
 class MultiFits:
@@ -3104,11 +3126,13 @@ class MultiFits:
                              save_results=True,
                              save_data=True,
                              save_auxdata=True,
+                             ID=None
                              ):
         return Fits._get_fit_to_hdf_dict(self,
                                          save_results=save_results,
                                          save_data=save_data,
                                          save_auxdata=save_auxdata,
+                                         ID=ID
                                          )
 
     @property

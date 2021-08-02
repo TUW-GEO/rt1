@@ -61,7 +61,7 @@ class TestRTfits(unittest.TestCase):
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         proc = RTprocess(config_path, autocontinue=True)
-        proc.run_processing(ncpu=4, reader_args=reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args, dump_fit=True)
 
         # run again to check what happens if files already exist
         proc.run_processing(ncpu=4, reader_args=reader_args)
@@ -86,6 +86,8 @@ class TestRTfits(unittest.TestCase):
     def test_1_rtresults(self):
 
         results = RTresults("tests/proc_test")
+        dumpresults = RTresults("tests/proc_test", use_dumps=True)
+
         assert hasattr(results, "dump01"), "dumpfolder not found by RTresults"
 
         dumpfiles = [i for i in results.dump01.dump_files]
@@ -109,13 +111,16 @@ class TestRTfits(unittest.TestCase):
 
         fit_db = results.dump01.fit_db
 
+        assert not any(fit_db.IDs.duplicated()), (
+            "there are duplicated IDs in the HDF container!")
+
         # check if all ID's are present in the HDF-container
         assert all(
-            i in fit_db.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+            i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
             ), ("HDF-container does not contain all IDs")
 
         # check if dumped-properties are equal for pickles and HDF-containers
-        for fit in results.dump01.dump_fits:
+        for fit in dumpresults.dump01.dump_fits:
             fit_hdf = fit_db.load_fit(fit.ID)
             assert fit_hdf.dataset.equals(fit.dataset), (
                 "datasets of HDF-container and pickle-dumps are not equal!")
@@ -237,7 +242,7 @@ class TestRTfits(unittest.TestCase):
 
         # check if all ID's are present in the HDF-container
         assert all(
-            i in fit_db.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+            i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
             ), ("HDF-container does not contain all IDs")
 
         # check if dumped-properties are equal for pickles and HDF-containers
@@ -332,7 +337,7 @@ class TestRTfits(unittest.TestCase):
 
                 # check if all ID's are present in the HDF-container
                 assert all(
-                    i in data.IDs.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+                    i in data.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
                     ), ("HDF-container does not contain all IDs")
 
                 # some basic checks if Fits and MultiFits are correctly exported

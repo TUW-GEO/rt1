@@ -6,6 +6,7 @@ from timeit import default_timer
 from datetime import timedelta
 import sys
 import pandas as pd
+import numpy as np
 import traceback
 
 from queue import Empty as QueueEmpty
@@ -18,10 +19,12 @@ from itertools import count
 import signal
 
 from . import log
+from .rtresults import HDFaccessor
 from .general_functions import (dt_to_hms,
                                 update_progress,
                                 groupby_unsorted,
                                 isidentifier,
+                                find_missing
                                 )
 
 
@@ -165,12 +168,12 @@ class RT1_processor(object):
             end = default_timer()
             meantime = (end - self.p_start) / (p_meancnt)
 
-            if self.p_max is None:
+            if self.p_max.value is None:
                 p_max = p_totcnt + 1
                 remain = timedelta(seconds=meantime * 1000)
                 timesuffix = "for 1000 fits"
             else:
-                p_max = self.p_max
+                p_max = self.p_max.value
                 remain = timedelta(seconds=meantime * (p_max - p_totcnt))
                 timesuffix = "remaining"
 
@@ -207,7 +210,7 @@ class RT1_processor(object):
 
         self.out_queue.put(outdict)
 
-    def _combiner_process(self):
+    def _combiner_process(self, init_func=None, init_args=None):
         """
         combine results before writing them to the HDF-store
 
@@ -215,6 +218,12 @@ class RT1_processor(object):
         property that is maintained for all configs of a MultiConfig object
 
         """
+        if callable(init_func) and init_func is not None:
+            if init_args is None:
+                init_func()
+            else:
+                init_func(*init_args)
+
         c = count()  # a counter to name threads
         threads = []
         while True:
@@ -281,8 +290,6 @@ class RT1_processor(object):
 
         Parameters
         ----------
-        inp : iterable
-            the list of IDs that are intended to be processed.
         key : str, optional
             the key to use in the HDF-container. The default is "reader_arg".
         get_ID : callable, optional
@@ -306,38 +313,58 @@ class RT1_processor(object):
             if get_ID is None:
 
                 def get_ID(i):
-                    ID = i.split(os.sep)[-1].split(".")[0]
+                    ID = str(i["ID"]).split(os.sep)[-1].split(".")[0]
                     if not isidentifier(str(ID)):
                         return f"RT1_{ID}"
                     else:
                         return str(ID)
 
-            with pd.HDFStore(self.dst_path, "r") as store:
-                keys = [i.lstrip("/") for i in store.keys()]
-                if key not in keys:
-                    try:
-                        msg = f"key {key} not found in HDF-file..."
-                        key = keys[0]
-                        log.warning(msg + f"using key {key} to determine existing IDs")
-                    except IndexError:
-                        self.args_to_process = self.arg_list
-                        log.warning("unable to determine IDs of existing file..." +
-                                    f"processing all {len(self.args_to_process)} IDs!")
-                        return
+            with HDFaccessor(self.dst_path) as fit_db:
+                # get all IDs that are already present in the HDF store
+                # found_IDs = store.select_column("reader_arg", "ID").values
+                # get a list of integers that have already been assigned to IDs
+                # found_ID_nums = store.select_column("reader_arg", "index").values
 
-                found_IDs = pd.Index(map(get_ID, self.arg_list)).isin(store[key].index)
-                self.args_to_process = [i for i, q in zip(self.arg_list,
-                                                          found_IDs) if not q]
+                found_ID_nums = fit_db.IDs.index
+                found_IDs = fit_db.IDs.ID.values
+
+                # a list of bool's that indicate if the ID is already processed
+                process_Q = pd.Index(map(get_ID, self.arg_list)).isin(found_IDs)
+
+                # a counter that yields unique IDs that are not yet assigned
+                # in the HDF store
+                id_counter = find_missing(found_ID_nums)
+
+                # set the processing-args
+                # update ID to be a valid python-identifier
+                self.args_to_process = [
+                        {**arg,
+                         "_RT1_ID_num": next(id_counter)}
+                        for arg, q in zip(self.arg_list, process_Q)
+                        if not q
+                        ]
         else:
-            self.args_to_process = self.arg_list
+            self.args_to_process = [{**i, "_RT1_ID_num": n}
+                                    for i, n in zip(self.arg_list,
+                                                    range(len(self.arg_list)))
+                                    ]
+
             log.info("no existing output-HDF file found...")
             log.progress(f"processing all {len(self.args_to_process)} IDs!")
-
+            return
         log.progress(f"found {len(self.args_to_process)} missing and " +
                      f"{len(self.arg_list) - len(self.args_to_process)}" +
                      " existing IDs!")
 
-    def _save_file_process(self):
+    def _save_file_process(self, init_func=None, init_args=None):
+        log_first_expected_rows = defaultdict(lambda: True)
+
+        if callable(init_func) and init_func is not None:
+            if init_args is None:
+                init_func()
+            else:
+                init_func(*init_args)
+
         while True:
             # continue until the out_queue is emptied, then break
             if self.combiner_ready.is_set():
@@ -370,15 +397,41 @@ class RT1_processor(object):
                 self.write_lock.acquire()
                 with pd.HDFStore(self.dst_path, "a", **self.HDF_kwargs) as store:
                     for key, val in out.items():
+                        # make sure the ID column is indexed for the reader_args
+                        if key == "reader_arg":
+                            data_columns = ["ID"]
+                        else:
+                            data_columns = []
                         # don't index data-columns
                         # don't index right away (will be done once all processes are
                         # finished to maintain write-speed during processing)
+
+                        # evaluate the number of expected rows since it is
+                        # "highly recommended" to do this for very large datasets
+                        if self.p_max.value is None:
+                            expectedrows = None
+                        else:
+                            expectedrows = self.p_max.value * len(val)
                         store.append(key,
                                      val,
                                      format="t",
-                                     data_columns=[],
+                                     data_columns=data_columns,
                                      index=False,
-                                     min_itemsize=self.min_itemsize)
+                                     min_itemsize=self.min_itemsize,
+                                     expectedrows=expectedrows)
+
+                        if log_first_expected_rows[key]:
+                            log.debug("expecting to get " +
+                                      f"{self.p_max.value * len(val)} rows " +
+                                      "in the HDF5-container for " +
+                                      f"'{key}' based on {self.p_max.value}" +
+                                      " results to process"
+                                      )
+                            # don't log this multiple times
+                            # (even though it might change depending on
+                            #  the length of the dataframes to append)!
+                            log_first_expected_rows[key] = False
+
                 self.write_lock.release()
             except Exception:
                 log.error("problem while writing data... exiting")
@@ -393,12 +446,12 @@ class RT1_processor(object):
         try:
             if self.reader_func is not None:
                 # use provided reader-func...
-                fit = self.reader_func(*args)
+                data = self.reader_func(args[0])
             else:
-                fit = args[0]
+                data = args[0]
 
-            if fit is not None:
-                res = self.process_func(fit, *args[1:])
+            if data is not None:
+                res = self.process_func(data, *args[1:])
                 self.queue.put(res)
             else:
                 log.warning(f"loading {args} resulted in None... skipping")
@@ -407,24 +460,26 @@ class RT1_processor(object):
             log.error(f"problem while processing \n{args}")
             traceback.print_exc()
 
-    def _start_writer_process(self):
+    def _start_writer_process(self, init_func=None, init_args=None):
         # define a process that writes the results to disc
         procs = []
         for i in range(self.n_writer):
             ctx = mp.get_context('spawn')
             writer = ctx.Process(target=self._save_file_process,
+                                 args=(init_func, init_args),
                                  name=f"RTprocess writer {i}")
             procs.append(writer)
             log.progress(f"starting {writer.name}")
             writer.start()
         return procs
 
-    def _start_combiner_process(self):
+    def _start_combiner_process(self, init_func=None, init_args=None):
         procs = []
         for i in range(self.n_combiner):
             # start thread to combine the results
             ctx = mp.get_context('spawn')
             t = ctx.Process(target=self._combiner_process,
+                            args=(init_func, init_args),
                             name=f"RTprocess combiner {i}")
             procs.append(t)
             # combiner_thread.setDaemon(True)
@@ -451,16 +506,20 @@ class RT1_processor(object):
 
         self.combiner_ready = manager.Event()
 
+        self.p_max = manager.Value(ctypes.c_ulonglong, None)
+
         return manager
 
     @classmethod
     @contextmanager
-    def writer_pool(cls, *args, **kwargs):
+    def writer_pool(cls, init_func=None, init_args=None, *args, **kwargs):
         try:
             w = cls(*args, **kwargs)
             manager = w._setup_manager()
-            writer = w._start_writer_process()
-            combiner = w._start_combiner_process()
+            writer = w._start_writer_process(init_func=init_func,
+                                             init_args=init_args)
+            combiner = w._start_combiner_process(init_func=init_func,
+                                                 init_args=init_args)
 
             yield w
         finally:
@@ -523,13 +582,12 @@ class RT1_processor(object):
         self.reader_func = reader_func
         self.process_func = process_func
 
-        if self.arg_list is None:
-            self.p_max = None
-        else:
-            self._check_IDs(get_ID=ID_getter)
-            self.p_max = len(self.args_to_process)
+        assert self.arg_list is not None, 'you must provide "arg_list"'
 
-        if self.p_max == 0:
+        self._check_IDs(get_ID=ID_getter)
+        self.p_max.value = len(self.args_to_process)
+
+        if self.p_max.value == 0:
             log.error("ALL IDs are already present in the HDF file!")
             return
 
@@ -591,7 +649,7 @@ class RT1_processor(object):
 
     @staticmethod
     def create_index(dst_path, idx_levels=None,
-                     keys=None):
+                     keys=None, kind="full", optlevel=6):
         """
         create an index for the given HDF-store to speed up querying.
         (the index is stored to disk, so this only needs to be executed once!)
@@ -608,18 +666,27 @@ class RT1_processor(object):
                          only levels actually present in a dataset are
                          considered! multiindexes are also possible,
                          e.g.: (["ID", "date"])
-            if True: all available index-levels found in the dataset are used
-            if "None": only the first index-level found in the dataset is used
+            if "all": all available index-levels found in the dataset are used
+            if None: only the first index-level found in the dataset is used
             The default is None.
         keys : iterable, optional
             the keys to create an index for.
             The default is None, in which case all keys are used!.
+        optlevel : int or None, default None
+            passed to "pandas.io.pytables.---FrameTable.create_index()"
+            Optimization level [1-9], if None, pytables defaults to 6.
+
+        kind : str or None, default None
+            passed to "pandas.io.pytables.---FrameTable.create_index()"
+            Kind of index, if None, pytables defaults to "medium".
+            can be one of ["ultralight", "light", "medium", "full"]
 
         """
         with pd.HDFStore(dst_path, "a") as store:
             use_keys = keys if keys else store.keys()
             use_keys = [key for key in use_keys if not key.endswith("/meta")]
-            log.progress("attempting to create indexes for the columns:\n" +
+            log.progress(f"attempting to create '{kind}' indexes with " +
+                         f"optlevel {optlevel} for the columns:\n" +
                          "    \n".join(use_keys))
             for key in use_keys:
                 s = store.get_storer(key)
@@ -650,9 +717,13 @@ class RT1_processor(object):
 
                 if len(use_levels) > 0:
                     log.progress(f'creating index-levels "{use_levels}" for "{key}"')
-                    s.create_index(list(map(str, use_levels)), kind="full")
+                    s.create_index(list(map(str, use_levels)),
+                                   kind=kind,
+                                   optlevel=optlevel,
+                                   )
                 else:
                     log.warning(f'no index-level found for "{key}"... skipping')
+        log.progress("finished index-creation")
 
     @staticmethod
     def get_data(dst_path, key, config=None, **kwargs):

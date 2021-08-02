@@ -14,6 +14,7 @@ from numpy.random import choice
 
 from .rtparse import RT1_configparser
 from .rtfits import load, Fits, MultiFits
+from .general_functions import isidentifier
 from . import log
 
 
@@ -387,7 +388,7 @@ class RTresults(object):
 
                         yield entry.path
             else:
-                for ID in self.fit_db.IDs:
+                for ID in self.fit_db.IDs.ID:
                     yield ID
 
         @property
@@ -406,7 +407,7 @@ class RTresults(object):
 
                         yield self.load_fit(entry.name)
             else:
-                for ID in self.fit_db.IDs:
+                for ID in self.fit_db.IDs.ID:
                     yield self.load_fit(ID)
 
         @property
@@ -444,7 +445,23 @@ class HDFaccessor(object):
         self.datasets = _data_container()
 
         if "reader_arg" in self.store:
-            self.IDs = self.store.select_column("reader_arg", "index")
+            try:
+                # use .values to avoid the following issue:
+                # https://github.com/pandas-dev/pandas/issues/42818
+                self.IDs = pd.DataFrame(
+                    dict(
+                        ID=self.store.select_column("reader_arg",
+                                                    "ID"
+                                                    ).apply(
+                                                        self._get_ID
+                                                        ).values
+                    ),
+                    self.store.select_column("reader_arg", "index").values
+                    )
+
+            except KeyError:
+                # TODO this is just for downward-compatibility... remove it!
+                self.IDs = self.store.select_column("reader_arg", "index")
         else:
             self.IDs = None
 
@@ -483,11 +500,20 @@ class HDFaccessor(object):
         self.store.close()
         gc.collect()
 
+    @staticmethod
+    def _get_ID(ID):
+        if not isidentifier(str(ID)):
+            return f"RT1_{ID}"
+        else:
+            return str(ID)
+
     def _load_fit(self, ID):
         if ID is None:
             ID = self.IDs.sample(n=1).values[0]
-        if isinstance(ID, int):
-            ID = self.IDs[ID]
+
+        if isinstance(ID, str):
+            ID = self._ID_to_IDnum(ID)
+
         try:
             init_dict = self.datasets.init_dict.get_id(ID)
         except Exception:
@@ -510,9 +536,9 @@ class HDFaccessor(object):
             reader_arg = self.datasets.reader_arg.get_id(ID)
             reader_arg = reader_arg.loc[ID].to_dict()
             if "ID" not in reader_arg:
-                reader_arg["ID"] = ID
+                reader_arg["ID"] = self.IDs.loc[ID].values[0]
         except Exception:
-            reader_arg = None
+            reader_arg = dict(ID=self.IDs.loc[ID].values[0])
             pass
 
         try:
@@ -529,7 +555,6 @@ class HDFaccessor(object):
                          cfg_attrs.items()}
 
                 fit = Fits(**attrs)
-                fit.ID = ID
 
                 if res_dict is not None:
                     # use dropna(how="all", axis=1) to make sure that parameters that
@@ -550,14 +575,14 @@ class HDFaccessor(object):
             if reader_arg is not None:
                 mf.set_reader_arg(reader_arg)
 
-            mf.set_ID(ID)
+            mf.set_ID(self.IDs.loc[ID].values[0])
             return mf
 
         else:
             attrs = {key: literal_eval(val) for key, val in
                      init_dict.loc[ID].items()}
             fit = Fits(**attrs)
-            fit.ID = ID
+            fit.ID = self.IDs.loc[ID].values[0]
 
             if dataset is not None:
                 fit.dataset = dataset.loc[ID]
@@ -580,19 +605,23 @@ class HDFaccessor(object):
             yield lst[i:i + n]
 
     def _get_vals(self, key, chunksize, start=None, **kwargs):
-        n = self.store.get_node(key)
-
-        # TODO
-        if "ID" in n.table.colpathnames:
-            idxname = "ID"
-        else:
+        # n = self.store.get_node(key)
+        # # TODO
+        # if "ID" in n.table.colpathnames:
+        #     idxname = "ID"
+        # else:
+        #     idxname = "index"
+        idxlevels = self.store.get_storer(key).levels
+        if idxlevels == 1:
             idxname = "index"
+        else:
+            idxname = idxlevels[0]
 
         assert self.IDs is not None, "no IDs found in HDF-store"
         if start:
             assert start < len(self.IDs), (f"start={start} is bigger than the number" +
                                            f" of IDs ({len(self.IDs)})")
-        use_ids = self._chunks(self.IDs[slice(start, None)], chunksize)
+        use_ids = self._chunks(self.IDs.index[slice(start, None)], chunksize)
         for i, ids in enumerate(use_ids):
             indexes = self.store.select_as_coordinates(key=key,
                                                        where=f"{idxname} in ids")
@@ -601,12 +630,17 @@ class HDFaccessor(object):
             yield data
 
     def _get_vals_with_IDs(self, key, use_ids, chunksize=1, **kwargs):
-        n = self.store.get_node(key)
-        # TODO
-        if "ID" in n.table.colpathnames:
-            idxname = "ID"
-        else:
+        # n = self.store.get_node(key)
+        # # TODO
+        # if "ID" in n.table.colpathnames:
+        #     idxname = "ID"
+        # else:
+        #     idxname = "index"
+        idxlevels = self.store.get_storer(key).levels
+        if idxlevels == 1:
             idxname = "index"
+        else:
+            idxname = idxlevels[0]
 
         assert self.IDs is not None, "no IDs found in HDF-store"
         use_ids = self._chunks(use_ids, chunksize)
@@ -648,6 +682,9 @@ class HDFaccessor(object):
                                         print_progress=print_progress,
                                         **kwargs))
 
+    def _ID_to_IDnum(self, ID):
+        return int(self.IDs[(self.IDs == ID).values].index[0])
+
     def _get_id(self, key, n, **kwargs):
         """
         return the data for a single ID
@@ -667,9 +704,10 @@ class HDFaccessor(object):
         assert isinstance(n, (int, str)), "ID can only be an integer or string!"
 
         if isinstance(n, str):
-            ret = next(self._get_nids_iter(key=key, nids=[n], **kwargs))
-        elif isinstance(n, int):
-            ret = next(self._get_nids_iter(key=key, nids=1, start=n, **kwargs))
+            n = self._ID_to_IDnum(n)
+
+        n = self.IDs.index.get_loc(n)
+        ret = next(self._get_nids_iter(key=key, nids=1, start=n, **kwargs))
 
         return ret
 
