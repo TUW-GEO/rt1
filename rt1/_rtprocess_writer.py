@@ -336,12 +336,12 @@ class RT1_processor(object):
 
                 # set the processing-args
                 # update ID to be a valid python-identifier
-                self.args_to_process = [
-                        {**arg,
-                         "_RT1_ID_num": next(id_counter)}
-                        for arg, q in zip(self.arg_list, process_Q)
-                        if not q
-                        ]
+                self.args_to_process = [{**arg,
+                                         "_RT1_ID_num": next(id_counter)}
+                                        for arg, q in zip(self.arg_list,
+                                                          process_Q)
+                                        if not q
+                                        ]
         else:
             self.args_to_process = [{**i, "_RT1_ID_num": n}
                                     for i, n in zip(self.arg_list,
