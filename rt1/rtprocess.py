@@ -1391,13 +1391,21 @@ class RTprocess(object):
             - key: the name to use for the metric in the returned dataset
             - value: a tuple of the form:
                      (metric, parameter 1, parameter 2)
+                     if `value = "custom"` the function provided in
+                     `export_functions`will be used
 
             >>> dict(R = ("pearson", "sig", "tot"),
-            >>>      RMSD = ("rmsd", "sig", "tot"))
+            >>>      RMSD = ("rmsd", "sig", "tot"),
+            >>>      X = "custom"    # evaluated via export_functions["X"]
+            >>>     )
 
 
         export_functions = dict, optional
-            a dict with functions that will be used to export the parameter-values
+            a dict with functions that will be used to export the
+            parameter- and/or metric-values.
+
+            parameter-functions must return a pandas.DataFrame!
+            metric-functions must return an int or float
 
             NOTE: this will override the default extraction-procedures!
             NOTE: the functions must be pickleable for parallel processing!
@@ -1469,7 +1477,6 @@ class RTprocess(object):
 
         # ----- get list of paths to fit-objects
         self._useres = getattr(res, dumpfolder)
-
         # load the first fit-object to pre-load fn-coefficients
         fit0 = self._useres.load_fit(0)
 
@@ -1565,7 +1572,8 @@ class RTprocess(object):
 
         if export_functions:
             for key, func in export_functions.items():
-                auxdata[key] = func(fit)
+                if key in parameters:
+                    auxdata[key] = func(fit)
 
         ret = RTprocess._postprocess_getparams(
             fit=fit,
@@ -1580,9 +1588,13 @@ class RTprocess(object):
         if metrics:
             metric_layer = dict()
             for name, p in metrics.items():
-                metric_layer[name] = getattr(
-                    getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower()
-                )
+                if (export_functions and name in export_functions
+                    and p == "custom"):
+                    metric_layer[name] = export_functions[name](fit)
+                else:
+                    metric_layer[name] = getattr(
+                        getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower()
+                    )
             metric_layer = pd.DataFrame(metric_layer, index=[fit._RT1_ID_num])
             metric_layer.index.name = "ID"
 
@@ -1649,6 +1661,8 @@ class RTprocess(object):
         if staticlayers is None:
             staticlayers = dict()
 
+        ret = dict()  # dict that holds the return-values
+
         defs = RTprocess._defdict_parser(fit.defdict)
 
         usedfs = []
@@ -1691,29 +1705,34 @@ class RTprocess(object):
         if auxdata is not None and len(auxdata) > 0:
             usedfs.append(auxdata)
 
-        # combine all timeseries and set the proper index
-        df = pd.concat(usedfs, axis=1)
-        df.columns.names = ["param"]
-        df.index.names = ["date"]
+        if len(usedfs) > 0:
+            # combine all timeseries and set the proper index
+            df = pd.concat(usedfs, axis=1)
+            df.columns.names = ["param"]
+            df.index.names = ["date"]
 
-        if yindex is not None:
-            df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+            if yindex is not None:
+                df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
+                df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+            else:
+                df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
 
-            # set static layers
-            statics = pd.DataFrame(
-                staticlayers,
-                index=pd.MultiIndex.from_product(
-                    iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
-                ),
-            )
+            ret["dynamic"] = df
 
-        else:
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+        if len(staticlayers) > 0:
+            if yindex is not None:
+                # set static layers
+                statics = pd.DataFrame(
+                    staticlayers,
+                    index=pd.MultiIndex.from_product(
+                        iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
+                    ),
+                )
+            else:
+                # set static layers
+                statics = pd.DataFrame(staticlayers, index=[xindex[1]])
+                statics.index.name = xindex[0]
 
-            # set static layers
-            statics = pd.DataFrame(staticlayers, index=[xindex[1]])
-            statics.index.name = xindex[0]
+            ret["static"] = statics
 
-        return dict(dynamic=df,
-                    static=statics)
+        return ret

@@ -127,7 +127,6 @@ class TestRTfits(unittest.TestCase):
             assert fit_hdf.res_df.equals(fit.res_df), (
                 "res_df of HDF-container and pickle-dumps are not equal!")
 
-
         # check accessing fits via ID
         id_fit = fit_db.load_fit("RT1_1")
         assert id_fit.ID == "RT1_1", "the ID of the loaded fit is not OK"
