@@ -742,6 +742,9 @@ class HDFaccessor(object):
             the retrieved DataFrame.
 
         """
+
+        nids = min(len(self.IDs), nids)
+
         assert key in self.store, (
             f"invalid key provided, use one of {self.store.keys()}"
             )
@@ -791,10 +794,6 @@ class HDFaccessor(object):
 
             if print_progress:
                 print("reading", (i + 1) * read_chunksize)
-        else:
-            print("asdf")
-            data = pd.concat(ret)
-            yield data
 
 
 class _data_container(object):
