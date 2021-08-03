@@ -127,6 +127,51 @@ class TestRTfits(unittest.TestCase):
             assert fit_hdf.res_df.equals(fit.res_df), (
                 "res_df of HDF-container and pickle-dumps are not equal!")
 
+
+        # check accessing fits via ID
+        id_fit = fit_db.load_fit("RT1_1")
+        assert id_fit.ID == "RT1_1", "the ID of the loaded fit is not OK"
+
+        # try accessing the data directly
+        alldata = fit_db.datasets.dataset.select()
+        assert len(alldata.index.levels[0]) == 3, (
+            "accessing full dataset was not OK")
+
+        data0 = fit_db.datasets.dataset.get_id(0)
+        assert len(data0.index.levels[0]) == 1, "dataset-selection was not OK"
+        assert data0.index.levels[0][0] == 0, "dataset-selection was not OK"
+
+        for i in ["RT1_1", "RT1_2", "RT1_3"]:
+            dataID = fit_db.datasets.dataset.get_id(i)
+            assert len(dataID.index.levels[0]) == 1, (
+                "dataset-selection via ID was not OK")
+            assert fit_db.IDs.loc[dataID.index.levels[0][0]].ID == i, (
+                "dataset-selection via ID was not OK")
+
+        data2 = fit_db.datasets.dataset.get_nids(2)
+        assert len(data2.index.levels[0]) == 2, (
+            "multiple dataset-selection was not OK")
+        assert all(fit_db.IDs.index[:2].isin(data2.index.levels[0])), (
+            "multiple dataset-selection was not OK")
+
+        # check data-generator
+        data_iter = fit_db.datasets.dataset.get_nids_iter(2)
+
+        data_iter_1 = next(data_iter)
+        assert len(data_iter_1.index.levels[0]) == 2, (
+            "dataset generator was not OK")
+        assert all(fit_db.IDs.index[:2].isin(data_iter_1.index.levels[0])), (
+            "dataset generator was not OK")
+
+        data_iter_2 = next(data_iter)
+        assert len(data_iter_2.index.levels[0]) == 1, (
+            "dataset generator was not OK")
+        assert all(fit_db.IDs.index[2:].isin(data_iter_2.index.levels[0])), (
+            "dataset generator was not OK")
+
+        with self.assertRaises(StopIteration):
+            _ = next(data_iter)
+
         # make sure to close the HDF-file so that the folders can be savely deleted
         fit_db.close()
 
