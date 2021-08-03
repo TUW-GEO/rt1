@@ -572,7 +572,7 @@ class RTprocess(object):
             res = initializer(*args)
             return res
 
-    def processfunc(
+    def _processfunc(
         self,
         ncpu=1,
         print_progress=True,
@@ -580,6 +580,7 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         queue=None,
+        proc_counter=None,
         dump_fit=False,
         **kwargs
     ):
@@ -596,15 +597,15 @@ class RTprocess(object):
             (see for example: )
 
             >>> if __name__ == '__main__':
-                    fit.processfunc(...)
+                    fit._processfunc(...)
 
             In order to allow pickling the final rt1.rtfits.Fits object,
             it is required to store ALL definitions within a separate
-            file and call processfunc in the 'main'-file as follows:
+            file and call _processfunc in the 'main'-file as follows:
 
             >>> from specification_file import fit reader lsq_kwargs ... ...
                 if __name__ == '__main__':
-                    fit.processfunc(ncpu=5, reader=reader,
+                    fit._processfunc(ncpu=5, reader=reader,
                                     lsq_kwargs=lsq_kwargs, ... ...)
 
         Parameters
@@ -671,14 +672,14 @@ class RTprocess(object):
         # check if reader args is provided in setupdict
         if reader_args is None:
             assert "reader_args" in setupdict, (
-                'if "reader_args" is not passed directly to processfunc() '
+                'if "reader_args" is not passed directly to _processfunc() '
                 + ', the preprocess() function must return a key "reader_args"!'
             )
 
             reader_args = setupdict["reader_args"]
         else:
             assert "reader_args" not in setupdict, (
-                '"reader_args" is provided as argument to processfunc() '
+                '"reader_args" is provided as argument to _processfunc() '
                 + "AND via the return-dict of the preprocess() function!"
             )
 
@@ -694,8 +695,6 @@ class RTprocess(object):
         # to the initargs and use "self._initializer" as initializer-function
         # Note: this is a pickleable way for decorating the initializer!
 
-        # TODO use the same Manager as for the queue
-        proc_counter = mp.Manager().Value(ctypes.c_ulonglong, 0)
         pool_kwargs["initargs"] = [
             pool_kwargs.pop("initializer", None),
             queue,
@@ -818,7 +817,11 @@ class RTprocess(object):
             if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
-                queue = mp.Manager().Queue(-1)
+                manager = mp.Manager()
+                queue = manager.Queue(-1)
+                # a counter to name the multiprocess-workers
+                proc_counter = manager.Value(ctypes.c_ulonglong, 0)
+
                 listener = mp.Process(
                     target=self._listener_process,
                     args=[queue, self.dumppath, logfile_level],
@@ -884,13 +887,14 @@ class RTprocess(object):
 
                         log.info(outtxt)
 
-            _ = self.processfunc(
+            _ = self._processfunc(
                 ncpu=ncpu,
                 print_progress=print_progress,
                 reader_args=reader_args,
                 pool_kwargs=pool_kwargs,
                 preprocess_kwargs=preprocess_kwargs,
                 queue=queue,
+                proc_counter=proc_counter,
                 dump_fit=dump_fit,
                 init_func=self._worker_configurer,
                 init_args=(queue, logfile_level)
@@ -1035,7 +1039,11 @@ class RTprocess(object):
             if logfile_level is not None and ncpu > 1:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
-                queue = mp.Manager().Queue(-1)
+                manager = mp.Manager()
+                queue = manager.Queue(-1)
+                # a counter to name the multiprocess-workers
+                proc_counter = manager.Value(ctypes.c_ulonglong, 0)
+
                 listener = mp.Process(
                     target=self._listener_process,
                     args=[queue, self.dumppath, logfile_level],
@@ -1069,6 +1077,7 @@ class RTprocess(object):
                 use_config=use_config,
                 postprocess=postprocess,
                 queue=queue,
+                proc_counter=proc_counter,
                 print_progress=print_progress,
                 create_index=create_index,
                 init_func=self._worker_configurer,
@@ -1110,15 +1119,11 @@ class RTprocess(object):
         use_config=None,
         postprocess=None,
         queue=None,
+        proc_counter=None,
         print_progress=True,
         create_index=True,
         **kwargs
     ):
-
-        # don't call additional initializers, only use the default initializer
-        # (to enable subprocess-logging)
-        # TODO use the same manager as for the queue
-        proc_counter = mp.Manager().Value(ctypes.c_ulonglong, 0)
 
         pool_kwargs = dict(
             initializer=self._initializer,
