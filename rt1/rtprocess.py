@@ -814,7 +814,7 @@ class RTprocess(object):
             # initialize all necessary properties if setup was not yet called
             self.setup()
 
-            if logfile_level is not None and ncpu > 1:
+            if logfile_level is not None:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 manager = mp.Manager()
@@ -834,9 +834,9 @@ class RTprocess(object):
                 # (otherwise the log-file can not be generated!)
                 self._worker_configurer(queue, loglevel=logfile_level)
             else:
-                queue = None
+                queue, proc_counter = None
 
-            if logfile_level is not None and ncpu > 1:
+            if logfile_level is not None:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
@@ -913,13 +913,12 @@ class RTprocess(object):
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-                if ncpu > 1:
 
-                    # tell the queue to stop
-                    queue.put_nowait(None)
+                # tell the queue to stop
+                queue.put_nowait(None)
 
-                    # stop the listener process
-                    listener.join()
+                # stop the listener process
+                listener.join()
 
                 # remove any remaining file-handler and queue-handlers after
                 # the processing is done
@@ -1036,7 +1035,7 @@ class RTprocess(object):
                     self.proc_cls.rt1_procsesing_respath / self.proc_cls.finalout_name
                 )
 
-            if logfile_level is not None and ncpu > 1:
+            if logfile_level is not None:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
                 manager = mp.Manager()
@@ -1056,13 +1055,12 @@ class RTprocess(object):
                 # (otherwise the log-file can not be generated!)
                 self._worker_configurer(queue, loglevel=logfile_level)
             else:
-                queue = None
+                queue, proc_counter = None, None
 
-            if logfile_level is not None and ncpu > 1:
+            if logfile_level is not None:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
-                # TODO
                 listener.start()
 
             if fitlist is None:
@@ -1096,12 +1094,11 @@ class RTprocess(object):
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-                if ncpu > 1:
-                    # tell the queue to stop
-                    queue.put_nowait(None)
+                # tell the queue to stop
+                queue.put_nowait(None)
 
-                    # stop the listener process
-                    listener.join()
+                # stop the listener process
+                listener.join()
 
                 # remove any remaining file-and queue-handlers after processing is done
                 handlers = groupby_unsorted(log.handlers, key=lambda x: x.name)
