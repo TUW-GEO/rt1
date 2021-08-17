@@ -329,7 +329,6 @@ class RTmetrics(object):
 
         """
 
-
         return stats.linregress(d1, d2)._asdict()
 
     @staticmethod
@@ -538,6 +537,13 @@ class RTmetrics(object):
                      (cint + (slope - stderr) * (x.max() - x.mean()))],
                  c='r', ls='--', alpha=0.5)
 
+        # overplot intercept error
+        # ("intercept_stderr" is available only in new scipy versions!)
+        if "intercept_stderr" in metrics_dict["linregress"]:
+            intercept_err = metrics_dict["linregress"]["intercept_stderr"]
+            ax1.plot(x, intercept + intercept_err + slope * x, c='g', ls=':')
+            ax1.plot(x, intercept - intercept_err + slope * x, c='g', ls=':')
+
         metric_names = []
         metric_values = []
         # flatten metrics array and format float values
@@ -565,8 +571,7 @@ class RTmetrics(object):
 
         # scale for higher cells
         metrics_table.scale(1, 1.5)
-
-        plt.show(block=False)
+        fig.tight_layout()
         return fig
 
     @classmethod
