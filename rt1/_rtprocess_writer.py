@@ -228,7 +228,8 @@ class RT1_processor(object):
         while True:
             if self.should_stop.is_set():
                 if not self.queue.empty():
-                    log.progress("... combining remaining processed files")
+                    log.progress("... combining remaining " +
+                                 f"{self.queue.qsize()} processed results")
                 else:
                     log.progress("shutting down " + mp.current_process().name)
                     break
