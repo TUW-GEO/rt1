@@ -115,6 +115,13 @@ class RTresults(object):
 
         return getattr(self, key)
 
+    def __repr__(self):
+        s = [f"Parent path = {self._parent_path}",
+             "Results:"]
+        s += [f"    - {i}" for i in  self._paths]
+
+        return "\n".join(s)
+
     @staticmethod
     def _check_folderstructure(path):
         return all(
@@ -150,6 +157,17 @@ class RTresults(object):
 
         def __iter__(self):
             return self.dump_files
+
+        def __repr__(self):
+            s = [str(self.name)]
+            if len(self._nc_paths) > 0:
+                s += ["NetCDF files:"]
+                s += [f"    - {i}" for i in  self._nc_paths]
+            if len(self._hdf_paths) > 0:
+                s += ["HDF5 files:"]
+                s += [f"    - {i}" for i in  self._hdf_paths]
+
+            return "\n".join(s)
 
         @property
         def fit_db(self):
@@ -496,6 +514,17 @@ class HDFaccessor(object):
         self.store.close()
         gc.collect()
 
+    def __repr__(self):
+        s = [f"Path: {self.store._path}"]
+        if self.IDs is not None:
+            s += ["", f"Number of IDs: {len(self.IDs)}"]
+            s += ["Data keys:"]
+        s += [(f"    - {key.lstrip('/') :<15}" +
+               f" (nrows: {self.store.get_storer(key).nrows})")
+              for key in self.store if not key.endswith("meta")]
+
+        return "\n".join(s)
+
     def close(self):
         self.store.close()
         gc.collect()
@@ -605,12 +634,7 @@ class HDFaccessor(object):
             yield lst[i:i + n]
 
     def _get_vals(self, key, chunksize, start=None, **kwargs):
-        # n = self.store.get_node(key)
-        # # TODO
-        # if "ID" in n.table.colpathnames:
-        #     idxname = "ID"
-        # else:
-        #     idxname = "index"
+        # TODO
         idxlevels = self.store.get_storer(key).levels
         if idxlevels == 1:
             idxname = "index"
@@ -630,12 +654,7 @@ class HDFaccessor(object):
             yield data
 
     def _get_vals_with_IDs(self, key, use_ids, chunksize=1, **kwargs):
-        # n = self.store.get_node(key)
-        # # TODO
-        # if "ID" in n.table.colpathnames:
-        #     idxname = "ID"
-        # else:
-        #     idxname = "index"
+        # TODO
         idxlevels = self.store.get_storer(key).levels
         if idxlevels == 1:
             idxname = "index"
