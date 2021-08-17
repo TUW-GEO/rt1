@@ -328,12 +328,9 @@ class RTmetrics(object):
             float values for slope, intercept, pearson, pvalue, stderr
 
         """
-        return dict(
-            zip(
-                ["slope", "intercept", "pearson", "pvalue", "stderr"],
-                stats.linregress(d1, d2),
-            )
-        )
+
+
+        return stats.linregress(d1, d2)._asdict()
 
     @staticmethod
     def rmsd(d1, d2):
@@ -516,14 +513,33 @@ class RTmetrics(object):
 
         # create scatterplot
         ax1.scatter(d1, d2)
+
         ax1.set_xlabel(d1_name)
         ax1.set_ylabel(d2_name)
 
         # get all metrics and define lists for table data
         metrics_dict = cls.allmetrics(d1, d2)
+
+        # add linregress-line
+        intercept = metrics_dict["linregress"]["intercept"]
+        slope = metrics_dict["linregress"]["slope"]
+        stderr = metrics_dict["linregress"]["stderr"]
+
+        x = np.array([d1.min(), d1.max()])
+        ax1.plot(x, intercept + slope * x, c='k', ls='--')
+
+        # overplot gradient error
+        cint = intercept + slope * x.mean()
+        ax1.plot(x, [(cint + (slope + stderr) * (x.min() - x.mean())),
+                     (cint + (slope + stderr) * (x.max() - x.mean()))],
+                 c='r', ls='--', alpha=0.5)
+
+        ax1.plot(x, [(cint + (slope - stderr) * (x.min() - x.mean())),
+                     (cint + (slope - stderr) * (x.max() - x.mean()))],
+                 c='r', ls='--', alpha=0.5)
+
         metric_names = []
         metric_values = []
-
         # flatten metrics array and format float values
         for key, val in cls._flatten_dictionary(metrics_dict).items():
             metric_names.append(key)
