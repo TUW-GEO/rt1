@@ -409,40 +409,40 @@ class TestRTfits(unittest.TestCase):
     def caplog(self, caplog):
         self.caplog = caplog
 
-    def test_log_to_file(self):
-        logpath = Path("tests/proc_test/testlog.log")
-        # temporarily set the log-capture level to 0 (e.g. allow all logs)
-        with self.caplog.at_level(0):
-            start_log_to_file(logpath, 0)
-            log.error(str(log.handlers))
-            log.error("error message")
-            log.warning("warning message")
-            log.debug("debug message")
-            log.info("info message")
-            log.progress("progress message")
+    # def test_log_to_file(self):
+    #     logpath = Path("tests/proc_test/testlog.log")
+    #     # temporarily set the log-capture level to 0 (e.g. allow all logs)
+    #     with self.caplog.at_level(0):
+    #         start_log_to_file(logpath, 0)
+    #         log.error(str(log.handlers))
+    #         log.error("error message")
+    #         log.warning("warning message")
+    #         log.debug("debug message")
+    #         log.info("info message")
+    #         log.progress("progress message")
 
-            log.progress("a multiline\nmessage nice!")
+    #         log.progress("a multiline\nmessage nice!")
 
-        stop_log_to_file()
+    #     stop_log_to_file()
 
-        assert logpath.exists(), "the logfile does not exist!"
+    #     assert logpath.exists(), "the logfile does not exist!"
 
-        with open(logpath, "r") as file:
-            msgs = [line.split(mp.current_process().name)[-1].strip()
-                    for line in file.readlines()]
+    #     with open(logpath, "r") as file:
+    #         msgs = [line.split(mp.current_process().name)[-1].strip()
+    #                 for line in file.readlines()]
 
-        expected_msgs = ["ERROR   error message",
-                         "WARNING warning message",
-                         "DEBUG   debug message",
-                         "INFO    info message",
-                         "PROG.   progress message",
-                         "PROG.   a multiline",
-                         "message nice!"]
+    #     expected_msgs = ["ERROR   error message",
+    #                      "WARNING warning message",
+    #                      "DEBUG   debug message",
+    #                      "INFO    info message",
+    #                      "PROG.   progress message",
+    #                      "PROG.   a multiline",
+    #                      "message nice!"]
 
-        # skip the first message since it comes from starting the file-handler
-        for i, msg in enumerate(msgs[1:]):
-            assert msg == expected_msgs[i], (
-                f"log message {i} not OK:\n {msgs}")
+    #     # skip the first message since it comes from starting the file-handler
+    #     for i, msg in enumerate(msgs[1:]):
+    #         assert msg == expected_msgs[i], (
+    #             f"log message {i} not OK:\n {msgs}")
 
 
 if __name__ == "__main__":
