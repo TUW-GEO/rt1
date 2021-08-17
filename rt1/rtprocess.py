@@ -1461,7 +1461,9 @@ class RTprocess(object):
         # ----- initialize a RTresults object for easy access to the list of dump-files
         # don't use "self.dumppath" since it requires a call to setup() !
         specs = RT1_configparser(self.config_path).get_process_specs()
-        res = RTresults(specs["save_path"] / specs["dumpfolder"])
+        res = RTresults(specs["save_path"] / specs["dumpfolder"],
+                        use_dumps=kwargs.get("use_dumps", False))
+
 
         # ----- get dumpfolder to use
         if not dumpfolder:
