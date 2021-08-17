@@ -937,7 +937,7 @@ class RTprocess(object):
         finalout_name=None,
         postprocess=None,
         print_progress=True,
-        logfile_level=1,
+        logfile_level=21,
         fitlist=None,
         save_path=None,
         create_index=True,
@@ -1509,8 +1509,6 @@ class RTprocess(object):
             use_config=use_config,
             finalout_name=finalout_name,
             postprocess=func,
-            print_progress=True,
-            logfile_level=1,
             save_path=savepath,
             **kwargs
         )
