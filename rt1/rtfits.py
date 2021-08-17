@@ -66,6 +66,11 @@ def load(path):
         else:
             fit.ID = Path(path).stem
 
+    if isinstance(fit, MultiFits):
+        fit.set_dataset(fit.dataset)
+        fit.set_aux_data(fit.aux_data)
+        fit.set_reader_arg(fit.reader_arg)
+
     return fit
 
 
