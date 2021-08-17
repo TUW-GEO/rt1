@@ -1464,7 +1464,6 @@ class RTprocess(object):
         res = RTresults(specs["save_path"] / specs["dumpfolder"],
                         use_dumps=kwargs.get("use_dumps", False))
 
-
         # ----- get dumpfolder to use
         if not dumpfolder:
             if len(res._paths) > 1:
