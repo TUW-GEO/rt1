@@ -1174,11 +1174,12 @@ class RTprocess(object):
         return res
 
     def _finalout_reader(self, reader_arg, use_config=None):
-        fitpath = reader_arg["ID"]
-        # load fitobjects based on fit-paths
+        ID = reader_arg["ID"]
+        # load fitobjects based on IDs
         try:
-            fit = self._useres.load_fit(fitpath)
-
+            fit = self._useres.load_fit(ID)
+            if fit is None:
+                return
             if ((use_config is None or use_config == "from_postprocess"
                  ) and isinstance(fit, MultiFits)):
                 use_config = fit.config_names
@@ -1213,7 +1214,7 @@ class RTprocess(object):
 
             return fit
         except Exception:
-            log.error(f"there was an error while loading {fitpath}",
+            log.error(f"there was an error while loading {ID}",
                       exc_info=True)
             return
 
@@ -1291,7 +1292,6 @@ class RTprocess(object):
         if not hasattr(self, "_useres"):
             self._useres = getattr(RTresults(self.dumppath, use_dumps=use_dumps),
                                    self.proc_cls.dumpfolder)
-
         # get dump-files
         dumpiter = self._useres.dump_files
 
