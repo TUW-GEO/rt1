@@ -24,7 +24,7 @@ class TestRTMetrics(unittest.TestCase):
             'linregress': {
                 'slope': 0.2014594067161711,
                 'intercept': 27.29877405497224,
-                'pearson': 0.13745925602259895,
+                'rvalue': 0.13745925602259895,
                 'pvalue': 0.7049253466715144,
                 'stderr': 0.513246861349088},
             'rmsd': 61.48676800743392,
@@ -63,8 +63,8 @@ class TestRTMetrics(unittest.TestCase):
                                linregress_expected['slope'])
         self.assertAlmostEqual(linregress['intercept'],
                                linregress_expected['intercept'])
-        self.assertAlmostEqual(linregress['pearson'],
-                               linregress_expected['pearson'])
+        self.assertAlmostEqual(linregress['rvalue'],
+                               linregress_expected['rvalue'])
         self.assertAlmostEqual(linregress['pvalue'],
                                linregress_expected['pvalue'])
         self.assertAlmostEqual(linregress['stderr'],
