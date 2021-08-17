@@ -414,6 +414,7 @@ class TestRTfits(unittest.TestCase):
         # temporarily set the log-capture level to 0 (e.g. allow all logs)
         with self.caplog.at_level(0):
             start_log_to_file(logpath, 0)
+            log.error(str(log.handlers))
             log.error("error message")
             log.warning("warning message")
             log.debug("debug message")
