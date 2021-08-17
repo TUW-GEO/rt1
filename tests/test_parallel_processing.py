@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 import unittest
 import unittest.mock as mock
-from rt1 import log, start_log_to_file, stop_log_to_file, set_log_handler_level
+from rt1 import log, start_log_to_file, stop_log_to_file
 from rt1.rtprocess import RTprocess
 from rt1.rtresults import RTresults
 from rt1.rtfits import MultiFits
@@ -410,7 +410,6 @@ class TestRTfits(unittest.TestCase):
         self.caplog = caplog
 
     def test_log_to_file(self):
-        set_log_handler_level(0)
         logpath = Path("tests/proc_test/testlog.log")
         # temporarily set the log-capture level to 0 (e.g. allow all logs)
         with self.caplog.at_level(0):
@@ -440,7 +439,7 @@ class TestRTfits(unittest.TestCase):
                          "message nice!"]
 
         # skip the first message since it comes from starting the file-handler
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(msgs[1:]):
             assert msg == expected_msgs[i], (
                 f"log message {i} not OK:\n {msgs}")
 
