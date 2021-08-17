@@ -440,7 +440,7 @@ class TestRTfits(unittest.TestCase):
                          "message nice!"]
 
         # skip the first message since it comes from starting the file-handler
-        for i, msg in enumerate(msgs[1:]):
+        for i, msg in enumerate(msgs):
             assert msg == expected_msgs[i], (
                 f"log message {i} not OK:\n {msgs}")
 
