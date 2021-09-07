@@ -26,6 +26,17 @@ class Volume(Scatter):
         self.polarplot = partial(polarplot, X=self)
         update_wrapper(self.polarplot, polarplot)
 
+    def __repr__(self):
+        try:
+            return (self.name +
+                    "(" +
+                    (",\n" + " " * (len(self.name) + 1)
+                     ).join([f"{param}={getattr(self, param)}"
+                             for param in self._param_names]) +
+                    ")")
+        except Exception:
+            return object.__repr__(self)
+
     @property
     def init_dict(self):
         if self.name.startswith("LinCombV"):

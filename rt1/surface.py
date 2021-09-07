@@ -28,6 +28,17 @@ class Surface(Scatter):
         self.hemreflect = partial(hemreflect, SRF=self)
         update_wrapper(self.hemreflect, hemreflect)
 
+    def __repr__(self):
+        try:
+            return (self.name +
+                    "(" +
+                    (",\n" + " " * (len(self.name) + 1)
+                     ).join([f"{param}={getattr(self, param)}"
+                             for param in self._param_names]) +
+                    ")")
+        except Exception:
+            return object.__repr__(self)
+
     @property
     def init_dict(self):
         if self.name.startswith("LinCombSRF"):
