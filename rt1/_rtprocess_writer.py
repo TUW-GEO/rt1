@@ -591,32 +591,30 @@ class RT1_processor(object):
             log.error("ALL IDs are already present in the HDF file!")
             return
 
+        ctx = mp.get_context('spawn')
+        pool = ctx.Pool(self.n_worker, **pool_kwargs)
+        # with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
         try:
-            ctx = mp.get_context('spawn')
-            pool = ctx.Pool(self.n_worker, **pool_kwargs)
-            # with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
-            try:
-                worker = pool.starmap_async(self._worker_process,
-                                            zip(self.args_to_process,
-                                                *starmap_args),
-                                            )
+            worker = pool.starmap_async(self._worker_process,
+                                        zip(self.args_to_process,
+                                            *starmap_args),
+                                        )
 
-                # do this after calling starmap_async to wait for the initializers
-                # to finish!
-                _ = self.start_print_thread()
+            # do this after calling starmap_async to wait for the initializers
+            # to finish!
+            _ = self.start_print_thread()
 
-                res = worker.get()
-            finally:
-                pool.close()
-                pool.join()
-        finally:
+            res = worker.get()
+
             print()  # print a newline
-
             d, h, m, s = dt_to_hms(timedelta(
                 seconds=default_timer() - self.p_start))
             log.progress("finished processing " +
                          f"{len(self.args_to_process)} [{self.p_totcnt.value}] IDs!" +
                          f" ... it took {d} {h:02}:{m:02}:{s:02}")
+        finally:
+            pool.close()
+            pool.join()
 
         return res
 
