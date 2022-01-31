@@ -43,6 +43,10 @@ except ModuleNotFoundError:
     log.warning("cloudpickle could not be imported, .dump() will not work!")
 
 
+def _check_multi(fit):
+    return fit.__class__.__name__ == "MultiFits"
+
+
 def load(path):
     """
     a convenience-function to load a Fits-object dumped with `fit.dump()`
@@ -59,14 +63,13 @@ def load(path):
 
     with open(path, "rb") as file:
         fit = pd.read_pickle(file)
-
     if not hasattr(fit, "ID") or fit.ID is None:
-        if isinstance(fit, MultiFits):
+        if _check_multi(fit):
             fit.set_ID(Path(path).stem)
         else:
             fit.ID = Path(path).stem
 
-    if isinstance(fit, MultiFits):
+    if _check_multi(fit):
         fit.set_dataset(fit.dataset)
         fit.set_aux_data(fit.aux_data)
         fit.set_reader_arg(fit.reader_arg)
