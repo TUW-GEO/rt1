@@ -1659,7 +1659,8 @@ class Fits(Scatter):
                 R.V.omega = res_dict["omega"]
         else:
             R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._omega_symb}
             )
 
         if self._tau_func is None:
@@ -1667,14 +1668,16 @@ class Fits(Scatter):
                 R.V.tau = res_dict["tau"]
         else:
             R.V.tau = self._tau_func(
-                **{key: res_dict[key] for key in self._tau_symb})
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._tau_symb})
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
                 R.SRF.NormBRDF = res_dict["NormBRDF"]
         else:
             R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._N_symb}
             )
 
         if "bsf" in res_dict:
@@ -1873,7 +1876,8 @@ class Fits(Scatter):
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             # evaluate the inner derivative
             df_dx = self._tau_diff_func[i](
-                **{key: res_dict[key] for key in self._tau_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._tau_symb}
             )
             if not np.isscalar(df_dx):
                 # flatten the array (except if it is a scalar)
@@ -1889,7 +1893,8 @@ class Fits(Scatter):
         # same for omega
         for i in set(self._omega_symb) & set(param_dyn_dict.keys()):
             df_dx = self._omega_diff_func[i](
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._omega_symb}
             )
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
@@ -1902,7 +1907,8 @@ class Fits(Scatter):
         # same for NormBRDF
         for i in set(self._N_symb) & set(param_dyn_dict.keys()):
             df_dx = self._N_diff_func[i](
-                **{key: res_dict[key] for key in self._N_symb})
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._N_symb})
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
@@ -2020,7 +2026,8 @@ class Fits(Scatter):
                 R.V.omega = res_dict["omega"]
         else:
             R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._omega_symb}
             )
 
         if self._tau_func is None:
@@ -2028,14 +2035,16 @@ class Fits(Scatter):
                 R.V.tau = res_dict["tau"]
         else:
             R.V.tau = self._tau_func(
-                **{key: res_dict[key] for key in self._tau_symb})
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._tau_symb})
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
                 R.SRF.NormBRDF = res_dict["NormBRDF"]
         else:
             R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
+                **{key: res_dict[key] if key in res_dict else fixed_dict[key]
+                   for key in self._N_symb}
             )
 
         if "bsf" in res_dict:
