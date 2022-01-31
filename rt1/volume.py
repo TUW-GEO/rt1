@@ -9,6 +9,7 @@ from .rtplots import polarplot
 
 class Volume(Scatter):
     """basic volume class"""
+
     name = "RT1_Volume_base_class"
     _param_names = ["omega", "tau", "a"]
 
@@ -28,12 +29,14 @@ class Volume(Scatter):
 
     def __repr__(self):
         try:
-            return (self.name +
-                    "(" +
-                    (",\n" + " " * (len(self.name) + 1)
-                     ).join([f"{param}={getattr(self, param)}"
-                             for param in self._param_names]) +
-                    ")")
+            return (
+                self.name
+                + "("
+                + (",\n" + " " * (len(self.name) + 1)).join(
+                    [f"{param}={getattr(self, param)}" for param in self._param_names]
+                )
+                + ")"
+            )
         except Exception:
             return object.__repr__(self)
 
@@ -81,7 +84,6 @@ class Volume(Scatter):
         pfunc = sp.lambdify(args, self._func, modules=["numpy", "sympy"])
         return pfunc
 
-
     def p(self, t_0, t_ex, p_0, p_ex, param_dict={}):
         """
         Calculate numerical value of the volume-scattering phase-function
@@ -124,7 +126,7 @@ class Volume(Scatter):
                 0.1,
                 0.1,
                 0.1,
-                **{key: 0.12 for key in param_dict.keys()}
+                **{key: 0.12 for key in param_dict.keys()},
             ),
             np.ndarray,
         ):
@@ -297,7 +299,7 @@ class Volume(Scatter):
                     0.1,
                     0.1,
                     0.1,
-                    **{key: 0.12 for key in param_dict.keys()}
+                    **{key: 0.12 for key in param_dict.keys()},
                 ),
                 np.ndarray,
             ):
@@ -475,6 +477,7 @@ class LinCombV(Volume):
                (Volume-objects) and the associated weighting-factors
                (floats) of the linear-combination.
     """
+
     name = "LinCombV"
     _param_names = ["Vchoices", "tau", "omega"]
 
@@ -611,6 +614,7 @@ class Rayleigh(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+
     name = "Rayleigh"
     _param_names = ["tau", "omega"]
 
@@ -633,7 +637,7 @@ class Rayleigh(Volume):
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        return 3.0 / (16.0 * sp.pi) * (1.0 + x ** 2.0)
+        return 3.0 / (16.0 * sp.pi) * (1.0 + x**2.0)
 
     @property
     @lru_cache()
@@ -677,6 +681,7 @@ class HenyeyGreenstein(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+
     name = "HenyeyGreenstein"
     _param_names = ["tau", "omega", "ncoefs", "t", "a"]
 
@@ -704,8 +709,8 @@ class HenyeyGreenstein(Volume):
         phi_0 = sp.Symbol("phi_0")
         phi_ex = sp.Symbol("phi_ex")
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        func = (1.0 - self.t ** 2.0) / (
-            (4.0 * sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5
+        func = (1.0 - self.t**2.0) / (
+            (4.0 * sp.pi) * (1.0 + self.t**2.0 - 2.0 * self.t * x) ** 1.5
         )
 
         return func
@@ -717,8 +722,8 @@ class HenyeyGreenstein(Volume):
         else:
             t = self.t
         x = self._scat_angle_numeric(theta_0, theta_ex, phi_0, phi_ex, self.a)
-        func = (1.0 - t ** 2.0) / (
-            (4.0 * np.pi) * (1.0 + t ** 2.0 - 2.0 * t * x) ** 1.5
+        func = (1.0 - t**2.0) / (
+            (4.0 * np.pi) * (1.0 + t**2.0 - 2.0 * t * x) ** 1.5
         )
 
         return func
@@ -731,7 +736,7 @@ class HenyeyGreenstein(Volume):
         needs to be a function that can be later evaluated by subsituting 'n'
         """
         n = sp.Symbol("n")
-        legcoefs = (1.0 / (4.0 * sp.pi)) * (2.0 * n + 1) * self.t ** n
+        legcoefs = (1.0 / (4.0 * sp.pi)) * (2.0 * n + 1) * self.t**n
         return legcoefs
 
 
@@ -762,6 +767,7 @@ class HGRayleigh(Volume):
         scat_angle() of the BRDF
         (http://rt1.readthedocs.io/en/latest/theory.html#equation-general_scat_angle)
     """
+
     name = "HGRayleigh"
     _param_names = ["tau", "omega", "ncoefs", "t", "a"]
 
@@ -798,10 +804,10 @@ class HGRayleigh(Volume):
             / (8.0 * sp.pi)
             * (
                 1.0
-                / (2.0 + self.t ** 2)
-                * (1 + x ** 2)
-                * (1.0 - self.t ** 2.0)
-                / ((1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+                / (2.0 + self.t**2)
+                * (1 + x**2)
+                * (1.0 - self.t**2.0)
+                / ((1.0 + self.t**2.0 - 2.0 * self.t * x) ** 1.5)
             )
         )
 
@@ -818,11 +824,11 @@ class HGRayleigh(Volume):
                 3.0
                 / (8.0 * sp.pi)
                 * 1.0
-                / (2.0 + self.t ** 2)
+                / (2.0 + self.t**2)
                 * (
                     (n + 2.0) * (n + 1.0) / (2.0 * n + 3) * self.t ** (n + 2.0)
-                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t ** n
-                    + (5.0 * n ** 2.0 - 1.0) / (2.0 * n - 1.0) * self.t ** n
+                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t**n
+                    + (5.0 * n**2.0 - 1.0) / (2.0 * n - 1.0) * self.t**n
                 ),
                 n < 2,
             ),
@@ -830,12 +836,12 @@ class HGRayleigh(Volume):
                 3.0
                 / (8.0 * sp.pi)
                 * 1.0
-                / (2.0 + self.t ** 2)
+                / (2.0 + self.t**2)
                 * (
                     n * (n - 1.0) / (2.0 * n - 1.0) * self.t ** (n - 2.0)
                     + (n + 2.0) * (n + 1.0) / (2.0 * n + 3) * self.t ** (n + 2.0)
-                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t ** n
-                    + (5.0 * n ** 2.0 - 1.0) / (2.0 * n - 1.0) * self.t ** n
+                    + (n + 1.0) ** 2.0 / (2.0 * n + 3.0) * self.t**n
+                    + (5.0 * n**2.0 - 1.0) / (2.0 * n - 1.0) * self.t**n
                 ),
                 True,
             ),

@@ -19,12 +19,13 @@ import signal
 
 from . import log
 from .rtresults import HDFaccessor
-from .general_functions import (dt_to_hms,
-                                update_progress,
-                                groupby_unsorted,
-                                isidentifier,
-                                find_missing
-                                )
+from .general_functions import (
+    dt_to_hms,
+    update_progress,
+    groupby_unsorted,
+    isidentifier,
+    find_missing,
+)
 
 
 class RepeatTimer(threading.Thread):
@@ -60,11 +61,17 @@ class RepeatTimer(threading.Thread):
 
 
 class RT1_processor(object):
-    def __init__(self,
-                 n_worker=1, n_combiner=2, n_writer=1,
-                 dst_path=None, HDF_kwargs=None,
-                 write_chunk_size=1000, out_cache_size=10,
-                 min_itemsize=None):
+    def __init__(
+        self,
+        n_worker=1,
+        n_combiner=2,
+        n_writer=1,
+        dst_path=None,
+        HDF_kwargs=None,
+        write_chunk_size=1000,
+        out_cache_size=10,
+        min_itemsize=None,
+    ):
         """
         A class that takes care of combining results and writing them
         to disk as a HDF-container.
@@ -133,7 +140,7 @@ class RT1_processor(object):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         self.should_stop.set()
         self._stop.set()
-        raise(SystemExit)
+        raise (SystemExit)
 
     def _increase_cnt(self, err=False):
         self.lock.acquire()
@@ -149,7 +156,7 @@ class RT1_processor(object):
 
     def print_progress(self):
         # shut down the print-thread in case should_stop is set and the queue is empty
-        if ((self.should_stop.is_set() and self.queue.empty()) or self._stop.is_set()):
+        if (self.should_stop.is_set() and self.queue.empty()) or self._stop.is_set():
             threading.current_thread().cancel()
             print()  # print a newline
 
@@ -191,9 +198,7 @@ class RT1_processor(object):
         )
 
         sys.stdout.write(
-            msg
-            + f" Q={self.queue.qsize():03}"
-            + f" O={self.out_queue.qsize():02}"
+            msg + f" Q={self.queue.qsize():03}" + f" O={self.out_queue.qsize():02}"
         )
         sys.stdout.flush()
 
@@ -228,8 +233,10 @@ class RT1_processor(object):
         while True:
             if self.should_stop.is_set():
                 if not self.queue.empty():
-                    log.progress("... combining remaining " +
-                                 f"{self.queue.qsize()} processed results")
+                    log.progress(
+                        "... combining remaining "
+                        + f"{self.queue.qsize()} processed results"
+                    )
                 else:
                     log.progress("shutting down " + mp.current_process().name)
                     break
@@ -268,8 +275,10 @@ class RT1_processor(object):
 
                 if len(results) > 0:
                     t = threading.Thread(
-                        target=self._combine_results, args=(results,),
-                        name=f"{mp.current_process().name} - {next(c)}")
+                        target=self._combine_results,
+                        args=(results,),
+                        name=f"{mp.current_process().name} - {next(c)}",
+                    )
                     t.start()
                     threads.append(t)
 
@@ -337,24 +346,25 @@ class RT1_processor(object):
 
                 # set the processing-args
                 # update ID to be a valid python-identifier
-                self.args_to_process = [{**arg,
-                                         "_RT1_ID_num": next(id_counter)}
-                                        for arg, q in zip(self.arg_list,
-                                                          process_Q)
-                                        if not q
-                                        ]
+                self.args_to_process = [
+                    {**arg, "_RT1_ID_num": next(id_counter)}
+                    for arg, q in zip(self.arg_list, process_Q)
+                    if not q
+                ]
         else:
-            self.args_to_process = [{**i, "_RT1_ID_num": n}
-                                    for i, n in zip(self.arg_list,
-                                                    range(len(self.arg_list)))
-                                    ]
+            self.args_to_process = [
+                {**i, "_RT1_ID_num": n}
+                for i, n in zip(self.arg_list, range(len(self.arg_list)))
+            ]
 
             log.info("no existing output-HDF file found...")
             log.progress(f"processing all {len(self.args_to_process)} IDs!")
             return
-        log.progress(f"found {len(self.args_to_process)} missing and " +
-                     f"{len(self.arg_list) - len(self.args_to_process)}" +
-                     " existing IDs!")
+        log.progress(
+            f"found {len(self.args_to_process)} missing and "
+            + f"{len(self.arg_list) - len(self.args_to_process)}"
+            + " existing IDs!"
+        )
 
     def _save_file_process(self, init_func=None, init_args=None):
         log_first_expected_rows = defaultdict(lambda: True)
@@ -369,8 +379,10 @@ class RT1_processor(object):
             # continue until the out_queue is emptied, then break
             if self.combiner_ready.is_set():
                 if not self.out_queue.empty():
-                    log.progress(f"writing remaining {self.out_queue.qsize()}" +
-                                 " cached results to disk")
+                    log.progress(
+                        f"writing remaining {self.out_queue.qsize()}"
+                        + " cached results to disk"
+                    )
                 else:
                     log.progress("shutting down " + mp.current_process().name)
                     break
@@ -412,21 +424,24 @@ class RT1_processor(object):
                             expectedrows = None
                         else:
                             expectedrows = self.p_max.value * len(val)
-                        store.append(key,
-                                     val,
-                                     format="t",
-                                     data_columns=data_columns,
-                                     index=False,
-                                     min_itemsize=self.min_itemsize,
-                                     expectedrows=expectedrows)
+                        store.append(
+                            key,
+                            val,
+                            format="t",
+                            data_columns=data_columns,
+                            index=False,
+                            min_itemsize=self.min_itemsize,
+                            expectedrows=expectedrows,
+                        )
 
                         if log_first_expected_rows[key]:
-                            log.debug("expecting to get " +
-                                      f"{self.p_max.value * len(val)} rows " +
-                                      "in the HDF5-container for " +
-                                      f"'{key}' based on {self.p_max.value}" +
-                                      " results to process"
-                                      )
+                            log.debug(
+                                "expecting to get "
+                                + f"{self.p_max.value * len(val)} rows "
+                                + "in the HDF5-container for "
+                                + f"'{key}' based on {self.p_max.value}"
+                                + " results to process"
+                            )
                             # don't log this multiple times
                             # (even though it might change depending on
                             #  the length of the dataframes to append)!
@@ -464,10 +479,12 @@ class RT1_processor(object):
         # define a process that writes the results to disc
         procs = []
         for i in range(self.n_writer):
-            ctx = mp.get_context('spawn')
-            writer = ctx.Process(target=self._save_file_process,
-                                 args=(init_func, init_args),
-                                 name=f"RTprocess writer {i}")
+            ctx = mp.get_context("spawn")
+            writer = ctx.Process(
+                target=self._save_file_process,
+                args=(init_func, init_args),
+                name=f"RTprocess writer {i}",
+            )
             procs.append(writer)
             log.progress(f"starting {writer.name}")
             writer.start()
@@ -477,10 +494,12 @@ class RT1_processor(object):
         procs = []
         for i in range(self.n_combiner):
             # start thread to combine the results
-            ctx = mp.get_context('spawn')
-            t = ctx.Process(target=self._combiner_process,
-                            args=(init_func, init_args),
-                            name=f"RTprocess combiner {i}")
+            ctx = mp.get_context("spawn")
+            t = ctx.Process(
+                target=self._combiner_process,
+                args=(init_func, init_args),
+                name=f"RTprocess combiner {i}",
+            )
             procs.append(t)
             # combiner_thread.setDaemon(True)
             log.progress(f"starting {t.name}")
@@ -488,7 +507,7 @@ class RT1_processor(object):
         return procs
 
     def _setup_manager(self):
-        ctx = mp.get_context('spawn')
+        ctx = mp.get_context("spawn")
         manager = ctx.Manager()
 
         self.queue = manager.Queue()
@@ -516,10 +535,10 @@ class RT1_processor(object):
         try:
             w = cls(*args, **kwargs)
             manager = w._setup_manager()
-            writer = w._start_writer_process(init_func=init_func,
-                                             init_args=init_args)
-            combiner = w._start_combiner_process(init_func=init_func,
-                                                 init_args=init_args)
+            writer = w._start_writer_process(init_func=init_func, init_args=init_args)
+            combiner = w._start_combiner_process(
+                init_func=init_func, init_args=init_args
+            )
 
             yield w
         finally:
@@ -529,18 +548,19 @@ class RT1_processor(object):
         # start the timer for estimating the processing-time
         self.p_start = default_timer()
 
-        print_thread = RepeatTimer(.25, self.print_progress)
+        print_thread = RepeatTimer(0.25, self.print_progress)
         print_thread.start()
         return print_thread
 
-    def run_starmap(self,
-                    arg_list=None,
-                    process_func=None,
-                    reader_func=None,
-                    pool_kwargs=None,
-                    starmap_args=None,
-                    ID_getter=None
-                    ):
+    def run_starmap(
+        self,
+        arg_list=None,
+        process_func=None,
+        reader_func=None,
+        pool_kwargs=None,
+        starmap_args=None,
+        ID_getter=None,
+    ):
         """
 
 
@@ -591,14 +611,14 @@ class RT1_processor(object):
             log.error("ALL IDs are already present in the HDF file!")
             return
 
-        ctx = mp.get_context('spawn')
+        ctx = mp.get_context("spawn")
         pool = ctx.Pool(self.n_worker, **pool_kwargs)
         # with ctx.Pool(self.n_worker, **pool_kwargs) as pool:
         try:
-            worker = pool.starmap_async(self._worker_process,
-                                        zip(self.args_to_process,
-                                            *starmap_args),
-                                        )
+            worker = pool.starmap_async(
+                self._worker_process,
+                zip(self.args_to_process, *starmap_args),
+            )
 
             # do this after calling starmap_async to wait for the initializers
             # to finish!
@@ -607,11 +627,12 @@ class RT1_processor(object):
             res = worker.get()
 
             print()  # print a newline
-            d, h, m, s = dt_to_hms(timedelta(
-                seconds=default_timer() - self.p_start))
-            log.progress("finished processing " +
-                         f"{len(self.args_to_process)} [{self.p_totcnt.value}] IDs!" +
-                         f" ... it took {d} {h:02}:{m:02}:{s:02}")
+            d, h, m, s = dt_to_hms(timedelta(seconds=default_timer() - self.p_start))
+            log.progress(
+                "finished processing "
+                + f"{len(self.args_to_process)} [{self.p_totcnt.value}] IDs!"
+                + f" ... it took {d} {h:02}:{m:02}:{s:02}"
+            )
         finally:
             pool.close()
             pool.join()
@@ -639,15 +660,13 @@ class RT1_processor(object):
         manager.shutdown()
 
         if hasattr(self, "p_start"):
-            d, h, m, s = dt_to_hms(timedelta(
-                seconds=default_timer() - self.p_start))
+            d, h, m, s = dt_to_hms(timedelta(seconds=default_timer() - self.p_start))
             log.progress(f"finished! ... it took {d} {h:02}:{m:02}:{s:02}")
         else:
             log.progress("exiting...")
 
     @staticmethod
-    def create_index(dst_path, idx_levels=None,
-                     keys=None, kind="full", optlevel=6):
+    def create_index(dst_path, idx_levels=None, keys=None, kind="full", optlevel=6):
         """
         create an index for the given HDF-store to speed up querying.
         (the index is stored to disk, so this only needs to be executed once!)
@@ -683,9 +702,11 @@ class RT1_processor(object):
         with pd.HDFStore(dst_path, "a") as store:
             use_keys = keys if keys else store.keys()
             use_keys = [key for key in use_keys if not key.endswith("/meta")]
-            log.progress(f"attempting to create '{kind}' indexes with " +
-                         f"optlevel {optlevel} for the columns:\n" +
-                         "    \n".join(use_keys))
+            log.progress(
+                f"attempting to create '{kind}' indexes with "
+                + f"optlevel {optlevel} for the columns:\n"
+                + "    \n".join(use_keys)
+            )
             for key in use_keys:
                 s = store.get_storer(key)
                 s_levels = s.levels
@@ -715,10 +736,11 @@ class RT1_processor(object):
 
                 if len(use_levels) > 0:
                     log.progress(f'creating index-levels "{use_levels}" for "{key}"')
-                    s.create_index(list(map(str, use_levels)),
-                                   kind=kind,
-                                   optlevel=optlevel,
-                                   )
+                    s.create_index(
+                        list(map(str, use_levels)),
+                        kind=kind,
+                        optlevel=optlevel,
+                    )
                 else:
                     log.warning(f'no index-level found for "{key}"... skipping')
         log.progress("finished index-creation")
@@ -747,20 +769,19 @@ class RT1_processor(object):
         with pd.HDFStore(dst_path, "r") as store:
             keysplits = [key.lstrip("/").split("/") for key in store]
             cfg_keys = (i for i in keysplits if len(i) > 1)
-            cfg_keys = groupby_unsorted(cfg_keys,
-                                        key=lambda x: x[0],
-                                        get=lambda x: x[1],
-                                        sort=True)
+            cfg_keys = groupby_unsorted(
+                cfg_keys, key=lambda x: x[0], get=lambda x: x[1], sort=True
+            )
             const_keys = [i[0] for i in keysplits if len(i) == 1]
 
             if config is None:
-                assert key in const_keys, (f"'{key}' not found in HDF-file\n" +
-                                           "... available constant layers are" +
-                                           f"\n    {const_keys}\n" +
-                                           "... available config layers are \n    " +
-                                           "\n    ".join(
-                                               f"{key}: {val}"
-                                               for key, val in cfg_keys.items()))
+                assert key in const_keys, (
+                    f"'{key}' not found in HDF-file\n"
+                    + "... available constant layers are"
+                    + f"\n    {const_keys}\n"
+                    + "... available config layers are \n    "
+                    + "\n    ".join(f"{key}: {val}" for key, val in cfg_keys.items())
+                )
 
             usekey = f"{config}/{key}"
             res = store.select(usekey, **kwargs)

@@ -23,6 +23,7 @@ from . import log, _get_logger_formatter
 import logging
 import ctypes
 
+
 def _confirm_input(msg="are you sure?", stopmsg="STOP", callbackdict=None):
     """
     Parameters
@@ -274,8 +275,10 @@ class RTprocess(object):
             ), f"the init_kwargs section {section} is not present in the .ini file!"
 
             for key, val in init_defs.items():
-                if (key in self.cfg.config[section] and
-                    mp.current_process().name == "MainProcess"):
+                if (
+                    key in self.cfg.config[section]
+                    and mp.current_process().name == "MainProcess"
+                ):
 
                     log.warning(
                         f'"{key} = {self.cfg.config[section][key]}" '
@@ -424,8 +427,8 @@ class RTprocess(object):
                         )
 
                         log.debug(
-                            f'{module_copypath.name} imported from \n' +
-                            f'"{module_copypath}"\n'
+                            f"{module_copypath.name} imported from \n"
+                            + f'"{module_copypath}"\n'
                         )
 
                     else:
@@ -486,29 +489,31 @@ class RTprocess(object):
                 # set ID for all configs
                 self.parent_fit.set_ID(
                     self.proc_cls.get_names_ids(reader_arg)["feature_id"]
-                    )
+                )
 
                 do_performfit = self.parent_fit.accessor.performfit()
                 _ = [doit() for doit in do_performfit.values()]
 
                 if self._dump_fit:
                     self.parent_fit.dump(
-                        (self.dumppath /
-                         "dumps" /
-                         self.proc_cls.get_names_ids(reader_arg)["filename"]
-                         ),
+                        (
+                            self.dumppath
+                            / "dumps"
+                            / self.proc_cls.get_names_ids(reader_arg)["filename"]
+                        ),
                         mini=True,
-                        )
+                    )
 
                 return self.parent_fit._get_fit_to_hdf_dict(
-                    ID=reader_arg.get("_RT1_ID_num", None))
+                    ID=reader_arg.get("_RT1_ID_num", None)
+                )
 
             else:
                 fit = self.parent_fit.reinit_object(
                     dataset=dataset,
                     share_fnevals=True,
                     ID=self.proc_cls.get_names_ids(reader_arg)["feature_id"],
-                    )
+                )
                 # append reader_arg
                 fit.reader_arg = reader_arg
 
@@ -523,15 +528,15 @@ class RTprocess(object):
                 # (it might happen that some parts change during postprocessing)
                 if self._dump_fit:
                     fit.dump(
-                        (self.dumppath /
-                         "dumps" /
-                         self.proc_cls.get_names_ids(reader_arg)["filename"]
-                         ),
+                        (
+                            self.dumppath
+                            / "dumps"
+                            / self.proc_cls.get_names_ids(reader_arg)["filename"]
+                        ),
                         mini=True,
-                        )
+                    )
 
-                return fit._get_fit_to_hdf_dict(
-                    ID=reader_arg.get("_RT1_ID_num", None))
+                return fit._get_fit_to_hdf_dict(ID=reader_arg.get("_RT1_ID_num", None))
 
         except Exception as ex:
 
@@ -558,9 +563,7 @@ class RTprocess(object):
             # all required modules from the desired locations
 
             origname = mp.current_process().name
-            mp.current_process().name = "RTprocess-" + "".join(
-                origname.split("-")[1:]
-                )
+            mp.current_process().name = "RTprocess-" + "".join(origname.split("-")[1:])
             if proc_counter is not None:
                 proc_counter.value += 1
                 mp.current_process().name = f"RTprocess-{proc_counter.value}"
@@ -582,7 +585,7 @@ class RTprocess(object):
         queue=None,
         proc_counter=None,
         dump_fit=False,
-        **kwargs
+        **kwargs,
     ):
         """
         Evaluate a RT-1 model on a single core or in parallel using
@@ -707,9 +710,7 @@ class RTprocess(object):
         if isinstance(self.parent_fit, MultiFits):
             for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
-                    log.progress(
-                        f"pre-evaluating coefficients for config {name} ..."
-                        )
+                    log.progress(f"pre-evaluating coefficients for config {name} ...")
                     parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
@@ -720,7 +721,7 @@ class RTprocess(object):
         with RT1_processor.writer_pool(
             n_worker=ncpu,
             dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
-            **kwargs
+            **kwargs,
         ) as w:
 
             res = w.run_starmap(
@@ -897,7 +898,7 @@ class RTprocess(object):
                 proc_counter=proc_counter,
                 dump_fit=dump_fit,
                 init_func=self._worker_configurer,
-                init_args=(queue, logfile_level)
+                init_args=(queue, logfile_level),
             )
 
         except Exception as err:
@@ -1066,8 +1067,7 @@ class RTprocess(object):
             if fitlist is None:
 
                 # use fits from .dump file if no fitlist is provided
-                fitlist = self._get_files(use_N_files=use_N_files,
-                                          use_dumps=use_dumps)
+                fitlist = self._get_files(use_N_files=use_N_files, use_dumps=use_dumps)
             res = self._run_finalout(
                 ncpu,
                 fitlist=fitlist,
@@ -1080,7 +1080,7 @@ class RTprocess(object):
                 create_index=create_index,
                 init_func=self._worker_configurer,
                 init_args=(queue, logfile_level),
-                **kwargs
+                **kwargs,
             )
 
             return res
@@ -1119,7 +1119,7 @@ class RTprocess(object):
         proc_counter=None,
         print_progress=True,
         create_index=True,
-        **kwargs
+        **kwargs,
     ):
 
         pool_kwargs = dict(
@@ -1138,9 +1138,7 @@ class RTprocess(object):
                     cfgs = use_config
 
                 for fit_name in cfgs:
-                    log.progress(
-                        f"pre-evaluation of coefficients for {fit_name}"
-                        )
+                    log.progress(f"pre-evaluation of coefficients for {fit_name}")
                     parent_fit = self.parent_fit.accessor.config_fits[fit_name]
                     if parent_fit.int_Q is True:
                         parent_fit._fnevals_input = parent_fit.R._fnevals
@@ -1150,9 +1148,7 @@ class RTprocess(object):
 
         log.progress(f"start of finalout generation on {ncpu} cores")
         with RT1_processor.writer_pool(
-            n_worker=ncpu,
-            dst_path=save_path,
-            **kwargs
+            n_worker=ncpu, dst_path=save_path, **kwargs
         ) as w:
 
             res = w.run_starmap(
@@ -1160,9 +1156,10 @@ class RTprocess(object):
                 reader_func=self._finalout_reader,
                 process_func=self._run_postprocess,
                 pool_kwargs=pool_kwargs,
-                starmap_args=[repeat(use_config),
-                              repeat(postprocess),
-                              ],
+                starmap_args=[
+                    repeat(use_config),
+                    repeat(postprocess),
+                ],
             )
 
         if create_index:
@@ -1180,8 +1177,9 @@ class RTprocess(object):
             fit = self._useres.load_fit(ID)
             if fit is None:
                 return
-            if ((use_config is None or use_config == "from_postprocess"
-                 ) and isinstance(fit, MultiFits)):
+            if (use_config is None or use_config == "from_postprocess") and isinstance(
+                fit, MultiFits
+            ):
                 use_config = fit.config_names
 
             # assign pre-evaluated fn-coefficients
@@ -1194,7 +1192,7 @@ class RTprocess(object):
                             try:
                                 fit.configs[
                                     config_name
-                                    ]._fnevals_input = config_fit._fnevals_input
+                                ]._fnevals_input = config_fit._fnevals_input
                             except AttributeError:
                                 log.error(
                                     "could not assign pre-evaluated fn-coefficients to "
@@ -1214,8 +1212,7 @@ class RTprocess(object):
 
             return fit
         except Exception:
-            log.error(f"there was an error while loading {ID}",
-                      exc_info=True)
+            log.error(f"there was an error while loading {ID}", exc_info=True)
             return
 
     def _run_postprocess(self, fit, use_config=None, postprocess=None, *args):
@@ -1233,9 +1230,9 @@ class RTprocess(object):
             if isinstance(fit, MultiFits):
                 if postprocess is None:
                     assert hasattr(self.proc_cls, "postprocess"), (
-                        "no explicit 'postprocess' function provided" +
-                        "and no 'postprocess' function found in processing_config class"
-                        )
+                        "no explicit 'postprocess' function provided"
+                        + "and no 'postprocess' function found in processing_config class"
+                    )
                     ret = dict(
                         fit.apply(
                             self.proc_cls.postprocess,
@@ -1290,14 +1287,14 @@ class RTprocess(object):
     def _get_files(self, use_N_files=None, use_dumps=False):
 
         if not hasattr(self, "_useres"):
-            self._useres = getattr(RTresults(self.dumppath, use_dumps=use_dumps),
-                                   self.proc_cls.dumpfolder)
+            self._useres = getattr(
+                RTresults(self.dumppath, use_dumps=use_dumps), self.proc_cls.dumpfolder
+            )
         # get dump-files
         dumpiter = self._useres.dump_files
 
         if use_N_files is not None:
-            fitlist = list(map(lambda x: dict(ID=x),
-                               islice(dumpiter, use_N_files)))
+            fitlist = list(map(lambda x: dict(ID=x), islice(dumpiter, use_N_files)))
         else:
             fitlist = list(map(lambda x: dict(ID=x), dumpiter))
         return fitlist
@@ -1367,7 +1364,7 @@ class RTprocess(object):
         pre_evaluate_fn_coefs=True,
         finalout_name=None,
         savepath=None,
-        **kwargs
+        **kwargs,
     ):
         """
         a convenience-method to export parameters and performance-metrics
@@ -1461,8 +1458,10 @@ class RTprocess(object):
         # ----- initialize a RTresults object for easy access to the list of dump-files
         # don't use "self.dumppath" since it requires a call to setup() !
         specs = RT1_configparser(self.config_path).get_process_specs()
-        res = RTresults(specs["save_path"] / specs["dumpfolder"],
-                        use_dumps=kwargs.get("use_dumps", False))
+        res = RTresults(
+            specs["save_path"] / specs["dumpfolder"],
+            use_dumps=kwargs.get("use_dumps", False),
+        )
 
         # ----- get dumpfolder to use
         if not dumpfolder:
@@ -1511,7 +1510,7 @@ class RTprocess(object):
             finalout_name=finalout_name,
             postprocess=func,
             save_path=savepath,
-            **kwargs
+            **kwargs,
         )
 
         return out
@@ -1526,7 +1525,6 @@ class RTprocess(object):
         sig_to_dB=False,
         inc_to_degree=False,
         _fnevals_input=None,
-
     ):
         """
         Parameters
@@ -1587,8 +1585,7 @@ class RTprocess(object):
         if metrics:
             metric_layer = dict()
             for name, p in metrics.items():
-                if (export_functions and name in export_functions
-                    and p == "custom"):
+                if export_functions and name in export_functions and p == "custom":
                     metric_layer[name] = export_functions[name](fit)
                 else:
                     metric_layer[name] = getattr(

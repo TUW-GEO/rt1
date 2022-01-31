@@ -30,7 +30,6 @@ except ModuleNotFoundError:
 from contextlib import contextmanager
 
 
-
 class RTresults(object):
     """
     A class to provide easy access to processed results.
@@ -114,15 +113,15 @@ class RTresults(object):
         return (getattr(self, i) for i in self._paths)
 
     def __getitem__(self, key):
-        assert key in self._paths, (
-            f"'{key}' not found... use one of {list(self._paths)}")
+        assert (
+            key in self._paths
+        ), f"'{key}' not found... use one of {list(self._paths)}"
 
         return getattr(self, key)
 
     def __repr__(self):
-        s = [f"Parent path = {self._parent_path}",
-             "Results:"]
-        s += [f"    - {i}" for i in  self._paths]
+        s = [f"Parent path = {self._parent_path}", "Results:"]
+        s += [f"    - {i}" for i in self._paths]
 
         return "\n".join(s)
 
@@ -166,13 +165,12 @@ class RTresults(object):
             s = [str(self.name)]
             if len(self._nc_paths) > 0:
                 s += ["NetCDF files:"]
-                s += [f"    - {i}" for i in  self._nc_paths]
+                s += [f"    - {i}" for i in self._nc_paths]
             if len(self._hdf_paths) > 0:
                 s += ["HDF5 files:"]
-                s += [f"    - {i}" for i in  self._hdf_paths]
+                s += [f"    - {i}" for i in self._hdf_paths]
 
             return "\n".join(s)
-
 
         def rescan(self, use_dumps=None):
             """
@@ -194,9 +192,9 @@ class RTresults(object):
         @property
         @lru_cache()
         def fit_db(self):
-            assert "fit_db" in self._hdf_paths, (
-                '"fit_db.h5" not found in results-folder'
-                )
+            assert (
+                "fit_db" in self._hdf_paths
+            ), '"fit_db.h5" not found in results-folder'
 
             return self.load_hdf("fit_db")
 
@@ -367,9 +365,9 @@ class RTresults(object):
 
                 fit = load(filepath)
             else:
-                assert isinstance(ID, (str, int)) or ID is None, (
-                    "please provide either a string, int or 'None' as ID"
-                    )
+                assert (
+                    isinstance(ID, (str, int)) or ID is None
+                ), "please provide either a string, int or 'None' as ID"
                 fit = self._load_fit_from_HDF(ID)
 
             if return_ID is True:
@@ -431,9 +429,11 @@ class RTresults(object):
 
             if self._use_dumps:
                 for entry in os.scandir(self._dump_path):
-                    if (entry.name.endswith('.dump')
+                    if (
+                        entry.name.endswith(".dump")
                         and entry.is_file()
-                        and 'error' not in entry.name):
+                        and "error" not in entry.name
+                    ):
 
                         yield entry.path
             else:
@@ -450,9 +450,11 @@ class RTresults(object):
             """
             if self._use_dumps:
                 for entry in os.scandir(self._dump_path):
-                    if (entry.name.endswith('.dump')
+                    if (
+                        entry.name.endswith(".dump")
                         and entry.is_file()
-                        and 'error' not in entry.name):
+                        and "error" not in entry.name
+                    ):
 
                         yield self.load_fit(entry.name)
             else:
@@ -503,14 +505,12 @@ class HDFaccessor(object):
                 # https://github.com/pandas-dev/pandas/issues/42818
                 self.IDs = pd.DataFrame(
                     dict(
-                        ID=self.store.select_column("reader_arg",
-                                                    "ID"
-                                                    ).apply(
-                                                        self._get_ID
-                                                        ).values
+                        ID=self.store.select_column("reader_arg", "ID")
+                        .apply(self._get_ID)
+                        .values
                     ),
-                    self.store.select_column("reader_arg", "index").values
-                    )
+                    self.store.select_column("reader_arg", "index").values,
+                )
 
             except KeyError:
                 # TODO this is just for downward-compatibility... remove it!
@@ -554,9 +554,14 @@ class HDFaccessor(object):
         if self.IDs is not None:
             s += ["", f"Number of IDs: {len(self.IDs)}"]
             s += ["Data keys:"]
-        s += [(f"    - {key.lstrip('/') :<15}" +
-               f" (nrows: {self.store.get_storer(key).nrows})")
-              for key in self.store if not key.endswith("meta")]
+        s += [
+            (
+                f"    - {key.lstrip('/') :<15}"
+                + f" (nrows: {self.store.get_storer(key).nrows})"
+            )
+            for key in self.store
+            if not key.endswith("meta")
+        ]
 
         return "\n".join(s)
 
@@ -626,8 +631,7 @@ class HDFaccessor(object):
                 mf = MultiFits()
                 for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
 
-                    attrs = {key: literal_eval(val) for key, val in
-                             cfg_attrs.items()}
+                    attrs = {key: literal_eval(val) for key, val in cfg_attrs.items()}
 
                     fit = Fits(**attrs)
 
@@ -635,10 +639,13 @@ class HDFaccessor(object):
                         # use dropna(how="all", axis=1) to make sure that parameters that
                         # are fitted in one config but not in another are not added as
                         # empty lists!
-                        fit.res_dict = {key: val.dropna().to_list()
-                                        for key, val in
-                                        res_dict.loc[ID].loc[cfg].dropna(how="all",
-                                                                         axis=1).items()}
+                        fit.res_dict = {
+                            key: val.dropna().to_list()
+                            for key, val in res_dict.loc[ID]
+                            .loc[cfg]
+                            .dropna(how="all", axis=1)
+                            .items()
+                        }
 
                     mf.add_config(cfg, fit)
 
@@ -654,8 +661,9 @@ class HDFaccessor(object):
                 return mf
 
             else:
-                attrs = {key: literal_eval(val) for key, val in
-                         init_dict.loc[ID].items()}
+                attrs = {
+                    key: literal_eval(val) for key, val in init_dict.loc[ID].items()
+                }
                 fit = Fits(**attrs)
                 fit.ID = self.IDs.loc[ID].values[0]
 
@@ -669,15 +677,17 @@ class HDFaccessor(object):
                     fit.reader_arg = reader_arg
 
                 if res_dict is not None:
-                    fit.res_dict = {key: val.dropna().to_list()
-                                    for key, val in res_dict.loc[ID].items()}
+                    fit.res_dict = {
+                        key: val.dropna().to_list()
+                        for key, val in res_dict.loc[ID].items()
+                    }
                 return fit
 
     @staticmethod
     def _chunks(lst, n):
         """Yield successive n-sized chunks from lst."""
         for i in range(0, len(lst), n):
-            yield lst[i:i + n]
+            yield lst[i : i + n]
 
     def _get_vals(self, key, chunksize, start=None, **kwargs):
         # TODO
@@ -689,14 +699,16 @@ class HDFaccessor(object):
 
         assert self.IDs is not None, "no IDs found in HDF-store"
         if start:
-            assert start < len(self.IDs), (f"start={start} is bigger than the number" +
-                                           f" of IDs ({len(self.IDs)})")
+            assert start < len(self.IDs), (
+                f"start={start} is bigger than the number"
+                + f" of IDs ({len(self.IDs)})"
+            )
         use_ids = self._chunks(self.IDs.index[slice(start, None)], chunksize)
         for i, ids in enumerate(use_ids):
-            indexes = self.store.select_as_coordinates(key=key,
-                                                       where=f"{idxname} in ids")
-            data = self.store.get_storer(key).read(where=indexes,
-                                                   **kwargs)
+            indexes = self.store.select_as_coordinates(
+                key=key, where=f"{idxname} in ids"
+            )
+            data = self.store.get_storer(key).read(where=indexes, **kwargs)
             yield data
 
     def _get_vals_with_IDs(self, key, use_ids, chunksize=1, **kwargs):
@@ -711,14 +723,15 @@ class HDFaccessor(object):
         use_ids = self._chunks(use_ids, chunksize)
 
         for i, ids in enumerate(use_ids):
-            indexes = self.store.select_as_coordinates(key=key,
-                                                       where=f"{idxname} in ids")
-            data = self.store.get_storer(key).read(where=indexes,
-                                                   **kwargs)
+            indexes = self.store.select_as_coordinates(
+                key=key, where=f"{idxname} in ids"
+            )
+            data = self.store.get_storer(key).read(where=indexes, **kwargs)
             yield data
 
-    def _get_nids(self, key, nids, start=None,
-                  read_chunksize=None, print_progress=False, **kwargs):
+    def _get_nids(
+        self, key, nids, start=None, read_chunksize=None, print_progress=False, **kwargs
+    ):
         """
         get the data for "nids" ID's as a pandas.DataFrame
 
@@ -742,10 +755,16 @@ class HDFaccessor(object):
         pandas.DataFrame
         """
 
-        return next(self._get_nids_iter(key=key, nids=nids, start=start,
-                                        read_chunksize=read_chunksize,
-                                        print_progress=print_progress,
-                                        **kwargs))
+        return next(
+            self._get_nids_iter(
+                key=key,
+                nids=nids,
+                start=start,
+                read_chunksize=read_chunksize,
+                print_progress=print_progress,
+                **kwargs,
+            )
+        )
 
     def _ID_to_IDnum(self, ID):
         return int(self.IDs[(self.IDs == ID).values].index[0])
@@ -776,8 +795,9 @@ class HDFaccessor(object):
 
         return ret
 
-    def _get_nids_iter(self, key, nids, start=None,
-                       read_chunksize=None, print_progress=False, **kwargs):
+    def _get_nids_iter(
+        self, key, nids, start=None, read_chunksize=None, print_progress=False, **kwargs
+    ):
         """
         return an iterator that iteratively yields "nids" IDs from the given key
         until all data has been returned
@@ -810,9 +830,9 @@ class HDFaccessor(object):
 
         nids = min(len(self.IDs), nids)
 
-        assert key in self.store, (
-            f"invalid key provided, use one of {self.store.keys()}"
-            )
+        assert (
+            key in self.store
+        ), f"invalid key provided, use one of {self.store.keys()}"
 
         if read_chunksize is None:
             s = self.store.get_storer(key)
@@ -828,17 +848,20 @@ class HDFaccessor(object):
                 read_chunksize = len(nids)
 
         if isinstance(nids, int):
-            data_gen = self._get_vals(key=key, chunksize=read_chunksize,
-                                      start=start, **kwargs)
+            data_gen = self._get_vals(
+                key=key, chunksize=read_chunksize, start=start, **kwargs
+            )
         elif isinstance(nids, str):
             nids = 1
-            data_gen = self._get_vals_with_IDs(key=key, chunksize=read_chunksize,
-                                               use_ids=[nids], **kwargs)
+            data_gen = self._get_vals_with_IDs(
+                key=key, chunksize=read_chunksize, use_ids=[nids], **kwargs
+            )
         else:
             use_ids = nids
             nids = len(use_ids)
-            data_gen = self._get_vals_with_IDs(key=key, chunksize=read_chunksize,
-                                               use_ids=use_ids, **kwargs)
+            data_gen = self._get_vals_with_IDs(
+                key=key, chunksize=read_chunksize, use_ids=use_ids, **kwargs
+            )
 
         ret = []
         for i, d in enumerate(data_gen):
@@ -853,8 +876,8 @@ class HDFaccessor(object):
                 if self.set_ID is True:
                     if isinstance(data.index, pd.MultiIndex):
                         data.index = data.index.set_levels(
-                            self.IDs.loc[data.index.levels[0]].ID,
-                            0)
+                            self.IDs.loc[data.index.levels[0]].ID, 0
+                        )
                     else:
                         data["ID"] = self.IDs.loc[data.index]
                         data = data.set_index("ID")
@@ -899,35 +922,39 @@ class _subselector(object):
         if self._parent().set_ID is True:
             if isinstance(ret.index, pd.MultiIndex):
                 ret.index = ret.index.set_levels(
-                    self._parent().IDs.loc[ret.index.levels[0]].ID,
-                    0)
+                    self._parent().IDs.loc[ret.index.levels[0]].ID, 0
+                )
             else:
                 ret["ID"] = self._parent().IDs.loc[ret.index]
                 ret = ret.set_index("ID")
 
-
-
         return ret
 
     @wraps(HDFaccessor._get_nids_iter)
-    def get_nids_iter(self, nids, start=None,
-                      read_chunksize=None, print_progress=False, **kwargs):
-        return self._parent()._get_nids_iter(key=self._key,
-                                             nids=nids,
-                                             start=start,
-                                             read_chunksize=read_chunksize,
-                                             print_progress=print_progress,
-                                             **kwargs)
+    def get_nids_iter(
+        self, nids, start=None, read_chunksize=None, print_progress=False, **kwargs
+    ):
+        return self._parent()._get_nids_iter(
+            key=self._key,
+            nids=nids,
+            start=start,
+            read_chunksize=read_chunksize,
+            print_progress=print_progress,
+            **kwargs,
+        )
 
     @wraps(HDFaccessor._get_nids)
-    def get_nids(self, nids, start=None,
-                 read_chunksize=None, print_progress=False, **kwargs):
-        return self._parent()._get_nids(key=self._key,
-                                        nids=nids,
-                                        start=start,
-                                        read_chunksize=read_chunksize,
-                                        print_progress=print_progress,
-                                        **kwargs)
+    def get_nids(
+        self, nids, start=None, read_chunksize=None, print_progress=False, **kwargs
+    ):
+        return self._parent()._get_nids(
+            key=self._key,
+            nids=nids,
+            start=start,
+            read_chunksize=read_chunksize,
+            print_progress=print_progress,
+            **kwargs,
+        )
 
     @wraps(HDFaccessor._get_id)
     def get_id(self, n, **kwargs):

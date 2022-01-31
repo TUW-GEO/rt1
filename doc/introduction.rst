@@ -19,6 +19,3 @@ When you are using `RT1` as part of your publications, please give the developer
 
 * R.Quast and W.Wagner, `Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media`, Appl.Opt.55, 5379-5386 (2016)
 * R.Quast, C.Albergel, J.C.Calvet, W.Wagner, `A Generic First-Order Radiative Transfer Modelling Approach for the Inversion of Soil and Vegetation Parameters from Scatterometer Observations`,  doi:10.3390/rs11030285
-
-
-

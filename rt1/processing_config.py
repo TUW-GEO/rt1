@@ -238,8 +238,9 @@ class rt1_processing_config(object):
 
             log.error(f"there was a DATA-problem for '{names_ids['filename']}'")
         else:
-            log.error(f"something went wrong for: {reader_arg}\n" + 
-                      traceback.format_exc())
+            log.error(
+                f"something went wrong for: {reader_arg}\n" + traceback.format_exc()
+            )
 
         # in case `save_path` is specified, write ALL exceptions to a file
         # and continue processing WITHOUT raising the exception.

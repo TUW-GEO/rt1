@@ -14,5 +14,3 @@ review:
     # Don't use 'failure' build status when
     # a pull request contains style errors.
     fail_on_comments: false
-
-

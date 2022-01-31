@@ -479,8 +479,7 @@ class RTmetrics(object):
             function/metric name and corresponding value
 
         """
-        return {func: getattr(cls, func)(d1, d2)
-                for func in cls.metrics_registry}
+        return {func: getattr(cls, func)(d1, d2) for func in cls.metrics_registry}
 
     @classmethod
     def scatterplot(cls, d1, d2, d1_name, d2_name):
@@ -525,24 +524,38 @@ class RTmetrics(object):
         stderr = metrics_dict["linregress"]["stderr"]
 
         x = np.array([d1.min(), d1.max()])
-        ax1.plot(x, intercept + slope * x, c='k', ls='--')
+        ax1.plot(x, intercept + slope * x, c="k", ls="--")
 
         # overplot gradient error
         cint = intercept + slope * x.mean()
-        ax1.plot(x, [(cint + (slope + stderr) * (x.min() - x.mean())),
-                     (cint + (slope + stderr) * (x.max() - x.mean()))],
-                 c='r', ls='--', alpha=0.5)
+        ax1.plot(
+            x,
+            [
+                (cint + (slope + stderr) * (x.min() - x.mean())),
+                (cint + (slope + stderr) * (x.max() - x.mean())),
+            ],
+            c="r",
+            ls="--",
+            alpha=0.5,
+        )
 
-        ax1.plot(x, [(cint + (slope - stderr) * (x.min() - x.mean())),
-                     (cint + (slope - stderr) * (x.max() - x.mean()))],
-                 c='r', ls='--', alpha=0.5)
+        ax1.plot(
+            x,
+            [
+                (cint + (slope - stderr) * (x.min() - x.mean())),
+                (cint + (slope - stderr) * (x.max() - x.mean())),
+            ],
+            c="r",
+            ls="--",
+            alpha=0.5,
+        )
 
         # overplot intercept error
         # ("intercept_stderr" is available only in new scipy versions!)
         if "intercept_stderr" in metrics_dict["linregress"]:
             intercept_err = metrics_dict["linregress"]["intercept_stderr"]
-            ax1.plot(x, intercept + intercept_err + slope * x, c='g', ls=':')
-            ax1.plot(x, intercept - intercept_err + slope * x, c='g', ls=':')
+            ax1.plot(x, intercept + intercept_err + slope * x, c="g", ls=":")
+            ax1.plot(x, intercept - intercept_err + slope * x, c="g", ls=":")
 
         metric_names = []
         metric_values = []
@@ -555,8 +568,7 @@ class RTmetrics(object):
                 metric_values.append(val)
 
         # add another dimension for usage in table
-        two_dim_metric_values = [[metric_value]
-                                 for metric_value in metric_values]
+        two_dim_metric_values = [[metric_value] for metric_value in metric_values]
 
         # remove border to only show table itself
         ax2.axis("off")
@@ -669,8 +681,7 @@ class RTmetrics(object):
 
             elif isinstance(val, dict):
                 entries += (
-                    " " + "--" * depth
-                    + f"{metric}|".ljust(29 - depth_offset) + "|\n"
+                    " " + "--" * depth + f"{metric}|".ljust(29 - depth_offset) + "|\n"
                 )
                 entries += cls._metrics_table_dict_entry(val, depth + 1)
 

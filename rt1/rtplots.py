@@ -188,9 +188,7 @@ def polarplot(
             for ti in plottis:
                 color = next(colors)
                 used_colors.append(color)
-                rad = getattr(X, funcname)(
-                    ti, thetass, 0.0, 0.0, param_dict=params
-                )
+                rad = getattr(X, funcname)(ti, thetass, 0.0, 0.0, param_dict=params)
                 if aprox is True:
                     # the use of np.pi-ti stems from the definition
                     # of legexpansion() in volume.py
@@ -531,7 +529,7 @@ class plot:
             ax.text(
                 0.8,
                 0.1,
-                "$R^2$ = " + str(np.round(r_value ** 2, 2)),
+                "$R^2$ = " + str(np.round(r_value**2, 2)),
                 horizontalalignment="center",
                 verticalalignment="center",
                 transform=ax.transAxes,
