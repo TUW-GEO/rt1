@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from itertools import islice
-from functools import wraps
+from functools import wraps, lru_cache
 from collections import defaultdict
 import weakref
 import os
@@ -25,6 +25,10 @@ except ModuleNotFoundError:
         "xarray could not be imported, "
         + "NetCDF-features of RT1_results will not work!"
     )
+
+
+from contextlib import contextmanager
+
 
 
 class RTresults(object):
@@ -169,13 +173,39 @@ class RTresults(object):
 
             return "\n".join(s)
 
+
+        def rescan(self, use_dumps=None):
+            """
+            re-scan the folder and reset the cache
+
+            Parameters
+            ----------
+            use_dumps : bool, optional
+                optionally change if dump-files or the fit_db HDF store
+                is used to load fits. The default is None.
+            """
+
+            if use_dumps is not None:
+                self._use_dumps = use_dumps
+            self._nc_paths = self._get_results(".nc")
+            self._hdf_paths = self._get_results(".h5")
+            self._reset_fit_db_cache()
+
         @property
+        @lru_cache()
         def fit_db(self):
             assert "fit_db" in self._hdf_paths, (
                 '"fit_db.h5" not found in results-folder'
                 )
 
             return self.load_hdf("fit_db")
+
+        def _reset_fit_db_cache(self):
+            """
+            clear the cached handler for "fit_db"
+            """
+            print("clearing cached fit_db handler")
+            self.__class__.fit_db.fget.cache_clear()
 
         @staticmethod
         def _check_dump_filename(p):
@@ -272,8 +302,9 @@ class RTresults(object):
             return file
 
         def _load_fit_from_HDF(self, ID):
-            with self.fit_db as fit_db:
-                fit = fit_db.load_fit(ID)
+            if not self.fit_db.store.is_open:
+                self._reset_fit_db_cache()
+            fit = self.fit_db.load_fit(ID)
 
             return fit
 
@@ -442,7 +473,7 @@ class RTresults(object):
 
 
 class HDFaccessor(object):
-    def __init__(self, path, **kwargs):
+    def __init__(self, path, set_ID=False, **kwargs):
         """
         accessor class to read HDF5 files stored during RT1 processing
 
@@ -450,6 +481,9 @@ class HDFaccessor(object):
         ----------
         path : str
             the path to the HDF file.
+        set_ID : bool
+            indicator if the ID should be recovered from self.IDs when
+            accessing a dataset or not.
         **kwargs :
             kwargs passed to pd.HDFstore().
 
@@ -461,6 +495,7 @@ class HDFaccessor(object):
         self.store = pd.HDFStore(path=path, mode="r", **kwargs)
 
         self.datasets = _data_container()
+        self.set_ID = set_ID
 
         if "reader_arg" in self.store:
             try:
@@ -529,6 +564,16 @@ class HDFaccessor(object):
         self.store.close()
         gc.collect()
 
+    @contextmanager
+    def _numeric_ID(self):
+        # a contextmanager to force using numeric IDs
+        setID = self.set_ID
+        self.set_ID = False
+        try:
+            yield
+        finally:
+            self.set_ID = setID
+
     @staticmethod
     def _get_ID(ID):
         if not isidentifier(str(ID)):
@@ -537,95 +582,96 @@ class HDFaccessor(object):
             return str(ID)
 
     def _load_fit(self, ID):
-        if ID is None:
-            ID = self.IDs.sample(n=1).values[0]
+        with self._numeric_ID():
+            if ID is None:
+                ID = self.IDs.sample(n=1).values[0]
 
-        if isinstance(ID, str):
-            ID = self._ID_to_IDnum(ID)
+            if isinstance(ID, str):
+                ID = self._ID_to_IDnum(ID)
 
-        try:
-            init_dict = self.datasets.init_dict.get_id(ID)
-        except Exception:
-            print("'init_dict' not present... fit can not be loaded")
-            return
+            try:
+                init_dict = self.datasets.init_dict.get_id(ID)
+            except Exception:
+                print("'init_dict' not present... fit can not be loaded")
+                return
 
-        try:
-            dataset = self.datasets.dataset.get_id(ID)
-        except Exception:
-            dataset = None
-            pass
+            try:
+                dataset = self.datasets.dataset.get_id(ID)
+            except Exception:
+                dataset = None
+                pass
 
-        try:
-            aux_data = self.datasets.aux_data.get_id(ID)
-        except Exception:
-            aux_data = None
-            pass
+            try:
+                aux_data = self.datasets.aux_data.get_id(ID)
+            except Exception:
+                aux_data = None
+                pass
 
-        try:
-            reader_arg = self.datasets.reader_arg.get_id(ID)
-            reader_arg = reader_arg.loc[ID].to_dict()
-            if "ID" not in reader_arg:
-                reader_arg["ID"] = self.IDs.loc[ID].values[0]
-        except Exception:
-            reader_arg = dict(ID=self.IDs.loc[ID].values[0])
-            pass
+            try:
+                reader_arg = self.datasets.reader_arg.get_id(ID)
+                reader_arg = reader_arg.loc[ID].to_dict()
+                if "ID" not in reader_arg:
+                    reader_arg["ID"] = self.IDs.loc[ID].values[0]
+            except Exception:
+                reader_arg = dict(ID=self.IDs.loc[ID].values[0])
+                pass
 
-        try:
-            res_dict = self.datasets.res_dict.get_id(ID)
-        except Exception:
-            res_dict = None
-            pass
+            try:
+                res_dict = self.datasets.res_dict.get_id(ID)
+            except Exception:
+                res_dict = None
+                pass
 
-        if "cfg" in init_dict.index.names:
-            mf = MultiFits()
-            for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
+            if "cfg" in init_dict.index.names:
+                mf = MultiFits()
+                for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
 
+                    attrs = {key: literal_eval(val) for key, val in
+                             cfg_attrs.items()}
+
+                    fit = Fits(**attrs)
+
+                    if res_dict is not None:
+                        # use dropna(how="all", axis=1) to make sure that parameters that
+                        # are fitted in one config but not in another are not added as
+                        # empty lists!
+                        fit.res_dict = {key: val.dropna().to_list()
+                                        for key, val in
+                                        res_dict.loc[ID].loc[cfg].dropna(how="all",
+                                                                         axis=1).items()}
+
+                    mf.add_config(cfg, fit)
+
+                # attach shared properties
+                if dataset is not None:
+                    mf.set_dataset(dataset.loc[ID])
+                if aux_data is not None:
+                    mf.set_aux_data(aux_data.loc[ID])
+                if reader_arg is not None:
+                    mf.set_reader_arg(reader_arg)
+
+                mf.set_ID(self.IDs.loc[ID].values[0])
+                return mf
+
+            else:
                 attrs = {key: literal_eval(val) for key, val in
-                         cfg_attrs.items()}
-
+                         init_dict.loc[ID].items()}
                 fit = Fits(**attrs)
+                fit.ID = self.IDs.loc[ID].values[0]
+
+                if dataset is not None:
+                    fit.dataset = dataset.loc[ID]
+
+                if aux_data is not None:
+                    fit.aux_data = aux_data.loc[ID]
+
+                if reader_arg is not None:
+                    fit.reader_arg = reader_arg
 
                 if res_dict is not None:
-                    # use dropna(how="all", axis=1) to make sure that parameters that
-                    # are fitted in one config but not in another are not added as
-                    # empty lists!
                     fit.res_dict = {key: val.dropna().to_list()
-                                    for key, val in
-                                    res_dict.loc[ID].loc[cfg].dropna(how="all",
-                                                                     axis=1).items()}
-
-                mf.add_config(cfg, fit)
-
-            # attach shared properties
-            if dataset is not None:
-                mf.set_dataset(dataset.loc[ID])
-            if aux_data is not None:
-                mf.set_aux_data(aux_data.loc[ID])
-            if reader_arg is not None:
-                mf.set_reader_arg(reader_arg)
-
-            mf.set_ID(self.IDs.loc[ID].values[0])
-            return mf
-
-        else:
-            attrs = {key: literal_eval(val) for key, val in
-                     init_dict.loc[ID].items()}
-            fit = Fits(**attrs)
-            fit.ID = self.IDs.loc[ID].values[0]
-
-            if dataset is not None:
-                fit.dataset = dataset.loc[ID]
-
-            if aux_data is not None:
-                fit.aux_data = aux_data.loc[ID]
-
-            if reader_arg is not None:
-                fit.reader_arg = reader_arg
-
-            if res_dict is not None:
-                fit.res_dict = {key: val.dropna().to_list()
-                                for key, val in res_dict.loc[ID].items()}
-            return fit
+                                    for key, val in res_dict.loc[ID].items()}
+                return fit
 
     @staticmethod
     def _chunks(lst, n):
@@ -804,6 +850,14 @@ class HDFaccessor(object):
                     ret.append(iloc_level(data, slice(nids % 10)))
 
                 data = pd.concat(ret)
+                if self.set_ID is True:
+                    if isinstance(data.index, pd.MultiIndex):
+                        data.index = data.index.set_levels(
+                            self.IDs.loc[data.index.levels[0]].ID,
+                            0)
+                    else:
+                        data["ID"] = self.IDs.loc[data.index]
+                        data = data.set_index("ID")
                 yield data
 
                 if nids % read_chunksize != 0:
@@ -841,6 +895,18 @@ class _subselector(object):
 
     def select(self, **kwargs):
         ret = self._parent().store.select(self._key, **kwargs)
+
+        if self._parent().set_ID is True:
+            if isinstance(ret.index, pd.MultiIndex):
+                ret.index = ret.index.set_levels(
+                    self._parent().IDs.loc[ret.index.levels[0]].ID,
+                    0)
+            else:
+                ret["ID"] = self._parent().IDs.loc[ret.index]
+                ret = ret.set_index("ID")
+
+
+
         return ret
 
     @wraps(HDFaccessor._get_nids_iter)
