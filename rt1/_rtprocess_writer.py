@@ -283,8 +283,7 @@ class RT1_processor(object):
                     threads.append(t)
 
             except Exception:
-                log.error("There was a problem combining results:")
-                traceback.print_exc(file=sys.stderr)
+                log.error("There was a problem combining results:", exc_info=True)
 
         # wait for all threads to finish before exiting the combiner process
         for n, t in enumerate(threads):
@@ -449,11 +448,10 @@ class RT1_processor(object):
 
                 self.write_lock.release()
             except Exception:
-                log.error("problem while writing data... exiting")
+                log.error("problem while writing data... exiting", exc_info=True)
                 self._stop.set()
                 self.should_wait.clear()
                 self.write_lock.release()
-                traceback.print_exc(file=sys.stderr)
 
     def _worker_process(self, *args):
         self.should_wait.wait()
@@ -472,8 +470,7 @@ class RT1_processor(object):
                 log.warning(f"loading {args} resulted in None... skipping")
         except Exception:
             print()
-            log.error(f"problem while processing \n{args}")
-            traceback.print_exc()
+            log.error(f"problem while processing \n{args}", exc_info=True)
 
     def _start_writer_process(self, init_func=None, init_args=None):
         # define a process that writes the results to disc
