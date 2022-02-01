@@ -1,17 +1,27 @@
 import copy
 
 
+class _var_container:
+    def __init__(self):
+        pass
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
 class _RT1_defdict:
     def __init__(self):
         self._variables = list()
 
+        self._vars = _var_container()
+
     def __repr__(self):
         return "\n".join(
-            [f"{name}: {repr(getattr(self, name))}" for name in self._variables]
+            [f"{name}: {repr(getattr(self.var, name))}" for name in self._variables]
         )
 
     def __getitem__(self, key):
-        return getattr(self, key)
+        return getattr(self.var, key)
 
     def __setattr__(self, key, val):
         if not key.startswith("_") and key not in self._variables:
@@ -30,6 +40,10 @@ class _RT1_defdict:
 
     def __iter__(self):
         return iter(self._variables)
+
+    @property
+    def var(self):
+        return self._vars
 
     def add_variable(
         self, name, fitQ=True, val=0.5, freq=None, minval=0.0, maxval=1.0, interpQ=False
@@ -103,7 +117,7 @@ class _RT1_defdict:
             interpQ=interpQ,
         )
         object.__setattr__(
-            self,
+            self.var,
             name,
             obj,
         )
@@ -148,13 +162,9 @@ class _RT1_defdict:
         for key, val in d.items():
             defdict.add_variable(key)
             if isinstance(val, list):
-                getattr(defdict, key).from_list(
-                    copy.deepcopy(val) if copy_vals else val
-                )
+                defdict[key]._from_list(copy.deepcopy(val) if copy_vals else val)
             elif isinstance(val, dict):
-                getattr(defdict, key).from_dict(
-                    copy.deepcopy(val) if copy_vals else val
-                )
+                defdict[key]._from_dict(copy.deepcopy(val) if copy_vals else val)
         return defdict
 
     def to_dict(self, props="list"):
@@ -176,10 +186,10 @@ class _RT1_defdict:
         d = dict()
         if props == "list":
             for name in self._variables:
-                d[name] = getattr(self, name).to_list()
+                d[name] = getattr(self.var, name)._to_list()
         elif props == "dict":
             for name in self._variables:
-                d[name] = getattr(self, name).to_dict()
+                d[name] = getattr(self.var, name)._to_dict()
 
         return d
 
@@ -194,7 +204,6 @@ class _var:
     def __init__(self, name, val):
         self._name = name
         self._val = val
-        pass
 
     def __repr__(self):
         return f"{self._name}: {self._val}"
@@ -206,10 +215,6 @@ class _var:
     def name(self):
         return self._name
 
-    @name.setter
-    def name(self, val):
-        self._name = val
-
     @property
     def value(self):
         return self._val
@@ -220,6 +225,8 @@ class _var:
 
 
 class _RT1_variable:
+    _paramnames = ["fitQ", "val", "freq", "minval", "maxval", "interpQ"]
+
     def __init__(
         self,
         name=None,
@@ -240,22 +247,39 @@ class _RT1_variable:
         self._interpQ = _var("interpQ", interpQ)
 
     def __repr__(self):
-        return str(self.props)
+        return str(self._props)
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            return self.props[key]
+            return self._props[key]
         else:
-            return getattr(self, key)
+            return object.__getattribute__(self, key).value
+
+    def __getattribute__(self, key):
+        if key in ["fitQ", "val", "freq", "minval", "maxval", "interpQ"]:
+            return object.__getattribute__(self, key).value
+        else:
+            return object.__getattribute__(self, key)
 
     def __setitem__(self, key, val):
         # set the value of the corresponding property on item assignment
-        getattr(self, key).value = val
+        if isinstance(key, int):
+            name = ["fitQ", "val", "freq", "mima", "interpQ"][key]
+            if name == "mima":
+                ([v0], [v1]) = val
+
+                object.__getattribute__(self, "minval").value = v0
+                object.__getattribute__(self, "maxval").value = v1
+
+            else:
+                object.__getattribute__(self, name).value = val
+        else:
+            object.__getattribute__(self, key).value = val
 
     def __setattr__(self, key, val):
-        if not key.startswith("_"):
+        if key in ["fitQ", "val", "freq", "minval", "maxval", "interpQ"]:
             # set the value of the corresponding property on item assignment
-            getattr(self, key).value = val
+            object.__getattribute__(self, key).value = val
         else:
             object.__setattr__(self, key, val)
 
@@ -288,7 +312,7 @@ class _RT1_variable:
         return self._interpQ
 
     @property
-    def props(self):
+    def _props(self):
         return [
             self.fitQ,
             self.val,
@@ -297,7 +321,7 @@ class _RT1_variable:
             self.interpQ,
         ]
 
-    def from_list(self, l):
+    def _from_list(self, l):
         """
         Parse properties of a variable from a list
 
@@ -319,7 +343,7 @@ class _RT1_variable:
             l + [None, None, None, [[None], [None]], None][len(l) :]
         )
 
-    def to_list(self):
+    def _to_list(self):
         """
         Get a list of the properties
 
@@ -330,14 +354,14 @@ class _RT1_variable:
 
         """
         return [
-            self.fitQ.value,
-            self.val.value,
-            self.freq.value,
-            ([self.minval.value], [self.maxval.value]),
-            self.interpQ.value,
+            self.fitQ,
+            self.val,
+            self.freq,
+            ([self.minval], [self.maxval]),
+            self.interpQ,
         ]
 
-    def from_dict(self, d):
+    def _from_dict(self, d):
         """
         Parse properties of a variable from a dict
 
@@ -352,7 +376,7 @@ class _RT1_variable:
         for key, val in d.items():
             setattr(self, key, val)
 
-    def to_dict(self):
+    def _to_dict(self):
         """
         Get a dict of the properties
 
