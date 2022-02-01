@@ -27,10 +27,9 @@ def export_sig2(fit):
 
 
 class TestRTfits(unittest.TestCase):
-
     @classmethod
     def setup_class(cls):
-        """ ... called before the testing starts """
+        """... called before the testing starts"""
         if not cleanup_before:
             return
 
@@ -44,7 +43,7 @@ class TestRTfits(unittest.TestCase):
 
     @classmethod
     def teardown_class(cls):
-        """ cleanup after the test finished """
+        """cleanup after the test finished"""
         if not cleanup_after:
             return
 
@@ -111,21 +110,24 @@ class TestRTfits(unittest.TestCase):
 
         fit_db = results.dump01.fit_db
 
-        assert not any(fit_db.IDs.duplicated()), (
-            "there are duplicated IDs in the HDF container!")
+        assert not any(
+            fit_db.IDs.duplicated()
+        ), "there are duplicated IDs in the HDF container!"
 
         # check if all ID's are present in the HDF-container
         assert all(
             i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
-            ), ("HDF-container does not contain all IDs")
+        ), "HDF-container does not contain all IDs"
 
         # check if dumped-properties are equal for pickles and HDF-containers
         for fit in dumpresults.dump01.dump_fits:
             fit_hdf = fit_db.load_fit(fit.ID)
-            assert fit_hdf.dataset.equals(fit.dataset), (
-                "datasets of HDF-container and pickle-dumps are not equal!")
-            assert fit_hdf.res_df.equals(fit.res_df), (
-                "res_df of HDF-container and pickle-dumps are not equal!")
+            assert fit_hdf.dataset.equals(
+                fit.dataset
+            ), "datasets of HDF-container and pickle-dumps are not equal!"
+            assert fit_hdf.res_df.equals(
+                fit.res_df
+            ), "res_df of HDF-container and pickle-dumps are not equal!"
 
         # check accessing fits via ID
         id_fit = fit_db.load_fit("RT1_1")
@@ -133,8 +135,7 @@ class TestRTfits(unittest.TestCase):
 
         # try accessing the data directly
         alldata = fit_db.datasets.dataset.select()
-        assert len(alldata.index.levels[0]) == 3, (
-            "accessing full dataset was not OK")
+        assert len(alldata.index.levels[0]) == 3, "accessing full dataset was not OK"
 
         data0 = fit_db.datasets.dataset.get_id(0)
         assert len(data0.index.levels[0]) == 1, "dataset-selection was not OK"
@@ -142,31 +143,33 @@ class TestRTfits(unittest.TestCase):
 
         for i in ["RT1_1", "RT1_2", "RT1_3"]:
             dataID = fit_db.datasets.dataset.get_id(i)
-            assert len(dataID.index.levels[0]) == 1, (
-                "dataset-selection via ID was not OK")
-            assert fit_db.IDs.loc[dataID.index.levels[0][0]].ID == i, (
-                "dataset-selection via ID was not OK")
+            assert (
+                len(dataID.index.levels[0]) == 1
+            ), "dataset-selection via ID was not OK"
+            assert (
+                fit_db.IDs.loc[dataID.index.levels[0][0]].ID == i
+            ), "dataset-selection via ID was not OK"
 
         data2 = fit_db.datasets.dataset.get_nids(2)
-        assert len(data2.index.levels[0]) == 2, (
-            "multiple dataset-selection was not OK")
-        assert all(fit_db.IDs.index[:2].isin(data2.index.levels[0])), (
-            "multiple dataset-selection was not OK")
+        assert len(data2.index.levels[0]) == 2, "multiple dataset-selection was not OK"
+        assert all(
+            fit_db.IDs.index[:2].isin(data2.index.levels[0])
+        ), "multiple dataset-selection was not OK"
 
         # check data-generator
         data_iter = fit_db.datasets.dataset.get_nids_iter(2)
 
         data_iter_1 = next(data_iter)
-        assert len(data_iter_1.index.levels[0]) == 2, (
-            "dataset generator was not OK")
-        assert all(fit_db.IDs.index[:2].isin(data_iter_1.index.levels[0])), (
-            "dataset generator was not OK")
+        assert len(data_iter_1.index.levels[0]) == 2, "dataset generator was not OK"
+        assert all(
+            fit_db.IDs.index[:2].isin(data_iter_1.index.levels[0])
+        ), "dataset generator was not OK"
 
         data_iter_2 = next(data_iter)
-        assert len(data_iter_2.index.levels[0]) == 1, (
-            "dataset generator was not OK")
-        assert all(fit_db.IDs.index[2:].isin(data_iter_2.index.levels[0])), (
-            "dataset generator was not OK")
+        assert len(data_iter_2.index.levels[0]) == 1, "dataset generator was not OK"
+        assert all(
+            fit_db.IDs.index[2:].isin(data_iter_2.index.levels[0])
+        ), "dataset generator was not OK"
 
         with self.assertRaises(StopIteration):
             _ = next(data_iter)
@@ -287,23 +290,24 @@ class TestRTfits(unittest.TestCase):
         # check if all ID's are present in the HDF-container
         assert all(
             i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
-            ), ("HDF-container does not contain all IDs")
+        ), "HDF-container does not contain all IDs"
 
         # check if dumped-properties are equal for pickles and HDF-containers
         for fit in results.dump01.dump_fits:
             fit_hdf = fit_db.load_fit(fit.ID)
             _ = fit_hdf.dataset[list(fit.dataset)]
-            assert fit_hdf.dataset.equals(fit.dataset), (
-                "datasets of HDF-container and pickle-dumps are not equal!")
+            assert fit_hdf.dataset.equals(
+                fit.dataset
+            ), "datasets of HDF-container and pickle-dumps are not equal!"
 
             for fit_cfg in fit.configs:
                 hdf_res_df = fit_hdf.configs[fit_cfg.config_name].res_df
                 # make sure column-order is the same
                 hdf_res_df = hdf_res_df[list(fit_cfg.res_df)]
 
-                assert hdf_res_df.equals(fit_cfg.res_df), (
-                    "res_df of HDF-container and pickle-dumps are not equal!"
-                    )
+                assert hdf_res_df.equals(
+                    fit_cfg.res_df
+                ), "res_df of HDF-container and pickle-dumps are not equal!"
 
         # make sure to close the HDF-file so that the folders can be savely deleted
         fit_db.close()
@@ -359,21 +363,23 @@ class TestRTfits(unittest.TestCase):
             parameters = ["t_s", "tau", "sig2"]
             export_functions = dict(sig2=export_sig2)
 
-            metrics = dict(R=("pearson", "sig", "tot"),
-                           RMSD=("rmsd", "sig", "tot")
-                           )
+            metrics = dict(R=("pearson", "sig", "tot"), RMSD=("rmsd", "sig", "tot"))
 
-            proc.export_data_to_HDF(parameters=parameters,
-                                    metrics=metrics,
-                                    export_functions=export_functions,
-                                    ncpu=1,
-                                    finalout_name="export_ncpu1.h5")
+            proc.export_data_to_HDF(
+                parameters=parameters,
+                metrics=metrics,
+                export_functions=export_functions,
+                ncpu=1,
+                finalout_name="export_ncpu1.h5",
+            )
 
-            proc.export_data_to_HDF(parameters=parameters,
-                                    metrics=metrics,
-                                    export_functions=export_functions,
-                                    ncpu=3,
-                                    finalout_name="export_ncpu3.h5")
+            proc.export_data_to_HDF(
+                parameters=parameters,
+                metrics=metrics,
+                export_functions=export_functions,
+                ncpu=3,
+                finalout_name="export_ncpu3.h5",
+            )
 
             for export_name in ["export_ncpu1", "export_ncpu3"]:
 
@@ -382,7 +388,7 @@ class TestRTfits(unittest.TestCase):
                 # check if all ID's are present in the HDF-container
                 assert all(
                     i in data.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
-                    ), ("HDF-container does not contain all IDs")
+                ), "HDF-container does not contain all IDs"
 
                 # some basic checks if Fits and MultiFits are correctly exported
 
@@ -392,16 +398,13 @@ class TestRTfits(unittest.TestCase):
                     configs = ["cfg_0", "cfg_1"]
 
                 for cfg in configs:
-                    cols = list(getattr(
-                        data.datasets, cfg).dynamic.get_id(0).columns)
+                    cols = list(getattr(data.datasets, cfg).dynamic.get_id(0).columns)
                     assert cols == ["tau", "sig2"], "dynamic columns are not OK"
 
-                    cols = list(getattr(
-                        data.datasets, cfg).static.get_id(0).columns)
+                    cols = list(getattr(data.datasets, cfg).static.get_id(0).columns)
                     assert cols == ["t_s"], "static columns are not OK"
 
-                    cols = list(getattr(
-                        data.datasets, cfg).metrics.get_id(0).columns)
+                    cols = list(getattr(data.datasets, cfg).metrics.get_id(0).columns)
                     assert cols == ["R", "RMSD"], "metrics columns are not OK"
 
     # this is needed to disable log-capturing during testing

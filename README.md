@@ -35,7 +35,7 @@ The documentation of the package is found [here](http://rt1.readthedocs.io/).
   - a flexible interface to perform parameter estimation from incidence-angle  
     dependent backscatter-timeseries via non-linear least-squares fitting routines.
 
-  - integrates with a set of pre-defined plot-functions and interactive   
+  - integrates with a set of pre-defined plot-functions and interactive  
     widgets that can be used to quickly analyze the obtained results
 
 - :rocket: **rt1.rtprocess**
@@ -71,4 +71,3 @@ optional dependencies `symengine` and `xarray` by using:
 ## References
 * Quast & Wagner (2016): [doi:10.1364/AO.55.005379](https://doi.org/10.1364/AO.55.005379)
 * Quast, Albergel, Calvet, Wagner (2019) : [doi:10.3390/rs11030285](https://doi.org/10.3390/rs11030285)
-

@@ -881,7 +881,7 @@ class RT1(object):
                 * brdf_slope
                 * (2.0 * self.V.tau / self._mu_0 + 1.0)
                 + (
-                    4.0 * self.V.tau ** 2 / self._mu_0 ** 3 * np.sin(self.t_0) ** 2
+                    4.0 * self.V.tau**2 / self._mu_0**3 * np.sin(self.t_0) ** 2
                     - 2.0 * self.V.tau
                     - self._mu_0
                 )
@@ -916,12 +916,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope**2 / I_val**2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
+                    * (I_curv / I_val - I_slope**2 / I_val**2 - self._mu_0 ** (-2))
                 )
 
     def volume(self):
@@ -1004,7 +1004,7 @@ class RT1(object):
                     * 2
                     * self.V.tau
                     * np.sin(self.t_0)
-                    / self._mu_0 ** 2
+                    / self._mu_0**2
                 )
                 * p_val
                 + (1.0 - np.exp(-(2 * self.V.tau / self._mu_0))) * p_slope
@@ -1081,7 +1081,7 @@ class RT1(object):
             / 2.0
             * (
                 np.exp(-(2 * self.V.tau / self._mu_0))
-                * (2 * self.V.tau / self._mu_0 ** 3)
+                * (2 * self.V.tau / self._mu_0**3)
                 * (
                     np.sin(self.t_0) ** 2
                     + 1.0
@@ -1092,7 +1092,7 @@ class RT1(object):
                     np.exp(-(2 * self.V.tau / self._mu_0))
                     * 4.0
                     * self.V.tau
-                    / self._mu_0 ** 2
+                    / self._mu_0**2
                     * np.sin(self.t_0)
                 )
                 * p_slope
@@ -1116,12 +1116,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope**2 / I_val**2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
+                    * (I_curv / I_val - I_slope**2 / I_val**2 - self._mu_0 ** (-2))
                 )
 
     def tot_slope(self, sig0=False, dB=False):
@@ -1205,12 +1205,12 @@ class RT1(object):
                     )
                 )
             elif sig0 is False and dB is True:
-                return 10.0 / np.log(10) * (I_curv / I_val - I_slope ** 2 / I_val ** 2)
+                return 10.0 / np.log(10) * (I_curv / I_val - I_slope**2 / I_val**2)
             elif sig0 is True and dB is True:
                 return (
                     10.0
                     / np.log(10)
-                    * (I_curv / I_val - I_slope ** 2 / I_val ** 2 - self._mu_0 ** (-2))
+                    * (I_curv / I_val - I_slope**2 / I_val**2 - self._mu_0 ** (-2))
                 )
 
     def interaction(self):

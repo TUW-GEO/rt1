@@ -250,7 +250,6 @@ class RT1_configparser(object):
             parsed_dict[key] = val
         return parsed_dict
 
-
     def _parse_V_SRF(self, section):
 
         inp = self.config[section]
@@ -276,8 +275,10 @@ class RT1_configparser(object):
             parsed_dict[key] = val
 
         for prefix in ["V", "SRF"]:
-            if (f"{prefix}_name" in parsed_dict and
-                parsed_dict[f"{prefix}_name"] == f"LinComb{prefix}"):
+            if (
+                f"{prefix}_name" in parsed_dict
+                and parsed_dict[f"{prefix}_name"] == f"LinComb{prefix}"
+            ):
                 choices = defaultdict(lambda: [1, dict()])
                 for key in list(parsed_dict):
                     if key[0].isupper() and key[1:].startswith("__"):

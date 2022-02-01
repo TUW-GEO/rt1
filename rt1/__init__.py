@@ -2,6 +2,7 @@
 
 try:
     from colorama import Fore, Back, Style, init
+
     init()
     _colored = True
 except Exception:
@@ -150,12 +151,17 @@ class ColoredWrappedFixedIndentingLog(logging.Formatter):
             logging.WARNING: Fore.MAGENTA + fmt + Style.RESET_ALL,
             logging.ERROR: Back.RED + fmt + Style.RESET_ALL,
             logging.CRITICAL: Back.RED + fmt + Style.RESET_ALL,
-            _PROGRESS_LEVEL_NUM: Back.GREEN + fmt + Style.RESET_ALL
+            _PROGRESS_LEVEL_NUM: Back.GREEN + fmt + Style.RESET_ALL,
         }
 
     def format(self, record):
-        log_fmt = (Fore.LIGHTWHITE_EX + "%(asctime)s" + Style.RESET_ALL + " - " +
-                   self.FORMATS.get(record.levelno))
+        log_fmt = (
+            Fore.LIGHTWHITE_EX
+            + "%(asctime)s"
+            + Style.RESET_ALL
+            + " - "
+            + self.FORMATS.get(record.levelno)
+        )
         formatter = logging.Formatter(log_fmt, datefmt=self.datefmt)
 
         return indent(formatter.format(record), " " * self._indent).strip()
@@ -184,24 +190,22 @@ def _get_logger_formatter(simple=True, colored=False):
             + "%(message)s"
         )
     if colored:
-        formatter = ColoredWrappedFixedIndentingLog(logfmt,
-                                                    indent=51,
-                                                    datefmt="%Y-%m-%d %H:%M:%S",
-                                                    )
+        formatter = ColoredWrappedFixedIndentingLog(
+            logfmt,
+            indent=51,
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     else:
-        formatter = WrappedFixedIndentingLog(logfmt,
-                                             indent=51,
-                                             datefmt="%Y-%m-%d %H:%M:%S",
-                                             )
+        formatter = WrappedFixedIndentingLog(
+            logfmt,
+            indent=51,
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     return formatter
 
 
 def setup_logger(
-    log_name="rt1",
-    console_out=True,
-    console_level=21,
-    simple=True,
-    colored=_colored
+    log_name="rt1", console_out=True, console_level=21, simple=True, colored=_colored
 ):
 
     logger = logging.getLogger(log_name)

@@ -4,6 +4,7 @@
 import sympy as sp
 import numpy as np
 
+
 class Scatter(object):
     """The basis object for any Surface and Volume objects"""
 

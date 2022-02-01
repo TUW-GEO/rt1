@@ -27,4 +27,3 @@ You can also download the source code package from the `project website <https:/
     python setup.py install
 
 If might be that you might need administrator rights for this step, as the program tries to install into system library pathes. To install into a user specific directory please refer to the `pip` documentation.
-
