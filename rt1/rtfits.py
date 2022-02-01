@@ -2755,7 +2755,7 @@ class Fits(Scatter):
             "sig0": self.sig0,
             "dB": self.dB,
             "dataset": self.dataset,
-            "defdict": self.defdict,
+            "defdict": self.defdict.to_dict(),
             "set_V_SRF": self.set_V_SRF,
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,
@@ -2777,7 +2777,7 @@ class Fits(Scatter):
         args = {
             "sig0": self.sig0,
             "dB": self.dB,
-            "defdict": self.defdict,
+            "defdict": self.defdict.to_dict(),
             "set_V_SRF": self.set_V_SRF,
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,

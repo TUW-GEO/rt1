@@ -423,6 +423,7 @@ class RT1_processor(object):
                             expectedrows = None
                         else:
                             expectedrows = self.p_max.value * len(val)
+
                         store.append(
                             key,
                             val,
