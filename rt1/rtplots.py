@@ -2595,7 +2595,7 @@ class plot:
         # add a button to indicate the fit-results
         if res_dict is not None:
             buttonlabels += ["... indicate fit"]
-            buttonvals += [True]
+            buttonvals += [False]
         buttons = CheckButtons(buttonax, buttonlabels, buttonvals)
 
         params = startparams.copy()
@@ -2612,8 +2612,6 @@ class plot:
                 alpha=0.75,
                 zorder=-1,
             )
-
-            ax.add_collection(lc)
 
         # define function to update lines based on slider-input
         def animate(value, key):
@@ -2759,16 +2757,19 @@ class plot:
 
         printvariationQ = {key: False for key in minparams}
         if res_dict is not None:
-            printvariationQ["... indicate fit"] = True
+            printvariationQ["... indicate fit"] = False
 
         def buttonfunc(label):
             if label == "... indicate fit":
                 if printvariationQ[label] is True:
-                    lc.remove()
+                    try:
+                        lc.remove()
+                    except Exception:
+                        pass
                     printvariationQ[label] = False
                 else:
-                    ax.add_collection(lc)
                     printvariationQ[label] = True
+                    ax.add_collection(lc)
                 return
             # if labels of the buttons have been changed by the labels-argument
             # set the name to the corresponding key (= the actual parameter name)
