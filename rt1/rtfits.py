@@ -29,6 +29,7 @@ from . import volume as rt1_v
 from . import __version__ as _RT1_version
 from . import log
 from .rtmetrics import _metric_keys
+from ._containers import _RT1_defdict
 
 import copy
 from itertools import repeat, count, chain, groupby
@@ -296,11 +297,6 @@ class Fits(Scatter):
         self.dataset = self._check_monotonic_dataset_index(dataset)
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
 
-        if defdict is None:
-            self.defdict = dict()
-        else:
-            self.defdict = copy.deepcopy(defdict)
-
         if lsq_kwargs is None:
             self.lsq_kwargs = dict()
         else:
@@ -320,6 +316,22 @@ class Fits(Scatter):
 
         # add plotfunctions
         self.plot = rt1_plots(self)
+
+        if defdict is None:
+            self._defdict = _RT1_defdict()
+        else:
+            self.defdict = defdict
+
+    @property
+    def defdict(self):
+        return self._defdict
+
+    @defdict.setter
+    def defdict(self, d):
+        if isinstance(d, (dict, pd.DataFrame)):
+            self._defdict = _RT1_defdict.from_dict(d)
+        else:
+            raise TypeError("defdicts can only be parsed from dicts!")
 
     def __update__(self):
         """needed for downward compatibility"""
