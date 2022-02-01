@@ -3,7 +3,7 @@ import copy
 
 class _RT1_defdict:
     def __init__(self):
-        self._variables = set()
+        self._variables = list()
 
     def __repr__(self):
         return "\n".join(
@@ -92,7 +92,7 @@ class _RT1_defdict:
         """
 
         if name not in self._variables:
-            self._variables.add(name)
+            self._variables.append(name)
         obj = _RT1_variable(
             name=name,
             fitQ=fitQ,
@@ -118,7 +118,7 @@ class _RT1_defdict:
             The name of the variable to remove.
         """
         if name in self._variables:
-            self._variables.remove(name)
+            self._variables.pop(self._variables.index(name))
         delattr(self, name)
 
     @classmethod
@@ -187,7 +187,7 @@ class _RT1_defdict:
         return self.to_dict().items()
 
     def keys(self):
-        return self._variables
+        return [*self._variables]
 
 
 class _var:
