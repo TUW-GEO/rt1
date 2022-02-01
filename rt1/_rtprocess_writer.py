@@ -6,7 +6,6 @@ from timeit import default_timer
 from datetime import timedelta
 import sys
 import pandas as pd
-import traceback
 
 from queue import Empty as QueueEmpty
 import os

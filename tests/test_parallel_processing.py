@@ -2,13 +2,11 @@ from pathlib import Path
 import shutil
 import unittest
 import unittest.mock as mock
-from rt1 import log, start_log_to_file, stop_log_to_file
 from rt1.rtprocess import RTprocess
 from rt1.rtresults import RTresults
 from rt1.rtfits import MultiFits
 import warnings
 import pytest
-import multiprocessing as mp
 
 warnings.simplefilter("ignore")
 
