@@ -1678,7 +1678,7 @@ class RTprocess(object):
                 elif key in defs["fitted_const"]:
                     staticlayers[key] = fit.res_dict[key][0]
                 elif key in defs["constant"]:
-                    staticlayers[key] = fit.defdict[key][1]
+                    staticlayers[key] = fit.defdict[key].val.value
                 elif key in defs["auxiliary"]:
                     usedfs.append(fit.dataset[key])
             elif key in fit.dataset:

@@ -146,16 +146,15 @@ class _RT1_defdict:
 
         defdict = cls()
         for key, val in d.items():
-            for i, p in enumerate(val):
-                defdict.add_variable(key)
-                if isinstance(val, list):
-                    getattr(defdict, key).from_list(
-                        copy.deepcopy(val) if copy_vals else val
-                    )
-                elif isinstance(val, dict):
-                    getattr(defdict, key).from_dict(
-                        copy.deepcopy(val) if copy_vals else val
-                    )
+            defdict.add_variable(key)
+            if isinstance(val, list):
+                getattr(defdict, key).from_list(
+                    copy.deepcopy(val) if copy_vals else val
+                )
+            elif isinstance(val, dict):
+                getattr(defdict, key).from_dict(
+                    copy.deepcopy(val) if copy_vals else val
+                )
         return defdict
 
     def to_dict(self, props="list"):
@@ -309,14 +308,16 @@ class _RT1_variable:
 
                 [fitQ, val, freq, ([minval], [maxval]), interpQ]
         """
-        if len(l) == 5:
-            [
-                self.fitQ,
-                self.val,
-                self.freq,
-                ([self.minval], [self.maxval]),
-                self.interpQ,
-            ][: len(l)] = l
+        assert isinstance(l, list), "The provided value must be a list!"
+        [
+            self.fitQ,
+            self.val,
+            self.freq,
+            [[self.minval], [self.maxval]],
+            self.interpQ,
+        ] = (
+            l + [None, None, None, [[None], [None]], None][len(l) :]
+        )
 
     def to_list(self):
         """

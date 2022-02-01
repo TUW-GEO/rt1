@@ -328,10 +328,15 @@ class Fits(Scatter):
 
     @defdict.setter
     def defdict(self, d):
-        if isinstance(d, (dict, pd.DataFrame)):
-            self._defdict = _RT1_defdict.from_dict(d)
+        if isinstance(d, _RT1_defdict):
+            self._defdict = d
+        elif d is None:
+            self._defdict = _RT1_defdict()
         else:
-            raise TypeError("defdicts can only be parsed from dicts!")
+            if isinstance(d, (dict, pd.DataFrame)):
+                self._defdict = _RT1_defdict.from_dict(d)
+            else:
+                raise TypeError("defdicts can only be parsed from dicts!")
 
     def __update__(self):
         """needed for downward compatibility"""
