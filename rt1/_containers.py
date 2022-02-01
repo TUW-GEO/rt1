@@ -32,7 +32,7 @@ class _RT1_defdict:
         return iter(self._variables)
 
     def add_variable(
-        self, name, fitQ=True, val=0.5, freq=None, minval=0, maxval=1, interpQ=False
+        self, name, fitQ=True, val=0.5, freq=None, minval=0.0, maxval=1.0, interpQ=False
     ):
         """
         Add a new definition for a variable to the defdict.
@@ -316,10 +316,7 @@ class _RT1_variable:
                 self.freq,
                 ([self.minval], [self.maxval]),
                 self.interpQ,
-            ] = l
-        else:
-            [self.fitQ, self.val, self.freq, ([self.minval], [self.maxval])] = l
-            self.interpQ = False
+            ][: len(l)] = l
 
     def to_list(self):
         """
@@ -372,7 +369,3 @@ class _RT1_variable:
             maxval=self.maxval.value,
             interpQ=self.interpQ.value,
         )
-
-
-defdict = _RT1_defdict()
-defdict.add_variable("a")
