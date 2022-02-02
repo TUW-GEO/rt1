@@ -2773,12 +2773,24 @@ class Fits(Scatter):
 
         return fit
 
+    def _get_V_SRF_dict(self):
+        # convert set_V_SRF to a dict
+        if isinstance(self.set_V_SRF, dict):
+            return self.set_V_SRF
+        else:
+            try:
+                # init V and SRF with string-variables
+                V, SRF = self.set_V_SRF(**dict(zip(*[self.defdict._variables] * 2)))
+            except TypeError:
+                log.error("Not all variables are specified in defdict!", exc_info=True)
+            return dict(V_props=V.init_dict, SRF_props=SRF.init_dict)
+
     def _get_init_dict(self):
         args = {
             "sig0": self.sig0,
             "dB": self.dB,
             "defdict": self.defdict.to_dict(),
-            "set_V_SRF": self.set_V_SRF,
+            "set_V_SRF": self._get_V_SRF_dict(),
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,
         }
