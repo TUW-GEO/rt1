@@ -737,6 +737,7 @@ class plot:
             labels=list(lab),
             loc="upper left",
             ncol=5,
+            markerscale=3,
         )
 
         if ylim is not None:

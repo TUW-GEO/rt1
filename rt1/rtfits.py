@@ -726,6 +726,7 @@ class Fits(Scatter):
         def doit(x, N):
             return str(x).zfill(N)
 
+        conclist = list()
         for i, [key, val] in enumerate(self.param_dyn_dict.items()):
             if i == 0:
                 conclist = list(map(partial(doit, N=maxdict[key]), val))
