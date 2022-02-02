@@ -133,7 +133,7 @@ class _RT1_defdict:
         """
         if name in self._variables:
             self._variables.pop(self._variables.index(name))
-        delattr(self, name)
+        delattr(self.var, name)
 
     @classmethod
     def from_dict(cls, d, copy_vals=True):
