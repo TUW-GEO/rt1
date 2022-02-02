@@ -1,25 +1,64 @@
 from pathlib import Path
+import shutil
 import unittest
 import unittest.mock as mock
 from rt1.rtprocess import RTprocess
 from rt1.rtresults import RTresults
 from rt1.rtfits import MultiFits
 import warnings
+import pytest
 
 warnings.simplefilter("ignore")
 
 
 # use "test_0_---"   "test_1_---"   to ensure test-order
 
+# # set this to False to avoid deleting results & processing-folders!
+cleanup_before = False
+cleanup_after = False
+
+
+# define an export_function (used in test_92_export_results)
+# (must be defined outside of __main__ to be pickleable!)
+def export_sig2(fit):
+    return fit.dataset.sig**2
+
 
 class TestRTfits(unittest.TestCase):
+    @classmethod
+    def setup_class(cls):
+        """... called before the testing starts"""
+        if not cleanup_before:
+            return
+
+        folders = ["proc_test", "proc_test2", "proc_multi"]
+
+        for folder in folders:
+            p = Path(f"tests/{folder}")
+            if p.exists():
+                print(f"removing existing folder '{folder}' before starting tests")
+                shutil.rmtree(p)
+
+    @classmethod
+    def teardown_class(cls):
+        """cleanup after the test finished"""
+        if not cleanup_after:
+            return
+
+        folders = ["proc_test", "proc_test2", "proc_multi"]
+
+        for folder in folders:
+            p = Path(f"tests/{folder}")
+            if p.exists():
+                print(f"removing folder '{folder}' to cleanup after testing")
+                shutil.rmtree(p)
+
     def test_0_parallel_processing(self):
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         proc = RTprocess(config_path, autocontinue=True)
-
-        proc.run_processing(ncpu=4, reader_args=reader_args)
+        proc.run_processing(ncpu=4, reader_args=reader_args, dump_fit=True)
 
         # run again to check what happens if files already exist
         proc.run_processing(ncpu=4, reader_args=reader_args)
@@ -44,29 +83,100 @@ class TestRTfits(unittest.TestCase):
     def test_1_rtresults(self):
 
         results = RTresults("tests/proc_test")
+        dumpresults = RTresults("tests/proc_test", use_dumps=True)
+
         assert hasattr(results, "dump01"), "dumpfolder not found by RTresults"
 
         dumpfiles = [i for i in results.dump01.dump_files]
         print(dumpfiles)
 
         fit = results.dump01.load_fit()
-        cfg = results.dump01.load_cfg()
+        _ = results.dump01.load_cfg()
 
-        with results.dump01.load_nc() as ncfile:
-            processed_ids = list(ncfile.ID.values)
+        # with results.dump01.load_nc() as ncfile:
+        #     processed_ids = list(ncfile.ID.values)
 
-        processed_ids.sort()
-        assert processed_ids == [1, 2, 3], "NetCDF export does not include all IDs"
+        # processed_ids.sort()
+        # assert processed_ids == [1, 2, 3], "NetCDF export does not include all IDs"
 
-        # check if NetCDF_variables works as expected
-        results.dump01.NetCDF_variables
+        # # check if NetCDF_variables works as expected
+        # results.dump01.NetCDF_variables
 
         # remove the save_path directory
         # print('deleting save_path directory...')
         # shutil.rmtree(results._parent_path)
 
+        fit_db = results.dump01.fit_db
+
+        assert not any(
+            fit_db.IDs.duplicated()
+        ), "there are duplicated IDs in the HDF container!"
+
+        # check if all ID's are present in the HDF-container
+        assert all(
+            i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+        ), "HDF-container does not contain all IDs"
+
+        # check if dumped-properties are equal for pickles and HDF-containers
+        for fit in dumpresults.dump01.dump_fits:
+            fit_hdf = fit_db.load_fit(fit.ID)
+            assert fit_hdf.dataset.equals(
+                fit.dataset
+            ), "datasets of HDF-container and pickle-dumps are not equal!"
+            assert fit_hdf.res_df.equals(
+                fit.res_df
+            ), "res_df of HDF-container and pickle-dumps are not equal!"
+
+        # check accessing fits via ID
+        id_fit = fit_db.load_fit("RT1_1")
+        assert id_fit.ID == "RT1_1", "the ID of the loaded fit is not OK"
+
+        # try accessing the data directly
+        alldata = fit_db.datasets.dataset.select()
+        assert len(alldata.index.levels[0]) == 3, "accessing full dataset was not OK"
+
+        data0 = fit_db.datasets.dataset.get_id(0)
+        assert len(data0.index.levels[0]) == 1, "dataset-selection was not OK"
+        assert data0.index.levels[0][0] == 0, "dataset-selection was not OK"
+
+        for i in ["RT1_1", "RT1_2", "RT1_3"]:
+            dataID = fit_db.datasets.dataset.get_id(i)
+            assert (
+                len(dataID.index.levels[0]) == 1
+            ), "dataset-selection via ID was not OK"
+            assert (
+                fit_db.IDs.loc[dataID.index.levels[0][0]].ID == i
+            ), "dataset-selection via ID was not OK"
+
+        data2 = fit_db.datasets.dataset.get_nids(2)
+        assert len(data2.index.levels[0]) == 2, "multiple dataset-selection was not OK"
+        assert all(
+            fit_db.IDs.index[:2].isin(data2.index.levels[0])
+        ), "multiple dataset-selection was not OK"
+
+        # check data-generator
+        data_iter = fit_db.datasets.dataset.get_nids_iter(2)
+
+        data_iter_1 = next(data_iter)
+        assert len(data_iter_1.index.levels[0]) == 2, "dataset generator was not OK"
+        assert all(
+            fit_db.IDs.index[:2].isin(data_iter_1.index.levels[0])
+        ), "dataset generator was not OK"
+
+        data_iter_2 = next(data_iter)
+        assert len(data_iter_2.index.levels[0]) == 1, "dataset generator was not OK"
+        assert all(
+            fit_db.IDs.index[2:].isin(data_iter_2.index.levels[0])
+        ), "dataset generator was not OK"
+
+        with self.assertRaises(StopIteration):
+            _ = next(data_iter)
+
+        # make sure to close the HDF-file so that the folders can be savely deleted
+        fit_db.close()
+
     def test_2_single_core_processing(self):
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         # mock inputs as shown here: https://stackoverflow.com/a/37467870/9703451
@@ -88,7 +198,7 @@ class TestRTfits(unittest.TestCase):
         ), "user-input REMOVE did not work"
 
         with mock.patch("builtins.input", side_effect=["REMOVE", "Y"]):
-            proc = RTprocess(config_path, autocontinue=False, copy=False)
+            proc = RTprocess(config_path, autocontinue=False)
             proc.run_processing(ncpu=1, reader_args=reader_args)
 
         # ----------------------------------------- check if files have been copied
@@ -101,12 +211,12 @@ class TestRTfits(unittest.TestCase):
         assert Path(
             "tests/proc_test/dump01/dumps"
         ).exists(), "folder-generation did not work"
-        assert not Path(
+        assert Path(
             "tests/proc_test/dump01/cfg/test_config.ini"
-        ).exists(), "NOT copying did not work"
-        assert not Path(
+        ).exists(), "copying did not work"
+        assert Path(
             "tests/proc_test/dump01/cfg/parallel_processing_config.py"
-        ).exists(), "NOT copying did not work"
+        ).exists(), "copying did not work"
 
         # remove the save_path directory
         # print('deleting save_path directory...')
@@ -114,7 +224,7 @@ class TestRTfits(unittest.TestCase):
 
     def test_3_parallel_processing_init_kwargs(self):
         # test overwriting keyword-args from .ini file
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
         config_path = Path(__file__).parent.absolute() / "test_config.ini"
 
         proc = RTprocess(config_path, autocontinue=True)
@@ -145,89 +255,60 @@ class TestRTfits(unittest.TestCase):
             "tests/proc_test2/dump02/cfg/parallel_processing_config.py"
         ).exists(), "copying did not work"
 
-    def test_4_postprocess_and_finalout(self):
-        config_path = Path(__file__).parent.absolute() / "test_config.ini"
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
-
-        proc = RTprocess(config_path)
-        proc.override_config(
-            PROCESS_SPECS=dict(path__save_path="tests/proc_test3", dumpfolder="dump03")
-        )
-
-        proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=False)
-
-        results = RTresults("tests/proc_test3")
-        assert hasattr(results, "dump03"), "dumpfolder dump02 not found by RTresults"
-
-        finalout_name = results.dump03.load_cfg().get_process_specs()["finalout_name"]
-
-        assert not Path(
-            f"tests/proc_test3/dump03/results/{finalout_name}.nc"
-        ).exists(), "disabling postprocess did not work"
-
-        proc.run_finaloutput(ncpu=1, finalout_name="ncpu_1.nc")
-        assert Path(
-            "tests/proc_test3/dump03/results/ncpu_1.nc"
-        ).exists(), "run_finalout with ncpu=1 not work"
-
-        proc.run_finaloutput(ncpu=4, finalout_name="ncpu_2.nc")
-        assert Path(
-            "tests/proc_test3/dump03/results/ncpu_2.nc"
-        ).exists(), "run_finalout with ncpu=2 not work"
-
     def test_5_multiconfig(self):
 
         config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
-        reader_args = [dict(gpi=i) for i in [1, 2, 3, 4]]
+        reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
 
         proc = RTprocess(config_path)
-        proc.run_processing(ncpu=4, reader_args=reader_args, postprocess=True)
+        proc.run_processing(ncpu=4, reader_args=reader_args)
 
         for cfg in ["cfg_0", "cfg_1"]:
-            # check if all folders are properly initialized
-            # assert Path(
-            #     f"tests/proc_multi/dump01/dumps/{cfg}"
-            # ).exists(), "multiconfig folder generation did not work"
-            # assert Path(
-            #     f"tests/proc_multi/dump01/dumps/{cfg}"
-            # ).exists(), "multiconfig folder generation did not work"
-
             # check if model-definition files are written correctly
             assert Path(
                 f"tests/proc_multi/dump01/cfg/model_definition__{cfg}.txt"
             ).exists(), "multiconfig model_definition.txt export did not work"
 
-            # # check if netcdf have been exported
+            # # # check if netcdf have been exported
             # assert Path(
-            #     f"tests/proc_multi/dump01/results/{cfg}/results.nc"
+            #     f"tests/proc_multi/dump01/results/results__{cfg}.nc"
             # ).exists(), "multiconfig NetCDF export did not work"
-            # check if netcdf have been exported
-            assert Path(
-                f"tests/proc_multi/dump01/results/results__{cfg}.nc"
-            ).exists(), "multiconfig NetCDF export did not work"
 
-    def test_7_multiconfig_finalout(self):
-        config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
+    def test_6_multiconfig_rtresults(self):
+        results = RTresults("tests/proc_multi")
+        assert hasattr(results, "dump01"), "dumpfolder not found by RTresults"
 
-        proc = RTprocess(config_path)
-        proc.run_finaloutput(
-            ncpu=1,
-            finalout_name="ncpu1.nc",
-        )
+        _ = [i for i in results.dump01.dump_files]
 
-        proc.run_finaloutput(
-            ncpu=3,
-            finalout_name="ncpu3.nc",
-        )
+        fit = results.dump01.load_fit()
+        _ = results.dump01.load_cfg()
 
-        for cfg in ["cfg_0", "cfg_1"]:
-            # check if all folders are properly initialized
-            assert Path(
-                f"tests/proc_multi/dump01/results/ncpu1__{cfg}.nc"
-            ).exists(), "multiconfig finaloutput with ncpu=1 did not work"
-            assert Path(
-                f"tests/proc_multi/dump01/results/ncpu3__{cfg}.nc"
-            ).exists(), "multiconfig finaloutput with ncpu=3 did not work"
+        fit_db = results.dump01.fit_db
+
+        # check if all ID's are present in the HDF-container
+        assert all(
+            i in fit_db.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+        ), "HDF-container does not contain all IDs"
+
+        # check if dumped-properties are equal for pickles and HDF-containers
+        for fit in results.dump01.dump_fits:
+            fit_hdf = fit_db.load_fit(fit.ID)
+            _ = fit_hdf.dataset[list(fit.dataset)]
+            assert fit_hdf.dataset.equals(
+                fit.dataset
+            ), "datasets of HDF-container and pickle-dumps are not equal!"
+
+            for fit_cfg in fit.configs:
+                hdf_res_df = fit_hdf.configs[fit_cfg.config_name].res_df
+                # make sure column-order is the same
+                hdf_res_df = hdf_res_df[list(fit_cfg.res_df)]
+
+                assert hdf_res_df.equals(
+                    fit_cfg.res_df
+                ), "res_df of HDF-container and pickle-dumps are not equal!"
+
+        # make sure to close the HDF-file so that the folders can be savely deleted
+        fit_db.close()
 
     def test_8_multiconfig_rtresults(self):
         res = RTresults("tests/proc_multi")
@@ -267,51 +348,103 @@ class TestRTfits(unittest.TestCase):
         assert fit.SRF.ncoefs == 5, "multiconfig props not correct"
         assert fit.lsq_kwargs["ftol"] == 0.001, "multiconfig props not correct"
 
-    def test_91_export_results(self):
-        for folder in ["proc_test", "proc_test2", "proc_test3", "proc_multi"]:
-            proc = RTprocess(f"tests/{folder}")
+    def test_92_export_results(self):
+        for folder in ["proc_test", "proc_test2", "proc_multi"]:
+            # select the first subfolder and find the .ini file used
+            res = list(RTresults(f"tests/{folder}"))
+            assert len(res) == 1, "there's more than one result-folder???"
+            res = res[0]
+            configpath = res.load_cfg().configpath
 
-            parameters = dict(t_s=dict(long_name="bare soil directionality"),
-                              tau=dict(long_name="optical depth"),
-                              sig2=dict(long_name="sigma0 squared")
-                              )
+            proc = RTprocess(configpath)
 
-            metrics = dict(R=["pearson", "sig", "tot",
-                              dict(long_name="sig0 pearson correlation")],
-                           RMSD=["rmsd", "sig", "tot",
-                              dict(long_name="sig0 RMSD")]
-                           )
+            parameters = ["t_s", "tau", "sig2"]
+            export_functions = dict(sig2=export_sig2)
 
-            export_functions = dict(sig2=lambda fit: fit.dataset.sig**2)
+            metrics = dict(R=("pearson", "sig", "tot"), RMSD=("rmsd", "sig", "tot"))
 
-            attributes = dict(info="some info")
+            proc.export_data_to_HDF(
+                parameters=parameters,
+                metrics=metrics,
+                export_functions=export_functions,
+                ncpu=1,
+                finalout_name="export_ncpu1.h5",
+            )
 
-            res = proc.export_data(parameters=parameters,
-                                   metrics=metrics,
-                                   export_functions=export_functions,
-                                   attributes=attributes,
-                                   index_col='gpi')
+            proc.export_data_to_HDF(
+                parameters=parameters,
+                metrics=metrics,
+                export_functions=export_functions,
+                ncpu=3,
+                finalout_name="export_ncpu3.h5",
+            )
 
-            if folder != "proc_multi":
-                # make single-fit results a dict as well so that they can be treated
-                # in the same way as multi-fits
-                res = dict(single_fit=res)
+            for export_name in ["export_ncpu1", "export_ncpu3"]:
 
-            for cfg_name, useres in res.items():
-                assert useres.R.dims == ('gpi',), "metric dim is wrong"
-                assert useres.RMSD.dims == ('gpi',), "metric dim is wrong"
+                data = res.load_hdf(export_name)
 
-                assert useres.t_s.dims == ('gpi',), "static parameter dim is wrong"
-                assert useres.tau.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
-                assert useres.sig2.dims == ('gpi', 'date'), "dynamic parameter dim is wrong"
+                # check if all ID's are present in the HDF-container
+                assert all(
+                    i in data.IDs.ID.values for i in ["RT1_1", "RT1_2", "RT1_3"]
+                ), "HDF-container does not contain all IDs"
 
-                # check if attributes are correctly attached
-                assert useres.attrs['info'] == attributes['info'], "attributes not correctly attached"
-                for key, attrs in parameters.items():
-                    for name, a in attrs.items():
-                        assert useres[key].attrs[name] == a, "attributes not correctly attached"
+                # some basic checks if Fits and MultiFits are correctly exported
 
-                assert "model_definition" in useres.attrs, "model_definition not correctly attached"
+                if folder in ["proc_test", "proc_test2"]:
+                    configs = ["default"]  # single-config is called "default"
+                else:
+                    configs = ["cfg_0", "cfg_1"]
+
+                for cfg in configs:
+                    cols = list(getattr(data.datasets, cfg).dynamic.get_id(0).columns)
+                    assert cols == ["tau", "sig2"], "dynamic columns are not OK"
+
+                    cols = list(getattr(data.datasets, cfg).static.get_id(0).columns)
+                    assert cols == ["t_s"], "static columns are not OK"
+
+                    cols = list(getattr(data.datasets, cfg).metrics.get_id(0).columns)
+                    assert cols == ["R", "RMSD"], "metrics columns are not OK"
+
+    # this is needed to disable log-capturing during testing
+    @pytest.fixture(autouse=True)
+    def caplog(self, caplog):
+        self.caplog = caplog
+
+    # def test_log_to_file(self):
+    #     logpath = Path("tests/proc_test/testlog.log")
+    #     # temporarily set the log-capture level to 0 (e.g. allow all logs)
+    #     with self.caplog.at_level(0):
+    #         start_log_to_file(logpath, 0)
+    #         log.error(str(log.handlers))
+    #         log.error("error message")
+    #         log.warning("warning message")
+    #         log.debug("debug message")
+    #         log.info("info message")
+    #         log.progress("progress message")
+
+    #         log.progress("a multiline\nmessage nice!")
+
+    #     stop_log_to_file()
+
+    #     assert logpath.exists(), "the logfile does not exist!"
+
+    #     with open(logpath, "r") as file:
+    #         msgs = [line.split(mp.current_process().name)[-1].strip()
+    #                 for line in file.readlines()]
+
+    #     expected_msgs = ["ERROR   error message",
+    #                      "WARNING warning message",
+    #                      "DEBUG   debug message",
+    #                      "INFO    info message",
+    #                      "PROG.   progress message",
+    #                      "PROG.   a multiline",
+    #                      "message nice!"]
+
+    #     # skip the first message since it comes from starting the file-handler
+    #     for i, msg in enumerate(msgs[1:]):
+    #         assert msg == expected_msgs[i], (
+    #             f"log message {i} not OK:\n {msgs}")
+
 
 if __name__ == "__main__":
     unittest.main()

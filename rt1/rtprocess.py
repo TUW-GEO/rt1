@@ -1,8 +1,6 @@
 import multiprocessing as mp
-from timeit import default_timer
-from datetime import datetime, timedelta
+from datetime import datetime
 from itertools import repeat, islice
-import ctypes
 import sys
 import traceback
 from textwrap import dedent
@@ -14,21 +12,16 @@ import shutil
 import pandas as pd
 import numpy as np
 
-from .general_functions import dt_to_hms, update_progress, groupby_unsorted
+
+from ._rtprocess_writer import RT1_processor
+
+from .general_functions import groupby_unsorted, isidentifier
 from .rtparse import RT1_configparser
 from .rtresults import RTresults
-from .rtfits import load, MultiFits
+from .rtfits import MultiFits
 from . import log, _get_logger_formatter
 import logging
-
-
-try:
-    import xarray as xar
-except ModuleNotFoundError:
-    log.info(
-        "xarray could not be imported, "
-        + "NetCDF-features of RT1_results will not work!"
-    )
+import ctypes
 
 
 def _confirm_input(msg="are you sure?", stopmsg="STOP", callbackdict=None):
@@ -72,113 +65,15 @@ def _make_folderstructure(save_path, subfolders):
     if save_path is not None:
         # generate "save_path" directory if it does not exist
         if not save_path.exists():
-            log.info(f'"{save_path}"\ndoes not exist... creating directory')
+            log.progress(f'"{save_path}"\ndoes not exist... creating directory')
             save_path.mkdir(parents=True, exist_ok=True)
 
         for folder in subfolders:
             # generate subfolder if it does not exist
             mkpath = save_path / folder
             if not mkpath.exists():
-                log.info(f'"{mkpath}"\ndoes not exist... creating directory')
+                log.progress(f'"{mkpath}"\ndoes not exist... creating directory')
                 mkpath.mkdir(parents=True, exist_ok=True)
-
-
-def _setup_cnt(N_items, ncpu):
-    if ncpu > 1:
-        manager = mp.Manager()
-        lock = manager.Lock()
-        p_totcnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_meancnt = manager.Value(ctypes.c_ulonglong, 0)
-        p_time = manager.Value(ctypes.c_float, 0)
-    else:
-        # don't use a manager if single-core processing is used
-        p_totcnt = mp.Value(ctypes.c_ulonglong, 0)
-        p_meancnt = mp.Value(ctypes.c_ulonglong, 0)
-        p_time = mp.Value(ctypes.c_float, 0)
-        lock = None
-
-    process_cnt = [p_totcnt, p_meancnt, N_items, p_time, ncpu, lock]
-    return process_cnt
-
-
-def _start_cnt():
-    return default_timer()
-
-
-def _increase_cnt(process_cnt, start, err=False):
-    if process_cnt is None:
-        return
-
-    p_totcnt, p_meancnt, p_max, p_time, p_ncpu, lock = process_cnt
-    if lock is not None:
-        # ensure that only one process is allowed to write simultaneously
-        lock.acquire()
-    try:
-        if err is False:
-            end = default_timer()
-            # increase the total counter
-            p_totcnt.value += 1
-
-            # update the estimate of the mean time needed to process a site
-            p_time.value = (p_meancnt.value * p_time.value + (end - start)) / (
-                p_meancnt.value + 1
-            )
-            # increase the mean counter
-            p_meancnt.value += 1
-            # get the remaining time and update the progressbar
-            remain = timedelta(seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value)
-            d, h, m, s = dt_to_hms(remain)
-
-            msg = update_progress(
-                p_totcnt.value,
-                p_max,
-                title=f"approx. {d} {h:02}:{m:02}:{s:02} remaining",
-                finalmsg=(
-                    "finished! "
-                    + f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"
-                ),
-                progress2=p_totcnt.value - p_meancnt.value,
-            )
-
-        else:
-            # only increase the total counter
-            p_totcnt.value += 1
-            if p_meancnt.value == 0:
-                title = f"{'estimating time ...':<28}"
-            else:
-                # get the remaining time and update the progressbar
-                remain = timedelta(
-                    seconds=(p_max - p_totcnt.value) / p_ncpu * p_time.value
-                )
-                d, h, m, s = dt_to_hms(remain)
-                title = f"approx. {d} {h:02}:{m:02}:{s:02} remaining"
-
-            msg = update_progress(
-                p_totcnt.value,
-                p_max,
-                title=title,
-                finalmsg=(
-                    "finished! "
-                    + f"({p_max} [{p_totcnt.value - p_meancnt.value}] fits)"
-                ),
-                progress2=p_totcnt.value - p_meancnt.value,
-            )
-
-            # log to file if an error occured during processing
-            log.debug(msg.strip())
-
-        if lock is not None:
-            # release the lock
-            lock.release()
-    except Exception:
-        msg = "???"
-        if lock is not None:
-            # release the lock in case an error occured
-            lock.release()
-        pass
-
-    sys.stdout.write(msg)
-    sys.stdout.flush()
 
 
 class RTprocess(object):
@@ -240,8 +135,6 @@ class RTprocess(object):
 
         self.autocontinue = autocontinue
 
-        self._postprocess = True
-
         self.copy = copy
 
         self._proc_cls = proc_cls
@@ -255,24 +148,25 @@ class RTprocess(object):
             ), 'the values of "init_kwargs" MUST be strings !'
             self.init_kwargs = init_kwargs
 
-    def _listener_process(self, queue):
+    @staticmethod
+    def _listener_process(queue, dumppath, log_level=1):
 
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
-        if not hasattr(self, "dumppath"):
+        if dumppath is None:
             log.warning("no dumppath specified, log is not saved!")
             return
 
         datestring = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
-        path = self.dumppath / "cfg" / f"RT1_process({datestring}).log"
+        path = dumppath / "cfg" / f"RT1_process({datestring}).log"
 
         log.debug("listener process started for path: " + str(path))
 
         log2 = logging.getLogger()
-        log2.setLevel(1)
+        log2.setLevel(log_level)
         h = logging.FileHandler(path)
         h.setFormatter(_get_logger_formatter())
-        h.setLevel(1)
+        h.setLevel(log_level)
         log2.addHandler(h)
 
         while True:
@@ -357,7 +251,7 @@ class RTprocess(object):
         # remove folderstructure
         shutil.rmtree(self.dumppath)
 
-        log.info(f'"{self.dumppath}"' + "\nhas successfully been removed.\n")
+        log.progress(f'"{self.dumppath}"' + "\nhas successfully been removed.\n")
 
     def setup(self):
         """
@@ -366,13 +260,13 @@ class RTprocess(object):
           - copy modules and .ini files (if copy=True) (only from MainProcess!)
           - load modules and set parent-fit-object
         """
+
         try:
             self.cfg = RT1_configparser(self.config_path)
         except Exception:
             if mp.current_process().name == "MainProcess":
                 log.warning("no valid config file was found")
             return
-
 
         # update specs with init_kwargs
         for section, init_defs in self.init_kwargs.items():
@@ -381,14 +275,18 @@ class RTprocess(object):
             ), f"the init_kwargs section {section} is not present in the .ini file!"
 
             for key, val in init_defs.items():
-                if key in self.cfg.config[section]:
+                if (
+                    key in self.cfg.config[section]
+                    and mp.current_process().name == "MainProcess"
+                ):
+
                     log.warning(
                         f'"{key} = {self.cfg.config[section][key]}" '
                         + "will be overwritten by the definition provided via "
                         + f'"init_kwargs[{section}]": "{key} = {val}" '
                     )
-                    # update the parsed config (for import of modules etc.)
-                    self.cfg.config[section][key] = val
+                # update the parsed config (for import of modules etc.)
+                self.cfg.config[section][key] = val
 
         specs = self.cfg.get_process_specs()
         self.dumppath = specs["save_path"] / specs["dumpfolder"]
@@ -425,6 +323,8 @@ class RTprocess(object):
                 ["results", "cfg", "dumps"],
             )
 
+        # TODO fix this properly!!
+        sys.path.append(str(self.dumppath / "cfg"))
         # copy modules and config-files and ensure that they are loaded from the
         # right direction (NO files will be overwritten!!)
         # copying is only performed in the main-process!
@@ -461,8 +361,6 @@ class RTprocess(object):
         for key in [
             "preprocess",
             "reader",
-            "postprocess",
-            "finaloutput",
             "exceptfunc",
         ]:
             assert hasattr(
@@ -486,9 +384,7 @@ class RTprocess(object):
                     + "existing one is used!\n"
                 )
 
-                log.debug(
-                    f'{copypath.name} imported from \n"{copypath}"\n'
-                )
+                log.debug(f'{copypath.name} imported from \n"{copypath}"\n')
             else:
                 if len(self.init_kwargs) == 0:
                     # if no init_kwargs have been provided, copy the
@@ -531,7 +427,8 @@ class RTprocess(object):
                         )
 
                         log.debug(
-                            f'{module_copypath.name} imported from \n"{module_copypath}"\n'
+                            f"{module_copypath.name} imported from \n"
+                            + f'"{module_copypath}"\n'
                         )
 
                     else:
@@ -541,7 +438,7 @@ class RTprocess(object):
         del self.cfg
         self.cfg = RT1_configparser(copypath)
 
-    def _evalfunc(self, reader_arg=None, process_cnt=None):
+    def _evalfunc(self, reader_arg=None):
         """
         Initialize a Fits-instance and perform a fit.
         (used for parallel processing)
@@ -550,16 +447,11 @@ class RTprocess(object):
         ----------
         reader_arg : dict
             A dict of arguments passed to the reader.
-        process_cnt : list
-            A list of shared-memory variables that are used to update the
-            progressbar
         Returns
         -------
-        The used 'rt1.rtfit.Fits' object or the output of 'postprocess()'
+        a dict containing all data and definitions needed to re-create the Fits object
         """
 
-        if process_cnt is not None:
-            start = _start_cnt()
         try:
             # if a reader (and no dataset) is provided, use the reader
             read_data = self.proc_cls.reader(reader_arg)
@@ -582,6 +474,9 @@ class RTprocess(object):
                     + "must be a pandas DataFrame"
                 )
 
+            if dataset is None or len(dataset) == 0:
+                raise Exception("rt1_data_error")
+
             # take proper care of MultiFit objects
             if isinstance(self.parent_fit, MultiFits):
                 # set the dataset
@@ -591,71 +486,68 @@ class RTprocess(object):
                     self.parent_fit.set_aux_data(aux_data)
                 # append reader_arg to all configs
                 self.parent_fit.set_reader_arg(reader_arg)
+                # set ID for all configs
+                self.parent_fit.set_ID(
+                    self.proc_cls.get_names_ids(reader_arg)["feature_id"]
+                )
 
                 do_performfit = self.parent_fit.accessor.performfit()
                 _ = [doit() for doit in do_performfit.values()]
 
-                # if a post-processing function is provided, return its output,
-                # else return None
-                if self._postprocess and callable(self.proc_cls.postprocess):
-                    ret = dict(
-                        self.parent_fit.apply(
-                            self.proc_cls.postprocess, reader_arg=reader_arg
-                        )
-                    )
-                else:
-                    ret = dict()
-
-                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                    self.proc_cls.dump_fit_to_file(
-                        self.parent_fit, reader_arg, mini=True
+                if self._dump_fit:
+                    self.parent_fit.dump(
+                        (
+                            self.dumppath
+                            / "dumps"
+                            / self.proc_cls.get_names_ids(reader_arg)["filename"]
+                        ),
+                        mini=True,
                     )
 
-                if process_cnt is not None:
-                    _increase_cnt(process_cnt, start, err=False)
+                return self.parent_fit._get_fit_to_hdf_dict(
+                    ID=reader_arg.get("_RT1_ID_num", None)
+                )
 
             else:
-                fit = self.parent_fit.reinit_object(dataset=dataset)
+                fit = self.parent_fit.reinit_object(
+                    dataset=dataset,
+                    share_fnevals=True,
+                    ID=self.proc_cls.get_names_ids(reader_arg)["feature_id"],
+                )
+                # append reader_arg
+                fit.reader_arg = reader_arg
+
                 fit.performfit()
 
                 # append auxiliary data
                 if aux_data is not None:
                     fit.aux_data = aux_data
 
-                # append reader_arg
-                fit.reader_arg = reader_arg
-
-                if process_cnt is not None:
-                    _increase_cnt(process_cnt, start, err=False)
-
-                # if a post-processing function is provided, return its output,
-                # else return None
-                if self._postprocess and callable(self.proc_cls.postprocess):
-                    ret = self.proc_cls.postprocess(fit, reader_arg)
-                else:
-                    ret = None
-
                 # dump a fit-file
                 # save dumps AFTER prostprocessing has been performed
                 # (it might happen that some parts change during postprocessing)
-                if self._dump_fit and hasattr(self.proc_cls, "dump_fit_to_file"):
-                    self.proc_cls.dump_fit_to_file(fit, reader_arg, mini=True)
-            return ret
+                if self._dump_fit:
+                    fit.dump(
+                        (
+                            self.dumppath
+                            / "dumps"
+                            / self.proc_cls.get_names_ids(reader_arg)["filename"]
+                        ),
+                        mini=True,
+                    )
+
+                return fit._get_fit_to_hdf_dict(ID=reader_arg.get("_RT1_ID_num", None))
 
         except Exception as ex:
 
             if callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, reader_arg)
-                if ex_ret is None or ex_ret is False:
-                    _increase_cnt(process_cnt, start, err=True)
-                else:
-                    _increase_cnt(process_cnt, start, err=False)
 
                 return ex_ret
             else:
                 raise ex
 
-    def _initializer(self, initializer, queue, *args):
+    def _initializer(self, initializer, queue, proc_counter=None, *args):
         """
         decorate a provided initializer with the "_worker_configurer()" to
         enable logging from subprocesses while keeping the initializer a
@@ -664,11 +556,18 @@ class RTprocess(object):
         """
 
         if queue is not None:
-            self._worker_configurer(queue)
+            RTprocess._worker_configurer(queue)
 
         if not mp.current_process().name == "MainProcess":
             # call setup() on each worker-process to ensure that the importer loads
             # all required modules from the desired locations
+
+            origname = mp.current_process().name
+            mp.current_process().name = "RTprocess-" + "".join(origname.split("-")[1:])
+            if proc_counter is not None:
+                proc_counter.value += 1
+                mp.current_process().name = f"RTprocess-{proc_counter.value}"
+
             log.progress("setting up RTprocess-worker")
             self.setup()
 
@@ -676,7 +575,7 @@ class RTprocess(object):
             res = initializer(*args)
             return res
 
-    def processfunc(
+    def _processfunc(
         self,
         ncpu=1,
         print_progress=True,
@@ -684,8 +583,9 @@ class RTprocess(object):
         pool_kwargs=None,
         preprocess_kwargs=None,
         queue=None,
-        dump_fit=True,
-        postprocess=True,
+        proc_counter=None,
+        dump_fit=False,
+        **kwargs,
     ):
         """
         Evaluate a RT-1 model on a single core or in parallel using
@@ -700,15 +600,15 @@ class RTprocess(object):
             (see for example: )
 
             >>> if __name__ == '__main__':
-                    fit.processfunc(...)
+                    fit._processfunc(...)
 
             In order to allow pickling the final rt1.rtfits.Fits object,
             it is required to store ALL definitions within a separate
-            file and call processfunc in the 'main'-file as follows:
+            file and call _processfunc in the 'main'-file as follows:
 
             >>> from specification_file import fit reader lsq_kwargs ... ...
                 if __name__ == '__main__':
-                    fit.processfunc(ncpu=5, reader=reader,
+                    fit._processfunc(ncpu=5, reader=reader,
                                     lsq_kwargs=lsq_kwargs, ... ...)
 
         Parameters
@@ -750,21 +650,16 @@ class RTprocess(object):
         queue : multiprocessing.Manager().queue
             the queue used for logging
         dump_fit : bool, optional
-            indicator if a fit-object should be dumped or not.
-            (e.g. by invoking processing_config.dump_fit_to_file() )
-            The default is True
-        postprocess bool, optional
-            indicator if postprocess() and finalout() workflows should be
-            executed or not
+            indicator if a pickle of the fit-object should be put in the
+            "dumps" folder for each finished fit.
+            The default is False
 
         Returns
         -------
         res : list
-            A list of rt1.rtfits.Fits objects or a list of outputs of the
-            postprocess-function.
+            A list of rt1.rtfits.Fits objects
 
         """
-        self._postprocess = postprocess
         self._dump_fit = dump_fit
 
         if callable(self.proc_cls.preprocess):
@@ -780,18 +675,18 @@ class RTprocess(object):
         # check if reader args is provided in setupdict
         if reader_args is None:
             assert "reader_args" in setupdict, (
-                'if "reader_args" is not passed directly to processfunc() '
+                'if "reader_args" is not passed directly to _processfunc() '
                 + ', the preprocess() function must return a key "reader_args"!'
             )
 
             reader_args = setupdict["reader_args"]
         else:
             assert "reader_args" not in setupdict, (
-                '"reader_args" is provided as argument to processfunc() '
+                '"reader_args" is provided as argument to _processfunc() '
                 + "AND via the return-dict of the preprocess() function!"
             )
 
-        log.info(f"processing {len(reader_args)} features")
+        log.info(f"attempting to process {len(reader_args)} features")
 
         if "pool_kwargs" in setupdict:
             pool_kwargs = setupdict["pool_kwargs"]
@@ -802,9 +697,11 @@ class RTprocess(object):
         # add provided initializer and queue (used for subprocess-logging)
         # to the initargs and use "self._initializer" as initializer-function
         # Note: this is a pickleable way for decorating the initializer!
+
         pool_kwargs["initargs"] = [
             pool_kwargs.pop("initializer", None),
             queue,
+            proc_counter,
             *pool_kwargs.pop("initargs", []),
         ]
         pool_kwargs["initializer"] = self._initializer
@@ -813,80 +710,36 @@ class RTprocess(object):
         if isinstance(self.parent_fit, MultiFits):
             for name, parent_fit in self.parent_fit.accessor.config_fits.items():
                 if parent_fit.int_Q is True:
+                    log.progress(f"pre-evaluating coefficients for config {name} ...")
                     parent_fit._fnevals_input = parent_fit.R._fnevals
         else:
             if self.parent_fit.int_Q is True:
+                log.progress("pre-evaluating coefficients ...")
                 self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            process_cnt = _setup_cnt(N_items=len(reader_args), ncpu=ncpu)
+        # start processing
+        with RT1_processor.writer_pool(
+            n_worker=ncpu,
+            dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
+            **kwargs,
+        ) as w:
+
+            res = w.run_starmap(
+                arg_list=reader_args,
+                process_func=self._evalfunc,
+                pool_kwargs=pool_kwargs,
+                ID_getter=self._extract_ID,
+            )
+
+        return res
+
+    def _extract_ID(self, reader_arg):
+        ID = self.proc_cls.get_names_ids(reader_arg)["feature_id"]
+
+        if not isidentifier(str(ID)):
+            return f"RT1_{ID}"
         else:
-            process_cnt = None
-
-        if ncpu > 1:
-            log.info(f"start of parallel evaluation on {ncpu} cores")
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(
-                    self._evalfunc, zip(reader_args, repeat(process_cnt))
-                )
-
-                pool.close()  # Marks the pool as closed.
-                pool.join()  # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            log.info("start of single-core evaluation")
-            # force autocontinue=True when calling the initializer since setup() has
-            # already been called in the main process so all folders will already exist!
-            init_autocontinue = self.autocontinue
-            self.autocontinue = True
-
-            # call the initializer if it has been provided
-            if "initializer" in pool_kwargs:
-                if "initargs" in pool_kwargs:
-                    pool_kwargs["initializer"](*pool_kwargs["initargs"])
-                else:
-                    pool_kwargs["initializer"]()
-
-            self.autocontinue = init_autocontinue
-
-            res = []
-            for reader_arg in reader_args:
-                res.append(
-                    self._evalfunc(reader_arg=reader_arg, process_cnt=process_cnt)
-                )
-
-        # TODO incorporate this in run_finalout
-        # call finaloutput if post-processing has been performed and a finaloutput
-        # function is provided
-        if self._postprocess and callable(self.proc_cls.finaloutput):
-            # in case of a multi-config, results will be dicts!
-            if isinstance(self.parent_fit, MultiFits):
-                # store original finalout_name
-                finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-                for name in self.parent_fit.config_names:
-                    self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
-                    self.proc_cls.finaloutput(
-                        (i.get(name) for i in res if i is not None)
-                    )
-                # reset initial finalout_name
-                self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
-
-            # if len(self.cfg.config_names) > 0:
-            #     for i, res_i in enumerate(
-            #         zip_longest(*(i for i in res if i is not None))
-            #     ):
-            #         self.proc_cls.rt1_procsesing_respath = (
-            #             self.dumppath / "results" / self.parent_fit[i][0]
-            #         )
-            #         self.proc_cls.finaloutput(res_i)
-            else:
-                return self.proc_cls.finaloutput(res)
-        else:
-            return res
+            return str(ID)
 
     def run_processing(
         self,
@@ -895,9 +748,8 @@ class RTprocess(object):
         reader_args=None,
         pool_kwargs=None,
         preprocess_kwargs=None,
-        logfile_level=1,
-        dump_fit=True,
-        postprocess=True,
+        logfile_level=21,
+        dump_fit=False,
     ):
         """
         Start the processing
@@ -945,35 +797,47 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
+
+            The default is 21 (=logging.PROGRESS), in which case only
+            e.g. only RT1 progress-messages, warnings and errors will be logged
         dump_fit: bool, optional
-            indicator if `processing_config.dump_fit_to_file()` should be
-            called after finishing the fit.
-            The default is True
-        postprocess : bool, optional
-            indicator if postprocess() and finaloutput() workflows should be
-            executed or not.
-            The default is True.
+            indicator if a pickle-dump file should be generated and put in the
+            "dumps" folder after finishing the fit.
+            -> this will generate a pickle (".dump") file for each fit so that
+            can be loaded and analyzed quickly.
+
+            useful for debug and initial configuration of a fit)
+            NOT suitable for long-term storage!!
+            The default is False
         """
 
         try:
-            if logfile_level is not None and ncpu > 1:
+            # initialize all necessary properties if setup was not yet called
+            self.setup()
+
+            if logfile_level is not None:
                 # start a listener-process that takes care of the logs from
                 # multiprocessing workers
-                queue = mp.Manager().Queue(-1)
-                listener = mp.Process(target=self._listener_process, args=[queue])
+                manager = mp.Manager()
+                queue = manager.Queue(-1)
+                # a counter to name the multiprocess-workers
+                proc_counter = manager.Value(ctypes.c_ulonglong, 0)
+
+                listener = mp.Process(
+                    target=self._listener_process,
+                    args=[queue, self.dumppath, logfile_level],
+                    name="RTprocess logger",
+                )
 
                 # make the queue listen also to the MainProcess start the
                 # listener-process that writes the file to disc AFTER
                 # initialization of the  folder-structure!
                 # (otherwise the log-file can not be generated!)
-                self._worker_configurer(queue)
+                self._worker_configurer(queue, loglevel=logfile_level)
             else:
-                queue = None
+                queue, proc_counter = None
 
-            # initialize all necessary properties if setup was not yet called
-            self.setup()
-
-            if logfile_level is not None and ncpu > 1:
+            if logfile_level is not None:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
@@ -1024,15 +888,17 @@ class RTprocess(object):
 
                         log.info(outtxt)
 
-            _ = self.processfunc(
+            _ = self._processfunc(
                 ncpu=ncpu,
                 print_progress=print_progress,
                 reader_args=reader_args,
                 pool_kwargs=pool_kwargs,
                 preprocess_kwargs=preprocess_kwargs,
                 queue=queue,
+                proc_counter=proc_counter,
                 dump_fit=dump_fit,
-                postprocess=postprocess,
+                init_func=self._worker_configurer,
+                init_args=(queue, logfile_level),
             )
 
         except Exception as err:
@@ -1048,13 +914,12 @@ class RTprocess(object):
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-                if ncpu > 1:
 
-                    # tell the queue to stop
-                    queue.put_nowait(None)
+                # tell the queue to stop
+                queue.put_nowait(None)
 
-                    # stop the listener process
-                    listener.join()
+                # stop the listener process
+                listener.join()
 
                 # remove any remaining file-handler and queue-handlers after
                 # the processing is done
@@ -1071,14 +936,17 @@ class RTprocess(object):
         use_N_files=None,
         use_config=None,
         finalout_name=None,
-        finaloutput=None,
         postprocess=None,
         print_progress=True,
-        logfile_level=1,
-        fitlist=None
+        logfile_level=21,
+        fitlist=None,
+        save_path=None,
+        create_index=True,
+        use_dumps=False,
+        **kwargs,
     ):
         """
-        run postprocess and finaloutput for available .dump files
+        run postprocess for available .dump files
 
         Parameters
         ----------
@@ -1092,18 +960,9 @@ class RTprocess(object):
             The default is None, in which case all configs are used!
         finalout_name : str, optional
             override the finalout_name provided in the ".ini" file
-        finaloutput : callable, optional
-            override the finaloutput function provided via the
-            "processing_config.py" script
-            NOTICE: the call-signature is
-            `finaloutput(proc_cls, ...)` where proc_cls is the
-            used instance of the "processing_cfg" class!
-            -> this way you have access to all arguments specified in
-            proc_cls such as ".save_path", ".dumpfolder" etc.
         postprocess : callable, optional
             override the postprocess function provided via the
             "processing_config.py" script
-            NOTICE: the call signature is similar to finaloutput above!
         print_progress : bool, optional
             Indicator if a progress-bar should be printed or not.
             If True, it might be wise to suppress warnings during runtime
@@ -1121,32 +980,46 @@ class RTprocess(object):
 
             for information on the level values see:
                 https://docs.python.org/3/library/logging.html#logging-levels
+
+            The default is 21 (=logging.PROGRESS), in which case only
+            e.g. only RT1 progress-messages, warnings and errors will be logged
         fitlist : list, optional
             optional way to provide a list of paths to dump-files directly
             (useful if RTprocess is used without a config attached)
             The default is None, in which case the dump-files will be
             identified according to the definitions in the config-file.
+        save_path : str, optional
+            the path where the finaloutput file will be stored
+            if None, the path provided in the ".ini" file will be used
+            (e.g. "dumpfolder / results / finalout_name.h5" )
+        create_index : bool or dict, optional
+            indicator if the created HDF-store should be indexed or not.
+
+            - if True a index is created for the first index-column
+              (this can take quite some time but speeds up querying a lot!)
+            - if a dict is provided, it is used as kwargs for
+              `_rtprocess_writer.RT1_processor.create_index()`
+              (e.g. the defaults are:  idx_levels=None and keys=None)
+        use_dumps : bool, optional
+            indicatior if the "fit_db.h5" file or the ".dump" files in the
+            "dumps" folder should be used to load the Fits-objects
+            The default is False in which case "fit_db.h5" is used
+        **kwargs :
+            additional kwargs passed to
+            `_rtprocess_writer.RT1_processor()`
+            (n_combiner, n_writer, HDF_kwargs, write_chunk_size,
+             out_cache_size)
         """
+
+        # check if provided postprocess function is a callable
+        if postprocess is not None:
+            assert callable(postprocess), "postprocess must be callable!"
+
         try:
-            if logfile_level is not None and ncpu > 1:
-                # start a listener-process that takes care of the logs from
-                # multiprocessing workers
-                queue = mp.Manager().Queue(-1)
-                listener = mp.Process(target=self._listener_process, args=[queue])
-
-                # make the queue listen also to the MainProcess start the
-                # listener-process that writes the file to disc AFTER
-                # initialization of the  folder-structure!
-                # (otherwise the log-file can not be generated!)
-                self._worker_configurer(queue)
-            else:
-                queue = None
-
             # override finalout_name
             # do this BEFORE self.setup() is called !!
             if finalout_name is not None:
                 assert isinstance(finalout_name, str), "finalout_name must be a string"
-                # self.proc_cls.finalout_name = finalout_name
                 self.override_config(
                     PROCESS_SPECS=dict(finalout_name=finalout_name), override=False
                 )
@@ -1157,44 +1030,77 @@ class RTprocess(object):
             self.setup()
             self.autocontinue = initial_autocontinue
 
-            if logfile_level is not None and ncpu > 1:
+            # if "save-path" is not provided explicitly, use the path from the config
+            if save_path is None:
+                save_path = (
+                    self.proc_cls.rt1_procsesing_respath / self.proc_cls.finalout_name
+                )
+
+            if logfile_level is not None:
+                # start a listener-process that takes care of the logs from
+                # multiprocessing workers
+                manager = mp.Manager()
+                queue = manager.Queue(-1)
+                # a counter to name the multiprocess-workers
+                proc_counter = manager.Value(ctypes.c_ulonglong, 0)
+
+                listener = mp.Process(
+                    target=self._listener_process,
+                    args=[queue, self.dumppath, logfile_level],
+                    name="RTprocess logger",
+                )
+
+                # make the queue listen also to the MainProcess start the
+                # listener-process that writes the file to disc AFTER
+                # initialization of the  folder-structure!
+                # (otherwise the log-file can not be generated!)
+                self._worker_configurer(queue, loglevel=logfile_level)
+            else:
+                queue, proc_counter = None, None
+
+            if logfile_level is not None:
                 # start the listener after the setup-function completed, since
                 # otherwise the folder-structure does not yet exist and the
                 # file to which the process is writing can not be generated!
                 listener.start()
 
-            if not fitlist:
-                fitlist = self._get_files(use_N_files=use_N_files)
+            if fitlist is None:
 
-            return self._run_finalout(
+                # use fits from .dump file if no fitlist is provided
+                fitlist = self._get_files(use_N_files=use_N_files, use_dumps=use_dumps)
+            res = self._run_finalout(
                 ncpu,
                 fitlist=fitlist,
+                save_path=save_path,
                 use_config=use_config,
-                finaloutput=finaloutput,
                 postprocess=postprocess,
                 queue=queue,
+                proc_counter=proc_counter,
                 print_progress=print_progress,
+                create_index=create_index,
+                init_func=self._worker_configurer,
+                init_args=(queue, logfile_level),
+                **kwargs,
             )
+
+            return res
 
         except Exception as err:
             log.exception("there was an error during finalout generation!")
             raise err
 
         finally:
-
             # turn off capturing warnings
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-                if ncpu > 1:
-                    # tell the queue to stop
-                    queue.put_nowait(None)
+                # tell the queue to stop
+                queue.put_nowait(None)
 
-                    # stop the listener process
-                    listener.join()
+                # stop the listener process
+                listener.join()
 
-                # remove any remaining file-handler and queue-handlers after
-                # the processing is done
+                # remove any remaining file-and queue-handlers after processing is done
                 handlers = groupby_unsorted(log.handlers, key=lambda x: x.name)
                 for h in handlers.get("rtprocessing_queuehandler", []):
                     # close the handler (removing it does not close it!)
@@ -1202,120 +1108,37 @@ class RTprocess(object):
                     # remove the file-handler from the log
                     log.handlers.remove(h)
 
-    def _run_postprocess(
-        self, fitpath, use_config=None, process_cnt=None, postprocess=None
-    ):
-        if process_cnt is not None:
-            start = _start_cnt()
-
-        # load fitobjects based on fit-paths
-        try:
-            fit = load(fitpath)
-            if use_config is None and isinstance(fit, MultiFits):
-                use_config = fit.config_names
-
-
-            # assign pre-evaluated fn-coefficients
-            if hasattr(self, "parent_fit"):
-                for config_name in use_config:
-                    config_fit = self.parent_fit.accessor.config_fits[config_name]
-                    if config_fit.int_Q is True:
-                        try:
-                            getattr(fit.configs, config_name)._fnevals_input = config_fit._fnevals_input
-                        except AttributeError:
-                            log.error("could not assign pre-evaluated fn-coefficients to " +
-                                      f"the config {config_name}... " +
-                                      "available configs of the loaded Fits object:" +
-                                      f" {fit.config_names}")
-
-
-        except Exception:
-            log.error(f"there was an error while loading {fitpath}")
-            _increase_cnt(process_cnt, start, err=True)
-            return
-        # TODO fix reader_arg argument of postprocess
-        try:
-            if isinstance(fit, MultiFits):
-                if postprocess is None:
-                    ret = dict(
-                        fit.apply(
-                            self.proc_cls.postprocess,
-                            use_config=use_config,
-                            reader_arg=fit.reader_arg,
-                        )
-                    )
-                else:
-                    ret = dict(
-                        fit.apply(
-                            postprocess,
-                            use_config=use_config,
-                            reader_arg=fit.reader_arg,
-                        )
-                    )
-            else:
-                # run postprocessing
-                if postprocess is None:
-                    ret = self.proc_cls.postprocess(fit, reader_arg=fit.reader_arg)
-                else:
-                    ret = postprocess(fit, reader_arg=fit.reader_arg)
-
-            if process_cnt is not None:
-                _increase_cnt(process_cnt, start, err=False)
-
-            return ret
-
-        except Exception as ex:
-            if hasattr(self, "proc_cls") and callable(self.proc_cls.exceptfunc):
-                ex_ret = self.proc_cls.exceptfunc(ex, fit.reader_arg)
-                if ex_ret is None or ex_ret is False:
-                    _increase_cnt(process_cnt, start, err=True)
-                else:
-                    _increase_cnt(process_cnt, start, err=False)
-                return ex_ret
-            else:
-                raise ex
-
-    def _get_files(self, use_N_files=None):
-        # get the relevant files that have to be processed for `run_finaloutput`
-
-        useres = getattr(RTresults(self.dumppath), self.proc_cls.dumpfolder)
-        # get dump-files
-        dumpiter = useres.dump_files
-
-        if use_N_files is not None:
-            fitlist = list(islice(dumpiter, use_N_files))
-        else:
-            fitlist = list(dumpiter)
-        return fitlist
-
     def _run_finalout(
         self,
         ncpu,
         fitlist=None,
+        save_path=None,
         use_config=None,
-        finaloutput=None,
         postprocess=None,
         queue=None,
+        proc_counter=None,
         print_progress=True,
+        create_index=True,
+        **kwargs,
     ):
 
-        # override postprocess function
-        if postprocess is not None:
-            assert callable(postprocess), "postprocess must be callable!"
-
-        # don't call additional initializers, only use the default initializer
-        # (to enable subprocess-logging)
-        pool_kwargs = dict(initializer=self._initializer, initargs=[None, queue])
+        pool_kwargs = dict(
+            initializer=self._initializer,
+            initargs=[None, queue, proc_counter],
+        )
 
         # pre-evaluate the fn-coefficients if interaction terms are used
-        # since finalout might involve calling "calc_model()" or similar functions
-        # that require a re-evaluation of the fn_coefficients
+        # since finalout might involve calling "calc_model()" or similar
+        # functions that require a re-evaluation of the fn_coefficients
         if hasattr(self, "parent_fit"):
             if isinstance(self.parent_fit, MultiFits):
-                if use_config is None:
-                    use_config = self.parent_fit.config_names
+                if use_config is None or use_config == "from_postprocess":
+                    cfgs = self.parent_fit.config_names
+                else:
+                    cfgs = use_config
 
-                for fit_name in use_config:
+                for fit_name in cfgs:
+                    log.progress(f"pre-evaluation of coefficients for {fit_name}")
                     parent_fit = self.parent_fit.accessor.config_fits[fit_name]
                     if parent_fit.int_Q is True:
                         parent_fit._fnevals_input = parent_fit.R._fnevals
@@ -1323,233 +1146,158 @@ class RTprocess(object):
                 if self.parent_fit.int_Q is True:
                     self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
 
-        if print_progress is True:
-            # initialize shared values that will be used to track the number
-            # of completed processes and the mean time to complete a process
-            process_cnt = _setup_cnt(N_items=len(fitlist), ncpu=ncpu)
-        else:
-            process_cnt = None
+        log.progress(f"start of finalout generation on {ncpu} cores")
+        with RT1_processor.writer_pool(
+            n_worker=ncpu, dst_path=save_path, **kwargs
+        ) as w:
 
-        if ncpu > 1:
-            log.progress(f"start of finalout generation on {ncpu} cores")
-            with mp.Pool(ncpu, **pool_kwargs) as pool:
-                # loop over the reader_args
-                res_async = pool.starmap_async(
-                    self._run_postprocess,
-                    zip(
-                        fitlist,
-                        repeat(use_config),
-                        repeat(process_cnt),
-                        repeat(postprocess),
-                    ),
-                )
-
-                pool.close()  # Marks the pool as closed.
-                pool.join()  # Waits for workers to exit.
-                res = res_async.get()
-        else:
-            log.progress("start of single-core finalout generation")
-            # force autocontinue=True when calling the initializer since setup() has
-            # already been called in the main process so all folders will already exist!
-            init_autocontinue = self.autocontinue
-            self.autocontinue = True
-
-            # call the initializer if it has been provided
-            if "initializer" in pool_kwargs:
-                if "initargs" in pool_kwargs:
-                    pool_kwargs["initializer"](*pool_kwargs["initargs"])
-                else:
-                    pool_kwargs["initializer"]()
-
-            self.autocontinue = init_autocontinue
-            res = []
-            for fitpath in fitlist:
-                res.append(
-                    self._run_postprocess(
-                        fitpath=fitpath,
-                        use_config=use_config,
-                        process_cnt=process_cnt,
-                        postprocess=postprocess,
-                    )
-                )
-        log.progress("... generating finaloutput")
-
-        # in case no config is provided return the output to the console
-        if not hasattr(self, "proc_cls"):
-            if isinstance(res[0], dict):
-                out = dict()
-                if use_config is None:
-                    use_config = res[0].keys()
-                for name in use_config:
-                    if callable(finaloutput):
-                        out[name] = finaloutput((i.get(name) for i in res if i is not None))
-            else:
-                if callable(finaloutput):
-                    out = finaloutput(res)
-                else:
-                    out = res
-
-            return out
-
-        # in case of a multi-config, results will be dicts!
-        # if isinstance(self.parent_fit, MultiFits):
-        if isinstance(res[0], dict):
-            # store original finalout_name
-            finalout_name, ending = self.proc_cls.finalout_name.split(".")
-
-            for name in use_config:
-                self.proc_cls.finalout_name = f"{finalout_name}__{name}.{ending}"
-                self.proc_cls.config_name = name
-                if callable(finaloutput):
-                    finaloutput((i.get(name) for i in res if i is not None))
-                elif hasattr(self.proc_cls, "finaloutput"):
-                    self.proc_cls.finaloutput(
-                        (i.get(name) for i in res if i is not None)
-                    )
-
-            # reset initial finalout_name
-            self.proc_cls.finalout_name = f"{finalout_name}.{ending}"
-        else:
-            if callable(finaloutput):
-                return finaloutput(res)
-                log.info("finished generation of finaloutput!")
-            elif hasattr(self.proc_cls, "finaloutput"):
-                return self.proc_cls.finaloutput(res)
-            else:
-                return res
-
-    def _postprocess_xarray(
-        self,
-        fit,
-        saveparams=None,
-        xindex=("x", -9999),
-        yindex=None,
-        staticlayers=None,
-        auxdata=None,
-        sig_to_dB=False,
-        inc_to_degree=False
-    ):
-        """
-        the identification of parameters is as follows:
-
-            1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
-            2) any parameter present in defdict is handled accordingly
-            3) auxdata (a pandas-dataframe) is appended
-            4) static layers are added according to the provided dict
-
-        Parameters
-        ----------
-        fit : rt1.rtfits.Fits object
-            the fit-object to use
-        saveparams : list, optional
-            a list of strings that correspond to parameter-names that should
-            be included.
-            can be any parameter present in "fit.dataset", "fit.res_df",
-            The default is None.
-        xindex : tuple, optional
-            a tuple (name, value) that will be used as the x-index.
-            The default is ('x', -9999).
-        yindex : tuple, optional
-            a tuple (name, value) that will be used as the y-index.
-            if provided, a multiindex (x, y) will be used!
-            Be warned... when combining xarrays the x- and y- coordinates will
-            be assumed as a rectangular grid!
-            The default is None.
-        staticlayers : dict, optional
-            a dict with parameter-names and values that will be added das
-            static layers. The default is None.
-        auxdata : pandas.DataFrame, optional
-            a pandas DataFrame that will be concatenated to the DataFrame obtained
-            from combining all 'saveparams'.
-            NOTICE: if the index does not align well with the fit-index, the
-            generated output can increase a lot in size due to missing values!
-            The default is None.
-        sig_to_dB : bool
-            indicator if sigma0 values (e.g. "sig", "tot", "surf", "vol", "inter")
-            should be converted to dB
-        inc_to_degree : bool
-            indicator if incidence-angle values (e.g. "inc")
-            should be converted to degrees
-
-        Returns
-        -------
-        dfxar : xarray.Dataset
-            a xarray-dataset with all layers defined according to the specs.
-
-        """
-        if saveparams is None:
-            saveparams = []
-
-        if staticlayers is None:
-            staticlayers = dict()
-
-        defs = self._defdict_parser(fit.defdict)
-
-        usedfs = []
-        for key in saveparams:
-
-            if key == "sig":
-                if fit.dB is False and sig_to_dB:
-                    usedfs.append(10.0 * np.log10(fit.dataset.sig))
-                else:
-                    usedfs.append(fit.dataset.sig)
-            elif key == "inc" and inc_to_degree:
-                usedfs.append(np.rad2deg(fit.dataset.inc))
-
-            elif key in fit.defdict:
-                if key in defs["fitted_dynamic"]:
-                    usedfs.append(fit.res_df[key])
-                elif key in defs["fitted_const"]:
-                    staticlayers[key] = fit.res_dict[key][0]
-                elif key in defs["constant"]:
-                    staticlayers[key] = fit.defdict[key][1]
-                elif key in defs["auxiliary"]:
-                    usedfs.append(fit.dataset[key])
-            elif key in fit.dataset:
-                if (key in ["tot", "surf", "vol", "inter"] and
-                    fit.dB is False and
-                    sig_to_dB):
-                    usedfs.append(10.0 * np.log10(fit.dataset[key]))
-                else:
-                    usedfs.append(fit.dataset[key])
-            elif key in fit.reader_arg:
-                staticlayers[key] = fit.reader_arg[key]
-            else:
-                log.warning(
-                    f"the parameter {key} could not be processed"
-                    + "during xarray postprocessing"
-                )
-
-        if auxdata is not None and len(auxdata) > 0:
-            usedfs.append(auxdata)
-
-        # combine all timeseries and set the proper index
-        df = pd.concat(usedfs, axis=1)
-        df.columns.names = ["param"]
-        df.index.names = ["date"]
-
-        if yindex is not None:
-            df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-            # set static layers
-            statics = pd.DataFrame(
-                staticlayers,
-                index=pd.MultiIndex.from_product(
-                    iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
-                ),
+            res = w.run_starmap(
+                arg_list=fitlist,
+                reader_func=self._finalout_reader,
+                process_func=self._run_postprocess,
+                pool_kwargs=pool_kwargs,
+                starmap_args=[
+                    repeat(use_config),
+                    repeat(postprocess),
+                ],
             )
 
+        if create_index:
+            if isinstance(create_index, dict):
+                RT1_processor.create_index(save_path, **create_index)
+            elif create_index is True:
+                RT1_processor.create_index(save_path)
+
+        return res
+
+    def _finalout_reader(self, reader_arg, use_config=None):
+        ID = reader_arg["ID"]
+        # load fitobjects based on IDs
+        try:
+            fit = self._useres.load_fit(ID)
+            if fit is None:
+                return
+            if (use_config is None or use_config == "from_postprocess") and isinstance(
+                fit, MultiFits
+            ):
+                use_config = fit.config_names
+
+            # assign pre-evaluated fn-coefficients
+            if hasattr(self, "parent_fit"):
+                if isinstance(fit, MultiFits):
+                    for config_name in use_config:
+                        config_fit = self.parent_fit.configs[config_name]
+
+                        if config_fit.int_Q is True:
+                            try:
+                                fit.configs[
+                                    config_name
+                                ]._fnevals_input = config_fit._fnevals_input
+                            except AttributeError:
+                                log.error(
+                                    "could not assign pre-evaluated fn-coefficients to "
+                                    + f"the config {config_name}... "
+                                    + "available configs of the loaded Fits object:"
+                                    + f" {fit.config_names}"
+                                )
+
+                else:
+                    fit._fnevals_input = self.parent_fit._fnevals_input
+
+            # attach ID integer identifier to the Fits-object
+            fit._RT1_ID_num = reader_arg.get("_RT1_ID_num", None)
+            if isinstance(fit, MultiFits):
+                for cfg_fit in fit.configs:
+                    cfg_fit._RT1_ID_num = reader_arg.get("_RT1_ID_num", None)
+
+            return fit
+        except Exception:
+            log.error(f"there was an error while loading {ID}", exc_info=True)
+            return
+
+    def _run_postprocess(self, fit, use_config=None, postprocess=None, *args):
+        # "from_postprocess" is used as indicator to use the function-output
+        #  directly (e.g. without using .apply to treat MultiFits objects etc.)
+        # -> only use if you know what you're doing!
+        if use_config == "from_postprocess":
+            use_func_directly = True
+            use_config = None
         else:
-            df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+            use_func_directly = False
 
-            # set static layers
-            statics = pd.DataFrame(staticlayers, index=[xindex[1]])
-            statics.index.name = xindex[0]
+        # apply postprocess function (with proper treatment of MultiFits)
+        try:
+            if isinstance(fit, MultiFits):
+                if postprocess is None:
+                    assert hasattr(self.proc_cls, "postprocess"), (
+                        "no explicit 'postprocess' function provided"
+                        + "and no 'postprocess' function found in processing_config class"
+                    )
+                    ret = dict(
+                        fit.apply(
+                            self.proc_cls.postprocess,
+                            use_config=use_config,
+                        )
+                    )
+                elif use_func_directly:
+                    ret = postprocess(fit)
+                else:
+                    ret = dict(
+                        fit.apply(
+                            postprocess,
+                            use_config=use_config,
+                        )
+                    )
+            else:
+                if hasattr(fit, "config_name"):
+                    cfgname = fit.config_name
+                else:
+                    cfgname = "default"
 
-        dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
+                # run postprocessing
+                if postprocess is None:
+                    if use_func_directly:
+                        ret = self.proc_cls.postprocess(fit)
+                    else:
+                        ret = {cfgname: self.proc_cls.postprocess(fit)}
+                else:
+                    if use_func_directly:
+                        ret = postprocess(fit)
+                    else:
+                        ret = {cfgname: postprocess(fit)}
 
-        return dfxar
+            if "const__reader_arg" not in ret and hasattr(fit, "reader_arg"):
+                # append reader_args
+                attrs = pd.DataFrame(fit.reader_arg, [fit._RT1_ID_num])
+                attrs.index.name = "ID"
+
+                # attrs = pd.DataFrame(fit.reader_arg, index=[0])
+                # attrs.set_index(self.proc_cls.ID_key, inplace=True)
+                ret["const__reader_arg"] = attrs
+
+            return ret
+
+        except Exception as ex:
+            if hasattr(self, "proc_cls") and callable(self.proc_cls.exceptfunc):
+                ex_ret = self.proc_cls.exceptfunc(ex, fit.reader_arg)
+                return ex_ret
+            else:
+                raise ex
+
+    def _get_files(self, use_N_files=None, use_dumps=False):
+
+        if not hasattr(self, "_useres"):
+            self._useres = getattr(
+                RTresults(self.dumppath, use_dumps=use_dumps), self.proc_cls.dumpfolder
+            )
+        # get dump-files
+        dumpiter = self._useres.dump_files
+
+        if use_N_files is not None:
+            fitlist = list(map(lambda x: dict(ID=x), islice(dumpiter, use_N_files)))
+        else:
+            fitlist = list(map(lambda x: dict(ID=x), dumpiter))
+        return fitlist
 
     @staticmethod
     def _defdict_parser(defdict):
@@ -1602,157 +1350,65 @@ class RTprocess(object):
 
         return parameter_specs
 
-    def _export_postprocess(self,
-                            fit,
-                            reader_arg=None,
-                            parameters=[],
-                            metrics=None,
-                            export_functions=None,
-                            model_keys=[],
-                            index_col='ID',
-                            sig_to_dB=False,
-                            inc_to_degree=False,
-                            _fnevals_input=None
-                            ):
-        """
-        Parameters
-        ----------
-
-        fit: rt1.rtfits.Fits object
-            The fits object.
-        reader_arg: dict
-            the arguments passed to the reader function.
-        parameters : list
-            a list of parameter-names to attach.
-        metrics : dict
-            key: the name to use for the metric in the returned dataset
-            value: a tuple of the form:
-                  (metric, parameter 1, parameter 2)
-        export_fuinctions : dict
-            a dict of functions to use for exporting the parameter
-        model_keys : list
-            a list of keys that correspond to model-calculation results
-            (e.g. any of ["tot", "surf", "vol", "inter"])
-        index_col : str
-            the name of the reader-arg value to use as index
-        _fnevals_input : dict or callable
-            pre-evaluated fnevals functions. in case fit is a MultiFits object:
-            a dict with the config-names and pre-evaluated fnevals functions
-        Returns
-        -------
-        df: pandas.DataFrame
-            a xarray.Dataset containing the fitted parameterss.
-
-        """
-        if reader_arg is None:
-            reader_arg = fit.reader_arg
-
-        # assign pre-evaluated fn-coefficients
-        if _fnevals_input:
-            if hasattr(fit, "config_name"):
-                if fit.int_Q is True and fit.config_name in _fnevals_input:
-                    fit._fnevals_input = _fnevals_input[fit.config_name]
-
-        staticlayers = dict()
-        if metrics:
-            for name, p in metrics.items():
-                staticlayers[name] = getattr(
-                    getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower())
-
-        auxdata = dict()
-        if model_keys:
-            auxdata = fit.calc_model(return_components=True)[model_keys]
-
-        if export_functions:
-            for key, func in export_functions.items():
-                auxdata[key] = func(fit)
-
-        ret = self._postprocess_xarray(
-            fit=fit,
-            saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
-            xindex=(index_col, reader_arg[index_col]),
-            staticlayers=staticlayers,
-            auxdata=pd.DataFrame(auxdata),
-            sig_to_dB=sig_to_dB,
-            inc_to_degree=inc_to_degree
-        )
-
-        return ret
-
-    @staticmethod
-    def _export_finalout(res, savepath=None, attrs=None, descriptions=None,
-                         encoding=None, concat_dim="ID"):
-
-        resxar = xar.combine_nested([i for i in res if i is not None],
-                                    concat_dim=concat_dim)
-        if attrs:
-            for key, val in attrs.items():
-                resxar.attrs[key] = val
-
-        if descriptions:
-            for p, a in descriptions.items():
-                for key, val in a.items():
-                    getattr(resxar, p).attrs[key] = val
-
-        if savepath:
-            if not encoding:
-                encoding = {key: {"zlib": True, "complevel": 1}
-                            for key in resxar.data_vars}
-
-            log.info(
-                "export of NetCDF file at location:\n"
-                + '"'
-                + savepath
-                + '"'
-            )
-
-            resxar.to_netcdf(savepath, encoding=encoding)
-        else:
-            return resxar
-
-    def export_data(self, parameters=None, metrics=None,
-                    attributes=None, export_functions=None,
-                    index_col="ID", use_config=None, dumpfolder=None,
-                    use_nfiles=None, ncpu=1, sig_to_dB=False, inc_to_degree=False,
-                    pre_evaluate_fn_coefs=True, savepath=None):
+    def export_data_to_HDF(
+        self,
+        parameters=None,
+        metrics=None,
+        export_functions=None,
+        use_config=None,
+        dumpfolder=None,
+        use_nfiles=None,
+        ncpu=1,
+        sig_to_dB=False,
+        inc_to_degree=False,
+        pre_evaluate_fn_coefs=True,
+        finalout_name=None,
+        savepath=None,
+        **kwargs,
+    ):
         """
         a convenience-method to export parameters and performance-metrics
-        from a collection of rtfits.Fits objects
+        from a collection of rtfits.Fits objects into a HDF-store
 
         Parameters
         ----------
-        parameters : list or dict
-            a list (or dict) of parameter-names to attach.
-            can be any parameter available in "fit.dataset", "fit.res_df", any of
-            the model-contributions, e.g.: ["tot", "surf", "vol", "inter"] or any
-            parameter whose export-function has been provided via "export_functions"
+        parameters : list
+            a list of parameter-names to attach.
+            can be any parameter available in "fit.dataset", "fit.res_df", or
+            any of the calculated model-contributions, e.g.:
 
-            To attach descriptions, use a dict of dicts of the form:
-            >>> dict(sig = dict(long_name = "sigma0 data",
-            >>>                 units = "dB"),
-            >>>      inc = dict(long_name = "incidence angle",
-            >>>                 units = "degrees"))
+            >>> ["tot", "surf", "vol", "inter"]
+
+            or any parameter whose export-function has been provided via
+            cumstom defined "export_functions"
 
         metrics : dict
             a dict of metrics to calculate between model-parameters and dataset-keys
 
             - key: the name to use for the metric in the returned dataset
-            - value: a tuple of the form (description is optional):
-                     (metric, parameter 1, parameter 2, [description-dict])
+            - value: a tuple of the form:
+                     (metric, parameter 1, parameter 2)
+                     if `value = "custom"` the function provided in
+                     `export_functions`will be used
 
-            >>> dict(R = ("pearson", "sig", "tot",
-            >>>           dict(long_name="sig0 pearson correlation")))
+            >>> dict(R = ("pearson", "sig", "tot"),
+            >>>      RMSD = ("rmsd", "sig", "tot"),
+            >>>      X = "custom"    # evaluated via export_functions["X"]
+            >>>     )
+
 
         export_functions = dict, optional
-            a dict with functions that will be used to export the parameter-values
-            (Note that this will override the default extraction-procedures!)
+            a dict with functions that will be used to export the
+            parameter- and/or metric-values.
+
+            parameter-functions must return a pandas.DataFrame!
+            metric-functions must return an int or float
+
+            NOTE: this will override the default extraction-procedures!
+            NOTE: the functions must be pickleable for parallel processing!
 
             >>> dict(sig=lambda fit: fit.dataset.sig)
 
-        attributes : dict, optional
-            additional attributes to attach to the returned xarray.Dataset
-        index_col : str
-            the name of the reader-arg value to use as index
         use_config : list, optional
             a list of configs to use in case a multi-config fit has been performed.
             The default is None.
@@ -1776,58 +1432,53 @@ class RTprocess(object):
             Note: if this is set to False, the coefficients have to be evaluated
             for every single file which can cause a major reduction in speed!
             The default is True.
-        savepath : str
-            the path to store the exported NetCDF files
-        Returns
-        -------
-        out : xarray.Dataset
-            a xarray Dataset of the exported data.
-
+        finalout_name : str, optional
+            override the finalout_name provided in the ".ini" file
+            (only relevant if savepath is not specified)
+        save_path : str, optional
+            the path where the output file will be stored
+            if None, the path provided in the ".ini" file will be used
+            (e.g. "dumpfolder / results / < finalout_name >.h5" )
+        **kwargs :
+            additional kwargs passed to `RTprocess.run_finaloutput()`
+            and further to `_rtprocess_writer.RT1_processor()`
+            (n_combiner, n_writer, HDF_kwargs, write_chunk_size,
+             out_cache_size)
         """
-
         if not parameters:
             parameters = []
 
         if not metrics:
             metrics = dict()
 
-        # ----- set descriptions (and separate model-keys)
-        descriptions = dict()
-        if isinstance(parameters, dict):
-            model_keys = dict()
-            descriptions.update(parameters)
-
-            for key in ["tot", "surf", "vol", "inter"]:
-                if key in parameters:
-                    model_keys[key] = parameters.pop(key)
-        else:
-            model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
-            parameters = set(parameters) ^ model_keys
-
-        for key, val in metrics.items():
-            if len(val) == 4:
-                descriptions[key] = val[3]
+        # ----- separate model-keys from the provided parameters
+        model_keys = set(parameters) & set(["tot", "surf", "vol", "inter"])
+        parameters = set(parameters) ^ model_keys
 
         # ----- initialize a RTresults object for easy access to the list of dump-files
-        res = RTresults(self.config_path)
+        # don't use "self.dumppath" since it requires a call to setup() !
+        specs = RT1_configparser(self.config_path).get_process_specs()
+        res = RTresults(
+            specs["save_path"] / specs["dumpfolder"],
+            use_dumps=kwargs.get("use_dumps", False),
+        )
 
         # ----- get dumpfolder to use
         if not dumpfolder:
             if len(res._paths) > 1:
-                log.error("there is more than 1 possible dumpfolder!\n" +
-                          f"please explicitly specify one of:\n{list(res._paths)}")
+                log.error(
+                    "there is more than 1 possible dumpfolder!\n"
+                    + f"please explicitly specify one of:\n{list(res._paths)}"
+                )
                 return
             else:
                 dumpfolder = list(res._paths)[0]
                 log.progress(f"exporting parameters from '{dumpfolder}' dumpfolder")
 
         # ----- get list of paths to fit-objects
-        useres = getattr(res, dumpfolder)
-        useres.scan_folder()
-        fitlist = list(islice(useres.dump_files, use_nfiles))
-
+        self._useres = getattr(res, dumpfolder)
         # load the first fit-object to pre-load fn-coefficients
-        fit0 = useres.load_fit(0)
+        fit0 = self._useres.load_fit(0)
 
         fn_evals = None
         if pre_evaluate_fn_coefs:
@@ -1842,55 +1493,242 @@ class RTprocess(object):
                 fn_evals = fit0.R._fnevals
 
         # ----- set postprocess and finalout functions
-        func = partial(self._export_postprocess,
-                       parameters=parameters,
-                       metrics=metrics,
-                       export_functions=export_functions,
-                       model_keys=model_keys,
-                       index_col=index_col,
-                       _fnevals_input=fn_evals)
-
-        finalout = partial(self._export_finalout,
-                           descriptions=descriptions,
-                           attrs=attributes,
-                           concat_dim=index_col)
+        func = partial(
+            self._HDF_export_postprocess,
+            parameters=parameters,
+            metrics=metrics,
+            export_functions=export_functions,
+            model_keys=model_keys,
+            _fnevals_input=fn_evals,
+        )
 
         # ----- run finalout generation
         out = self.run_finaloutput(
             ncpu=ncpu,
             use_N_files=use_nfiles,
             use_config=use_config,
-            finalout_name=None,
-            finaloutput=finalout,
+            finalout_name=finalout_name,
             postprocess=func,
-            print_progress=True,
-            logfile_level=1,
-            fitlist=fitlist
+            save_path=savepath,
+            **kwargs,
         )
-
-        # ----- attach model definition strings as attributes
-        if isinstance(fit0, MultiFits):
-            # remove dataset since we are not interested in site-specific infos
-            fit0.set_dataset(None)
-            for key, val in out.items():
-                val.attrs['model_definition'] = (
-                    fit0.accessor.config_fits[key]._model_definition)
-        else:
-            fit0.dataset = None
-            out.attrs['model_definition'] = fit0._model_definition
-
-        # if savepath is provided, save NetCDF files to disc
-        if savepath:
-            savepath = Path(savepath)
-            if isinstance(out, dict):
-                parent = savepath.parent
-                name = savepath.stem
-                suffix = savepath.suffix
-                for key, val in out.items():
-                    val.to_netcdf(parent / (name + "__" + key + suffix))
-            else:
-                out.to_netcdf(savepath)
 
         return out
 
+    @staticmethod
+    def _HDF_export_postprocess(
+        fit,
+        parameters=[],
+        metrics=None,
+        export_functions=None,
+        model_keys=[],
+        sig_to_dB=False,
+        inc_to_degree=False,
+        _fnevals_input=None,
+    ):
+        """
+        Parameters
+        ----------
 
+        fit: rt1.rtfits.Fits object
+            The fits object.
+        reader_arg: dict
+            the arguments passed to the reader function.
+        parameters : list
+            a list of parameter-names to attach.
+        metrics : dict
+            key: the name to use for the metric in the returned dataset
+            value: a tuple of the form:
+                  (metric, parameter 1, parameter 2)
+        export_fuinctions : dict
+            a dict of functions to use for exporting the parameter
+        model_keys : list
+            a list of keys that correspond to model-calculation results
+            (e.g. any of ["tot", "surf", "vol", "inter"])
+        _fnevals_input : dict or callable
+            pre-evaluated fnevals functions. in case fit is a MultiFits object:
+            a dict with the config-names and pre-evaluated fnevals functions
+        Returns
+        -------
+        df: pandas.DataFrame
+            a xarray.Dataset containing the fitted parameterss.
+
+        """
+
+        # assign pre-evaluated fn-coefficients
+        if _fnevals_input:
+            if hasattr(fit, "config_name"):
+                if fit.int_Q is True and fit.config_name in _fnevals_input:
+                    fit._fnevals_input = _fnevals_input[fit.config_name]
+            else:
+                fit._fnevals_input = _fnevals_input
+
+        auxdata = dict()
+        if model_keys:
+            auxdata = fit.calc_model(return_components=True)[model_keys]
+
+        if export_functions:
+            for key, func in export_functions.items():
+                if key in parameters:
+                    auxdata[key] = func(fit)
+
+        ret = RTprocess._postprocess_getparams(
+            fit=fit,
+            saveparams=set(parameters) ^ set(auxdata) ^ set(model_keys),
+            xindex=("ID", fit._RT1_ID_num),
+            auxdata=pd.DataFrame(auxdata),
+            sig_to_dB=sig_to_dB,
+            inc_to_degree=inc_to_degree,
+        )
+
+        # attach metrics if provided
+        if metrics:
+            metric_layer = dict()
+            for name, p in metrics.items():
+                if export_functions and name in export_functions and p == "custom":
+                    metric_layer[name] = export_functions[name](fit)
+                else:
+                    metric_layer[name] = getattr(
+                        getattr(getattr(fit.metric, p[1]), p[2]), p[0].lower()
+                    )
+            metric_layer = pd.DataFrame(metric_layer, index=[fit._RT1_ID_num])
+            metric_layer.index.name = "ID"
+
+            ret["metrics"] = metric_layer
+
+        return ret
+
+    @staticmethod
+    def _postprocess_getparams(
+        fit,
+        saveparams=None,
+        xindex=("x", -9999),
+        yindex=None,
+        staticlayers=None,
+        auxdata=None,
+        sig_to_dB=False,
+        inc_to_degree=False,
+    ):
+        """
+        the identification of parameters is as follows:
+
+            1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
+            2) any parameter present in defdict is handled accordingly
+            3) auxdata (a pandas-dataframe) is appended
+            4) static layers are added according to the provided dict
+
+        Parameters
+        ----------
+        fit : rt1.rtfits.Fits object
+            the fit-object to use
+        saveparams : list, optional
+            a list of strings that correspond to parameter-names that should
+            be included.
+            can be any parameter present in "fit.dataset", "fit.res_df",
+            The default is None.
+        xindex : tuple, optional
+            a tuple (name, value) that will be used as the x-index.
+            The default is ('x', -9999).
+        yindex : tuple, optional
+            a tuple (name, value) that will be used as the y-index.
+            if provided, a multiindex (x, y) will be used!
+            Be warned... when combining xarrays the x- and y- coordinates will
+            be assumed as a rectangular grid!
+            The default is None.
+        staticlayers : dict, optional
+            a dict with parameter-names and values that will be added das
+            static layers. The default is None.
+        auxdata : pandas.DataFrame, optional
+            a pandas DataFrame that will be concatenated to the DataFrame obtained
+            from combining all 'saveparams'.
+            NOTICE: if the index does not align well with the fit-index, the
+            generated output can increase a lot in size due to missing values!
+            The default is None.
+        sig_to_dB : bool
+            indicator if sigma0 values (e.g. "sig", "tot", "surf", "vol", "inter")
+            should be converted to dB
+        inc_to_degree : bool
+            indicator if incidence-angle values (e.g. "inc")
+            should be converted to degrees
+        """
+        if saveparams is None:
+            saveparams = []
+
+        if staticlayers is None:
+            staticlayers = dict()
+
+        ret = dict()  # dict that holds the return-values
+
+        defs = RTprocess._defdict_parser(fit.defdict)
+
+        usedfs = []
+        for key in saveparams:
+
+            if key == "sig":
+                if fit.dB is False and sig_to_dB:
+                    usedfs.append(10.0 * np.log10(fit.dataset.sig))
+                else:
+                    usedfs.append(fit.dataset.sig)
+            elif key == "inc" and inc_to_degree:
+                usedfs.append(np.rad2deg(fit.dataset.inc))
+
+            elif key in fit.defdict:
+                if key in defs["fitted_dynamic"]:
+                    usedfs.append(fit.res_df[key])
+                elif key in defs["fitted_const"]:
+                    staticlayers[key] = fit.res_dict[key][0]
+                elif key in defs["constant"]:
+                    staticlayers[key] = fit.defdict[key].val.value
+                elif key in defs["auxiliary"]:
+                    usedfs.append(fit.dataset[key])
+            elif key in fit.dataset:
+                if (
+                    key in ["tot", "surf", "vol", "inter"]
+                    and fit.dB is False
+                    and sig_to_dB
+                ):
+                    usedfs.append(10.0 * np.log10(fit.dataset[key]))
+                else:
+                    usedfs.append(fit.dataset[key])
+            elif key in fit.reader_arg:
+                staticlayers[key] = fit.reader_arg[key]
+            else:
+                log.warning(
+                    f"the parameter {key} could not be processed"
+                    + "during xarray postprocessing"
+                )
+
+        if auxdata is not None and len(auxdata) > 0:
+            usedfs.append(auxdata)
+
+        if len(usedfs) > 0:
+            # combine all timeseries and set the proper index
+            df = pd.concat(usedfs, axis=1)
+            df.columns.names = ["param"]
+            df.index.names = ["date"]
+
+            if yindex is not None:
+                df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
+                df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+            else:
+                df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
+
+            ret["dynamic"] = df
+
+        if len(staticlayers) > 0:
+            if yindex is not None:
+                # set static layers
+                statics = pd.DataFrame(
+                    staticlayers,
+                    index=pd.MultiIndex.from_product(
+                        iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
+                    ),
+                )
+            else:
+                # set static layers
+                statics = pd.DataFrame(staticlayers, index=[xindex[1]])
+                statics.index.name = xindex[0]
+
+            ret["static"] = statics
+
+        return ret

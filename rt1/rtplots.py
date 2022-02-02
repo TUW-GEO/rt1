@@ -18,6 +18,7 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 import matplotlib.ticker as ticker
+from matplotlib.collections import LineCollection
 
 try:
     from mpl_toolkits.mplot3d import Axes3D
@@ -188,9 +189,7 @@ def polarplot(
             for ti in plottis:
                 color = next(colors)
                 used_colors.append(color)
-                rad = getattr(X, funcname)(
-                    ti, thetass, 0.0, 0.0, param_dict=params
-                )
+                rad = getattr(X, funcname)(ti, thetass, 0.0, 0.0, param_dict=params)
                 if aprox is True:
                     # the use of np.pi-ti stems from the definition
                     # of legexpansion() in volume.py
@@ -531,7 +530,7 @@ class plot:
             ax.text(
                 0.8,
                 0.1,
-                "$R^2$ = " + str(np.round(r_value ** 2, 2)),
+                "$R^2$ = " + str(np.round(r_value**2, 2)),
                 horizontalalignment="center",
                 verticalalignment="center",
                 transform=ax.transAxes,
@@ -738,6 +737,7 @@ class plot:
             labels=list(lab),
             loc="upper left",
             ncol=5,
+            markerscale=3,
         )
 
         if ylim is not None:
@@ -2591,9 +2591,28 @@ class plot:
             paramslider[key].label.set_horizontalalignment("left")
             paramslider[key].valtext.set_position([0.8, 0.5])
 
-        buttons = CheckButtons(buttonax, buttonlabels, [False for i in buttonlabels])
+        buttonvals = [False for i in buttonlabels]
+
+        # add a button to indicate the fit-results
+        if res_dict is not None:
+            buttonlabels += ["... indicate fit"]
+            buttonvals += [False]
+        buttons = CheckButtons(buttonax, buttonlabels, buttonvals)
 
         params = startparams.copy()
+
+        # indicate the fit-results with some lines
+        if res_dict is not None:
+
+            res = fit.calc(fit.res_df, inc, return_components=False)
+
+            lc = LineCollection(
+                np.stack((np.array([inc] * len(res)), res), axis=2),
+                lw=0.25,
+                ec=".5",
+                alpha=0.75,
+                zorder=-1,
+            )
 
         # define function to update lines based on slider-input
         def animate(value, key):
@@ -2616,12 +2635,18 @@ class plot:
             if int_Q is True:
                 lint.set_ydata(modelresult["inter"].T)
 
-            # poverprint boundaries
-            hatches = [r"//", r"\\ ", "+", "oo", "--", ".."]
+            # overprint boundaries
+            hatches = [r"//", r"\\\\", "+", "oo", "--", ".."]
             colors = ["C" + str(i) for i in range(10)]
             ax.collections.clear()
+
             legendhandles = []
             for i, [key_i, key_Q] in enumerate(printvariationQ.items()):
+                if key_i == "... indicate fit":
+                    if key_Q is True:
+                        ax.add_collection(lc)
+                    continue
+
                 # replace label of key_i with provided label
                 if key_i in labels:
                     keylabel = labels[key_i]
@@ -2732,8 +2757,21 @@ class plot:
                     leg1.remove()
 
         printvariationQ = {key: False for key in minparams}
+        if res_dict is not None:
+            printvariationQ["... indicate fit"] = False
 
         def buttonfunc(label):
+            if label == "... indicate fit":
+                if printvariationQ[label] is True:
+                    try:
+                        lc.remove()
+                    except Exception:
+                        pass
+                    printvariationQ[label] = False
+                else:
+                    printvariationQ[label] = True
+                    ax.add_collection(lc)
+                return
             # if labels of the buttons have been changed by the labels-argument
             # set the name to the corresponding key (= the actual parameter name)
             for key, val in labels.items():

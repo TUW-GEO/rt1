@@ -247,7 +247,7 @@ class _RTmetrics1(object):
         return RTmetrics.metrics_table(*self._unify_idx_data)
 
     def scatterplot(self):
-        RTmetrics.scatterplot(*self._unify_idx_data, self._d1, self._d2)
+        return RTmetrics.scatterplot(*self._unify_idx_data, self._d1, self._d2)
 
 
 class RTmetrics(object):
@@ -328,12 +328,8 @@ class RTmetrics(object):
             float values for slope, intercept, pearson, pvalue, stderr
 
         """
-        return dict(
-            zip(
-                ["slope", "intercept", "pearson", "pvalue", "stderr"],
-                stats.linregress(d1, d2),
-            )
-        )
+
+        return stats.linregress(d1, d2)._asdict()
 
     @staticmethod
     def rmsd(d1, d2):
@@ -423,7 +419,8 @@ class RTmetrics(object):
     @staticmethod
     def mape(d1, d2):
         """
-        evaluates mean absolute percentage error of given Series d1 and d2 with respect to d1
+        evaluates mean absolute percentage error of given Series
+        d1 and d2 with respect to d1
 
         Parameters
         ----------
@@ -444,7 +441,8 @@ class RTmetrics(object):
     @staticmethod
     def std_ratio(d1, d2):
         """
-        evaluates standard deviation ratio of given Series d1 and d2: sigma_1 / sigma_2
+        evaluates standard deviation ratio of given Series
+        d1 and d2: sigma_1 / sigma_2
 
         Parameters
         ----------
@@ -464,8 +462,9 @@ class RTmetrics(object):
     @classmethod
     def allmetrics(cls, d1, d2):
         """
-        run all metrics specified in RTmetrics.metrics_registry of given Series d1 and d2
-        metrics have to be specified by function name in metrics_registry
+        run all metrics specified in RTmetrics.metrics_registry of given
+        Series d1 and d2. Metrics have to be specified by function name
+        in metrics_registry
 
         Parameters
         ----------
@@ -512,14 +511,54 @@ class RTmetrics(object):
 
         # create scatterplot
         ax1.scatter(d1, d2)
+
         ax1.set_xlabel(d1_name)
         ax1.set_ylabel(d2_name)
 
         # get all metrics and define lists for table data
         metrics_dict = cls.allmetrics(d1, d2)
+
+        # add linregress-line
+        intercept = metrics_dict["linregress"]["intercept"]
+        slope = metrics_dict["linregress"]["slope"]
+        stderr = metrics_dict["linregress"]["stderr"]
+
+        x = np.array([d1.min(), d1.max()])
+        ax1.plot(x, intercept + slope * x, c="k", ls="--")
+
+        # overplot gradient error
+        cint = intercept + slope * x.mean()
+        ax1.plot(
+            x,
+            [
+                (cint + (slope + stderr) * (x.min() - x.mean())),
+                (cint + (slope + stderr) * (x.max() - x.mean())),
+            ],
+            c="r",
+            ls="--",
+            alpha=0.5,
+        )
+
+        ax1.plot(
+            x,
+            [
+                (cint + (slope - stderr) * (x.min() - x.mean())),
+                (cint + (slope - stderr) * (x.max() - x.mean())),
+            ],
+            c="r",
+            ls="--",
+            alpha=0.5,
+        )
+
+        # overplot intercept error
+        # ("intercept_stderr" is available only in new scipy versions!)
+        if "intercept_stderr" in metrics_dict["linregress"]:
+            intercept_err = metrics_dict["linregress"]["intercept_stderr"]
+            ax1.plot(x, intercept + intercept_err + slope * x, c="g", ls=":")
+            ax1.plot(x, intercept - intercept_err + slope * x, c="g", ls=":")
+
         metric_names = []
         metric_values = []
-
         # flatten metrics array and format float values
         for key, val in cls._flatten_dictionary(metrics_dict).items():
             metric_names.append(key)
@@ -544,20 +583,20 @@ class RTmetrics(object):
 
         # scale for higher cells
         metrics_table.scale(1, 1.5)
-
-        plt.show()
+        fig.tight_layout()
         return fig
 
     @classmethod
     def _flatten_dictionary(cls, dictionary, depth=0):
         """
-        recursively flattens a dictionary, only returns float values from that dictionary
-        keys of sub-dictionaries are prefixed with a '-' according to the depth
+        recursively flattens a dictionary, only returns float values from
+        that dictionary keys of sub-dictionaries are prefixed with a '-'
+        according to the depth
 
         Parameters
         ----------
         dictionary : dict
-            dictionary that should be flattened, should contain float or dict values
+            dict that should be flattened, should contain float or dict values
         depth : integer
             recursion depth used for prefixing
 
@@ -581,8 +620,9 @@ class RTmetrics(object):
     @classmethod
     def metrics_table(cls, d1, d2):
         """
-        prints a table with all metrics and values returned from the allmetrics method for given series d1 and d2
-        dictionaries returned by allmetrics are handled recursively by _metrics_table_dict_entry
+        prints a table with all metrics and values returned from the allmetrics
+        method for given series d1 and d2 dictionaries returned by allmetrics
+        are handled recursively by _metrics_table_dict_entry
 
         Parameters
         ----------
@@ -622,7 +662,8 @@ class RTmetrics(object):
         Returns
         -------
         string
-            multiline string containing all floating point entries of a dictionary and its sub-dictionaries
+            multiline string containing all floating point entries of a
+            dictionary and its sub-dictionaries
 
         """
         entries = ""
