@@ -2782,9 +2782,9 @@ class Fits(Scatter):
             try:
                 # init V and SRF with string-variables
                 V, SRF = self.set_V_SRF(**dict(zip(*[self.defdict._variables] * 2)))
+                return dict(V_props=V.init_dict, SRF_props=SRF.init_dict)
             except TypeError:
                 log.error("Not all variables are specified in defdict!", exc_info=True)
-            return dict(V_props=V.init_dict, SRF_props=SRF.init_dict)
 
     def _get_init_dict(self):
         args = {
