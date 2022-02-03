@@ -2604,7 +2604,10 @@ class plot:
         # indicate the fit-results with some lines
         if res_dict is not None:
 
-            res = fit.calc(fit.res_df, inc, return_components=False)
+            res = fit.calc(
+                fit.res_df, inc, return_components=False, fixed_param=fit.dataset
+            )
+            res = dBsig0convert(res, inc, dB, sig0, fit.dB, fit.sig0)
 
             lc = LineCollection(
                 np.stack((np.array([inc] * len(res)), res), axis=2),
