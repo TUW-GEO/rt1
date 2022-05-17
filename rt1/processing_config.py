@@ -260,3 +260,90 @@ class rt1_processing_config(object):
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
+
+    def mask_existing_HDF_IDs(self, arg_list, key="reader_arg", get_ID=None):
+        """
+        check if the IDs provided in "arg_list" are already present in the "fit_db.h5"
+        container and return a list that contains only the missing entries of "arg_list".
+
+        Parameters
+        ----------
+        key : str, optional
+            the key to use in the HDF-container. The default is "reader_arg".
+        get_ID : callable, optional
+            a custom callable that extracts the ID from the provided
+            IDs list.
+            The default is None in which case the following function is used:
+
+                >>> # extract filename from given path
+                >>> def get_ID(i):
+                >>>     ID = str(i["ID"]).split(os.sep)[-1].split(".")[0]
+                >>>     if not isidentifier(str(ID)):
+                >>>         return f"RT1_{ID}"
+                >>>     else:
+                >>>         return str(ID)
+
+        Returns
+        -------
+        new_IDs : set
+            a set containing the unique elements of "inp" whose IDs are not
+            already present in the output HDF container.
+
+        """
+        import os
+        from .general_functions import isidentifier, find_missing
+        from .rtresults import HDFaccessor
+        import pandas as pd
+
+        dst_path = self.rt1_procsesing_respath / "fit_db.h5"
+
+        if Path(dst_path).exists():
+            log.progress("Checking for already existing IDs in the `fit_db.h5`...")
+            if get_ID is None:
+
+                def get_ID(i):
+                    ID = str(i["ID"]).split(os.sep)[-1].split(".")[0]
+                    if not isidentifier(str(ID)):
+                        return f"RT1_{ID}"
+                    else:
+                        return str(ID)
+
+            with HDFaccessor(dst_path) as fit_db:
+                # get all IDs that are already present in the HDF store
+                # found_IDs = store.select_column("reader_arg", "ID").values
+                # get a list of integers that have already been assigned to IDs
+                # found_ID_nums = store.select_column("reader_arg", "index").values
+
+                found_ID_nums = fit_db.IDs.index
+                found_IDs = fit_db.IDs.ID.values
+
+                # a list of bool's that indicate if the ID is already processed
+                process_Q = pd.Index(map(get_ID, arg_list)).isin(found_IDs)
+
+                # a counter that yields unique IDs that are not yet assigned
+                # in the HDF store
+                id_counter = find_missing(found_ID_nums)
+
+                # set the processing-args
+                # update ID to be a valid python-identifier
+                args_to_process = [
+                    {**arg, "_RT1_ID_num": next(id_counter)}
+                    for arg, q in zip(arg_list, process_Q)
+                    if not q
+                ]
+        else:
+            args_to_process = [
+                {**i, "_RT1_ID_num": n} for i, n in zip(arg_list, range(len(arg_list)))
+            ]
+
+            log.info("no existing output-HDF file found...")
+            log.progress(f"processing all {len(args_to_process)} IDs!")
+            return args_to_process
+
+        log.progress(
+            f"Found {len(args_to_process)} missing and "
+            + f"{len(arg_list) - len(args_to_process)}"
+            + " existing IDs!"
+        )
+
+        return args_to_process
