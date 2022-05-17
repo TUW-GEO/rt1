@@ -399,3 +399,26 @@ def find_missing(lst=[], N=None):
         return islice(chain(missingIDs, c), N)
     else:
         return chain(missingIDs, c)
+
+
+def chunkit(arr, chunk_size=10000):
+    """
+    split a array-like object into chunks of a pre-defined size
+
+    Parameters
+    ----------
+    arr : array-like
+        the data to split.
+    chunk_size : int, optional
+        the chunk-size. The default is 10000.
+
+    Yields
+    ------
+    array-like
+        the chunks of the input-array.
+    """
+    num_chunks = len(arr) // chunk_size
+    if len(arr) % chunk_size != 0:
+        num_chunks += 1
+    for i in range(num_chunks):
+        yield arr[i * chunk_size : (i + 1) * chunk_size]
