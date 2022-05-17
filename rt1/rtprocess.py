@@ -585,6 +585,7 @@ class RTprocess(object):
         queue=None,
         proc_counter=None,
         dump_fit=False,
+        create_index=False,
         **kwargs,
     ):
         """
@@ -653,6 +654,14 @@ class RTprocess(object):
             indicator if a pickle of the fit-object should be put in the
             "dumps" folder for each finished fit.
             The default is False
+        create_index : bool or dict, optional
+            indicator if the created HDF-store should be indexed or not.
+
+            - if True a index is created for the first index-column
+              (this can take quite some time but speeds up querying a lot!)
+            - if a dict is provided, it is used as kwargs for
+              `_rtprocess_writer.RT1_processor.create_index()`
+              (e.g. the defaults are:  idx_levels=None and keys=None)
 
         Returns
         -------
@@ -686,50 +695,66 @@ class RTprocess(object):
                 + "AND via the return-dict of the preprocess() function!"
             )
 
-        log.info(f"attempting to process {len(reader_args)} features")
-
-        if "pool_kwargs" in setupdict:
-            pool_kwargs = setupdict["pool_kwargs"]
-
-        if pool_kwargs is None:
-            pool_kwargs = dict()
-
-        # add provided initializer and queue (used for subprocess-logging)
-        # to the initargs and use "self._initializer" as initializer-function
-        # Note: this is a pickleable way for decorating the initializer!
-
-        pool_kwargs["initargs"] = [
-            pool_kwargs.pop("initializer", None),
-            queue,
-            proc_counter,
-            *pool_kwargs.pop("initargs", []),
-        ]
-        pool_kwargs["initializer"] = self._initializer
-
-        # pre-evaluate the fn-coefficients if interaction terms are used
-        if isinstance(self.parent_fit, MultiFits):
-            for name, parent_fit in self.parent_fit.accessor.config_fits.items():
-                if parent_fit.int_Q is True:
-                    log.progress(f"pre-evaluating coefficients for config {name} ...")
-                    parent_fit._fnevals_input = parent_fit.R._fnevals
+        if len(reader_args) == 0:
+            log.warning("There is nothing to process... (reader_args is empty)")
+            res = []
         else:
-            if self.parent_fit.int_Q is True:
-                log.progress("pre-evaluating coefficients ...")
-                self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+            log.info(f"attempting to process {len(reader_args)} features")
 
-        # start processing
-        with RT1_processor.writer_pool(
-            n_worker=ncpu,
-            dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
-            **kwargs,
-        ) as w:
+            if "pool_kwargs" in setupdict:
+                pool_kwargs = setupdict["pool_kwargs"]
 
-            res = w.run_starmap(
-                arg_list=reader_args,
-                process_func=self._evalfunc,
-                pool_kwargs=pool_kwargs,
-                ID_getter=self._extract_ID,
-            )
+            if pool_kwargs is None:
+                pool_kwargs = dict()
+
+            # add provided initializer and queue (used for subprocess-logging)
+            # to the initargs and use "self._initializer" as initializer-function
+            # Note: this is a pickleable way for decorating the initializer!
+
+            pool_kwargs["initargs"] = [
+                pool_kwargs.pop("initializer", None),
+                queue,
+                proc_counter,
+                *pool_kwargs.pop("initargs", []),
+            ]
+            pool_kwargs["initializer"] = self._initializer
+
+            # pre-evaluate the fn-coefficients if interaction terms are used
+            if isinstance(self.parent_fit, MultiFits):
+                for name, parent_fit in self.parent_fit.accessor.config_fits.items():
+                    if parent_fit.int_Q is True:
+                        log.progress(
+                            f"pre-evaluating coefficients for config {name} ..."
+                        )
+                        parent_fit._fnevals_input = parent_fit.R._fnevals
+            else:
+                if self.parent_fit.int_Q is True:
+                    log.progress("pre-evaluating coefficients ...")
+                    self.parent_fit._fnevals_input = self.parent_fit.R._fnevals
+
+            # start processing
+            with RT1_processor.writer_pool(
+                n_worker=ncpu,
+                dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
+                **kwargs,
+            ) as w:
+
+                res = w.run_starmap(
+                    arg_list=reader_args,
+                    process_func=self._evalfunc,
+                    pool_kwargs=pool_kwargs,
+                    ID_getter=self._extract_ID,
+                )
+
+        if create_index:
+            if isinstance(create_index, dict):
+                RT1_processor.create_index(
+                    self.proc_cls.rt1_procsesing_respath / "fit_db.h5", **create_index
+                )
+            elif create_index is True:
+                RT1_processor.create_index(
+                    self.proc_cls.rt1_procsesing_respath / "fit_db.h5"
+                )
 
         return res
 
@@ -750,6 +775,7 @@ class RTprocess(object):
         preprocess_kwargs=None,
         logfile_level=21,
         dump_fit=False,
+        create_index=False,
     ):
         """
         Start the processing
@@ -809,7 +835,19 @@ class RTprocess(object):
             useful for debug and initial configuration of a fit)
             NOT suitable for long-term storage!!
             The default is False
+        create_index : bool or dict, optional
+            indicator if the created HDF-store should be indexed or not.
+
+            - if True a index is created for the first index-column
+              (this can take quite some time but speeds up querying a lot!)
+            - if a dict is provided, it is used as kwargs for
+              `_rtprocess_writer.RT1_processor.create_index()`
+              (e.g. the defaults are:  idx_levels=None and keys=None)
+
         """
+        if hasattr(self, "proc_cls"):
+            if hasattr(self.proc_cls, "finalizer"):
+                self.proc_cls.finalizer()
 
         try:
             # initialize all necessary properties if setup was not yet called
@@ -899,6 +937,7 @@ class RTprocess(object):
                 dump_fit=dump_fit,
                 init_func=self._worker_configurer,
                 init_args=(queue, logfile_level),
+                create_index=create_index,
             )
 
         except Exception as err:
@@ -1457,7 +1496,10 @@ class RTprocess(object):
 
         # ----- initialize a RTresults object for easy access to the list of dump-files
         # don't use "self.dumppath" since it requires a call to setup() !
-        specs = RT1_configparser(self.config_path).get_process_specs()
+        if not hasattr(self, "cfg"):
+            specs = RT1_configparser(self.config_path).get_process_specs()
+        else:
+            specs = self.cfg.get_process_specs()
         res = RTresults(
             specs["save_path"] / specs["dumpfolder"],
             use_dumps=kwargs.get("use_dumps", False),
