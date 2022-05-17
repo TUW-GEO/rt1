@@ -827,7 +827,6 @@ class HDFaccessor(object):
             the retrieved DataFrame.
 
         """
-
         nids = min(len(self.IDs), nids)
 
         assert (
@@ -890,6 +889,8 @@ class HDFaccessor(object):
 
             if print_progress:
                 print("reading", (i + 1) * read_chunksize)
+        # make sure to return the last results (possibly less than the read-chunksize)
+        yield pd.concat(ret)
 
 
 class _data_container(object):
