@@ -236,7 +236,11 @@ class rt1_processing_config(object):
             # raised if there was a problem with the data, ignore and continue
             raise_exception = False
 
-            log.error(f"there was a DATA-problem for '{names_ids['filename']}'")
+            log.error(
+                f"there was a DATA-problem for '{names_ids['filename']}'"
+                + "\n"
+                + str([i for i in ex.args if i != "rt1_data_error"])
+            )
         else:
             log.error(
                 f"something went wrong for: {reader_arg}\n" + traceback.format_exc()
