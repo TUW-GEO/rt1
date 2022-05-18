@@ -1520,7 +1520,11 @@ class RTprocess(object):
         # ----- get list of paths to fit-objects
         self._useres = getattr(res, dumpfolder)
         # load the first fit-object to pre-load fn-coefficients
-        fit0 = self._useres.load_fit(0)
+        if hasattr(self._useres, "fit_db"):
+            fit0_ID = self._useres.fit_db.IDs.values.flat[0]
+        else:
+            fit0_ID = 0
+        fit0 = self._useres.load_fit(fit0_ID)
 
         fn_evals = None
         if pre_evaluate_fn_coefs:

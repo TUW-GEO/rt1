@@ -306,7 +306,7 @@ class RTresults(object):
 
             return fit
 
-        def load_fit(self, ID=0, return_ID=False):
+        def load_fit(self, ID=None, return_ID=False):
             """
             load one of the available Fits (or MultiFits) object from the data
             stored in the "results/fit_db.h5" file
@@ -589,7 +589,7 @@ class HDFaccessor(object):
     def _load_fit(self, ID):
         with self._numeric_ID():
             if ID is None:
-                ID = self.IDs.sample(n=1).values[0]
+                ID = choice(self.IDs.values.flat)
 
             if isinstance(ID, str):
                 ID = self._ID_to_IDnum(ID)
