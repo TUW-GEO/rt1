@@ -475,7 +475,8 @@ class RTprocess(object):
                 )
 
             if dataset is None or len(dataset) == 0:
-                raise Exception("rt1_data_error")
+                log.error("dataset is empty")
+                raise Exception("rt1_skip")
 
             # take proper care of MultiFit objects
             if isinstance(self.parent_fit, MultiFits):
