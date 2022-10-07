@@ -2880,7 +2880,7 @@ class Fits(Scatter):
         return df
 
     def _get_fit_to_hdf_dict(
-        self, save_results=True, save_data=True, save_auxdata=True, ID=None
+        self, save_results=True, save_res_df=True, save_data=True, save_auxdata=True, ID=None
     ):
         """
         return a dict of pandas-dataframes suitable to fully re-create
@@ -2891,6 +2891,9 @@ class Fits(Scatter):
         ----------
         save_results : bool, optional
             indicator if results should be saved. The default is True.
+        save_res_df : bool, optional
+            indicator if results re-indexed to the dataframe index
+            should be saved or not. The default is True.
         save_data : bool, optional
             indicator if the dataset should be saved. The default is True.
         save_auxdata : bool, optional
@@ -3000,6 +3003,22 @@ class Fits(Scatter):
                 hf["res_dict"] = df
             except Exception:
                 log.debug(f"could not save 'res_dict' for fit {ID}")
+
+        # -------------- save RES_DF (different for MultiFits)
+        if save_res_df is True:
+            try:
+                if isinstance(self, MultiFits):
+                    df = pd.concat(
+                        i[1]
+                        for i in self.apply(lambda fit: pd.concat([fit.res_df], keys=[fit.config_name], names=["cfg"]))
+                    )
+                    df = pd.concat([df], names=["ID"], keys=[ID])
+                else:
+                    df = Fits._prepend_ID_to_index(self.res_df, ID=ID)
+
+                hf["res_df"] = df
+            except Exception:
+                log.debug(f"could not save 'res_df' for fit {ID}")
 
         return hf
 
