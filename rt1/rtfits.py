@@ -443,7 +443,7 @@ class Fits(Scatter):
             return None
 
         if not dataset.index.is_monotonic_increasing:
-            log.warning("dataset has been sorted to ensure a monotonic index!")
+            log.info("dataset has been sorted to ensure a monotonic index!")
             return dataset.sort_index()
         else:
             return dataset
