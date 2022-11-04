@@ -85,6 +85,7 @@ class RTprocess(object):
         proc_cls=None,
         parent_fit=None,
         init_kwargs=None,
+        hdf_export_kwargs=None,
     ):
         """
         A class to perform parallelized processing.
@@ -125,6 +126,10 @@ class RTprocess(object):
             Additional keyword-arguments passed to the initialization of the
             'proc_cls' class. (used to append-to or partially overwrite
             definitions passed via the config-file). The default is None.
+        hdf_export_kwargs: dict, optional
+            a dict passed to fit._get_fit_to_hdf_dict()
+            (use it to set which variables to store in the hdf-container)
+            (e.g.: save_results, save_res_df, save_data, save_auxdata)
         """
         assert config_path is not None, "Please provide a config-path!"
         self.config_path = Path(config_path)
@@ -136,7 +141,12 @@ class RTprocess(object):
         self.autocontinue = autocontinue
 
         self.copy = copy
-
+        
+        if hdf_export_kwargs is None:
+            self.hdf_export_kwargs = dict()
+        else:
+            self.hdf_export_kwargs = hdf_export_kwargs
+        
         self._proc_cls = proc_cls
         self._parent_fit = parent_fit
         if init_kwargs is None:
@@ -506,7 +516,8 @@ class RTprocess(object):
                     )
 
                 return self.parent_fit._get_fit_to_hdf_dict(
-                    ID=reader_arg.get("_RT1_ID_num", None)
+                    ID=reader_arg.get("_RT1_ID_num", None),
+                    **self.hdf_export_kwargs
                 )
 
             else:
@@ -537,7 +548,9 @@ class RTprocess(object):
                         mini=True,
                     )
 
-                return fit._get_fit_to_hdf_dict(ID=reader_arg.get("_RT1_ID_num", None))
+                return fit._get_fit_to_hdf_dict(
+                    ID=reader_arg.get("_RT1_ID_num", None),
+                    **self.hdf_export_kwargs)
 
         except Exception as ex:
 
