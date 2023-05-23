@@ -1114,7 +1114,6 @@ class plot:
 
         # function to generate colormap that fades between colors
         def CustomCmap(from_rgb, to_rgb):
-
             # from color r,g,b
             r1, g1, b1 = from_rgb
 
@@ -1137,7 +1136,6 @@ class plot:
         ax = fig.add_subplot(111)
 
         for m_i, m in enumerate(fit_numbers):
-
             if convertTodB is True:
                 y = 10.0 * np.log10(estimates[m][~fit.mask[m]])
             else:
@@ -1796,7 +1794,6 @@ class plot:
             styledict_dict,
             styledict_fullt0_dict,
         ):
-
             incs = np.rad2deg(sig0_vals["incs"])
 
             lines = []
@@ -1858,7 +1855,6 @@ class plot:
                 newincs = np.rad2deg(newsig0_vals["incs"])
 
                 for day in np.arange(0, dayrange, 1):
-
                     sortp = np.argsort(newincs[day])
 
                     linesfull += ax.plot(
@@ -2096,14 +2092,12 @@ class plot:
             printcomponents,
             label,
         ):
-
             day0 = int(day0)
 
             label.set_position([day0, label.get_position()[1]])
             if dayrange == 1:
                 label.set_text(sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M"))
             elif dayrange > 1:
-
                 lday_0 = sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M")
                 lday_1 = sig0_vals["indexes"][day0 + dayrange - 1].strftime(
                     "%d. %b %Y %H:%M"
@@ -2280,7 +2274,6 @@ class plot:
             "xlim_changed", partial(updatesliderboundary, slider=a_slider)
         )
         if range2 is not None:
-
             # here we create the slider
             b_slider = Slider(
                 slider_bx,  # axes object for the slider
@@ -2603,9 +2596,13 @@ class plot:
 
         # indicate the fit-results with some lines
         if res_dict is not None:
-
             res = fit.calc(
-                fit.res_df, inc, return_components=False, fixed_param=fit.dataset
+                fit.res_df,
+                inc,
+                return_components=False,
+                fixed_param=fit.dataset.groupby(level=0, axis=0).mean()[
+                    fit.fixed_dict.keys()
+                ],
             )
             res = dBsig0convert(res, inc, dB, sig0, fit.dB, fit.sig0)
 
@@ -2641,7 +2638,9 @@ class plot:
             # overprint boundaries
             hatches = [r"//", r"\\\\", "+", "oo", "--", ".."]
             colors = ["C" + str(i) for i in range(10)]
-            ax.collections.clear()
+
+            for a in ax.collections:
+                a.remove()
 
             legendhandles = []
             for i, [key_i, key_Q] in enumerate(printvariationQ.items()):
@@ -2715,7 +2714,6 @@ class plot:
                     ]
 
                     if fillcomponents is True:
-
                         legendhandles += [
                             ax.fill_between(
                                 inc,
@@ -2783,7 +2781,9 @@ class plot:
 
             # ax.collections.clear()
             if printvariationQ[label] is True:
-                ax.collections.clear()
+                for a in ax.collections:
+                    a.remove()
+                # ax.collections.clear()
                 printvariationQ[label] = False
             elif printvariationQ[label] is False:
                 printvariationQ[label] = True
@@ -2828,7 +2828,6 @@ class plot:
 
         textboxes_buttons = {}
         for i, [key, val] in enumerate(paramslider.items()):
-
             axbox0 = plt.axes(
                 [
                     val.ax.get_position().x0,
