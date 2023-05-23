@@ -291,7 +291,6 @@ class Fits(Scatter):
         ID="RT1_fit",
         **kwargs,
     ):
-
         self.sig0 = sig0
         self.dB = dB
         self.dataset = self._check_monotonic_dataset_index(dataset)
@@ -366,7 +365,6 @@ class Fits(Scatter):
             and np.all([len(val) == 2 for _, val in self.res_dict.items()])
             and np.all([isinstance(val[0], list) for _, val in self.res_dict.items()])
         ):
-
             log.debug("updating res-dict to new shape...")
             self.res_dict = {key: val[0] for key, val in self.res_dict.items()}
 
@@ -586,7 +584,6 @@ class Fits(Scatter):
         if self.dataset is None:
             return dict()
         else:
-
             # the names of the parameters that will be fitted
             dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
 
@@ -709,7 +706,9 @@ class Fits(Scatter):
     @lru_cache()
     def _param_dyn_monotonic(self):
         """a dict indicating if the param_dyn assignments are monotonic"""
-        return {key: val.is_monotonic for key, val in self.param_dyn_df.items()}
+        return {
+            key: val.is_monotonic_increasing for key, val in self.param_dyn_df.items()
+        }
 
     @property
     @lru_cache()
@@ -1197,7 +1196,6 @@ class Fits(Scatter):
                 and val[2] != "manual"
                 and val[2] != "index"
             ):
-
                 usevals = list(map(str.strip, str(val[2]).split("+")))
                 assert len(usevals) <= 2, (
                     "there are 2 + symbols in "
@@ -1253,7 +1251,6 @@ class Fits(Scatter):
                     if val[2] is not None and "manual" in map(
                         str.strip, str(val[2]).split("+")
                     ):
-
                         assert f"{key}_dyn" in self.dataset, (
                             f"{key}_dyn must be provided in the dataset"
                             + 'if defdict[{key}][2] is set to "manual"'
@@ -1654,7 +1651,6 @@ class Fits(Scatter):
     def _set_calc_values(
         self, R=None, res_dict=None, fixed_dict=None, interp_vals=None, assign=True
     ):
-
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
         #             key, val in self._assignvals(res_dict).items()}
@@ -3034,7 +3030,6 @@ class _MultiAccessors:
     """
 
     def __init__(self, FitContainer):
-
         self._FitContainer = FitContainer
         ignore_keys = ["dataset", "aux_data", "plot"]
 
@@ -3176,7 +3171,6 @@ class MultiFits:
         aux_data=None,
         reader_arg=None,
     ):
-
         self.config_names = []
 
         self.configs = _FitContainer(self)
