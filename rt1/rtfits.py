@@ -2328,10 +2328,9 @@ class Fits(Scatter):
             split_vals = split_into(params, splitpos)
             newdict = dict(zip(self._order, split_vals))
             # calculate the residuals and incorporate data-weighting
-            errs = (
-                self.data_weights
-                * (self._calc_model(R=R, res_dict=newdict) - self.data)
-            )[~self.mask]
+            tot = self._calc_model(R=R, res_dict=newdict)
+
+            errs = (self.data_weights * (tot - self.data))[~self.mask]
 
             if intermediate_results is True:
                 self.intermediate_results["parameters"] += [newdict]
