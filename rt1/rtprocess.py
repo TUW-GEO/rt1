@@ -142,7 +142,6 @@ class RTprocess(object):
         if init_kwargs is None:
             self.init_kwargs = dict()
         else:
-
             assert all(
                 [isinstance(i, str) for i in init_kwargs.values()]
             ), 'the values of "init_kwargs" MUST be strings !'
@@ -150,7 +149,6 @@ class RTprocess(object):
 
     @staticmethod
     def _listener_process(queue, dumppath, log_level=1):
-
         # adapted from https://docs.python.org/3.7/howto/logging-cookbook.html
         # logging-to-a-single-file-from-multiple-processes
         if dumppath is None:
@@ -181,7 +179,6 @@ class RTprocess(object):
 
     @staticmethod
     def _worker_configurer(queue, loglevel=10):
-
         log.debug("configuring worker... ")
         log.setLevel(loglevel)
         h = logging.handlers.QueueHandler(queue)  # Just the one handler needed
@@ -279,7 +276,6 @@ class RTprocess(object):
                     key in self.cfg.config[section]
                     and mp.current_process().name == "MainProcess"
                 ):
-
                     log.warning(
                         f'"{key} = {self.cfg.config[section][key]}" '
                         + "will be overwritten by the definition provided via "
@@ -294,7 +290,6 @@ class RTprocess(object):
         if mp.current_process().name == "MainProcess":
             # init folderstructure and copy files only from main process
             if self.autocontinue is False:
-
                 if self.dumppath.exists():
                     _confirm_input(
                         msg=(
@@ -341,7 +336,6 @@ class RTprocess(object):
         # only import proc_cls if it is not yet set
         # (to allow overriding already set properties during runtime)
         if self._proc_cls is None:
-
             log.debug(
                 f'processing config class "{proc_class_name}"'
                 + f'  will be imported from \n"{procmodule}"'
@@ -377,7 +371,6 @@ class RTprocess(object):
         copypath = self.dumppath / "cfg" / self.cfg.configpath.name
         if mp.current_process().name == "MainProcess":
             if copypath.exists() and len(self.init_kwargs) == 0:
-
                 log.warning(
                     f'the file "{Path(*copypath.parts[-3:])} "'
                     + "already exists... NO copying is performed and the "
@@ -540,7 +533,6 @@ class RTprocess(object):
                 return fit._get_fit_to_hdf_dict(ID=reader_arg.get("_RT1_ID_num", None))
 
         except Exception as ex:
-
             if callable(self.proc_cls.exceptfunc):
                 ex_ret = self.proc_cls.exceptfunc(ex, reader_arg)
 
@@ -739,7 +731,6 @@ class RTprocess(object):
                 dst_path=self.proc_cls.rt1_procsesing_respath / "fit_db.h5",
                 **kwargs,
             ) as w:
-
                 res = w.run_starmap(
                     arg_list=reader_args,
                     process_func=self._evalfunc,
@@ -897,7 +888,6 @@ class RTprocess(object):
                             self.dumppath / "cfg" / f"model_definition__{cfg_name}.txt",
                             "w",
                         ) as file:
-
                             outtxt = ""
                             if hasattr(self.proc_cls, "description"):
                                 outtxt += dedent(self.proc_cls.description)
@@ -914,7 +904,6 @@ class RTprocess(object):
                     with open(
                         self.dumppath / "cfg" / "model_definition.txt", "w"
                     ) as file:
-
                         outtxt = ""
                         if hasattr(self.proc_cls, "description"):
                             outtxt += dedent(self.proc_cls.description)
@@ -954,7 +943,6 @@ class RTprocess(object):
             logging.captureWarnings(False)
 
             if logfile_level is not None:
-
                 # tell the queue to stop
                 queue.put_nowait(None)
 
@@ -1105,7 +1093,6 @@ class RTprocess(object):
                 listener.start()
 
             if fitlist is None:
-
                 # use fits from .dump file if no fitlist is provided
                 fitlist = self._get_files(use_N_files=use_N_files, use_dumps=use_dumps)
             res = self._run_finalout(
@@ -1161,7 +1148,6 @@ class RTprocess(object):
         create_index=True,
         **kwargs,
     ):
-
         pool_kwargs = dict(
             initializer=self._initializer,
             initargs=[None, queue, proc_counter],
@@ -1190,7 +1176,6 @@ class RTprocess(object):
         with RT1_processor.writer_pool(
             n_worker=ncpu, dst_path=save_path, **kwargs
         ) as w:
-
             res = w.run_starmap(
                 arg_list=fitlist,
                 reader_func=self._finalout_reader,
@@ -1325,7 +1310,6 @@ class RTprocess(object):
                 raise ex
 
     def _get_files(self, use_N_files=None, use_dumps=False):
-
         if not hasattr(self, "_useres"):
             self._useres = getattr(
                 RTresults(self.dumppath, use_dumps=use_dumps), self.proc_cls.dumpfolder
@@ -1610,14 +1594,19 @@ class RTprocess(object):
             else:
                 fit._fnevals_input = _fnevals_input
 
-        auxdata = dict()
+        auxdata, staticlayers = dict(), dict()
         if model_keys:
             auxdata = fit.calc_model(return_components=True)[model_keys]
 
         if export_functions:
             for key, func in export_functions.items():
                 if key in parameters:
-                    auxdata[key] = func(fit)
+                    val = func(fit)
+                    if isinstance(val, (int, float, np.number)):
+                        staticlayers[key] = val
+                        parameters.remove(key)
+                    else:
+                        auxdata[key] = val
 
         ret = RTprocess._postprocess_getparams(
             fit=fit,
@@ -1626,6 +1615,7 @@ class RTprocess(object):
             auxdata=pd.DataFrame(auxdata),
             sig_to_dB=sig_to_dB,
             inc_to_degree=inc_to_degree,
+            staticlayers=staticlayers,
         )
 
         # attach metrics if provided
@@ -1710,7 +1700,6 @@ class RTprocess(object):
 
         usedfs = []
         for key in saveparams:
-
             if key == "sig":
                 if fit.dB is False and sig_to_dB:
                     usedfs.append(10.0 * np.log10(fit.dataset.sig))
