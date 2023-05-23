@@ -875,7 +875,7 @@ class HDFaccessor(object):
                 if self.set_ID is True:
                     if isinstance(data.index, pd.MultiIndex):
                         data.index = data.index.set_levels(
-                            self.IDs.loc[data.index.levels[0]].ID, 0
+                            self.IDs.loc[data.index.levels[0]].ID, level=0
                         )
                     else:
                         data["ID"] = self.IDs.loc[data.index]
@@ -923,7 +923,7 @@ class _subselector(object):
         if self._parent().set_ID is True:
             if isinstance(ret.index, pd.MultiIndex):
                 ret.index = ret.index.set_levels(
-                    self._parent().IDs.loc[ret.index.levels[0]].ID, 0
+                    self._parent().IDs.loc[ret.index.levels[0]].ID, level=0
                 )
             else:
                 ret["ID"] = self._parent().IDs.loc[ret.index]
