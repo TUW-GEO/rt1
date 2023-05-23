@@ -132,7 +132,6 @@ class RT1_configparser(object):
     """
 
     def __init__(self, configpath, interpolation=ExtendedInterpolation()):
-
         self.configpath = Path(configpath)
         self.interpolation = interpolation
         # setup config (allow empty values -> will result in None)
@@ -163,7 +162,6 @@ class RT1_configparser(object):
         self._check_integrity()
 
     def _check_integrity(self):
-
         # check if required sections are defined
         required_sections = [
             "PROCESS_SPECS",
@@ -251,7 +249,6 @@ class RT1_configparser(object):
         return parsed_dict
 
     def _parse_V_SRF(self, section):
-
         inp = self.config[section]
 
         parsed_dict = dict()

@@ -237,7 +237,6 @@ class _RT1_variable:
         maxval=None,
         interpQ=None,
     ):
-
         self._name = _var("name", name)
         self._fitQ = _var("fitQ", fitQ)
         self._val = _var("val", val)

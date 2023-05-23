@@ -23,6 +23,8 @@ numfig = True
 # Enable equation-numbering
 math_number_all = True
 numpydoc_show_class_members = False
+
+
 # define a function that adds custom css stylesheet (used to override window-width restrictions)
 # basic idea taken from:  https://samnicholls.net/2016/06/15/how-to-sphinx-readthedocs/
 def setup(app):

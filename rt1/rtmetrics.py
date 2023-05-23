@@ -21,7 +21,6 @@ class _metric_keys(object):
     """
 
     def __init__(self, fit, d1=None, d2=None, auxdat=None):
-
         self._datakeys = fit.dataset.select_dtypes(include="number").keys()
         self._modelkeys = ["tot", "surf", "vol"]
         self._retrievalkeys = fit.res_dict.keys()
@@ -135,7 +134,6 @@ class _RTmetrics0(object):
 
 class _RTmetrics1(object):
     def __init__(self, d1, d2, fit, auxdat, all_keys):
-
         assert d1 in all_keys, f'the key "{d1}" could not be found'
         assert d2 in all_keys, f'the key "{d2}" could not be found'
 
@@ -251,7 +249,6 @@ class _RTmetrics1(object):
 
 
 class RTmetrics(object):
-
     # registry of metric methods used for allmetrics and metrics_table
     # enter the function name of a new metric in here
     # functions listed in here must have two pandas series d1, d2 as parameters

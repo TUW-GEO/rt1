@@ -139,7 +139,6 @@ class RT1(object):
         int_Q=True,
         verbosity=1,
     ):
-
         assert isinstance(geometry, str), (
             "ERROR: geometry must be " + "a 4-character string"
         )
@@ -1682,7 +1681,6 @@ class RT1(object):
 
         jac = []
         for key in param_list:
-
             if key == "omega":
                 jac += [(self._dsurface_domega() + self._dvolume_domega()) * norm]
             elif key == "tau":

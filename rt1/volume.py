@@ -377,7 +377,6 @@ class Volume(Scatter):
 
         # define sympy variables based on chosen geometry
         if geometry == "mono":
-
             assert len(np.unique(p_0)) == 1, (
                 "p_0 must contain only a "
                 + "single unique value for monostatic geometry"
@@ -562,7 +561,6 @@ class LinCombV(Volume):
         # evaluation of combined expansion in legendre-polynomials
         dummylegexpansion = []
         for i in range(0, len(equal_a)):
-
             Vdummy = Phasefunction()
             # select V choices where a parameter is equal
             Vequal = np.take(self.Vchoices, equal_a[i], axis=0)
@@ -571,7 +569,6 @@ class LinCombV(Volume):
             Vdummy.ncoefs = max([V[1].ncoefs for V in Vequal])
             # loop over phase-functions with equal a-parameter
             for V in Vequal:
-
                 # set parameters based on chosen phase-functions and evaluate
                 # combined legendre-expansion
                 Vdummy.a = V[1].a

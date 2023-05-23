@@ -468,7 +468,6 @@ class LinCombSRF(Surface):
     _param_names = ["SRFchoices", "NormBRDF"]
 
     def __init__(self, SRFchoices=None, **kwargs):
-
         super(LinCombSRF, self).__init__(**kwargs)
 
         self.SRFchoices = SRFchoices
@@ -546,7 +545,6 @@ class LinCombSRF(Surface):
         # evaluation of combined expansion in legendre-polynomials
         dummylegexpansion = []
         for i in range(0, len(equal_a)):
-
             SRFdummy = BRDFfunction()
             # select SRF choices where a parameter is equal
             SRFequal = np.take(self.SRFchoices, equal_a[i], axis=0)
@@ -555,7 +553,6 @@ class LinCombSRF(Surface):
             SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])
             # loop over phase-functions with equal a-parameter
             for SRF in SRFequal:
-
                 # set parameters based on chosen phase-functions and evaluate
                 # combined legendre-expansion
                 SRFdummy.a = SRF[1].a

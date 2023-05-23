@@ -22,6 +22,7 @@ from scipy.integrate import simps
  http://stackoverflow.com/questions/20668689/integrating-2d-samples-on-a-rectangular-grid-using-scipy
 """
 
+
 # phase-function definitions in terms of spherical coordinate system angles (NOT zenith-angles)
 def HG(thetai, thetas, phii, phis, t):
     return (

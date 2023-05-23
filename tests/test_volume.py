@@ -83,7 +83,6 @@ class TestVolume(unittest.TestCase):
         plt.close(pl)
 
     def test_V_normalization(self):
-
         V1 = HenyeyGreenstein(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         V2 = HGRayleigh(omega=0.2, tau=1.7, t=0.7, ncoefs=20)
         V3 = Rayleigh(omega=0.2, tau=1.7)
@@ -139,7 +138,6 @@ class TestVolume(unittest.TestCase):
         pincnum = np.linspace(0, 2 * np.pi, 3)
 
         for t_0, t_ex, p_0, p_ex in product(incnum, pincnum, incnum, pincnum):
-
             p = V.p(t_0, t_ex, p_0, p_ex)
             phg = Vhg.p(t_0, t_ex, p_0, p_ex)
             pr = Vr.p(t_0, t_ex, p_0, p_ex)

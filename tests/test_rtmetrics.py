@@ -71,12 +71,10 @@ class TestRTMetrics(unittest.TestCase):
         self.assertAlmostEqual(linregress["stderr"], linregress_expected["stderr"])
 
     def test_fit_metric(self):
-
         fit = self.mock_fit()
 
         # loop through all possible parameter combinations
         for [p1, s1], [p2, s2] in combinations(fit.metric._all_keys.items(), 2):
-
             metric_fit_params = getattr(getattr(fit.metric, p1), p2)
 
             # loop through all possible metrics

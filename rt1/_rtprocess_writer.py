@@ -637,7 +637,6 @@ class RT1_processor(object):
         return res
 
     def stop(self, writer, combiner, manager):
-
         # initialize shutdown
         self.should_stop.set()
         print()  # newline

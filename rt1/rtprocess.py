@@ -141,12 +141,12 @@ class RTprocess(object):
         self.autocontinue = autocontinue
 
         self.copy = copy
-        
+
         if hdf_export_kwargs is None:
             self.hdf_export_kwargs = dict()
         else:
             self.hdf_export_kwargs = hdf_export_kwargs
-        
+
         self._proc_cls = proc_cls
         self._parent_fit = parent_fit
         if init_kwargs is None:
@@ -509,8 +509,7 @@ class RTprocess(object):
                     )
 
                 return self.parent_fit._get_fit_to_hdf_dict(
-                    ID=reader_arg.get("_RT1_ID_num", None),
-                    **self.hdf_export_kwargs
+                    ID=reader_arg.get("_RT1_ID_num", None), **self.hdf_export_kwargs
                 )
 
             else:
@@ -542,8 +541,8 @@ class RTprocess(object):
                     )
 
                 return fit._get_fit_to_hdf_dict(
-                    ID=reader_arg.get("_RT1_ID_num", None),
-                    **self.hdf_export_kwargs)
+                    ID=reader_arg.get("_RT1_ID_num", None), **self.hdf_export_kwargs
+                )
 
         except Exception as ex:
             if callable(self.proc_cls.exceptfunc):

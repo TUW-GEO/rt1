@@ -62,7 +62,6 @@ class rt1_processing_config(object):
     """
 
     def __init__(self, **kwargs):
-
         if "save_path" in kwargs and "dumpfolder" in kwargs:
             parentpath = Path(kwargs["save_path"]) / kwargs["dumpfolder"]
 

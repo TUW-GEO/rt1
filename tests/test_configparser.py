@@ -119,7 +119,6 @@ class TestCONFIGPARSER(unittest.TestCase):
         process_specs_parsed = cfg.get_process_specs()
 
         for key, val in process_specs.items():
-
             parsedval = process_specs_parsed[key]
 
             assert key in process_specs_parsed, f"error in PROCESS_SPECS {key}"

@@ -81,7 +81,6 @@ class TestRTfits(unittest.TestCase):
         ).exists(), "copying did not work"
 
     def test_1_rtresults(self):
-
         results = RTresults("tests/proc_test")
         dumpresults = RTresults("tests/proc_test", use_dumps=True)
 
@@ -256,7 +255,6 @@ class TestRTfits(unittest.TestCase):
         ).exists(), "copying did not work"
 
     def test_5_multiconfig(self):
-
         config_path = Path(__file__).parent.absolute() / "test_config_multi.ini"
         reader_args = [dict(ID=i) for i in [1, 2, 3, 4]]
 
@@ -380,7 +378,6 @@ class TestRTfits(unittest.TestCase):
             )
 
             for export_name in ["export_ncpu1", "export_ncpu3"]:
-
                 data = res.load_hdf(export_name)
 
                 # check if all ID's are present in the HDF-container

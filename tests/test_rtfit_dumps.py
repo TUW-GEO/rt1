@@ -26,9 +26,7 @@ class TestDUMPS(unittest.TestCase):
         return fit
 
     def test_rtplots(self):
-
         for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID], ["dB", "linear"]):
-
             print(f"testing plotfunctions for {msg} fit")
             fit = self.load_data(ID)
 
@@ -119,7 +117,6 @@ class TestDUMPS(unittest.TestCase):
 
     def test_performfit(self):
         for ID, msg in zip([self.sig0_dB_ID, self.sig0_linear_ID], ["dB", "linear"]):
-
             print(f"testing plotfunctions for {msg} fit")
             fit = self.load_data(ID)
 

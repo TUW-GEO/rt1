@@ -128,7 +128,6 @@ def stop_log_to_file(name="rt1_filehandler"):
 
 class WrappedFixedIndentingLog(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, style="%", indent=4):
-
         usefmt = "%(asctime)s - " + fmt
 
         super().__init__(fmt=usefmt, datefmt=datefmt, style=style)
@@ -207,7 +206,6 @@ def _get_logger_formatter(simple=True, colored=False):
 def setup_logger(
     log_name="rt1", console_out=True, console_level=21, simple=True, colored=_colored
 ):
-
     logger = logging.getLogger(log_name)
 
     # check if the logger has a Handler, if yes, it's an already existing

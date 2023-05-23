@@ -2875,7 +2875,12 @@ class Fits(Scatter):
         return df
 
     def _get_fit_to_hdf_dict(
-        self, save_results=True, save_res_df=True, save_data=True, save_auxdata=True, ID=None
+        self,
+        save_results=True,
+        save_res_df=True,
+        save_data=True,
+        save_auxdata=True,
+        ID=None,
     ):
         """
         return a dict of pandas-dataframes suitable to fully re-create
@@ -3005,7 +3010,11 @@ class Fits(Scatter):
                 if isinstance(self, MultiFits):
                     df = pd.concat(
                         i[1]
-                        for i in self.apply(lambda fit: pd.concat([fit.res_df], keys=[fit.config_name], names=["cfg"]))
+                        for i in self.apply(
+                            lambda fit: pd.concat(
+                                [fit.res_df], keys=[fit.config_name], names=["cfg"]
+                            )
+                        )
                     )
                     df = pd.concat([df], names=["ID"], keys=[ID])
                 else:

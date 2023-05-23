@@ -434,7 +434,6 @@ class RTresults(object):
                         and entry.is_file()
                         and "error" not in entry.name
                     ):
-
                         yield entry.path
             else:
                 for ID in self.fit_db.IDs.ID:
@@ -455,7 +454,6 @@ class RTresults(object):
                         and entry.is_file()
                         and "error" not in entry.name
                     ):
-
                         yield self.load_fit(entry.name)
             else:
                 for ID in self.fit_db.IDs.ID:
@@ -630,7 +628,6 @@ class HDFaccessor(object):
             if "cfg" in init_dict.index.names:
                 mf = MultiFits()
                 for cfg, cfg_attrs in init_dict.loc[ID].iterrows():
-
                     attrs = {key: literal_eval(val) for key, val in cfg_attrs.items()}
 
                     fit = Fits(**attrs)
