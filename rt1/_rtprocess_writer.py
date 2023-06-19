@@ -167,7 +167,7 @@ class RT1_processor(object):
 
         if self.p_meancnt.value == 0:
             title = f"{'estimating time ...':<28}"
-            p_max = 1
+            p_max = self.p_max.value if self.p_max.value else p_totcnt + 1
             meantime = 0
         else:
             end = default_timer()
@@ -256,6 +256,7 @@ class RT1_processor(object):
                         val = self.queue.get(timeout=5)
                         if val is None:
                             log.debug("ignored a None in the queue")
+                            self._increase_cnt(err=True)
                             continue
                     except QueueEmpty:
                         break
@@ -469,6 +470,9 @@ class RT1_processor(object):
             else:
                 log.warning(f"loading {args} resulted in None... skipping")
         except Exception:
+            # put None in the queue to indicate an erroneous fit
+            self.queue.put(None)
+
             print()
             log.error(f"problem while processing \n{args}", exc_info=True)
 
