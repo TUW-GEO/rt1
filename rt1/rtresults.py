@@ -886,8 +886,10 @@ class HDFaccessor(object):
 
             if print_progress:
                 print("reading", (i + 1) * read_chunksize)
-        # make sure to return the last results (possibly less than the read-chunksize)
-        yield pd.concat(ret)
+
+        if len(ret) > 0:
+            # make sure to return the last results (maybe less than the read-chunksize)
+            yield pd.concat(ret)
 
 
 class _data_container(object):
