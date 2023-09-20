@@ -1,6 +1,7 @@
 """a module to parse .ini files"""
 
 from configparser import ConfigParser, ExtendedInterpolation
+from collections import defaultdict
 from datetime import datetime
 from functools import partial
 import sys
@@ -131,7 +132,6 @@ class RT1_configparser(object):
     """
 
     def __init__(self, configpath, interpolation=ExtendedInterpolation()):
-
         self.configpath = Path(configpath)
         self.interpolation = interpolation
         # setup config (allow empty values -> will result in None)
@@ -162,7 +162,6 @@ class RT1_configparser(object):
         self._check_integrity()
 
     def _check_integrity(self):
-
         # check if required sections are defined
         required_sections = [
             "PROCESS_SPECS",
@@ -250,14 +249,19 @@ class RT1_configparser(object):
         return parsed_dict
 
     def _parse_V_SRF(self, section):
-
         inp = self.config[section]
 
         parsed_dict = dict()
         for key in inp:
             val = None
-            if key == "ncoefs":
+            if key == "ncoefs" or key[1:] == "__ncoefs":
                 val = inp.getint(key)
+            elif key == "a" or key[1:] == "__a":
+                val = inp[key]
+                if val.startswith("[") and val.endswith("]"):
+                    val = list(map(float, val[1:-1].replace(" ", "").split(",")))
+                else:
+                    assert False, f"the passed V/SRF value for {key} is not a list"
             else:
                 # try to convert floats, if it fails return the string
                 try:
@@ -267,6 +271,20 @@ class RT1_configparser(object):
 
             parsed_dict[key] = val
 
+        for prefix in ["V", "SRF"]:
+            if (
+                f"{prefix}_name" in parsed_dict
+                and parsed_dict[f"{prefix}_name"] == f"LinComb{prefix}"
+            ):
+                choices = defaultdict(lambda: [1, dict()])
+                for key in list(parsed_dict):
+                    if key[0].isupper() and key[1:].startswith("__"):
+                        if key.endswith("__frac"):
+                            choices[key[0]][0] = parsed_dict.pop(key)
+                        else:
+                            choices[key[0]][1][key[3:]] = parsed_dict.pop(key)
+
+                parsed_dict[f"{prefix}choices"] = list(choices.values())
         return parsed_dict
 
     def _parse_defdict(self, section):

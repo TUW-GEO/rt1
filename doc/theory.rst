@@ -1,7 +1,7 @@
 Theory
 ======
 
-The RT1 module provides a method for calculating the scattered radiation from a 
+The RT1 module provides a method for calculating the scattered radiation from a
 uniformly illuminated rough surface covered by a homogeneous layer of tenuous media.
 The following sections are intended to give a general overview of the underlying theory of the
 RT1 module. A more general discussion on the derivation of the used results can be found in [QuWa16]_.
@@ -10,7 +10,7 @@ within the RT1-module are given in :ref:`cha_model_specification`.
 
 
 
-The utilized theoretical framework is based on applying the Radiative Transfer Equation (RTE) :eq:`RTE` to 
+The utilized theoretical framework is based on applying the Radiative Transfer Equation (RTE) :eq:`RTE` to
 the geometry shown in :numref:`problem_geometry`.
 
 .. math::
@@ -29,14 +29,14 @@ The individual variables are hereby defined as follows:
 - :math:`\hat{p}(\theta,\phi,\theta',\phi')` denotes the scattering phase-function of the constituents of the covering layer
 
 .. note::
-	To remain consistent with [QuWa16]_, the arguments of the functions :math:`\hat{p}(\theta,\phi,\theta',\phi')` and :math:`BRDF(\theta,\phi,\theta',\phi')` are defined as angles 
+	To remain consistent with [QuWa16]_, the arguments of the functions :math:`\hat{p}(\theta,\phi,\theta',\phi')` and :math:`BRDF(\theta,\phi,\theta',\phi')` are defined as angles
 	with respect to a spherical coordinate system in the following discussion. Within the RT1-module however, the functions are defined with respect to the associated zenith-angles!
- 
+
 	A relationship between the module-functions and the functions within the subsequent discussion is therefore given by:
- 
+
 	:code:`SRF.brdf(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~BRDF(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex}) \quad` and :math:`\mbox{}\quad` :code:`V.p(t_0,t_ex,p_0,p_ex)` :math:`\hat{=} ~\hat{p}(\pi - \theta_0, \phi_0, \theta_{ex},\phi_{ex})`
 
- 
+
 
 
 Problem Geometry and Boundary Conditions
@@ -73,7 +73,7 @@ The superscripts :math:`I^\pm` hereby indicate a separation between upwelling :m
 
 The additional specifications of the covering layer and the ground surface are summarized as follows:
 
-   
+
 Parameters used to describe the scattering properties of the covering layer
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
@@ -82,7 +82,7 @@ Parameters used to describe the scattering properties of the covering layer
 
 .. math::
    \hat{p}(\theta,\phi,\theta',\phi') \qquad \textrm{with} \qquad   \int\limits_0^{2\pi} ~ \int\limits_{0}^{\pi} \hat{p}(\theta,\phi,\theta',\phi') \sin(\theta') d\theta' d\phi' = 1
-   
+
 **Optical Depth:**
 
 .. math::
@@ -111,7 +111,7 @@ Parameters used to describe the scattering properties of the ground surface
 where :math:`R(\theta,\phi)` denotes the **Directional-Hemispherical Reflectance** of the ground surface.
 
 TBD: perhaps describe also normalization conditions for p and BRDF
-   
+
 First-order solution to the RTE
 --------------------------------
 
@@ -127,7 +127,7 @@ where the individual terms (representing the contributions to the scattered inte
 - :math:`I_{\textrm{volume}}`: radiation scattered once within the covering layer
 - :math:`I_{\textrm{interaction}}`: radiation scattered once by the ground surface and once within the covering layer
 - :math:`I_{svs}`: radiation scattered twice by the ground surface and once within the covering layer
-      (This contribution is assumed to be negligible due to the occurrence of second order surface-scattering) 
+      (This contribution is assumed to be negligible due to the occurrence of second order surface-scattering)
 
 After some algebraic manipulations the individual contributions are found to be given by (details can be found in [QuWa16]_):
 
@@ -151,17 +151,17 @@ After some algebraic manipulations the individual contributions are found to be 
 Evaluation of the interaction-contribution
 -------------------------------------------
 
-In order to analytically evaluate the remaining integral appearing in the interaction-term, the BRDF and the scattering phase-function of the covering layer are approximated via a 
+In order to analytically evaluate the remaining integral appearing in the interaction-term, the BRDF and the scattering phase-function of the covering layer are approximated via a
 Legendre-series in a (possibly generalized) scattering angle of the form:
 
 .. math::
-   BRDF(\theta, \phi, \theta_{s}, \phi_{s}) = \sum_{n=0}^{N_b} b_n P_n(\cos(\Theta_{a_b})) 
+   BRDF(\theta, \phi, \theta_{s}, \phi_{s}) = \sum_{n=0}^{N_b} b_n P_n(\cos(\Theta_{a_b}))
    :label: brdf_expansion
 
 .. math::
-   \hat{p}(\theta, \phi, \theta_{s}, \phi_{s}) = \sum_{n=0}^{N_p} p_n P_n(\cos(\Theta_{a_p})) 
+   \hat{p}(\theta, \phi, \theta_{s}, \phi_{s}) = \sum_{n=0}^{N_p} p_n P_n(\cos(\Theta_{a_p}))
    :label: p_expansion
-   
+
 where :math:`P_n(x)` denotes the :math:`\textrm{n}^\textrm{th}` Legendre-polynomial and the generalized scattering angle :math:`\Theta_a` is defined via:
 
 .. math::
@@ -171,7 +171,7 @@ where :math:`P_n(x)` denotes the :math:`\textrm{n}^\textrm{th}` Legendre-polynom
 where :math:`\theta ,\phi` are the polar- and azimuth-angles of the incident radiation, :math:`\theta_{s}, \phi_{s}` are the polar- and azimuth-angles of the scattered radiation and :math:`a_1,a_2` and :math:`a_3`
 are constants that allow consideration of off-specular and anisotropic effects within the approximations.
 
- 
+
 Once the :math:`b_n` and :math:`p_n` coefficients are known, the method developed in [QuWa16]_ is used to analytically solve :math:`I_{\textrm{interaction}}`.
 
 This is done in two steps:
@@ -215,4 +215,4 @@ Second, :math:`I_{\textrm{interaction}}` is evaluated using the analytic solutio
 
 
 .. rubric:: References
-.. [QuWa16]  R.Quast and W.Wagner, "Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media," Appl.Opt.55, 5379-5386 (2016) 
+.. [QuWa16]  R.Quast and W.Wagner, "Analytical solution for first-order scattering in bistatic radiative transfer interaction problems of layered media," Appl.Opt.55, 5379-5386 (2016)

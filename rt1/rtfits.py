@@ -19,6 +19,7 @@ from .general_functions import (
     split_into,
     update_progress,
     groupby_unsorted,
+    isidentifier,
 )
 
 from .rtplots import plot as rt1_plots
@@ -28,17 +29,23 @@ from . import volume as rt1_v
 from . import __version__ as _RT1_version
 from . import log
 from .rtmetrics import _metric_keys
+from ._containers import _RT1_defdict
 
 import copy
 from itertools import repeat, count, chain, groupby
 from functools import lru_cache, partial, wraps, update_wrapper
 from operator import itemgetter, add, methodcaller
 from datetime import datetime
+from pathlib import Path
 
 try:
     import cloudpickle
 except ModuleNotFoundError:
     log.warning("cloudpickle could not be imported, .dump() will not work!")
+
+
+def _check_multi(fit):
+    return fit.__class__.__name__ == "MultiFits"
 
 
 def load(path):
@@ -57,6 +64,16 @@ def load(path):
 
     with open(path, "rb") as file:
         fit = pd.read_pickle(file)
+    if not hasattr(fit, "ID") or fit.ID is None:
+        if _check_multi(fit):
+            fit.set_ID(Path(path).stem)
+        else:
+            fit.ID = Path(path).stem
+
+    if _check_multi(fit):
+        fit.set_dataset(fit.dataset)
+        fit.set_aux_data(fit.aux_data)
+        fit.set_reader_arg(fit.reader_arg)
 
     return fit
 
@@ -198,12 +215,6 @@ class Fits(Scatter):
                     interaction-term
                     -> use with care! you must ensure that the provided
                     function evaluates correctly for the used definitions
-    _interp_vals: list, optional
-                  a list of keys corresponding to parameters whose values
-                  should be quadratically interpolated over the timespan
-                  instead of using a step-function that assigns the obtained
-                  value equally to all observations within the timespan.
-                  -> use with care! this might cause unexpected behaviour!
     verbose : int, optional
               the verbosity of the print-outputs (also passed to
               scipy.optimize.least_squares and rt1.RT1)
@@ -277,14 +288,14 @@ class Fits(Scatter):
         lambda_backend=None,
         _fnevals_input=None,
         verbose=2,
+        ID="RT1_fit",
         **kwargs,
     ):
-
         self.sig0 = sig0
         self.dB = dB
         self.dataset = self._check_monotonic_dataset_index(dataset)
         self.set_V_SRF = copy.deepcopy(set_V_SRF)
-        self.defdict = copy.deepcopy(defdict)
+
         if lsq_kwargs is None:
             self.lsq_kwargs = dict()
         else:
@@ -300,8 +311,31 @@ class Fits(Scatter):
 
         self.verbose = verbose
 
+        self.ID = ID
+
         # add plotfunctions
         self.plot = rt1_plots(self)
+
+        if defdict is None:
+            self._defdict = _RT1_defdict()
+        else:
+            self.defdict = defdict
+
+    @property
+    def defdict(self):
+        return self._defdict
+
+    @defdict.setter
+    def defdict(self, d):
+        if isinstance(d, _RT1_defdict):
+            self._defdict = d
+        elif d is None:
+            self._defdict = _RT1_defdict()
+        else:
+            if isinstance(d, (dict, pd.DataFrame)):
+                self._defdict = _RT1_defdict.from_dict(d)
+            else:
+                raise TypeError("defdicts can only be parsed from dicts!")
 
     def __update__(self):
         """needed for downward compatibility"""
@@ -331,7 +365,6 @@ class Fits(Scatter):
             and np.all([len(val) == 2 for _, val in self.res_dict.items()])
             and np.all([isinstance(val[0], list) for _, val in self.res_dict.items()])
         ):
-
             log.debug("updating res-dict to new shape...")
             self.res_dict = {key: val[0] for key, val in self.res_dict.items()}
 
@@ -357,12 +390,13 @@ class Fits(Scatter):
                 returndict[key] = None
 
             # save only a minimal subset of the fit-output
-            if hasattr(self, "fit_output"):
-                fit_props = dict()
-                fit_props["fit_success"] = self.fit_output.success
-                fit_props["fit_status"] = self.fit_output.status
-                fit_props["fit_optimality"] = self.fit_output.optimality
-
+            fit_props = dict()
+            if hasattr(self, "fit_output") and self.fit_output is not None:
+                for key in ["success", "status", "optimality"]:
+                    try:
+                        fit_props[f"fit_{key}"] = getattr(self.fit_output, key)
+                    except AttributeError:
+                        continue
             returndict["fit_output"] = fit_props
 
             return returndict
@@ -381,6 +415,18 @@ class Fits(Scatter):
         super().__setattr__(attr, value)
 
     @property
+    def ID(self):
+        return self._ID
+
+    @ID.setter
+    def ID(self, ID):
+        if not isidentifier(str(ID)):
+            self._ID = f"RT1_{ID}"
+            log.debug(f"'{ID}' is not a valid identifier - using '{self._ID}'")
+        else:
+            self._ID = str(ID)
+
+    @property
     def dataset(self):
         return self._dataset
 
@@ -395,7 +441,7 @@ class Fits(Scatter):
             return None
 
         if not dataset.index.is_monotonic_increasing:
-            log.warning("dataset has been sorted to ensure a monotonic index!")
+            log.info("dataset has been sorted to ensure a monotonic index!")
             return dataset.sort_index()
         else:
             return dataset
@@ -427,8 +473,10 @@ class Fits(Scatter):
             "_param_dyn_monotonic",
             "_get_excludesymbs",
             "metric",
-            "V", "SRF", "set_model",
-            "_assignvals_log_message"
+            "V",
+            "SRF",
+            "set_model",
+            "_assignvals_log_message",
         ]
 
         for i in ["tau", "omega", "N"]:
@@ -536,10 +584,8 @@ class Fits(Scatter):
         if self.dataset is None:
             return dict()
         else:
-
             # the names of the parameters that will be fitted
-            dyn_keys = [key for key, val in self.defdict.items()
-                        if val[0] is True]
+            dyn_keys = [key for key, val in self.defdict.items() if val[0] is True]
 
             # set frequencies of fitted parameters
             # (group by similar frequencies)
@@ -660,7 +706,9 @@ class Fits(Scatter):
     @lru_cache()
     def _param_dyn_monotonic(self):
         """a dict indicating if the param_dyn assignments are monotonic"""
-        return {key: val.is_monotonic for key, val in self.param_dyn_df.items()}
+        return {
+            key: val.is_monotonic_increasing for key, val in self.param_dyn_df.items()
+        }
 
     @property
     @lru_cache()
@@ -671,19 +719,18 @@ class Fits(Scatter):
         """
 
         # find the max. length of the parameters
-        maxdict = {key: len(str(max(val)))
-                   for key, val in self.param_dyn_dict.items()}
+        maxdict = {key: len(str(max(val))) for key, val in self.param_dyn_dict.items()}
         # find the max. length of the parameters
 
         def doit(x, N):
             return str(x).zfill(N)
 
+        conclist = list()
         for i, [key, val] in enumerate(self.param_dyn_dict.items()):
             if i == 0:
                 conclist = list(map(partial(doit, N=maxdict[key]), val))
             else:
-                conclist = map(add, conclist, map(
-                    partial(doit, N=maxdict[key]), val))
+                conclist = map(add, conclist, map(partial(doit, N=maxdict[key]), val))
         return np.array(list(map(int, conclist)))
 
     @property
@@ -700,8 +747,10 @@ class Fits(Scatter):
             return
         # don't use keys that are not provided in defdict
         # (e.g. "param_dyn" keys and additional datasets irrelevant to the fit)
-        usekeys = ["sig", "inc"] + \
-            [key for key in self.defdict if key in self.dataset]
+        # always attach "sig" and "inc" keys
+
+        usekeys = list({*self.defdict, "sig", "inc"} & set(self.dataset))
+
         if "data_weights" in self.dataset:
             usekeys += ["data_weights"]
 
@@ -713,7 +762,14 @@ class Fits(Scatter):
                 key=itemgetter(0),
                 get=itemgetter(1),
             )
-        df = pd.DataFrame(df).rename(columns={"index": "orig_index"})
+
+        # make sure "orig_index" is correctly renamed in case
+        # the index-column has been explicitly re-named
+        indexname = (
+            self.dataset.index.name if self.dataset.index.name is not None else "index"
+        )
+
+        df = pd.DataFrame(df).rename(columns={indexname: "orig_index"})
         return df
 
     @property
@@ -978,8 +1034,7 @@ class Fits(Scatter):
         """indices of each parameter-group (to re-assign to the data-index)"""
         assigndict = dict()
         for key, val in self.param_dyn_dict.items():
-            assigndict[key] = groupby_unsorted(
-                range(len(val)), key=lambda x: val[x])
+            assigndict[key] = groupby_unsorted(range(len(val)), key=lambda x: val[x])
 
         return assigndict
 
@@ -1066,8 +1121,7 @@ class Fits(Scatter):
                     )
                     meanstartvals = list(
                         groupby_unsorted(
-                            zip(self._groupindex,
-                                self.dataset[key + "_start"]),
+                            zip(self._groupindex, self.dataset[key + "_start"]),
                             key=itemgetter(0),
                             get=itemgetter(1),
                         ).values()
@@ -1142,7 +1196,6 @@ class Fits(Scatter):
                 and val[2] != "manual"
                 and val[2] != "index"
             ):
-
                 usevals = list(map(str.strip, str(val[2]).split("+")))
                 assert len(usevals) <= 2, (
                     "there are 2 + symbols in "
@@ -1181,7 +1234,7 @@ class Fits(Scatter):
                     # set manual parameter dynamics
                     assert f"{key}_dyn" in self.dataset, (
                         f"{key}_dyn must be provided in the dataset"
-                        + 'if defdict[{key}][2] is set to "manual"'
+                        + ' if defdict[{key}][2] is set to "manual"'
                     )
 
                     manual_dyn_df[f"{key}"] = self.dataset[f"{key}_dyn"]
@@ -1198,7 +1251,6 @@ class Fits(Scatter):
                     if val[2] is not None and "manual" in map(
                         str.strip, str(val[2]).split("+")
                     ):
-
                         assert f"{key}_dyn" in self.dataset, (
                             f"{key}_dyn must be provided in the dataset"
                             + 'if defdict[{key}][2] is set to "manual"'
@@ -1239,9 +1291,8 @@ class Fits(Scatter):
         vsymb = self._Vsymb - angset
         srfsymb = self._SRFsymb - angset
 
-        paramset = (
-            set(map(str, self._startvaldict.keys()))
-            ^ set(map(str, self.fixed_dict.keys()))
+        paramset = set(map(str, self._startvaldict.keys())) ^ set(
+            map(str, self.fixed_dict.keys())
         )
 
         assert paramset >= (vsymb | srfsymb), (
@@ -1268,8 +1319,7 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             V, _ = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            V = self._init_V_SRF(
-                self.set_V_SRF["V_props"], setdict=self._setdict)
+            V = self._init_V_SRF(self.set_V_SRF["V_props"], setdict=self._setdict)
         return V
 
     @property
@@ -1281,8 +1331,7 @@ class Fits(Scatter):
         if callable(self.set_V_SRF):
             _, SRF = self.set_V_SRF(**self._setdict)
         elif isinstance(self.set_V_SRF, dict):
-            SRF = self._init_V_SRF(
-                self.set_V_SRF["SRF_props"], setdict=self._setdict)
+            SRF = self._init_V_SRF(self.set_V_SRF["SRF_props"], setdict=self._setdict)
         return SRF
 
     @property
@@ -1320,8 +1369,7 @@ class Fits(Scatter):
     def _get_V_SRF_symbs(self, V_SRF, prop):
         """the symbols used to define tau, omega and NormBRDF of V and SRF"""
         try:
-            symbs = list(
-                map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
+            symbs = list(map(str, getattr(getattr(self, V_SRF), prop).free_symbols))
         except Exception:
             symbs = list()
         return symbs
@@ -1418,8 +1466,7 @@ class Fits(Scatter):
             vals[key] = val[~self.mask]
 
         resdf = (
-            pd.DataFrame(vals, list(chain(*self._orig_index))
-                         ).groupby(level=0).first()
+            pd.DataFrame(vals, list(chain(*self._orig_index))).groupby(level=0).first()
         )
 
         return resdf
@@ -1496,8 +1543,7 @@ class Fits(Scatter):
                     self._assignvals_log_message("interp_non_mono", key)
                     # use assignments for unsorted param_dyns
                     useindex = self._meandt_interp_assigns(key)[0]
-                    usevals = np.array(
-                        val)[self._meandt_interp_assigns(key)[1]]
+                    usevals = np.array(val)[self._meandt_interp_assigns(key)[1]]
                 else:
                     useindex = self.meandatetimes[key]
                     usevals = val
@@ -1602,9 +1648,9 @@ class Fits(Scatter):
 
         return excludekeys
 
-    def _set_calc_values(self, R=None, res_dict=None, fixed_dict=None, interp_vals=None,
-                         assign=True):
-
+    def _set_calc_values(
+        self, R=None, res_dict=None, fixed_dict=None, interp_vals=None, assign=True
+    ):
         # ensure correct array-processing
         # res_dict = {key:val[:,np.newaxis] for
         #             key, val in self._assignvals(res_dict).items()}
@@ -1619,7 +1665,10 @@ class Fits(Scatter):
                 R.V.omega = res_dict["omega"]
         else:
             R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._omega_symb
+                }
             )
 
         if self._tau_func is None:
@@ -1627,14 +1676,21 @@ class Fits(Scatter):
                 R.V.tau = res_dict["tau"]
         else:
             R.V.tau = self._tau_func(
-                **{key: res_dict[key] for key in self._tau_symb})
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._tau_symb
+                }
+            )
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
                 R.SRF.NormBRDF = res_dict["NormBRDF"]
         else:
             R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._N_symb
+                }
             )
 
         if "bsf" in res_dict:
@@ -1646,7 +1702,9 @@ class Fits(Scatter):
         # and the symbols used to define them must be removed)
 
         strparam_fn = {
-            str(key): val for key, val in res_dict.items() if key not in self._get_excludesymbs
+            str(key): val
+            for key, val in res_dict.items()
+            if key not in self._get_excludesymbs
         }
 
         # set the param-dict to the newly generated dict
@@ -1707,10 +1765,13 @@ class Fits(Scatter):
         if interp_vals is None:
             interp_vals = self.interp_vals
 
-        R = self._set_calc_values(R=R, res_dict=res_dict,
-                                  fixed_dict=fixed_dict,
-                                  interp_vals=interp_vals,
-                                  assign=assign)
+        R = self._set_calc_values(
+            R=R,
+            res_dict=res_dict,
+            fixed_dict=fixed_dict,
+            interp_vals=interp_vals,
+            assign=assign,
+        )
 
         # calculate total backscatter-values
         if return_components is True:
@@ -1772,10 +1833,13 @@ class Fits(Scatter):
         if order is None:
             order = self._order
 
-        R = self._set_calc_values(R=R, res_dict=res_dict,
-                                  fixed_dict=fixed_dict,
-                                  interp_vals=interp_vals,
-                                  assign=True)
+        R = self._set_calc_values(
+            R=R,
+            res_dict=res_dict,
+            fixed_dict=fixed_dict,
+            interp_vals=interp_vals,
+            assign=True,
+        )
 
         # if tau, omega or NormBRDF have been provided in terms of symbols,
         # remove the symbols that are intended to be fitted (that are also
@@ -1832,7 +1896,10 @@ class Fits(Scatter):
             # df/dx = df/dtau * dtau/dx = df/dtau * d_inner
             # evaluate the inner derivative
             df_dx = self._tau_diff_func[i](
-                **{key: res_dict[key] for key in self._tau_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._tau_symb
+                }
             )
             if not np.isscalar(df_dx):
                 # flatten the array (except if it is a scalar)
@@ -1848,7 +1915,10 @@ class Fits(Scatter):
         # same for omega
         for i in set(self._omega_symb) & set(param_dyn_dict.keys()):
             df_dx = self._omega_diff_func[i](
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._omega_symb
+                }
             )
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
@@ -1861,7 +1931,11 @@ class Fits(Scatter):
         # same for NormBRDF
         for i in set(self._N_symb) & set(param_dyn_dict.keys()):
             df_dx = self._N_diff_func[i](
-                **{key: res_dict[key] for key in self._N_symb})
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._N_symb
+                }
+            )
             if not np.isscalar(df_dx):
                 df_dx = np.fromiter(chain(*df_dx), dtype=float, count=jac_size)
 
@@ -1910,7 +1984,7 @@ class Fits(Scatter):
                 return rectangularize(self._dataset_used[prop].values)
             elif prop == "mask":
                 _, mask = rectangularize(
-                    self._dataset_used.inc.values, return_mask=True
+                    self._dataset_used.orig_index.values, return_mask=True
                 )
                 if prop == "mask":
                     return mask
@@ -1979,7 +2053,10 @@ class Fits(Scatter):
                 R.V.omega = res_dict["omega"]
         else:
             R.V.omega = self._omega_func(
-                **{key: res_dict[key] for key in self._omega_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._omega_symb
+                }
             )
 
         if self._tau_func is None:
@@ -1987,14 +2064,21 @@ class Fits(Scatter):
                 R.V.tau = res_dict["tau"]
         else:
             R.V.tau = self._tau_func(
-                **{key: res_dict[key] for key in self._tau_symb})
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._tau_symb
+                }
+            )
 
         if self._N_func is None:
             if "NormBRDF" in res_dict:
                 R.SRF.NormBRDF = res_dict["NormBRDF"]
         else:
             R.SRF.NormBRDF = self._N_func(
-                **{key: res_dict[key] for key in self._N_symb}
+                **{
+                    key: res_dict[key] if key in res_dict else fixed_dict[key]
+                    for key in self._N_symb
+                }
             )
 
         if "bsf" in res_dict:
@@ -2084,9 +2168,7 @@ class Fits(Scatter):
         SRF : a function of rt1.surface
             the used surface-scattering function.
         """
-
-        if setdict is None:
-            setdict = dict()
+        ignore_keys = ["omega", "tau", "NormBRDF", "bsf"]
 
         assert (
             "V_name" in props or "SRF_name" in props
@@ -2095,14 +2177,13 @@ class Fits(Scatter):
             "V_name" in props and "SRF_name" in props
         ), 'provide either "V_name" or "SRF_name" not both!'
 
-        ignore_keys = ['omega', 'tau', 'NormBRDF', 'bsf']
+        if setdict is None:
+            setdict = dict()
 
         set_dict = dict()
         free_symbols = set()
-        for key, val in props.items():
-            if key == "V_name" or key == "SRF_name":
-                continue
 
+        def checkval(key, val):
             # check if val is directly provided in setdict, if yes use it
             # (e.g. this means the key is simply another name for a parameter
             # and not an  equation)
@@ -2119,7 +2200,7 @@ class Fits(Scatter):
             # then replace them by the corresponding values in setdict
             else:
                 # convert to sympy expression (check doc for use of _clash)
-                useval = sp.sympify(val, _clash)
+                useval = sp.sympify(val, _clash, evaluate=False)
                 # in case parts of the expression are provided in setdict,
                 # replace them with the provided values
                 replacements = dict()
@@ -2130,6 +2211,29 @@ class Fits(Scatter):
 
                 if key not in ignore_keys:
                     free_symbols.update(set(useval.free_symbols))
+            return useval
+
+        # deal with linear-combinations
+        for prefix in ["V", "SRF"]:
+            if f"{prefix}_name" in props and props[f"{prefix}_name"].startswith(
+                f"LinComb{prefix}"
+            ):
+                choices = []
+                for val, initdict in props[f"{prefix}choices"]:
+                    useval = checkval(val, val)
+
+                    choices.append([useval, self._init_V_SRF(initdict)])
+
+                set_dict[f"{prefix}choices"] = choices
+
+        for key, val in props.items():
+            if key in ["V_name", "SRF_name", "SRFchoices", "Vchoices"]:
+                continue
+            if key in ["a"]:
+                # use the values directly without checking anything
+                set_dict[key] = val
+                continue
+            useval = checkval(key, val)
             set_dict[key] = useval
 
         if "V_name" in props:
@@ -2224,10 +2328,9 @@ class Fits(Scatter):
             split_vals = split_into(params, splitpos)
             newdict = dict(zip(self._order, split_vals))
             # calculate the residuals and incorporate data-weighting
-            errs = (
-                self.data_weights
-                * (self._calc_model(R=R, res_dict=newdict) - self.data)
-            )[~self.mask]
+            tot = self._calc_model(R=R, res_dict=newdict)
+
+            errs = (self.data_weights * (tot - self.data))[~self.mask]
 
             if intermediate_results is True:
                 self.intermediate_results["parameters"] += [newdict]
@@ -2475,8 +2578,7 @@ class Fits(Scatter):
                 else:
                     vari = "      -       "
 
-                boun = (f"{val[3][0][0]:.5}" + "-" +
-                        f"{val[3][1][0]:.5}").ljust(13)
+                boun = (f"{val[3][0][0]:.5}" + "-" + f"{val[3][1][0]:.5}").ljust(13)
                 try:
                     inte = f"{str(val[4]):<14}"
                 except IndexError:
@@ -2502,8 +2604,7 @@ class Fits(Scatter):
             vvals = list(vprop.values())
 
             srfnames = list(srfprop.keys())
-            srfnames = [i.ljust(max(map(len, srfnames))) +
-                        ":" for i in srfnames]
+            srfnames = [i.ljust(max(map(len, srfnames))) + ":" for i in srfnames]
             srfvals = list(srfprop.values())
 
             while len(vnames) < max(len(vnames), len(srfnames)):
@@ -2591,7 +2692,7 @@ class Fits(Scatter):
         if len(lsqkw) > 0:
             outstr += "\n\n# LSQ PARAMETERS " + "\n"
             for key1, key2 in zip(
-                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2:]
+                keys[: (len(keys) + 1) // 2], keys[(len(keys) + 1) // 2 :]
             ):
                 outstr += (
                     f" {key1:<15}= {lsqkw[key1]}".ljust(37)
@@ -2650,7 +2751,7 @@ class Fits(Scatter):
             "sig0": self.sig0,
             "dB": self.dB,
             "dataset": self.dataset,
-            "defdict": self.defdict,
+            "defdict": self.defdict.to_dict(),
             "set_V_SRF": self.set_V_SRF,
             "lsq_kwargs": self.lsq_kwargs,
             "int_Q": self.int_Q,
@@ -2667,6 +2768,29 @@ class Fits(Scatter):
                 fit.aux_data = self.aux_data
 
         return fit
+
+    def _get_V_SRF_dict(self):
+        # convert set_V_SRF to a dict
+        if isinstance(self.set_V_SRF, dict):
+            return self.set_V_SRF
+        else:
+            try:
+                # init V and SRF with string-variables
+                V, SRF = self.set_V_SRF(**dict(zip(*[self.defdict._variables] * 2)))
+                return dict(V_props=V.init_dict, SRF_props=SRF.init_dict)
+            except TypeError:
+                log.error("Not all variables are specified in defdict!", exc_info=True)
+
+    def _get_init_dict(self):
+        args = {
+            "sig0": self.sig0,
+            "dB": self.dB,
+            "defdict": self.defdict.to_dict(),
+            "set_V_SRF": self._get_V_SRF_dict(),
+            "lsq_kwargs": self.lsq_kwargs,
+            "int_Q": self.int_Q,
+        }
+        return args
 
     def reinit_object(self, share_fnevals=False, share_auxdata=True, **kwargs):
         """
@@ -2704,6 +2828,204 @@ class Fits(Scatter):
         """
         return self._reinit_object(self, **kwargs)
 
+    def _get_res_dict_df(self, ID=None):
+        """
+        get a data-frame that contains all fitted parameters
+        (smaller than fit.res_df which is always interpolated to the index)
+
+        Returns
+        -------
+        df : pandas.DataFrame
+            a pandas-dataframe representing the obtained parameters.
+
+        """
+
+        if ID is None:
+            ID = self.ID
+
+        # convert res_dict to a dataframe
+        if self.res_dict is not None:
+            if hasattr(self, "config_name"):
+                idxcols = [[ID], [self.config_name]]
+                names = ["ID", "cfg", "n"]
+            else:
+                idxcols = [[ID]]
+                names = ["ID", "n"]
+
+            dfs = []
+            for key, val in self.res_dict.items():
+                idx = pd.MultiIndex.from_product(
+                    [*idxcols, range(len(val))], names=names
+                )
+
+                # TODO implement this after the following pandas-bug is fixed:
+                # https://github.com/pandas-dev/pandas/issues/42070
+                # dfs.append(pd.DataFrame({key:pd.arrays.SparseArray(val)}, idx))
+
+                dfs.append(pd.DataFrame({key: val}, idx))
+
+            df = pd.concat(dfs, axis=1)
+            return df
+
+    @staticmethod
+    def _prepend_ID_to_index(df, ID, idx_name="date"):
+        df = df.copy()
+        newindex = pd.MultiIndex.from_product([[ID], df.index], names=["ID", idx_name])
+        df.index = newindex
+        return df
+
+    def _get_fit_to_hdf_dict(
+        self,
+        save_results=True,
+        save_res_df=True,
+        save_data=True,
+        save_auxdata=True,
+        ID=None,
+    ):
+        """
+        return a dict of pandas-dataframes suitable to fully re-create
+        a Fits (or MultiFits) object.
+        -> used to store Fit-objects in HDF-containers
+
+        Parameters
+        ----------
+        save_results : bool, optional
+            indicator if results should be saved. The default is True.
+        save_res_df : bool, optional
+            indicator if results re-indexed to the dataframe index
+            should be saved or not. The default is True.
+        save_data : bool, optional
+            indicator if the dataset should be saved. The default is True.
+        save_auxdata : bool, optional
+            indicator if auxdata should be saved. The default is True.
+        ID : int, optional
+            the index-number to use for indexing within the HDF-store
+            if None, "fit._RT1_ID_num" will be used if available, else "fit.ID"
+        Returns
+        -------
+        hf : dict
+            a dict containing all relevant information necessary to re-create
+            a Fits (or MultiFits) object.
+
+        """
+        if ID is None:
+            if hasattr(self, "_RT1_ID_num"):
+                ID = self._RT1_ID_num
+            else:
+                ID = self.ID
+        hf = dict()
+
+        # -------------- save INIT_DICT (always saved, different for MultiFits)
+        # defdicts are stored as categories to save memory
+        try:
+            if isinstance(self, MultiFits):
+                initdict = pd.concat(
+                    map(
+                        lambda arg: pd.DataFrame(
+                            [pd.Series(arg[1])],
+                            pd.MultiIndex.from_product(
+                                [[ID], [arg[0]]], names=["ID", "cfg"]
+                            ),
+                            dtype=str,
+                        ).astype("category"),
+                        self._get_init_dict(),
+                    )
+                )
+            else:
+                initdict = pd.DataFrame(
+                    [pd.Series(self._get_init_dict())], [ID], dtype=str
+                ).astype("category")
+                initdict.index.name = "ID"
+
+            hf["init_dict"] = initdict
+        except Exception:
+            log.debug(f"could not save 'init_dict' for fit {ID}")
+
+        # -------------- save READER_ARG   (always saved)
+        try:
+            df = pd.DataFrame(self.reader_arg, [ID])
+            df.index.name = "ID"
+            hf["const__reader_arg"] = df
+        except Exception:
+            log.debug(f"could not save 'reader_arg' for fit {ID}")
+            df = pd.DataFrame({"ID": ID}, [ID])
+            df.index.name = "ID"
+
+            hf["const__reader_arg"] = df
+
+        # -------------- save DATASET
+        try:
+            if save_data is True:
+                df = getattr(self, "dataset", None)
+                if df is not None:
+                    hf["dataset"] = Fits._prepend_ID_to_index(df, ID)
+            elif save_results is True:
+                # store only data that is required to re-create the results
+                if isinstance(self, MultiFits):
+                    dynkeys = set(
+                        key + "_dyn"
+                        for cfg, defdict in self.apply(lambda fit: self.defdict)
+                        for key, val in defdict.items()
+                        if val[0] and val[2] == "manual"
+                    )
+                else:
+                    dynkeys = set(
+                        key + "_dyn"
+                        for key, val in self.defdict.items()
+                        if val[0] and val[2] == "manual"
+                    )
+                df = getattr(self, "dataset", None)[dynkeys]
+
+                hf["dataset"] = Fits._prepend_ID_to_index(df, ID)
+        except Exception:
+            log.debug(f"could not save 'dataset' for fit {ID}")
+
+        # -------------- save AUX_DATA
+        if save_auxdata is True:
+            try:
+                df = getattr(self, "aux_data", None)
+                if df is not None:
+                    hf["aux_data"] = Fits._prepend_ID_to_index(df, ID)
+            except Exception:
+                log.debug(f"could not save 'aux_data' for fit {ID}")
+
+        # -------------- save RES_DICT (different for MultiFits)
+        if save_results is True:
+            try:
+                if isinstance(self, MultiFits):
+                    df = pd.concat(
+                        i[1]
+                        for i in self.apply(lambda fit: fit._get_res_dict_df(ID=ID))
+                    )
+                else:
+                    df = self._get_res_dict_df(ID=ID)
+
+                hf["res_dict"] = df
+            except Exception:
+                log.debug(f"could not save 'res_dict' for fit {ID}")
+
+        # -------------- save RES_DF (different for MultiFits)
+        if save_res_df is True:
+            try:
+                if isinstance(self, MultiFits):
+                    df = pd.concat(
+                        i[1]
+                        for i in self.apply(
+                            lambda fit: pd.concat(
+                                [fit.res_df], keys=[fit.config_name], names=["cfg"]
+                            )
+                        )
+                    )
+                    df = pd.concat([df], names=["ID"], keys=[ID])
+                else:
+                    df = Fits._prepend_ID_to_index(self.res_df, ID=ID)
+
+                hf["res_df"] = df
+            except Exception:
+                log.debug(f"could not save 'res_df' for fit {ID}")
+
+        return hf
+
     @property
     @lru_cache()  # cache this since we need a static reference!
     def metric(self):
@@ -2728,41 +3050,6 @@ class Fits(Scatter):
         return _metric_keys(self)
 
 
-def get_fitobject(self):
-    configs = self.config_names
-    if len(configs) > 0:
-        rt1_fits = []
-        for config in configs:
-            cfg = self.get_config(config)
-
-            rt1_fits.append(
-                [
-                    config,
-                    Fits(
-                        dataset=None,
-                        defdict=cfg["defdict"],
-                        set_V_SRF=cfg["set_V_SRF"],
-                        lsq_kwargs=cfg["lsq_kwargs"],
-                        **cfg["fits_kwargs"],
-                    ),
-                ]
-            )
-    else:
-        cfg = self.get_config()
-        rt1_fits = Fits(
-            dataset=None,
-            defdict=cfg["defdict"],
-            set_V_SRF=cfg["set_V_SRF"],
-            lsq_kwargs=cfg["lsq_kwargs"],
-            **cfg["fits_kwargs"],
-        )
-
-    return rt1_fits
-
-
-# %%
-
-
 class _MultiAccessors:
     """
     a class to run functions and access properties on all `Fits` objects
@@ -2770,8 +3057,8 @@ class _MultiAccessors:
     """
 
     def __init__(self, FitContainer):
-
         self._FitContainer = FitContainer
+        ignore_keys = ["dataset", "aux_data", "plot"]
 
         # add all functions and attributes
         allattrs = list(i for i in dir(Fits()) if not i.startswith("__"))
@@ -2782,8 +3069,7 @@ class _MultiAccessors:
                     self,
                     prop,
                     update_wrapper(
-                        partial(self._applyit, prop=prop), getattr(
-                            Fits(), prop)
+                        partial(self._applyit, prop=prop), getattr(Fits(), prop)
                     ),
                 )
             elif isinstance(getattr(Fits, prop), property):
@@ -2793,7 +3079,7 @@ class _MultiAccessors:
                     property(self._getit(prop)),
                 )
 
-        for prop in (set(allattrs) ^ set(classattrs)) - set(["dataset", "aux_data"]):
+        for prop in (set(allattrs) ^ set(classattrs)) - set(ignore_keys):
             setattr(
                 _MultiAccessors,
                 prop,
@@ -2802,7 +3088,7 @@ class _MultiAccessors:
 
     @property
     def config_fits(self):
-        return self._FitContainer.__dict__
+        return {i.config_name: i for i in self._FitContainer}
 
     def _getit(self, prop):
         def _get_all(self):
@@ -2838,7 +3124,43 @@ class _MultiAccessors:
 
 
 class _FitContainer:
-    pass
+    def __init__(self, parent):
+        self._parent = parent
+
+    def __setstate__(self, d):
+        # downward-compatibility for the _parent property
+        if "_parent" not in d:
+            parent = MultiFits()
+            for key, val in d.items():
+                if isinstance(val, Fits):
+                    parent.add_config(key, val)
+            d["_parent"] = parent
+        # -----------------------------------------------
+        self.__dict__ = d
+
+    def __iter__(self):
+        return (getattr(self, i) for i in self._parent.config_names)
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            assert key in self._parent.config_names, (
+                f"config {key} not found, use one of:"
+                + f"\n{self._parent.config_names}"
+            )
+
+            return getattr(self, key)
+        elif isinstance(key, int):
+            n_names = len(self._parent.config_names)
+            assert key < n_names, (
+                f"cannot access config nr. {key}.... there are only "
+                + f"{n_names} configs available: \n{self._parent.config_names}"
+            )
+            return getattr(self, self._parent.config_names[key])
+
+        else:
+            raise AttributeError(
+                "configs can only be accessed using integers or strings"
+            )
 
 
 class MultiFits:
@@ -2870,11 +3192,15 @@ class MultiFits:
 
     """
 
-    def __init__(self, dataset=None, aux_data=None, reader_arg=None):
-
+    def __init__(
+        self,
+        dataset=None,
+        aux_data=None,
+        reader_arg=None,
+    ):
         self.config_names = []
 
-        self.configs = _FitContainer()
+        self.configs = _FitContainer(self)
         self._accessor = _MultiAccessors(self.configs)
 
         self.set_dataset(dataset)
@@ -2890,6 +3216,35 @@ class MultiFits:
         for name, fit in self.accessor.config_fits.items():
             if not hasattr(fit, "config_name"):
                 fit.config_name = name
+
+    def _get_init_dict(self):
+        args = self.apply(lambda fit: fit._get_init_dict())
+        return args
+
+    def _get_fit_to_hdf_dict(
+        self, save_results=True, save_data=True, save_auxdata=True, ID=None
+    ):
+        return Fits._get_fit_to_hdf_dict(
+            self,
+            save_results=save_results,
+            save_data=save_data,
+            save_auxdata=save_auxdata,
+            ID=ID,
+        )
+
+    @property
+    def ID(self):
+        assert (
+            len(self.config_names) > 0
+        ), "NO config... the MultiFits ID is inherited from the first config!"
+
+        return getattr(self.configs, self.config_names[0]).ID
+
+    @ID.setter
+    def ID(self, ID):
+        raise AttributeError(
+            "use `set_ID` to set 'ID' on ALL configs of the MultiFits object!"
+        )
 
     @property
     def dataset(self):
@@ -2908,7 +3263,8 @@ class MultiFits:
     @aux_data.setter
     def aux_data(self, value):
         raise AttributeError(
-            "use `set_aux_data` to set 'aux_data' on ALL configs of the MultiFits object!"
+            "use `set_aux_data` to set 'aux_data' on ALL configs"
+            + " of the MultiFits object!"
         )
 
     @property
@@ -2918,7 +3274,8 @@ class MultiFits:
     @reader_arg.setter
     def reader_arg(self, value):
         raise AttributeError(
-            "use `set_reader_arg` to set 'reader_arg' on ALL configs of the MultiFits object!"
+            "use `set_reader_arg` to set 'reader_arg' on ALL configs"
+            + " of the MultiFits object!"
         )
 
     def set_dataset(self, dataset):
@@ -2937,6 +3294,10 @@ class MultiFits:
         self._reader_arg = reader_arg
         for name in self.config_names:
             getattr(self.configs, name).reader_arg = self._reader_arg
+
+    def set_ID(self, ID):
+        for i, name in enumerate(self.config_names):
+            getattr(self.configs, name).ID = ID
 
     @property
     def accessor(self):
@@ -2969,8 +3330,7 @@ class MultiFits:
             )
         elif isinstance(use_config, str):
             return [
-                (use_config, f(
-                    fit=self.accessor.config_fits[use_config], **kwargs))
+                (use_config, f(fit=self.accessor.config_fits[use_config], **kwargs))
             ]
         elif isinstance(use_config, list):
             return (
@@ -2995,16 +3355,16 @@ class MultiFits:
             the fit-object
         """
         if name in self.config_names:
-            log.warning(
-                f"the config {name} will be overwritten by the new definition!")
+            log.warning(f"the config {name} will be overwritten by the new definition!")
 
         assert str.isidentifier(
             name
         ), f"the name {name} is not a valid python identifier!"
 
         # make sure that the config-name does not overwrite any definitions
-        assert name not in set(self.__dict__), (
-            f"you can not use {name} as the name for a configuration!")
+        assert name not in set(
+            self.__dict__
+        ), f"you can not use {name} as the name for a configuration!"
         self.config_names.append(name)
 
         fit_object.dataset = self.dataset
@@ -3031,6 +3391,3 @@ class MultiFits:
 
         with open(path, "wb") as file:
             cloudpickle.dump(self, file)
-
-
-# %%

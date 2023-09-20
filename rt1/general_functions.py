@@ -1,12 +1,31 @@
 # -*- coding: utf-8 -*-
 """helper functions that are used both in rtfits and rtplots"""
-from itertools import tee, islice
+from itertools import tee, islice, count, chain
 from collections import OrderedDict
+import keyword
 
 try:
     import numpy as np
 except ModuleNotFoundError:
     pass
+
+
+def isidentifier(ident: str) -> bool:
+    """
+    Determines if string is valid Python identifier.
+    taken from: https://stackoverflow.com/a/29586366/9703451
+    """
+
+    if not isinstance(ident, str):
+        raise TypeError("expected str, but got {!r}".format(type(ident)))
+
+    if not ident.isidentifier():
+        return False
+
+    if keyword.iskeyword(ident):
+        return False
+
+    return True
 
 
 def rectangularize(array, return_mask=False, dim=None, return_masked=False, dtype=None):
@@ -224,7 +243,7 @@ def update_progress(
     adapted from: https://blender.stackexchange.com/a/30739
     """
 
-    length = 25  # the length of the progress bar
+    length = 20  # the length of the progress bar
     block = int(round(length * progress / max_prog))
     if progress2 is not None:
         msg = (
@@ -330,3 +349,76 @@ def interpolate_to_index(data, index, data_index=None, **interp1d_kwargs):
         f = interp1d(data_index.to_julian_date(), data.values, **kwargs)
         x = f(index.to_julian_date())
         return Series(x, index)
+
+
+def find_missing(lst=[], N=None):
+    """
+    return a generator that yields sorted unique integers that are NOT present
+    in the provided "lst" list.
+
+    returned numbers will "fill up" missing values in the sorted "lst",
+    starting at 0:
+
+        >>> list(find_missing([2, 5, 6, 34, 68], 5))
+        >>> [0, 1, 3, 4, 7]
+
+    if the max. of the provided list is smaller than "N" the list is
+    extended to obtain N unique numbers, e.g.:
+
+        >>> list(find_missing([0, 1, 2], 5))
+        >>> [3, 4, 5, 6, 7]
+
+    Parameters
+    ----------
+    lst : iterable, optional
+        an iterable with numbers that should be excluded in the list.
+        The default is [].
+    N : int, optional
+        If N is provided, the generator will be exhausted after N values have
+        been returned. (otherwise it will continue yielding results forever!)
+    Returns
+    -------
+    missingIDs : list
+        a list of N unique integers that are not present in "lst".
+
+    """
+    start = 0
+    # get the max. ID defined in "lst"
+    maxID = max(lst) if len(lst) > 0 else 0
+
+    if len(lst) > 0:
+        # check for IDs that can be used to "fill-up" the provided list
+        missingIDs = sorted(set(range(start, maxID)) - set(lst))
+    else:
+        missingIDs = []
+
+    # init a counter that yields numbers larger than the max ID found in "lst"
+    c = count(maxID + 1)
+
+    if N is not None:
+        return islice(chain(missingIDs, c), N)
+    else:
+        return chain(missingIDs, c)
+
+
+def chunkit(arr, chunk_size=10000):
+    """
+    split a array-like object into chunks of a pre-defined size
+
+    Parameters
+    ----------
+    arr : array-like
+        the data to split.
+    chunk_size : int, optional
+        the chunk-size. The default is 10000.
+
+    Yields
+    ------
+    array-like
+        the chunks of the input-array.
+    """
+    num_chunks = len(arr) // chunk_size
+    if len(arr) % chunk_size != 0:
+        num_chunks += 1
+    for i in range(num_chunks):
+        yield arr[i * chunk_size : (i + 1) * chunk_size]

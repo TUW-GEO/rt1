@@ -10,7 +10,7 @@ jobs:
         # set operating systems to test
         os: [ubuntu-latest]
         # set python versions to test
-        python-version: ['3.7']
+        python-version: ['3.7', '3.8', '3.9']
 
     name: RT1_test ${{ matrix.os }}  ${{ matrix.python-version }}
     steps:
@@ -36,8 +36,9 @@ jobs:
         run: |
           python -m pytest --cov=rt1 --cov-report=xml
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           env_vars: ${{ matrix.os }}, ${{ matrix.python-version }}
           name: rt1_coverage
           fail_ci_if_error: true

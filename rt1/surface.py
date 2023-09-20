@@ -11,6 +11,9 @@ from .rtplots import polarplot, hemreflect
 class Surface(Scatter):
     """basic surface class"""
 
+    name = "RT1_Surface_base_class"
+    _param_names = ["NormBRDF", "a"]
+
     def __init__(self, **kwargs):
         # set scattering angle generalization-matrix to [1,1,1] if it is not
         # explicitly provided by the chosen class.
@@ -25,6 +28,49 @@ class Surface(Scatter):
         # quick way for visualizing the associated hemispherical reflectance
         self.hemreflect = partial(hemreflect, SRF=self)
         update_wrapper(self.hemreflect, hemreflect)
+
+    def __repr__(self):
+        try:
+            return (
+                self.name
+                + "("
+                + (",\n" + " " * (len(self.name) + 1)).join(
+                    [f"{param}={getattr(self, param)}" for param in self._param_names]
+                )
+                + ")"
+            )
+        except Exception:
+            return object.__repr__(self)
+
+    @property
+    def init_dict(self):
+        if self.name.startswith("LinCombSRF"):
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["SRF_name"] = "LinCombSRF"
+            srfchoices = []
+            for frac, srf in d["SRFchoices"]:
+                if isinstance(frac, sp.Basic):
+                    srfchoices.append([str(frac), srf.init_dict])
+                else:
+                    srfchoices.append([frac, srf.init_dict])
+
+            d["SRFchoices"] = srfchoices
+        else:
+            d = dict()
+            for key in self._param_names:
+                val = self.__dict__[key]
+                if isinstance(val, sp.Basic):
+                    d[key] = str(val)
+                else:
+                    d[key] = val
+            d["SRF_name"] = self.name
+        return d
 
     @lru_cache()
     def _lambda_func(self, *args):
@@ -83,7 +129,7 @@ class Surface(Scatter):
                 0.1,
                 0.1,
                 0.1,
-                **{key: 0.12 for key in param_dict.keys()}
+                **{key: 0.12 for key in param_dict.keys()},
             ),
             np.ndarray,
         ):
@@ -388,7 +434,7 @@ class Surface(Scatter):
                     0.1,
                     0.1,
                     0.1,
-                    **{key: 0.12 for key in param_dict.keys()}
+                    **{key: 0.12 for key in param_dict.keys()},
                 ),
                 np.ndarray,
             ):
@@ -419,9 +465,9 @@ class LinCombSRF(Surface):
     """
 
     name = "LinCombSRF"
+    _param_names = ["SRFchoices", "NormBRDF"]
 
     def __init__(self, SRFchoices=None, **kwargs):
-
         super(LinCombSRF, self).__init__(**kwargs)
 
         self.SRFchoices = SRFchoices
@@ -437,7 +483,6 @@ class LinCombSRF(Surface):
     def _func(self):
         """define phase function as sympy object for later evaluation"""
         return self._SRFcombiner()._func
-
 
     def _set_legexpansion(self):
         """set legexpansion to the combined legexpansion"""
@@ -500,7 +545,6 @@ class LinCombSRF(Surface):
         # evaluation of combined expansion in legendre-polynomials
         dummylegexpansion = []
         for i in range(0, len(equal_a)):
-
             SRFdummy = BRDFfunction()
             # select SRF choices where a parameter is equal
             SRFequal = np.take(self.SRFchoices, equal_a[i], axis=0)
@@ -509,7 +553,6 @@ class LinCombSRF(Surface):
             SRFdummy.ncoefs = max([SRF[1].ncoefs for SRF in SRFequal])
             # loop over phase-functions with equal a-parameter
             for SRF in SRFequal:
-
                 # set parameters based on chosen phase-functions and evaluate
                 # combined legendre-expansion
                 SRFdummy.a = SRF[1].a
@@ -542,7 +585,9 @@ class Isotropic(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+
     name = "Isotropic"
+    _param_names = ["NormBRDF"]
 
     def __init__(self, **kwargs):
         super(Isotropic, self).__init__(**kwargs)
@@ -588,7 +633,9 @@ class CosineLobe(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+
     name = "CosineLobe"
+    _param_names = ["i", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, ncoefs=None, i=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert ncoefs is not None, (
@@ -684,7 +731,9 @@ class HenyeyGreenstein(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+
     name = "HenyeyGreenstein"
+    _param_names = ["t", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -715,15 +764,15 @@ class HenyeyGreenstein(Surface):
 
         return (
             1.0
-            * (1.0 - self.t ** 2.0)
-            / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+            * (1.0 - self.t**2.0)
+            / ((sp.pi) * (1.0 + self.t**2.0 - 2.0 * self.t * x) ** 1.5)
         )
 
     @property
     @lru_cache()
     def legcoefs(self):
         n = sp.Symbol("n")
-        return 1.0 * (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
+        return 1.0 * (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t**n
 
 
 class HG_nadirnorm(Surface):
@@ -748,7 +797,9 @@ class HG_nadirnorm(Surface):
                Normalization-factor used to scale the BRDF,
                i.e.  BRDF = NormBRDF * f(t_0,p_0,t_ex,p_ex)
     """
+
     name = "HG_nadirnorm"
+    _param_names = ["t", "ncoefs", "NormBRDF", "a"]
 
     def __init__(self, t=None, ncoefs=None, a=[1.0, 1.0, 1.0], **kwargs):
         assert t is not None, "t parameter needs to be provided!"
@@ -766,6 +817,8 @@ class HG_nadirnorm(Surface):
             "Error: Generalization-parameter list must " + "contain 3 values"
         )
 
+        self._param_names = ["t", "ncoefs", "NormBRDF", "a"]
+
     @property
     @lru_cache()
     def _func(self):
@@ -778,25 +831,25 @@ class HG_nadirnorm(Surface):
         x = self.scat_angle(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
         nadir_hemreflect = 4 * (
-            (1.0 - self.t ** 2.0)
+            (1.0 - self.t**2.0)
             * (
                 1.0
                 - self.t * (-self.t + self.a[0])
                 - sp.sqrt(
-                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
+                    (1 + self.t**2 - 2 * self.a[0] * self.t) * (1 + self.t**2)
                 )
             )
             / (
                 2.0
                 * self.a[0] ** 2.0
-                * self.t ** 2.0
-                * sp.sqrt(1.0 + self.t ** 2.0 - 2.0 * self.a[0] * self.t)
+                * self.t**2.0
+                * sp.sqrt(1.0 + self.t**2.0 - 2.0 * self.a[0] * self.t)
             )
         )
 
         func = (1.0 / nadir_hemreflect) * (
-            (1.0 - self.t ** 2.0)
-            / ((sp.pi) * (1.0 + self.t ** 2.0 - 2.0 * self.t * x) ** 1.5)
+            (1.0 - self.t**2.0)
+            / ((sp.pi) * (1.0 + self.t**2.0 - 2.0 * self.t * x) ** 1.5)
         )
 
         return func
@@ -812,25 +865,22 @@ class HG_nadirnorm(Surface):
         x = self._scat_angle_numeric(theta_0, theta_ex, phi_0, phi_ex, a=self.a)
 
         nadir_hemreflect = 4 * (
-            (1.0 - t ** 2.0)
+            (1.0 - t**2.0)
             * (
                 1.0
                 - t * (-t + self.a[0])
-                - np.sqrt(
-                    (1 + t ** 2 - 2 * self.a[0] * t) * (1 + t ** 2)
-                )
+                - np.sqrt((1 + t**2 - 2 * self.a[0] * t) * (1 + t**2))
             )
             / (
                 2.0
                 * self.a[0] ** 2.0
-                * t ** 2.0
-                * np.sqrt(1.0 + t ** 2.0 - 2.0 * self.a[0] * t)
+                * t**2.0
+                * np.sqrt(1.0 + t**2.0 - 2.0 * self.a[0] * t)
             )
         )
 
         func = (1.0 / nadir_hemreflect) * (
-            (1.0 - t ** 2.0)
-            / ((np.pi) * (1.0 + t ** 2.0 - 2.0 * t * x) ** 1.5)
+            (1.0 - t**2.0) / ((np.pi) * (1.0 + t**2.0 - 2.0 * t * x) ** 1.5)
         )
 
         return func
@@ -839,25 +889,25 @@ class HG_nadirnorm(Surface):
     @lru_cache()
     def legcoefs(self):
         nadir_hemreflect = 4 * (
-            (1.0 - self.t ** 2.0)
+            (1.0 - self.t**2.0)
             * (
                 1.0
                 - self.t * (-self.t + self.a[0])
                 - sp.sqrt(
-                    (1 + self.t ** 2 - 2 * self.a[0] * self.t) * (1 + self.t ** 2)
+                    (1 + self.t**2 - 2 * self.a[0] * self.t) * (1 + self.t**2)
                 )
             )
             / (
                 2.0
                 * self.a[0] ** 2.0
-                * self.t ** 2.0
-                * sp.sqrt(1.0 + self.t ** 2.0 - 2.0 * self.a[0] * self.t)
+                * self.t**2.0
+                * sp.sqrt(1.0 + self.t**2.0 - 2.0 * self.a[0] * self.t)
             )
         )
 
         n = sp.Symbol("n")
         legcoefs = (1.0 / nadir_hemreflect) * (
-            (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t ** n
+            (1.0 / (sp.pi)) * (2.0 * n + 1) * self.t**n
         )
 
         return legcoefs

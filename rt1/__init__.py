@@ -1,5 +1,13 @@
 """Import module for RT1 module"""
 
+try:
+    from colorama import Fore, Back, Style, init
+
+    init()
+    _colored = True
+except Exception:
+    _colored = False
+
 import logging
 import logging.handlers
 import sys
@@ -7,7 +15,7 @@ from textwrap import indent
 import multiprocessing as mp
 from .general_functions import groupby_unsorted
 
-__version__ = "1.5.2"
+__version__ = "2.0"
 __author__ = "Raphael Quast"
 
 
@@ -53,7 +61,7 @@ def set_log_handler_level(level, name="rt1_consolehandler"):
     h.setLevel(level)
 
 
-def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
+def start_log_to_file(path, name="rt1_filehandler", level=logging.DEBUG):
     """
     forward all log-messages to a file
     to close the file use the `stop_log_to_file()` method!
@@ -77,12 +85,10 @@ def start_log_to_file(path, name="rt1_filehandler", level=logging.INFO):
         stop_log_to_file(name=name)
 
         log = setup_logger()
-        # get formatting from consolehandler (always present)
-        hc = [val for val in log.handlers if val.name == "rt1_consolehandler"][0]
-
         # setup a new filehandler
         fh = logging.FileHandler(path, "a")
-        fh.setFormatter(hc.formatter)
+        formatter = _get_logger_formatter(True, colored=False)
+        fh.setFormatter(formatter)
         fh.set_name(name)
         # initialize the file-handler with level 1 to get all infos
         fh.setLevel(level)
@@ -122,7 +128,9 @@ def stop_log_to_file(name="rt1_filehandler"):
 
 class WrappedFixedIndentingLog(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, style="%", indent=4):
-        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
+        usefmt = "%(asctime)s - " + fmt
+
+        super().__init__(fmt=usefmt, datefmt=datefmt, style=style)
 
         self._indent = indent
 
@@ -130,12 +138,40 @@ class WrappedFixedIndentingLog(logging.Formatter):
         return indent(super().format(record), " " * self._indent).strip()
 
 
-def _get_logger_formatter(simple=True):
+class ColoredWrappedFixedIndentingLog(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, style="%", indent=4):
+        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
 
+        self._indent = indent
+
+        self.FORMATS = {
+            logging.DEBUG: Fore.CYAN + fmt + Style.RESET_ALL,
+            logging.INFO: Fore.GREEN + fmt + Style.RESET_ALL,
+            logging.WARNING: Fore.MAGENTA + fmt + Style.RESET_ALL,
+            logging.ERROR: Back.RED + fmt + Style.RESET_ALL,
+            logging.CRITICAL: Back.RED + fmt + Style.RESET_ALL,
+            _PROGRESS_LEVEL_NUM: Back.GREEN + fmt + Style.RESET_ALL,
+        }
+
+    def format(self, record):
+        log_fmt = (
+            Fore.LIGHTWHITE_EX
+            + "%(asctime)s"
+            + Style.RESET_ALL
+            + " - "
+            + self.FORMATS.get(record.levelno)
+        )
+        formatter = logging.Formatter(log_fmt, datefmt=self.datefmt)
+
+        return indent(formatter.format(record), " " * self._indent).strip()
+
+
+def _get_logger_formatter(simple=True, colored=False):
     if simple is False:
         logfmt = (
-            "%(asctime)s - "
-            + mp.current_process().name
+            # "%(asctime)s - "
+            # +
+            mp.current_process().name
             + ": "
             + "%(levelname)-8s ("
             + "%(filename)s:%(lineno)d - "
@@ -145,25 +181,31 @@ def _get_logger_formatter(simple=True):
         )
     else:
         logfmt = (
-            "%(asctime)s - "
-            +
+            # "%(asctime)s - "
+            # +
             # (mp.current_process().name + ':').ljust(21) +
             "%(processName)-21s"
             + "%(levelname)-8s"
             + "%(message)s"
         )
-
-    formatter = WrappedFixedIndentingLog(logfmt, indent=51, datefmt="%Y-%m-%d %H:%M:%S")
+    if colored:
+        formatter = ColoredWrappedFixedIndentingLog(
+            logfmt,
+            indent=51,
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    else:
+        formatter = WrappedFixedIndentingLog(
+            logfmt,
+            indent=51,
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     return formatter
 
 
 def setup_logger(
-    log_name="rt1",
-    console_out=True,
-    console_level=21,
-    simple=True,
+    log_name="rt1", console_out=True, console_level=21, simple=True, colored=_colored
 ):
-
     logger = logging.getLogger(log_name)
 
     # check if the logger has a Handler, if yes, it's an already existing
@@ -172,7 +214,7 @@ def setup_logger(
         return logger
 
     logger.setLevel(logging.DEBUG)
-    formatter = _get_logger_formatter(simple)
+    formatter = _get_logger_formatter(simple, colored=colored)
 
     if console_out is True:
         # setup a console-handler that prints to sys.stdout
@@ -188,4 +230,4 @@ def setup_logger(
 
 
 # initialize a logger for rt1
-log = setup_logger(console_out=True, simple=True, log_name="rt1")
+log = setup_logger(console_out=True, simple=True, log_name="rt1", colored=_colored)

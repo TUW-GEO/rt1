@@ -9,4 +9,3 @@ A script that produces all examples is provided in the doc/examples directory. T
 * `Example 2 from Quast and Wagner (2016) <https://github.com/pygeo/rt1/tree/master/doc/examples/example02.ipynb>`_
 * `Example 3: usage of a linear combination for the phase function and BRDF <https://github.com/pygeo/rt1/tree/master/doc/examples/example_lin_comb.ipynb>`_
 * `Example 4: basic fitting example <https://github.com/pygeo/rt1/tree/master/doc/examples/example_fitting.ipynb>`_
-

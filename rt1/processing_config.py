@@ -1,184 +1,10 @@
 """convenient default functions for use with rt1.rtfits.processfunc()"""
 
 import sys
-import pandas as pd
-import numpy as np
 import traceback
 from pathlib import Path
 from .rtfits import load
 from . import log
-
-try:
-    import xarray as xar
-except ModuleNotFoundError:
-    log.debug("xarray could not be imported, " + "postprocess_xarray will not work!")
-
-
-def defdict_parser(defdict):
-    """
-    get parameter-dynamics specifications from a given defdict
-
-    Parameters
-    ----------
-    defdict : dict
-        a defdict (e.g. fit.defdict)
-
-    Returns
-    -------
-    parameter_specs : dict
-        a dict that contains lists of parameter-names according to their
-        specifications. (keys should be self-explanatory)
-    """
-    parameter_specs = dict(
-        fitted=[],
-        fitted_const=[],
-        fitted_dynamic=[],
-        fitted_dynamic_manual=[],
-        fitted_dynamic_index=[],
-        fitted_dynamic_datetime=[],
-        fitted_dynamic_integer=[],
-        constant=[],
-        auxiliary=[],
-    )
-
-    for key, val in defdict.items():
-        if val[0] is True:
-            parameter_specs["fitted"].append(key)
-            if val[2] is None:
-                parameter_specs["fitted_const"].append(key)
-            else:
-                parameter_specs["fitted_dynamic"].append(key)
-                if val[2] == "manual":
-                    parameter_specs["fitted_dynamic_manual"].append(key)
-                elif val[2] == "index":
-                    parameter_specs["fitted_dynamic_index"].append(key)
-                elif isinstance(val[2], str):
-                    parameter_specs["fitted_dynamic_datetime"].append((key, val[2]))
-                elif isinstance(val[2], int):
-                    parameter_specs["fitted_dynamic_integer"].append((key, val[2]))
-        else:
-            if val[1] == "auxiliary":
-                parameter_specs["auxiliary"].append(key)
-            else:
-                parameter_specs["constant"].append(key)
-
-    return parameter_specs
-
-
-def postprocess_xarray(
-    fit,
-    saveparams=None,
-    xindex=("x", -9999),
-    yindex=None,
-    staticlayers=None,
-    auxdata=None,
-):
-    """
-    the identification of parameters is as follows:
-
-        1) 'sig' (conv. to dB) and 'inc' (conv. to degrees) from dataset
-        2) any parameter present in defdict is handled accordingly
-        3) auxdata (a pandas-dataframe) is appended
-
-        4) static layers are generated and added according to the provided dict
-
-
-    Parameters
-    ----------
-    fit : rt1.rtfits.Fits object
-        the fit-object to use
-    saveparams : list, optional
-        a list of strings that correspond to parameter-names that should
-        be included. The default is None.
-    xindex : tuple, optional
-        a tuple (name, value) that will be used as the x-index.
-        The default is ('x', -9999).
-    yindex : tuple, optional
-        a tuple (name, value) that will be used as the y-index.
-        if provided, a multiindex (x, y) will be used!
-        Be warned... when combining xarrays the x- and y- coordinates will
-        be assumed as a rectangular grid!
-        The default is None.
-    staticlayers : dict, optional
-        a dict with parameter-names and values that will be adde das
-        static layers. The default is None.
-    auxdata : pandas.DataFrame, optional
-        a pandas DataFrame that will be concatenated to the DataFrame obtained
-        from combining all 'saveparams'. The default is None.
-
-    Returns
-    -------
-    dfxar : xarray.Dataset
-        a xarray-dataset with all layers defined according to the specs.
-
-    """
-
-    if saveparams is None:
-        saveparams = []
-
-    if staticlayers is None:
-        staticlayers = dict()
-
-    defs = defdict_parser(fit.defdict)
-
-    usedfs = []
-    for key in saveparams:
-
-        if key == "sig":
-            if fit.dB is False:
-                usedfs.append(10.0 * np.log10(fit.dataset.sig))
-            else:
-                usedfs.append(fit.dataset.sig)
-        elif key == "inc":
-            usedfs.append(np.rad2deg(fit.dataset.inc))
-
-        elif key in fit.defdict:
-            if key in defs["fitted_dynamic"]:
-                usedfs.append(fit.res_df[key])
-            elif key in defs["fitted_const"]:
-                staticlayers[key] = fit.res_dict[key][0]
-            elif key in defs["constant"]:
-                staticlayers[key] = fit.defdict[key][1]
-            elif key in defs["auxiliary"]:
-                usedfs.append(fit.dataset[key])
-        elif key in fit.dataset:
-            usedfs.append(fit.dataset[key])
-        else:
-            log.warning(
-                f"the parameter {key} could not be processed"
-                + "during xarray postprocessing"
-            )
-
-    if auxdata is not None:
-        usedfs.append(auxdata)
-
-    # combine all timeseries and set the proper index
-    df = pd.concat(usedfs, axis=1)
-    df.columns.names = ["param"]
-    df.index.names = ["date"]
-
-    if yindex is not None:
-        df = pd.concat([df], keys=[yindex[1]], names=[yindex[0]])
-        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-        # set static layers
-        statics = pd.DataFrame(
-            staticlayers,
-            index=pd.MultiIndex.from_product(
-                iterables=[[xindex[1]], [yindex[1]]], names=["x", "y"]
-            ),
-        )
-
-    else:
-        df = pd.concat([df], keys=[xindex[1]], names=[xindex[0]])
-
-        # set static layers
-        statics = pd.DataFrame(staticlayers, index=[xindex[1]])
-        statics.index.name = xindex[0]
-
-    dfxar = xar.merge([df.to_xarray(), statics.to_xarray()])
-
-    return dfxar
 
 
 class rt1_processing_config(object):
@@ -193,10 +19,6 @@ class rt1_processing_config(object):
         The default is None.
     dumpfolder : str, optional
         the sub-folder in which the dump-files will be stored.
-        The default is None.
-    error_dumpfolder : srt, optional
-        the sub-folder in which the error-dump-files will be stored.
-        if None and dumpfolder is provided, dumpfolder will be used!
         The default is None.
     finalout_name : srt, optional
         the name of the hdf-file generated by finaloutput().
@@ -231,17 +53,6 @@ class rt1_processing_config(object):
     ...         ...
     ...         return df, aux_data
     ...
-    ...     # customize the postprocess function
-    ...     def postprocess(self, fit, reader_arg):
-    ...         # do something with each fit and return the desired output
-    ...         return ...
-    ...
-    ...     # customize the finaloutput function
-    ...     def finaloutput(self, res):
-    ...         # do something with res
-    ...         # (res is a list of outputs from the postprocess() function)
-    ...         ...
-    ...
     ...     # customize the function that is used to catch exceptions
     ...     def exceptfunc(self, ex, reader_arg):
     ...         # do something with the catched exception ex.args:
@@ -251,7 +62,6 @@ class rt1_processing_config(object):
     """
 
     def __init__(self, **kwargs):
-
         if "save_path" in kwargs and "dumpfolder" in kwargs:
             parentpath = Path(kwargs["save_path"]) / kwargs["dumpfolder"]
 
@@ -266,7 +76,7 @@ class rt1_processing_config(object):
         # append all arguments passed as kwargs to the class
         # NOTICE: ALL definitions in the 'PROCESS_SPECS' section of the
         #         config-file will be passed as kwargs to the initialization
-        #          of this class!)
+        #         of this class!)
         for key, val in kwargs.items():
             setattr(self, key, val)
 
@@ -274,7 +84,7 @@ class rt1_processing_config(object):
         """
         A function that returns the file-name based on the passed reader_args
 
-        - the filenames are generated from the reader-argument `'gpi'`
+        - by default, the filenames are generated from the reader-argument "ID"
 
         Parameters
         ----------
@@ -283,13 +93,14 @@ class rt1_processing_config(object):
 
         Returns
         -------
+        feature_id : str
+            the ID that will be assigned to the fits-object (e.g. `fit.ID`)
         filename : str
-            the file-name that will be used to save the fit dump-files in case
-            the processing was successful
+            the file-name that will be used to save the pickle dump-files
         """
 
         # the ID used for indexing the processed sites
-        feature_id = reader_arg["gpi"]
+        feature_id = str(reader_arg["ID"])
 
         # the filename of the dump-file
         filename = f"{feature_id}.dump"
@@ -299,151 +110,66 @@ class rt1_processing_config(object):
             filename=filename,
         )
 
-    def check_dump_exists(self, reader_arg):
-        """
-        check if a dump of the fit already exists
-        (used to determine if the fit has already been evaluated to avoid
-         performing the same fit twice)
-
-        Parameters
-        ----------
-        reader_arg : dict
-            the reader-arg dict.
-
-        Raises
-        ------
-        rt1_file_already_exists
-            If a dump-file with the specified filename already exists
-            at "save_path / dumpfolder / dumps /"
-        """
-
-        # check if the file already exists, and if yes, raise a skip-error
-        if self.rt1_procsesing_dumppath is not None:
-            names_ids = self.get_names_ids(reader_arg)
-            if (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
-                raise Exception("rt1_file_already_exists")
-
-    def dump_fit_to_file(self, fit, reader_arg, mini=True):
-        """
-        pickle to Fits-object to  "save_path / dumpfolder / filename.dump"
-
-        Parameters
-        ----------
-        fit : rt1.rtfits.Fits
-            the rtfits.Fits object.
-        reader_arg : dict
-            the reader-arg dict.
-        mini : bool, optional
-            indicator if a mini-dump should be performed or not.
-            (see rt1.rtfits.Fits.dump() for details)
-            The default is True.
-        """
-        if self.rt1_procsesing_dumppath is not None:
-            names_ids = self.get_names_ids(reader_arg)
-
-            if not (self.rt1_procsesing_dumppath / names_ids["filename"]).exists():
-                fit.dump(
-                    self.rt1_procsesing_dumppath / names_ids["filename"],
-                    mini=mini,
-                )
-
     def preprocess(self, **kwargs):
-        """a function that is called PRIOR to processing"""
+        """
+        a (optional) function that is called PRIOR to processing
+
+        Parameters
+        ----------
+        kwargs :
+            kwargs obtained from
+
+            >>> RTprocess(...).run_processing(preprocess_kwargs=dict(...))
+
+        Returns:
+        --------
+        dict
+            a dict with the following keys defined:
+
+                - "reader_args" : a list of dicts that will be used as input
+                  for the call to the reader function (e.g. `reader_arg`)
+                - "pool_kwargs" : a dict of kwargs passed to the initialization
+                  of the multiprocessing.Pool used for processing
+                  (useful for providing initializers etc.)
+        --------
+        """
+
         return
 
     def reader(self, reader_arg):
-        """a function that is called for each site to obtain the dataset"""
-        # get the incidence-angles of the data
-        inc = [0.1, 0.2, 0.3, 0.4, 0.5]
-        # get the sig0-values of the data
-        sig = [-10, -11.0, -11.45, -13, -15]
-        # get the index-values of the data
-        index = pd.date_range("1.1.2020", "1.5.2020", freq="D")
-
-        data = pd.DataFrame(dict(inc=inc, sig=sig), index=index)
-
-        aux_data = pd.DataFrame(dict(something=[1, 2, 3, 4, 5]))
-
-        return data, aux_data
-
-    def postprocess(self, fit, reader_arg=None):
         """
-        A function that is called AFTER processing of each site:
+        a function that is called for each site to obtain the dataset
 
-        - a pandas.DataFrame with the obtained parameters is returned.
-          The columns are multiindexes corresponding to::
+        it must return a pandas.DataFrame with the following keys defined:
+            - "inc" : the incidence-angle in radians
+            - "sig" : the backscattering coefficient values
 
-              columns = [feature_id,
-                         [param_1, param_2, ...]]
+        any additional return-values will be appended to the fit as `fit.aux_data`
 
-        - in case "save_path" is provided:
-            - a dump of the fit object will be stored in the folder
-            - if the file already exists, a 'rt1_file_already_exists' error
-              will be raised
-
+        >>> def reader(self, reader_arg):
+        >>>    data = pd.DataFrame(inc=[...]
+        >>>                        sig=[...],
+        >>>                        index = [a datetime-index])
+        >>>
+        >>>    aux_data = "any aux-data that should be appended"
+        >>>
+        >>>    return data, aux_data
 
         Parameters
         ----------
-        fit: rt1.rtfits.Fits object
-            The fits object.
-        reader_arg: dict
+        reader_arg : dict
             the arguments passed to the reader function.
 
         Returns
         -------
-        df: pandas.DataFrame
-            a pandas dataframe containing the fitted parameterss.
-
+        return_data : pandas.DataFrame
+            a pandas.DataFrame that will be used as "dataset" for the fit
+            (e.g. `fit.dataset`)
+        *aux_data :
+            any additional return-arguments will be attached to the fits-object
+            as `fit.aux_data`
         """
-        if reader_arg is None:
-            reader_arg = fit.reader_arg
-
-        # get filenames
-        names_ids = self.get_names_ids(reader_arg)
-        # parse defdict to find static and dynamic parameter names
-        params = defdict_parser(fit.defdict)
-
-        # add all constant (fitted) parameters as static layers
-        staticlayers = dict()
-        for key in params["fitted_const"]:
-            staticlayers[key] = fit.res_dict[key][0]
-
-        ret = postprocess_xarray(
-            fit=fit,
-            saveparams=["inc", "sig", *params["fitted_dynamic"]],
-            xindex=("ID", names_ids["feature_id"]),
-            staticlayers=staticlayers,
-        )
-
-        return ret
-
-    def finaloutput(self, res):
-        """
-        A function that is called after ALL sites are processed:
-
-        Parameters
-        ----------
-        res: list
-            A list of return-values from the "postprocess()" function.
-
-        Returns
-        -------
-        res: xarray.Dataset
-             the concatenated results
-        """
-
-        # concatenate the results
-        resxar = xar.combine_nested([i for i in res if i is not None], concat_dim="ID")
-
-        if self.rt1_procsesing_respath is None or self.finalout_name is None:
-            log.info(
-                "both save_path and finalout_name must be specified... "
-                + "otherwise the final results can NOT be saved!"
-            )
-            return resxar
-        else:
-            # export netcdf file
-            resxar.to_netcdf(self.rt1_procsesing_respath / self.finalout_name)
+        assert False, "you must define a proper reader-function first!"
 
     def exceptfunc(self, ex, reader_arg):
         """
@@ -455,10 +181,10 @@ class rt1_processing_config(object):
         - 'rt1_data_error'
             exceptions are ignored and the next site is processed
         - 'rt1_file_already_exists'
-            the already existing dump-file is loaded, the postprocess()
-            function is applied and the result is returned
+            the already existing dump-file is loaded, and the dict defining
+            the Fits-object is returned
         - for any other exceptions:
-            if `save_path` and `dumpfolder`or `error_dumpfolder` are specified
+            if `save_path` and `dumpfolder` are specified
             a dump of the exception-message is saved and the exception
             is ignored. otherwise the exception will be raised.
 
@@ -486,7 +212,7 @@ class rt1_processing_config(object):
             raise_exception = False
 
         elif "rt1_file_already_exists" in ex.args:
-            # if the fit-dump file already exists, try loading the existing
+            # if a fit-dump file already exists, try loading the existing
             # file and apply post-processing (e.g. avoid re-processing results)
             raise_exception = False
 
@@ -497,7 +223,7 @@ class rt1_processing_config(object):
 
             try:
                 fit = load(self.rt1_procsesing_dumppath / names_ids["filename"])
-                return self.postprocess(fit, reader_arg)
+                return fit._get_fit_to_hdf_dict()
             except Exception:
                 log.error(
                     "there has been a problem while loading the "
@@ -509,9 +235,15 @@ class rt1_processing_config(object):
             # raised if there was a problem with the data, ignore and continue
             raise_exception = False
 
-            log.error(f"there was a DATA-problem for '{names_ids['filename']}'")
+            log.error(
+                f"there was a DATA-problem for '{names_ids['filename']}'"
+                + "\n"
+                + str([i for i in ex.args if i != "rt1_data_error"])
+            )
         else:
-            log.error(traceback.format_exc())
+            log.error(
+                f"something went wrong for: {reader_arg}\n" + traceback.format_exc()
+            )
 
         # in case `save_path` is specified, write ALL exceptions to a file
         # and continue processing WITHOUT raising the exception.
@@ -527,3 +259,90 @@ class rt1_processing_config(object):
 
         # flush stdout to see output of child-processes
         sys.stdout.flush()
+
+    def mask_existing_HDF_IDs(self, arg_list, key="reader_arg", get_ID=None):
+        """
+        check if the IDs provided in "arg_list" are already present in the "fit_db.h5"
+        container and return a list that contains only the missing entries of "arg_list".
+
+        Parameters
+        ----------
+        key : str, optional
+            the key to use in the HDF-container. The default is "reader_arg".
+        get_ID : callable, optional
+            a custom callable that extracts the ID from the provided
+            IDs list.
+            The default is None in which case the following function is used:
+
+                >>> # extract filename from given path
+                >>> def get_ID(i):
+                >>>     ID = str(i["ID"]).split(os.sep)[-1].split(".")[0]
+                >>>     if not isidentifier(str(ID)):
+                >>>         return f"RT1_{ID}"
+                >>>     else:
+                >>>         return str(ID)
+
+        Returns
+        -------
+        new_IDs : set
+            a set containing the unique elements of "inp" whose IDs are not
+            already present in the output HDF container.
+
+        """
+        import os
+        from .general_functions import isidentifier, find_missing
+        from .rtresults import HDFaccessor
+        import pandas as pd
+
+        dst_path = self.rt1_procsesing_respath / "fit_db.h5"
+
+        if Path(dst_path).exists():
+            log.progress("Checking for already existing IDs in the `fit_db.h5`...")
+            if get_ID is None:
+
+                def get_ID(i):
+                    ID = str(i["ID"]).split(os.sep)[-1].split(".")[0]
+                    if not isidentifier(str(ID)):
+                        return f"RT1_{ID}"
+                    else:
+                        return str(ID)
+
+            with HDFaccessor(dst_path) as fit_db:
+                # get all IDs that are already present in the HDF store
+                # found_IDs = store.select_column("reader_arg", "ID").values
+                # get a list of integers that have already been assigned to IDs
+                # found_ID_nums = store.select_column("reader_arg", "index").values
+
+                found_ID_nums = fit_db.IDs.index
+                found_IDs = fit_db.IDs.ID.values
+
+                # a list of bool's that indicate if the ID is already processed
+                process_Q = pd.Index(map(get_ID, arg_list)).isin(found_IDs)
+
+                # a counter that yields unique IDs that are not yet assigned
+                # in the HDF store
+                id_counter = find_missing(found_ID_nums)
+
+                # set the processing-args
+                # update ID to be a valid python-identifier
+                args_to_process = [
+                    {**arg, "_RT1_ID_num": next(id_counter)}
+                    for arg, q in zip(arg_list, process_Q)
+                    if not q
+                ]
+        else:
+            args_to_process = [
+                {**i, "_RT1_ID_num": n} for i, n in zip(arg_list, range(len(arg_list)))
+            ]
+
+            log.info("no existing output-HDF file found...")
+            log.progress(f"processing all {len(args_to_process)} IDs!")
+            return args_to_process
+
+        log.progress(
+            f"Found {len(args_to_process)} missing and "
+            + f"{len(arg_list) - len(args_to_process)}"
+            + " existing IDs!"
+        )
+
+        return args_to_process

@@ -18,6 +18,7 @@ from matplotlib.widgets import Slider, CheckButtons
 from matplotlib.gridspec import GridSpec
 from matplotlib.gridspec import GridSpecFromSubplotSpec
 import matplotlib.ticker as ticker
+from matplotlib.collections import LineCollection
 
 try:
     from mpl_toolkits.mplot3d import Axes3D
@@ -188,9 +189,7 @@ def polarplot(
             for ti in plottis:
                 color = next(colors)
                 used_colors.append(color)
-                rad = getattr(X, funcname)(
-                    ti, thetass, 0.0, 0.0, param_dict=params
-                )
+                rad = getattr(X, funcname)(ti, thetass, 0.0, 0.0, param_dict=params)
                 if aprox is True:
                     # the use of np.pi-ti stems from the definition
                     # of legexpansion() in volume.py
@@ -531,7 +530,7 @@ class plot:
             ax.text(
                 0.8,
                 0.1,
-                "$R^2$ = " + str(np.round(r_value ** 2, 2)),
+                "$R^2$ = " + str(np.round(r_value**2, 2)),
                 horizontalalignment="center",
                 verticalalignment="center",
                 transform=ax.transAxes,
@@ -738,6 +737,7 @@ class plot:
             labels=list(lab),
             loc="upper left",
             ncol=5,
+            markerscale=3,
         )
 
         if ylim is not None:
@@ -1114,7 +1114,6 @@ class plot:
 
         # function to generate colormap that fades between colors
         def CustomCmap(from_rgb, to_rgb):
-
             # from color r,g,b
             r1, g1, b1 = from_rgb
 
@@ -1137,7 +1136,6 @@ class plot:
         ax = fig.add_subplot(111)
 
         for m_i, m in enumerate(fit_numbers):
-
             if convertTodB is True:
                 y = 10.0 * np.log10(estimates[m][~fit.mask[m]])
             else:
@@ -1796,7 +1794,6 @@ class plot:
             styledict_dict,
             styledict_fullt0_dict,
         ):
-
             incs = np.rad2deg(sig0_vals["incs"])
 
             lines = []
@@ -1858,7 +1855,6 @@ class plot:
                 newincs = np.rad2deg(newsig0_vals["incs"])
 
                 for day in np.arange(0, dayrange, 1):
-
                     sortp = np.argsort(newincs[day])
 
                     linesfull += ax.plot(
@@ -2096,14 +2092,12 @@ class plot:
             printcomponents,
             label,
         ):
-
             day0 = int(day0)
 
             label.set_position([day0, label.get_position()[1]])
             if dayrange == 1:
                 label.set_text(sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M"))
             elif dayrange > 1:
-
                 lday_0 = sig0_vals["indexes"][day0].strftime("%d. %b %Y %H:%M")
                 lday_1 = sig0_vals["indexes"][day0 + dayrange - 1].strftime(
                     "%d. %b %Y %H:%M"
@@ -2280,7 +2274,6 @@ class plot:
             "xlim_changed", partial(updatesliderboundary, slider=a_slider)
         )
         if range2 is not None:
-
             # here we create the slider
             b_slider = Slider(
                 slider_bx,  # axes object for the slider
@@ -2591,9 +2584,35 @@ class plot:
             paramslider[key].label.set_horizontalalignment("left")
             paramslider[key].valtext.set_position([0.8, 0.5])
 
-        buttons = CheckButtons(buttonax, buttonlabels, [False for i in buttonlabels])
+        buttonvals = [False for i in buttonlabels]
+
+        # add a button to indicate the fit-results
+        if res_dict is not None:
+            buttonlabels += ["... indicate fit"]
+            buttonvals += [False]
+        buttons = CheckButtons(buttonax, buttonlabels, buttonvals)
 
         params = startparams.copy()
+
+        # indicate the fit-results with some lines
+        if res_dict is not None:
+            res = fit.calc(
+                fit.res_df,
+                inc,
+                return_components=False,
+                fixed_param=fit.dataset.groupby(level=0, axis=0).mean()[
+                    fit.fixed_dict.keys()
+                ],
+            )
+            res = dBsig0convert(res, inc, dB, sig0, fit.dB, fit.sig0)
+
+            lc = LineCollection(
+                np.stack((np.array([inc] * len(res)), res), axis=2),
+                lw=0.25,
+                ec=".5",
+                alpha=0.75,
+                zorder=-1,
+            )
 
         # define function to update lines based on slider-input
         def animate(value, key):
@@ -2616,12 +2635,20 @@ class plot:
             if int_Q is True:
                 lint.set_ydata(modelresult["inter"].T)
 
-            # poverprint boundaries
-            hatches = [r"//", r"\\ ", "+", "oo", "--", ".."]
+            # overprint boundaries
+            hatches = [r"//", r"\\\\", "+", "oo", "--", ".."]
             colors = ["C" + str(i) for i in range(10)]
-            ax.collections.clear()
+
+            for a in ax.collections:
+                a.remove()
+
             legendhandles = []
             for i, [key_i, key_Q] in enumerate(printvariationQ.items()):
+                if key_i == "... indicate fit":
+                    if key_Q is True:
+                        ax.add_collection(lc)
+                    continue
+
                 # replace label of key_i with provided label
                 if key_i in labels:
                     keylabel = labels[key_i]
@@ -2687,7 +2714,6 @@ class plot:
                     ]
 
                     if fillcomponents is True:
-
                         legendhandles += [
                             ax.fill_between(
                                 inc,
@@ -2732,8 +2758,21 @@ class plot:
                     leg1.remove()
 
         printvariationQ = {key: False for key in minparams}
+        if res_dict is not None:
+            printvariationQ["... indicate fit"] = False
 
         def buttonfunc(label):
+            if label == "... indicate fit":
+                if printvariationQ[label] is True:
+                    try:
+                        lc.remove()
+                    except Exception:
+                        pass
+                    printvariationQ[label] = False
+                else:
+                    printvariationQ[label] = True
+                    ax.add_collection(lc)
+                return
             # if labels of the buttons have been changed by the labels-argument
             # set the name to the corresponding key (= the actual parameter name)
             for key, val in labels.items():
@@ -2742,7 +2781,9 @@ class plot:
 
             # ax.collections.clear()
             if printvariationQ[label] is True:
-                ax.collections.clear()
+                for a in ax.collections:
+                    a.remove()
+                # ax.collections.clear()
                 printvariationQ[label] = False
             elif printvariationQ[label] is False:
                 printvariationQ[label] = True
@@ -2787,7 +2828,6 @@ class plot:
 
         textboxes_buttons = {}
         for i, [key, val] in enumerate(paramslider.items()):
-
             axbox0 = plt.axes(
                 [
                     val.ax.get_position().x0,
