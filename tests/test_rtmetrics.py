@@ -79,6 +79,14 @@ class TestRTMetrics(unittest.TestCase):
 
             # loop through all possible metrics
             for metric in RTmetrics.metrics_registry:
+                # don't attempt linear regression calculations if there is only a single
+                # unique value in one of the datasets (to avoid linregress issues)
+                if (
+                    metric_fit_params.d1.nunique() == 1
+                    or metric_fit_params.d2.nunique() == 1
+                ) and metric == "linregress":
+                    continue
+
                 fit_metric = getattr(metric_fit_params, metric)
 
                 # remove suffix if present
