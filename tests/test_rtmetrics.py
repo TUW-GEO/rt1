@@ -76,15 +76,16 @@ class TestRTMetrics(unittest.TestCase):
         # loop through all possible parameter combinations
         for [p1, s1], [p2, s2] in combinations(fit.metric._all_keys.items(), 2):
             metric_fit_params = getattr(getattr(fit.metric, p1), p2)
+            singular_data = (
+                metric_fit_params.d1.nunique() == 1
+                or metric_fit_params.d2.nunique() == 1
+            )
 
             # loop through all possible metrics
             for metric in RTmetrics.metrics_registry:
                 # don't attempt linear regression calculations if there is only a single
                 # unique value in one of the datasets (to avoid linregress issues)
-                if (
-                    metric_fit_params.d1.nunique() == 1
-                    or metric_fit_params.d2.nunique() == 1
-                ) and metric == "linregress":
+                if singular_data and metric == "linregress":
                     continue
 
                 fit_metric = getattr(metric_fit_params, metric)
@@ -130,8 +131,9 @@ class TestRTMetrics(unittest.TestCase):
                         assert fit_metric == fit_func, assertmsg
 
             # check additional methods
-            f = metric_fit_params.scatterplot()
-            plt.close(f)
+            if not singular_data:
+                f = metric_fit_params.scatterplot()
+                plt.close(f)
 
             _ = metric_fit_params.allmetrics
 

@@ -325,8 +325,10 @@ class RTmetrics(object):
             float values for slope, intercept, pearson, pvalue, stderr
 
         """
-
-        return stats.linregress(d1, d2)._asdict()
+        try:
+            return stats.linregress(d1, d2)._asdict()
+        except ValueError:
+            return None
 
     @staticmethod
     def rmsd(d1, d2):
