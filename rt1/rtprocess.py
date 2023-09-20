@@ -272,7 +272,7 @@ class RTprocess(object):
             self.cfg = RT1_configparser(self.config_path)
         except Exception:
             if mp.current_process().name == "MainProcess":
-                log.warning("no valid config file was found")
+                log.warning(f"no valid config file was found", exc_info=1)
             return
 
         # update specs with init_kwargs
