@@ -132,6 +132,7 @@ class TestRTMetrics(unittest.TestCase):
 
             # check additional methods
             if not singular_data:
+                # avoid scatterplots for singular datasets
                 f = metric_fit_params.scatterplot()
                 plt.close(f)
 
