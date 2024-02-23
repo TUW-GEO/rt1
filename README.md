@@ -7,6 +7,15 @@
 
 # RT1 - bistatic scattering model for first order scattering of random media
 
+----
+
+> [!CAUTION]
+> **This package is superseeded by a [TUW-GEO/rt1_model](https://github.com/TUW-GEO/rt1_model)!**  
+> ([TUW-GEO/rt1_model](https://github.com/TUW-GEO/rt1_model) provides similar functionalities but with a simplified and more robust API)
+
+----
+
+
 The package implements a first order scattering radiative transfer model
 for random volume over ground as documented in *Quast & Wagner (2016)* and
 *Quast, Albergel, Calvet, Wagner (2019)*
